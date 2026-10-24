@@ -17,7 +17,8 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
   const body = await readJson(request);
   if (!body || typeof body.memberId !== "string") return json({ error: "Choose a known synthetic member." }, 400);
   try {
-    const cookie = await createPreviewSessionCookie(body.memberId, env);
+    const isSecure = request.url.startsWith("https:");
+    const cookie = await createPreviewSessionCookie(body.memberId, env, isSecure);
     return json({ identity: { memberId: body.memberId, source: "synthetic", label: "Synthetic preview identity" }, syntheticOnly: true }, 200, { "set-cookie": cookie });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Synthetic sign-in is not configured.";
@@ -29,5 +30,6 @@ export async function DELETE({ request, locals }: { request: Request; locals: Ru
   const originError = requireSameOrigin(request);
   if (originError) return originError;
   if (platformEnv(locals).APP_MODE !== "preview") return json({ error: "Unavailable." }, 404);
-  return json({ identity: null, syntheticOnly: true }, 200, { "set-cookie": "horizon_preview_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0" });
+  const secureFlag = request.url.startsWith("https:") ? " Secure;" : "";
+  return json({ identity: null, syntheticOnly: true }, 200, { "set-cookie": `horizon_preview_session=; Path=/; HttpOnly;${secureFlag} SameSite=Lax; Max-Age=0` });
 }

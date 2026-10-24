@@ -1,7 +1,12 @@
-# Fusion Horizon Policy Platform
+# Fusion Horizon Policy Platform (Reclaim & Engage Foundation)
 
-The platform is Fusion's public policy library and member consultation space. Members browse published policies, contribute feedback and proposed changes, and can see draft ballots and published outcomes. Administrators manage consultations and policy revisions. A vote is binding only after the platform has an approved Underground identity/eligibility interface and the explicit governance release gates are met.
+The platform is Fusion's layered policy library, transparent provenance review space, and member consultation and voting system. It satisfies the AGM policy review requirements—distinguishing existing approved policies (repackaged for readability) from materially revised proposals, new proposals, draft-derived proposals, and unverified lineage mappings—while providing the foundation for continuous policy development (**Engage**) without a generic workflow engine or separate demo/production voting stacks.
 
-Underground CRM remains the sole authority for member identity and eligibility. Development and preview use clearly identified synthetic accounts and data. The application stores policy content, consultation records, current ballot selections, application roles, and operational audit records in its own MongoDB database, deployed alongside the app in Docker for the initial self-hosted environment.
+Every policy follows a unified lifecycle:
+`Existing policy → proposed wording → provenance/comparison → member review (comments & amendments) → settled immutable revision → individual ballot vote → recorded outcome & adopted wording`.
 
-The adoption agenda separates two decisions: whether to adopt the Reclaim policy platform as it existed, and whether to adopt the Horizon visual identity across Fusion, including the new logo. They are separate from the 36 policy-specific proposals in the initial draft round.
+Underground CRM remains the sole authority for production member identity and constitutional voting eligibility (`fail-closed` until the Underground interface is connected). Preview mode (`APP_MODE=preview`) exercises the exact same consultation, revision, and ballot collections and business logic using synthetic identities and explicit environment safeguards so synthetic participation can never become binding.
+
+Alongside individual policy review, the platform preserves the two separate member review questions requested for the Reclaim platform and the Horizon visual identity (including the logo).
+
+Website copy follows the [editorial policy](docs/editorial-policy.md). Page-specific copy belongs in content data; presentation components should render it without owning or duplicating page claims.

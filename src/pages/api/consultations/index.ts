@@ -1,21 +1,42 @@
-import { ensureIndexes, getDatabase } from "../../../lib/platform/database";
-import { resolveIdentity } from "../../../lib/platform/auth";
-import { createSubmission, listOwnSubmissions, validateSubmission } from "../../../lib/platform/consultations";
-import { json, platformEnv, readJson, requireSameOrigin } from "../../../lib/platform/http";
-import type { RuntimeLocals } from "../../../lib/platform/types";
-import { consumeRateLimit } from "../../../lib/platform/rate-limit";
+import { ensureIndexes, getDatabase } from "../../../lib/platform/database.ts";
+import { resolveIdentity } from "../../../lib/platform/auth.ts";
+import { createSubmission, listOwnSubmissions, listPublicSubmissions, validateSubmission } from "../../../lib/platform/consultations.ts";
+import { validPolicyId } from "../../../lib/platform/policy-revisions.mjs";
+import { json, platformEnv, readJson, requireSameOrigin } from "../../../lib/platform/http.ts";
+import type { RuntimeLocals } from "../../../lib/platform/types.ts";
+import { consumeRateLimit } from "../../../lib/platform/rate-limit.ts";
 
 export const prerender = false;
 
 export async function GET({ request, locals }: { request: Request; locals: RuntimeLocals }): Promise<Response> {
-  const { identity } = await resolveIdentity(request, platformEnv(locals));
-  if (!identity) return json({ error: "Sign in to view your submissions." }, 401);
+  const env = platformEnv(locals);
+  const url = new URL(request.url);
+  const policyIdParam = url.searchParams.get("policyId");
+  const roundIdParam = url.searchParams.get("roundId") ?? undefined;
+  if (policyIdParam !== null && !validPolicyId(policyIdParam)) {
+    return json({ error: "Provide a valid policyId." }, 400);
+  }
+  const { identity } = await resolveIdentity(request, env);
+  if (!policyIdParam && !roundIdParam && !identity) {
+    return json({ error: "Sign in to view your submissions." }, 401);
+  }
   try {
-    const db = await getDatabase(platformEnv(locals));
+    const db = await getDatabase(env);
     await ensureIndexes(db);
-    return json({ submissions: await listOwnSubmissions(db, identity.memberId), synthetic: identity.source === "synthetic" });
+    if (policyIdParam || roundIdParam) {
+      const publicSubmissions = await listPublicSubmissions(db, {
+        ...(policyIdParam ? { policyId: policyIdParam } : {}),
+        ...(roundIdParam ? { roundId: roundIdParam } : {}),
+      });
+      const ownSubmissions = identity ? await listOwnSubmissions(db, identity.memberId) : [];
+      return json({
+        submissions: publicSubmissions,
+        ownSubmissions: policyIdParam ? ownSubmissions.filter((item) => item.policyId === policyIdParam) : ownSubmissions,
+      });
+    }
+    return json({ submissions: await listOwnSubmissions(db, identity!.memberId) });
   } catch {
-    return json({ error: "Your submissions are temporarily unavailable." }, 503);
+    return json({ error: "Consultation submissions are temporarily unavailable." }, 503);
   }
 }
 
@@ -33,9 +54,10 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
     await ensureIndexes(db);
     if (!(await consumeRateLimit(db, "consultation-submission", identity.memberId, 5, 60 * 60_000))) return json({ error: "You have reached the submission limit for this hour. Please try again later." }, 429, { "retry-after": "3600" });
     const submissionId = await createSubmission(db, identity, input);
-    return json({ submissionId, status: "pending", synthetic: identity.source === "synthetic" }, 201);
+    return json({ submissionId, status: "pending" }, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Your submission could not be saved.";
-    return json({ error: message }, message.includes("not open") ? 409 : 503);
+    const status = message.includes("not open") ? 409 : message.includes("not included") || message.includes("could not be found") ? 422 : 503;
+    return json({ error: message }, status);
   }
 }

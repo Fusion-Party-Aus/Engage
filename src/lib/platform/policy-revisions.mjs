@@ -1,4 +1,4 @@
-const fields = new Set(["version", "title", "statement", "details", "outcomes", "domain"]);
+const fields = new Set(["version", "title", "statement", "details", "outcomes", "domain", "changeSummary"]);
 
 function cleanString(value, minimum, maximum) {
   if (typeof value !== "string") return null;
@@ -23,7 +23,12 @@ export function validatePolicyRevisionInput(value) {
     domain = cleanString(value.domain, 1, 120);
     if (!domain) return { error: "Domain must be at most 120 characters." };
   }
-  return { value: { version, title, statement, details, outcomes, ...(domain ? { domain } : {}) } };
+  let changeSummary;
+  if (value.changeSummary !== undefined && value.changeSummary !== "") {
+    changeSummary = cleanString(value.changeSummary, 1, 1000);
+    if (!changeSummary) return { error: "Change summary must be at most 1,000 characters." };
+  }
+  return { value: { version, title, statement, details, outcomes, ...(domain ? { domain } : {}), ...(changeSummary ? { changeSummary } : {}) } };
 }
 
 export function validPolicyId(policyId) {

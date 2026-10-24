@@ -18,15 +18,16 @@ export function formalVotingIsEnabled(env) {
   return env.APP_MODE === "production" && (env.FORMAL_BALLOTS_ENABLED === "true" || env.BINDING_BALLOTS_ENABLED === "true");
 }
 
-export async function upsertCurrentVote(votes, selection, choice, now) {
+export async function upsertCurrentVote(votes, selection, choice, now, extra = {}) {
+  const fields = { choice, updatedAt: now, ...extra };
   try {
     await votes.updateOne(selection, {
-      $set: { choice, updatedAt: now, synthetic: true },
+      $set: fields,
       $setOnInsert: { createdAt: now },
     }, { upsert: true });
   } catch (error) {
     // A simultaneous first vote can race on the compound unique index. Retry as an update of the single current vote.
     if (!error || typeof error !== "object" || error.code !== 11000) throw error;
-    await votes.updateOne(selection, { $set: { choice, updatedAt: now, synthetic: true } });
+    await votes.updateOne(selection, { $set: fields });
   }
 }

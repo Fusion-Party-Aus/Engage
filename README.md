@@ -17,9 +17,9 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The preview is synthetic-only and formal ballots are disabled. `.env` is ignored by Git and configures a local MongoDB container. For the complete containerized stack, run `docker compose up -d --build`; the app binds to localhost by default and MongoDB is not exposed beyond localhost. Put an HTTPS reverse proxy in front before allowing remote access. Do not use this preview for genuine member identities, consultation data, or binding votes.
+The preview uses synthetic identities with environment safeguards (`APP_MODE=preview`, `FORMAL_BALLOTS_ENABLED=false`) while exercising the unified consultation, revision, and ballot workflows. `.env` is ignored by Git and configures a local MongoDB container (when running app-only in preview mode without MongoDB reachable, an in-memory seeded preview database is used automatically). For the complete containerized stack, run `docker compose up -d --build`; the app binds to localhost by default and MongoDB is not exposed beyond localhost. Put an HTTPS reverse proxy in front before allowing remote access. Do not use this preview for genuine member identities, consultation data, or binding votes.
 
-Seed the local preview once to load the migrated policy revisions, 36 draft formal ballots, one synthetic consultation, and four simulation ballots:
+Seed the local MongoDB preview once to load the 76 baseline policy revisions, settled revision `POL-010:v2-settled`, the 36 AGM Round 1 policy ballots (4 open in preview for immediate voting), the 2 separate platform/Horizon identity adoption ballots, and the follow-on `POL-077` proposal in `continuous-policy-round-2027-q1`:
 
 ```sh
 docker compose run --rm app node /app/scripts/seed-preview.mjs --dry-run

@@ -14,7 +14,7 @@ export async function GET({ params, locals }: { params: { ballotId: string }; lo
     if (!ballot) return json({ error: "Ballot not found." }, 404);
     const results = await getBallotResults(db, ballot);
     if (!results) return json({ error: "Results will be available after the ballot closes." }, 409);
-    return json({ results, synthetic: ballot.mode === "simulation" });
+    return json({ results, ballotId: ballot.ballotId, proposalId: ballot.proposalId, policyRevisionId: ballot.policyRevisionId });
   } catch {
     return json({ error: "Results are temporarily unavailable." }, 503);
   }

@@ -23,10 +23,23 @@ export async function PATCH({ request, params, locals }: { request: Request; par
     const rounds = db.collection("consultation_rounds");
     const round = await rounds.findOne({ roundId: params.roundId });
     if (!round) return json({ error: "Consultation round not found." }, 404);
+    const now = new Date();
+    if (body.status !== undefined && Object.keys(body).length === 1) {
+      if (env.APP_MODE !== "preview") return json({ error: "Consultation round status transitions require preview mode or release authorization." }, 423);
+      if (body.status !== "draft" && body.status !== "open" && body.status !== "closed") return json({ error: "Choose draft, open, or closed." }, 400);
+      await rounds.updateOne(
+        { roundId: params.roundId },
+        { $set: { status: body.status, updatedAt: now, updatedBy: identity.memberId } },
+      );
+      await db.collection("operational_audit").insertOne({
+        actorId: identity.memberId, actorSource: identity.source, action: "consultation_round_status_updated",
+        targetType: "consultation_round", targetId: params.roundId, status: body.status, createdAt: now,
+      });
+      return json({ roundId: params.roundId, status: body.status, opensAt: round.opensAt, closesAt: round.closesAt });
+    }
     if (round.status !== "draft") return json({ error: "Only draft consultation rounds can be rescheduled." }, 409);
     const patch = validateDraftRoundPatch(body, { opensAt: round.opensAt, closesAt: round.closesAt });
     if ("error" in patch) return json({ error: patch.error }, 400);
-    const now = new Date();
     const updated = await rounds.updateOne(
       { roundId: params.roundId, status: "draft" },
       { $set: { opensAt: patch.opensAt, closesAt: patch.closesAt, updatedAt: now, updatedBy: identity.memberId } },

@@ -28,3 +28,28 @@ export interface RuntimeLocals {
   runtime?: { env?: PlatformEnv };
   env?: PlatformEnv;
 }
+
+export interface ConsultationRoundRecord {
+  roundId: string;
+  program?: string;
+  label?: string;
+  title?: string;
+  description?: string;
+  status: string;
+  opensAt: Date;
+  closesAt: Date;
+  policyIds: string[];
+}
+
+export interface ConsultationSubmissionRecord {
+  submissionId: string;
+  roundId: string;
+  policyId: string;
+  policyRevisionId: string;
+  kind: "comment" | "amendment" | "alternative";
+  title?: string;
+  body: string;
+  status: "pending" | "accepted" | "needs-changes" | "declined";
+  createdAt: Date;
+  moderatorResponse?: string;
+}

@@ -1,0 +1,298 @@
+---
+import type { PolicyLifecycleView } from '../lib/platform/catalogue.ts';
+import policies from '../data/policies.json';
+
+interface Props {
+  division: 'RECLAIM OUR ECONOMY' | 'RECLAIM OUR FUTURE';
+  domainSlug: string;
+  domainTitle: string;
+  domainSummary: string;
+  items: PolicyLifecycleView[];
+}
+
+const { division, domainSlug, domainTitle, domainSummary, items } = Astro.props;
+const divisionHref = division === 'RECLAIM OUR ECONOMY' ? '/reclaim-our-economy/' : '/reclaim-our-future/';
+const divisionLabel = division === 'RECLAIM OUR ECONOMY' ? 'Reclaim our economy' : 'Reclaim our future';
+
+const divisionDomains = policies.filter((p) => p.area === division);
+const currentIndex = divisionDomains.findIndex((p) => p.slug === domainSlug);
+const prevDomain = currentIndex > 0 ? divisionDomains[currentIndex - 1] : null;
+const nextDomain = currentIndex >= 0 && currentIndex < divisionDomains.length - 1 ? divisionDomains[currentIndex + 1] : null;
+
+const publicStatus = (item: PolicyLifecycleView) => item.ballot?.status === 'open'
+  ? 'Open for a member decision'
+  : item.consultationRounds.some((round) => round.status === 'open')
+    ? 'Open for comment'
+    : item.adoptedRevisionId && !item.adoptionIsSynthetic
+      ? 'Published policy'
+      : 'Proposal';
+---
+<article class="policy-domain page-wrap" data-domain-slug={domainSlug}>
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <a href="/policies/">Policies</a>
+    <span aria-hidden="true">/</span>
+    <a href={divisionHref}>{divisionLabel}</a>
+    <span aria-hidden="true">/</span>
+    <span aria-current="page">{domainTitle}</span>
+  </nav>
+
+  <header class="domain-head">
+    <p class="eyebrow">{divisionLabel}</p>
+    <h1>{domainTitle}</h1>
+    <p class="domain-summary">{domainSummary}</p>
+  </header>
+
+  <div class="domain-layout">
+    <aside class="domain-toc" aria-label="On this page">
+      <p class="toc-heading">Policies in this section</p>
+      <ol>
+        {items.map((item) => (
+          <li>
+            <a href={`#${item.anchor}`}>{item.title}</a>
+          </li>
+        ))}
+      </ol>
+    </aside>
+
+    <div class="domain-policies">
+      {items.map((item) => {
+        const openRound = item.consultationRounds.find((r) => r.status === 'open') ?? item.consultationRounds[0] ?? null;
+        return (
+          <section
+            id={item.anchor}
+            class="policy-card-section"
+            data-policy-id={item.policyId}
+            data-revision-id={item.publishedRevisionId}
+            data-active-revision-id={item.activeRevisionId}
+            data-synthetic-fixture={item.syntheticFixture ? 'true' : 'false'}
+            data-round-id={openRound?.roundId ?? ''}
+          >
+            <div class="policy-card-top">
+              <div class="policy-badges"><span class="lifecycle-badge">{publicStatus(item)}</span></div>
+              <h3>{item.title}</h3>
+            </div>
+
+            {item.syntheticFixture && item.fixtureNotice && (
+              <p class="fixture-callout" role="note">
+                <strong>Preview proposal:</strong> {item.fixtureNotice}
+              </p>
+            )}
+
+            <div class="tier-block tier-2">
+              <p class="tier-label">How it works</p>
+              <p class="policy-statement">{item.statement}</p>
+            </div>
+
+            <div class="tier-block tier-3">
+              <p class="tier-label">What this aims to achieve</p>
+              <ol class="policy-outcomes">
+                {item.outcomes.map((outcome) => <li>{outcome}</li>)}
+              </ol>
+            </div>
+
+            {item.pendingSettledRevision && (
+              <div class="pending-revision-callout" data-pending-revision-id={item.pendingSettledRevision.revisionId}>
+                <p class="tier-label">
+                  Wording proposed for a member decision
+                  {item.pendingSettledRevision.syntheticFixture && <span class="synthetic-inline"> · Preview proposal</span>}
+                </p>
+                <p>{item.pendingSettledRevision.statement}</p>
+                {item.pendingSettledRevision.changeSummary && (
+                  <p class="pending-revision-note"><strong>What changed:</strong> {item.pendingSettledRevision.changeSummary}</p>
+                )}
+                <p class="pending-revision-note">
+                  <em>This is the exact wording members will decide on. The policy above remains in place unless members approve the change.</em>
+                </p>
+              </div>
+            )}
+
+            <details class="provenance-panel">
+              <summary>
+                <strong>Sources and how this proposal has changed</strong>
+                <span>Evidence and revision history</span>
+              </summary>
+              <div class="provenance-body">
+                <p class="provenance-summary">{item.provenance.summary}</p>
+                {item.provenance.uncertaintyNote && (
+                  <p class="lineage-uncertainty"><strong>What is still uncertain:</strong> {item.provenance.uncertaintyNote}</p>
+                )}
+                {item.provenance.lineage.length > 0 ? (
+                  <ul class="lineage-list">
+                    {item.provenance.lineage.map((link) => (
+                      <li>
+                        {link.url ? <a href={link.url} rel="noreferrer noopener" target="_blank">{link.label}</a> : <strong>{link.label}</strong>}
+                        {link.description && <span> — {link.description}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p class="lineage-note">
+                    {item.provenance.lineageVerified
+                      ? 'No pre-existing approved Fusion policy, submission, or statement applies to this proposal.'
+                      : 'Relationship to prior approved policy wording has not been verified for this proposal yet. Members can flag lineage or suggest amendments below.'}
+                  </p>
+                )}
+                {item.provenance.valuesAlignment.length > 0 && (
+                  <div class="values-alignment">
+                    <p class="tier-label">Related Fusion principles</p>
+                    <ul>
+                      {item.provenance.valuesAlignment.map((val) => <li>{val}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {item.revisions.length > 1 && (
+                  <div class="revision-history">
+                    <p class="tier-label">Earlier and current wording</p>
+                    <ul>
+                      {item.revisions.map((rev) => (
+                        <li>
+                          <code>{rev.revisionId}</code>
+                          {rev.syntheticFixture && <span class="synthetic-inline"> [Synthetic preview fixture]</span>}
+                          {item.publishedRevisionId === rev.revisionId && <strong> [Displayed version]</strong>}: {rev.statement}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </details>
+
+            <details class="detail-panel">
+              <summary><strong>Why this approach, and what it would involve</strong></summary>
+              <div class="policy-detail-html" set:html={item.detailHtml} />
+            </details>
+
+            <div class="policy-participation">
+              <div class="participation-actions">
+                {openRound ? (
+                  <a class="button button--small" href={`/consultations/?policyId=${encodeURIComponent(item.policyId)}&roundId=${encodeURIComponent(openRound.roundId)}`}>
+                    Comment or propose amendment
+                  </a>
+                ) : (
+                  <a class="button button--small button--outline" href={`/consultations/?policyId=${encodeURIComponent(item.policyId)}`}>
+                    View consultation status
+                  </a>
+                )}
+                {item.ballot && (
+                  <a class="button button--small button--outline" href={`/ballots/#${item.ballot.ballotId}`}>
+                    {item.ballot.status === 'open'
+                      ? 'Vote on this policy'
+                      : item.ballot.status === 'closed'
+                        ? `Outcome: ${item.ballot.results?.outcome ?? 'Closed'}`
+                        : 'View ballot status'}
+                  </a>
+                )}
+              </div>
+
+              {item.submissions.length > 0 && (
+                <div class="policy-discussion">
+                  <p class="tier-label">Reviewed member discussion & proposed amendments ({item.submissions.length})</p>
+                  <ul>
+                    {item.submissions.map((sub) => (
+                      <li>
+                        <strong>{sub.title || sub.kind}</strong>
+                        <span class="sub-tag">{sub.kind === 'amendment' ? 'Suggested wording' : sub.kind === 'alternative' ? 'Alternative proposal' : 'Comment'}</span>
+                        <p>{sub.body}</p>
+                        {sub.moderatorResponse && <p class="mod-response"><strong>Review note:</strong> {sub.moderatorResponse}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  </div>
+
+  <nav class="domain-pagination" aria-label="Section navigation">
+    {prevDomain ? (
+      <a class="pagination-link" href={prevDomain.slug}>
+        <span>← Previous section</span>
+        <strong>{prevDomain.title}</strong>
+      </a>
+    ) : <span />}
+    {nextDomain ? (
+      <a class="pagination-link pagination-link--next" href={nextDomain.slug}>
+        <span>Next section →</span>
+        <strong>{nextDomain.title}</strong>
+      </a>
+    ) : <span />}
+  </nav>
+</article>
+
+<style>
+  .policy-domain { padding-block: 1.5rem 5rem; }
+  .breadcrumbs { display: flex; flex-wrap: wrap; gap: .55rem; align-items: center; margin: 1rem 0; color: #54465f; font-size: .9rem; }
+  .domain-head { padding-block: 1.5rem 2rem; border-bottom: 1px solid #ded6e7; margin-bottom: 2.2rem; }
+  .domain-head h1 { margin: .15rem 0 .9rem; font-size: clamp(2.4rem, 4.8vw, 4.2rem); }
+  .domain-summary { max-width: 68ch; color: #493b55; font-size: 1.12rem; line-height: 1.65; margin: 0 0 1.3rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .prov-badge { display: inline-flex; align-items: center; padding: .25rem .65rem; border-radius: 999px; font-size: .75rem; font-weight: 700; letter-spacing: .03em; }
+  .prov-badge--existing { background: #e3f5ec; color: #164932; }
+  .prov-badge--revised { background: #e4f9fa; color: #13464b; }
+  .prov-badge--new { background: #f8e8ff; color: #4d126b; }
+  .prov-badge--draft { background: #fff1db; color: #693f05; }
+  .prov-badge--unverified { background: #f2eef9; color: #54465f; border: 1px dashed #9382a8; }
+
+  .domain-layout { display: grid; grid-template-columns: 18rem minmax(0, 1fr); gap: 2.5rem; align-items: start; }
+  .domain-toc { position: sticky; top: 1.5rem; padding: 1.2rem; background: #f8f6fc; border: 1px solid #ded6e7; border-radius: .8rem; max-height: calc(100vh - 3rem); overflow: auto; }
+  .toc-heading { margin: 0 0 .75rem; font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #54465f; }
+  .domain-toc ol { margin: 0; padding-left: 1.2rem; display: grid; gap: .6rem; font-size: .88rem; }
+  .domain-toc li { line-height: 1.35; }
+  .domain-toc a { text-decoration: none; font-weight: 600; display: block; margin-bottom: .2rem; }
+  .domain-toc a:hover { text-decoration: underline; }
+
+  .domain-policies { display: grid; gap: 2rem; }
+  .policy-card-section { padding: clamp(1.3rem, 3vw, 2rem); border: 1px solid #ded6e7; border-radius: .9rem; background: #fff; scroll-margin-top: 1.5rem; }
+  .policy-badges { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; margin-bottom: .75rem; }
+  .policy-id-tag { font-family: monospace; font-size: .78rem; font-weight: 700; padding: .2rem .5rem; background: #f2eef9; border-radius: .35rem; color: #32105a; }
+  .lifecycle-badge { font-size: .75rem; font-weight: 600; padding: .2rem .6rem; border-radius: .35rem; background: #f2eef9; color: #54465f; }
+  .lifecycle-badge--open { background: #00c9d2; color: #1d0936; font-weight: 700; }
+  .lifecycle-badge--adopted { background: #164932; color: #fff; font-weight: 700; }
+  .lifecycle-badge--closed { background: #ded6e7; color: #32105a; }
+  .synthetic-badge { display: inline-flex; align-items: center; padding: .2rem .6rem; border-radius: .35rem; font-size: .75rem; font-weight: 700; background: #fff3cd; color: #664d03; border: 1px solid #ffecb5; }
+  .synthetic-inline { font-size: .75rem; font-weight: 700; color: #664d03; }
+  .fixture-callout { margin: 0 0 1rem; padding: .65rem .9rem; border-radius: .5rem; background: #fff3cd; border: 1px solid #ffecb5; color: #664d03; font-size: .88rem; }
+  .pending-revision-callout { margin: 1rem 0; padding: .85rem 1rem; border-radius: .65rem; background: #f2eef9; border-left: 4px solid #32105a; font-size: .92rem; line-height: 1.55; }
+  .pending-revision-callout p { margin: .35rem 0 0; }
+  .pending-revision-note { font-size: .85rem; color: #54465f; }
+  .lineage-uncertainty { margin: .5rem 0; padding: .55rem .75rem; border-radius: .45rem; background: #fff8e6; border: 1px solid #f0dca8; color: #5c4306; font-size: .88rem; }
+  .policy-card-top h3 { margin: .2rem 0 1.1rem; font-size: clamp(1.55rem, 2.5vw, 2.05rem); }
+
+  .tier-block { margin-bottom: 1.2rem; }
+  .tier-label { margin: 0 0 .35rem; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #625171; }
+  .policy-statement { margin: 0; font-size: 1.08rem; font-weight: 600; line-height: 1.6; color: #271047; }
+  .policy-outcomes { margin: .35rem 0 0; padding-left: 1.35rem; color: #362743; line-height: 1.65; }
+  .policy-outcomes li + li { margin-top: .35rem; }
+
+  .provenance-panel, .detail-panel { margin-top: 1rem; border: 1px solid #ded6e7; border-radius: .65rem; background: #faf8fd; }
+  .provenance-panel summary, .detail-panel summary { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 1rem; cursor: pointer; font-size: .92rem; }
+  .provenance-panel summary span { font-size: .78rem; color: #54465f; font-weight: 600; }
+  .provenance-body, .policy-detail-html { padding: 0 1rem 1rem; border-top: 1px solid #ded6e7; font-size: .95rem; line-height: 1.65; color: #362743; }
+  .provenance-summary { margin: .8rem 0; font-weight: 600; }
+  .lineage-list, .values-alignment ul, .revision-history ul { margin: .4rem 0 0; padding-left: 1.25rem; }
+  .lineage-note { margin: .5rem 0 0; color: #54465f; font-style: italic; }
+  .values-alignment, .revision-history { margin-top: .85rem; padding-top: .75rem; border-top: 1px dashed #ded6e7; }
+
+  .policy-participation { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #ded6e7; }
+  .participation-actions { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; }
+  .button--small { min-height: 2.45rem; padding: .45rem .95rem; font-size: .88rem; }
+  .policy-discussion { margin-top: 1rem; padding: .9rem 1rem; background: #f2eef9; border-radius: .65rem; }
+  .policy-discussion ul { list-style: none; padding: 0; margin: .5rem 0 0; display: grid; gap: .75rem; }
+  .policy-discussion li { padding: .75rem; background: #fff; border-radius: .5rem; border: 1px solid #ded6e7; font-size: .9rem; }
+  .policy-discussion li p { margin: .35rem 0 0; line-height: 1.55; }
+  .sub-tag { margin-left: .5rem; font-size: .75rem; color: #54465f; font-weight: 600; }
+  .mod-response { color: #164932; background: #e3f5ec; padding: .45rem .65rem; border-radius: .4rem; }
+
+  .domain-pagination { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3.5rem; padding-top: 1.5rem; border-top: 1px solid #ded6e7; }
+  .pagination-link { display: grid; gap: .2rem; padding: 1rem 1.25rem; border: 1px solid #ded6e7; border-radius: .75rem; text-decoration: none; background: #faf8fd; }
+  .pagination-link span { font-size: .8rem; color: #54465f; font-weight: 600; }
+  .pagination-link--next { text-align: right; margin-left: auto; }
+
+  @media (max-width: 920px) {
+    .domain-layout { grid-template-columns: 1fr; }
+    .domain-toc { position: static; max-height: none; }
+  }
+</style>

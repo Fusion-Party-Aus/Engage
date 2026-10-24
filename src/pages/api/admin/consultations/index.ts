@@ -19,9 +19,9 @@ export async function GET({ request, locals }: { request: Request; locals: Runti
     const requestedStatus = url.searchParams.get("status") ?? "pending";
     if (!new Set(["pending", "accepted", "declined", "needs-changes"]).has(requestedStatus)) return json({ error: "Unknown submission status." }, 400);
     const submissions = await db.collection("consultation_submissions").find({ status: requestedStatus }, {
-      projection: { _id: 0, submissionId: 1, roundId: 1, policyId: 1, policyRevisionId: 1, kind: 1, title: 1, body: 1, status: 1, createdAt: 1, moderatorResponse: 1, synthetic: 1 },
+      projection: { _id: 0, submissionId: 1, roundId: 1, policyId: 1, policyRevisionId: 1, kind: 1, title: 1, body: 1, status: 1, createdAt: 1, moderatorResponse: 1, identitySource: 1, synthetic: 1 },
     }).sort({ createdAt: 1 }).limit(100).toArray();
-    return json({ submissions, syntheticOnly: identity.source === "synthetic" });
+    return json({ submissions });
   } catch {
     return json({ error: "The moderation queue is temporarily unavailable." }, 503);
   }

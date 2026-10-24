@@ -1,5 +1,5 @@
-import { getDatabase } from "./database";
-import type { PlatformEnv, PlatformIdentity, PlatformRole } from "./types";
+import { getDatabase } from "./database.ts";
+import type { PlatformEnv, PlatformIdentity, PlatformRole } from "./types.ts";
 
 const SESSION_COOKIE = "horizon_preview_session";
 const SESSION_SECONDS = 60 * 60 * 8;
@@ -36,13 +36,14 @@ function previewAdminId(env: PlatformEnv): string {
   return env.PREVIEW_ADMIN_ID ?? "preview-admin-01";
 }
 
-export async function createPreviewSessionCookie(memberId: string, env: PlatformEnv): Promise<string> {
+export async function createPreviewSessionCookie(memberId: string, env: PlatformEnv, secure = false): Promise<string> {
   if (env.APP_MODE !== "preview") throw new Error("Synthetic authentication is disabled outside preview mode.");
   if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) throw new Error("Preview session signing is not configured.");
   if (!previewMembers(env).includes(memberId)) throw new Error("Unknown synthetic member.");
   const payload = base64Url(new TextEncoder().encode(JSON.stringify({ sub: memberId, exp: Math.floor(Date.now() / 1000) + SESSION_SECONDS })));
   const signature = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(env.SESSION_SECRET, ["sign"]), new TextEncoder().encode(payload)));
-  return `${SESSION_COOKIE}=${encodeURIComponent(`${payload}.${base64Url(signature)}`)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_SECONDS}`;
+  const secureFlag = secure ? " Secure;" : "";
+  return `${SESSION_COOKIE}=${encodeURIComponent(`${payload}.${base64Url(signature)}`)}; Path=/; HttpOnly;${secureFlag} SameSite=Lax; Max-Age=${SESSION_SECONDS}`;
 }
 
 async function verifyPreviewSession(request: Request, env: PlatformEnv): Promise<PlatformIdentity | null> {

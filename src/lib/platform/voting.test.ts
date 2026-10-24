@@ -51,7 +51,9 @@ test("concurrent synthetic revotes leave exactly one current choice", async () =
     upsertCurrentVote(votesCollection, { ballotId: "housing-01", memberId: "preview-member-01" }, "do-not-approve", new Date("2026-10-26T00:00:01Z")),
   ]);
   assert.equal(votes.size, 1);
-  assert.ok(["approve", "do-not-approve"].includes(String(votes.get("housing-01:preview-member-01")?.choice)));
+  const stored = votes.get("housing-01:preview-member-01");
+  assert.ok(["approve", "do-not-approve"].includes(String(stored?.choice)));
+  assert.equal("synthetic" in (stored ?? {}), false);
 });
 
 test("formal ballot activation stays disabled in preview", () => {

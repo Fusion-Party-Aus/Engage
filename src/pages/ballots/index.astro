@@ -2,81 +2,393 @@
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import PreviewNotice from '../../components/PreviewNotice.astro';
 import initialRound from '../../data/initial-round.json';
-const policyById = new Map(initialRound.policies.map((policy) => [policy.id, policy]));
+import { loadPolicyCatalogue } from '../../lib/platform/catalogue';
+import { getDatabase, ensureIndexes } from '../../lib/platform/database';
+import { listBallots, getBallotResults } from '../../lib/platform/ballots';
+import { resolveIdentity } from '../../lib/platform/auth';
+import { platformEnv } from '../../lib/platform/http';
+
+export const prerender = false;
+
+const env = platformEnv(Astro.locals);
+const [policies, db, resolution] = await Promise.all([
+  loadPolicyCatalogue(env),
+  getDatabase(env),
+  resolveIdentity(Astro.request, env),
+]);
+await ensureIndexes(db);
+
+const allBallots = await listBallots(db);
+const policyById = new Map(policies.map((p) => [p.id, p]));
+const requestedBallotId = Astro.url.searchParams.get('ballotId');
+
+// Load current member selections if signed in
+const memberVotes = new Map<string, string>();
+if (resolution.identity) {
+  const votes = await db
+    .collection<{ ballotId: string; choice: string }>('votes')
+    .find({ memberId: resolution.identity.memberId })
+    .toArray();
+  for (const v of votes) {
+    memberVotes.set(v.ballotId, v.choice);
+  }
+}
+
+// Compute results for closed ballots
+const closedResults = new Map<string, Awaited<ReturnType<typeof getBallotResults>>>();
+for (const ballot of allBallots) {
+  if (ballot.status === 'closed') {
+    const res = await getBallotResults(db, ballot);
+    if (res) closedResults.set(ballot.ballotId, res);
+  }
+}
+
+const openBallots = allBallots.filter((b) => b.status === 'open');
+const closedBallots = allBallots.filter((b) => b.status === 'closed');
+const adoptionBallots = allBallots.filter((b) =>
+  ['adoption-reclaim-platform', 'adoption-horizon-identity', 'ballot-adopt-reclaim-platform-2026', 'ballot-adopt-horizon-identity-2026'].includes(b.ballotId)
+);
+const continuousBallots = allBallots.filter((b) => b.roundId === 'continuous-policy-round-2027-q1');
+const scheduledAgmBallots = allBallots.filter(
+  (b) =>
+    b.status === 'draft' &&
+    b.roundId === 'first-priority-policy-round-2026' &&
+    !['adoption-reclaim-platform', 'adoption-horizon-identity', 'ballot-adopt-reclaim-platform-2026', 'ballot-adopt-horizon-identity-2026'].includes(b.ballotId)
+);
+
+const provenanceLabels: Record<string, string> = {
+  'existing-repackaged': 'Approved policy predecessor (equivalence unverified)',
+  'materially-revised': 'Materially revised or submission/FAQ-derived',
+  'new-proposal': 'New policy proposal',
+  'draft-derived': 'Draft-derived proposal (unpublished)',
+  unverified: 'Lineage mapping unverified',
+};
 ---
-<SiteLayout title="Ballots · Fusion" description="See the draft policy ballot schedule and synthetic voting demonstration." canonical={`${Astro.url.origin}/ballots/`}>
+<SiteLayout title="Ballots · Fusion" description="Review settled policy revisions, vote on individual policy proposals, and inspect recorded outcomes." canonical={`${Astro.url.origin}/ballots/`}>
   <PreviewNotice slot="notice" />
   <div class="page-wrap">
-    <header class="page-intro"><p class="eyebrow">Member decisions · Preview</p><h1>Two separate adoption decisions.</h1><p>Adopt the Reclaim platform as it existed. Separately, adopt the Horizon visual identity and new logo. Both remain draft; voting is not open.</p></header>
-    <section class="adoption-decisions" aria-labelledby="adoption-title">
-      <p class="eyebrow">Adoption decisions · Not open</p>
-      <h2 id="adoption-title">Review each question on its own.</h2>
-      <p class="adoption-intro">These are separate decisions, not one combined vote.</p>
-      <div class="adoption-grid">
-        <article class="adoption-card">
-          <span class="ballot-badge">Decision 1 · Draft</span>
-          <h3>Adopt the Reclaim platform as it existed.</h3>
-          <p>Whether to adopt the existing Reclaim policy platform in its published form. This decision stands on its own.</p>
-        </article>
-        <article class="adoption-card adoption-card--identity">
-          <img src="/fusion_horizon_logo_light.svg" alt="Fusion Horizon logo" width="64" height="64" />
-          <span class="ballot-badge">Decision 2 · Draft</span>
-          <h3>Adopt the Horizon visual identity.</h3>
-          <p>Whether to adopt Horizon as Fusion’s visual identity, including the new logo shown here.</p>
-        </article>
+    <header class="page-intro">
+      <p class="eyebrow">Member decisions · Policy &amp; platform ballots</p>
+      <h1>Vote on settled policy revisions and track outcomes.</h1>
+      <p>Once a policy proposal has undergone consultation and its wording is settled into an immutable revision, it is put to an individual member vote (Approve or Do Not Approve, strict majority of votes cast).</p>
+    </header>
+
+    <div class="notice-box">
+      <strong>Environment safeguard active ({env.APP_MODE === 'preview' ? 'Preview mode' : 'Production mode'}).</strong>
+      <p>
+        This page exercises the actual ballot and vote persistence workflow. In preview mode, votes require a synthetic member identity and cannot become binding party decisions. Production voting remains fail-closed until the Underground authentication and eligibility interface is connected.
+      </p>
+    </div>
+
+    <section class="ballot-section section-space" aria-labelledby="open-ballots-title">
+      <div class="list-heading">
+        <div>
+          <p class="eyebrow">Ready for member vote · Open ballots</p>
+          <h2 id="open-ballots-title">Open individual policy ballots ({openBallots.length})</h2>
+        </div>
+        {!resolution.identity ? (
+          <a class="button button--outline" href="/member/">Sign in to cast or change votes →</a>
+        ) : (
+          <span class="signed-in-badge">Signed in as <code>{resolution.identity.memberId}</code></span>
+        )}
       </div>
-      <p class="adoption-separation">These adoption decisions are separate from the 36 policy-specific proposals in the initial draft round below.</p>
+
+      {openBallots.length === 0 ? (
+        <p class="empty-state">No ballots are currently open. Moderators can open a ballot for a settled policy revision in the <a href="/admin/">moderation workspace</a>.</p>
+      ) : (
+        <div class="ballot-list">
+          {openBallots.map((ballot) => {
+            const policy = policyById.get(ballot.proposalId);
+            const pinnedRevision = policy?.revisions.find((r) => r.revisionId === ballot.policyRevisionId);
+            const currentChoice = memberVotes.get(ballot.ballotId);
+            const isHighlighted = requestedBallotId === ballot.ballotId;
+            return (
+              <article
+                id={ballot.ballotId}
+                class={`ballot-row ${isHighlighted ? 'ballot-row--highlight' : ''}`}
+                data-ballot-id={ballot.ballotId}
+              >
+                <div class="ballot-row__top">
+                  <span class="ballot-badge ballot-badge--open">Open ballot · {ballot.proposalId}</span>
+                  <span class="ballot-revision">Pinned revision: <code>{ballot.policyRevisionId}</code></span>
+                  {(pinnedRevision?.syntheticFixture || ballot.syntheticFixture) && (
+                    <span class="ballot-badge ballot-badge--synthetic">Synthetic preview fixture</span>
+                  )}
+                  {policy && (
+                    <span class="ballot-provenance">
+                      {provenanceLabels[policy.provenance.classification] ?? policy.provenance.classification}
+                    </span>
+                  )}
+                </div>
+
+                <h3>
+                  {policy ? (
+                    <a href={`${policy.sectionPath}#${policy.slug}`}>{ballot.title}</a>
+                  ) : (
+                    ballot.title
+                  )}
+                </h3>
+
+                <p class="ballot-summary">{pinnedRevision?.statement || ballot.summary}</p>
+                {pinnedRevision?.changeSummary && (
+                  <p class="ballot-change-note">
+                    <strong>Settled revision note:</strong> {pinnedRevision.changeSummary}
+                  </p>
+                )}
+
+                {policy && (
+                  <p class="ballot-links">
+                    <a class="text-link" href={`${policy.sectionPath}#${policy.slug}`}>
+                      Inspect full policy layers, provenance &amp; discussion <span aria-hidden="true">→</span>
+                    </a>
+                  </p>
+                )}
+
+                {resolution.identity ? (
+                  <div class="ballot-controls" data-ballot-controls={ballot.ballotId}>
+                    <button
+                      type="button"
+                      class={`button vote-btn ${currentChoice === 'approve' ? 'vote-btn--selected' : 'button--outline'}`}
+                      data-ballot-id={ballot.ballotId}
+                      data-choice="approve"
+                    >
+                      {currentChoice === 'approve' ? '✓ Approved (current)' : 'Approve'}
+                    </button>
+                    <button
+                      type="button"
+                      class={`button vote-btn ${currentChoice === 'do-not-approve' ? 'vote-btn--selected' : 'button--outline'}`}
+                      data-ballot-id={ballot.ballotId}
+                      data-choice="do-not-approve"
+                    >
+                      {currentChoice === 'do-not-approve' ? '✓ Do Not Approve (current)' : 'Do Not Approve'}
+                    </button>
+                    <span class="ballot-status" role="status" aria-live="polite">
+                      {currentChoice
+                        ? `Your current selection: ${currentChoice === 'approve' ? 'Approve' : 'Do Not Approve'}`
+                        : 'You have not voted on this ballot yet.'}
+                    </span>
+                  </div>
+                ) : (
+                  <p class="signin-hint">
+                    <a class="text-link" href="/member/">Sign in with a member preview account to vote on this policy <span aria-hidden="true">→</span></a>
+                  </p>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
     </section>
-    <div class="notice-box"><strong>No binding votes are open.</strong><p>Formal voting stays disabled until member identity, eligibility, and governance requirements are approved. Preview votes are synthetic and never affect Fusion decisions.</p></div>
-    <section class="round-summary" aria-labelledby="draft-round-title"><div><p class="eyebrow">Separate policy round · Draft</p><h2 id="draft-round-title">{initialRound.dateLabel}</h2><p>36 policy proposals · 4 areas · Review meeting 2 December</p></div><a class="text-link" href="/governance/">See what must be decided <span aria-hidden="true">→</span></a></section>
-    <details class="draft-proposals"><summary>Review the 36 draft proposals</summary><p>Each proposal is linked to an immutable version for this intended round. None of these formal ballots is open.</p>{initialRound.areas.map((area) => <section><h3>{area.domain} <small>· {area.policies.length} proposals</small></h3><ul>{area.policies.map((id) => { const policy = policyById.get(id); return policy && <li><strong>{policy.title}</strong><span>{policy.statement}</span></li>; })}</ul></section>)}</details>
-    <section aria-labelledby="ballot-list-title"><div class="list-heading"><div><p class="eyebrow">Synthetic activity only</p><h2 id="ballot-list-title">Voting demos</h2></div><span id="ballot-count" aria-live="polite">Loading demos…</span></div><div id="ballot-list" class="ballot-list"><p>Loading demos…</p></div></section>
+
+    <section class="ballot-section section-space" aria-labelledby="closed-ballots-title">
+      <div class="list-heading">
+        <div>
+          <p class="eyebrow">Recorded decisions · Closed ballots</p>
+          <h2 id="closed-ballots-title">Completed ballots &amp; adopted policy wording ({closedBallots.length})</h2>
+        </div>
+      </div>
+      {closedBallots.length === 0 ? (
+        <p class="empty-state">No ballots have closed yet. When an open ballot closes, its vote tally and recorded outcome (approved / not-approved) appear here and mark the adopted policy revision.</p>
+      ) : (
+        <div class="ballot-list">
+          {closedBallots.map((ballot) => {
+            const policy = policyById.get(ballot.proposalId);
+            const result = closedResults.get(ballot.ballotId);
+            const isSyntheticOutcome = env.APP_MODE === 'preview' || ballot.bindingBallotsEnabled !== true || Boolean(ballot.syntheticFixture);
+            return (
+              <article id={ballot.ballotId} class="ballot-row ballot-row--closed" data-synthetic-outcome={isSyntheticOutcome ? 'true' : 'false'}>
+                <div class="ballot-row__top">
+                  <span class={`ballot-badge ${result?.outcome === 'approved' ? 'ballot-badge--approved' : 'ballot-badge--rejected'}`}>
+                    {isSyntheticOutcome
+                      ? `Closed · Simulated Preview ${result?.outcome === 'approved' ? 'Approval (Non-binding)' : 'Rejection (Non-binding)'}`
+                      : `Closed · ${result?.outcome === 'approved' ? 'Approved & Adopted' : 'Not Approved'}`}
+                  </span>
+                  {isSyntheticOutcome && (
+                    <span class="ballot-badge ballot-badge--synthetic">Synthetic preview outcome · Not a party decision</span>
+                  )}
+                  <span class="ballot-revision">Evaluated revision: <code>{ballot.policyRevisionId}</code></span>
+                </div>
+                <h3>
+                  {policy ? <a href={`${policy.sectionPath}#${policy.slug}`}>{ballot.title}</a> : ballot.title}
+                </h3>
+                <p class="ballot-summary">{ballot.summary}</p>
+                {result && (
+                  <div class="tally-box">
+                    <span>
+                      <strong>Outcome:</strong>{' '}
+                      {isSyntheticOutcome
+                        ? `${result.outcome === 'approved' ? 'Simulated preview approval (non-binding)' : 'Simulated preview rejection (non-binding)'}`
+                        : `${result.outcome === 'approved' ? 'Adopted' : 'Not adopted'}`}
+                    </span>
+                    <span><strong>Approve:</strong> {result.approve}</span>
+                    <span><strong>Do Not Approve:</strong> {result.doNotApprove}</span>
+                    <span><strong>Total counted:</strong> {result.votesCast}</span>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+
+    <section class="adoption-decisions section-space" aria-labelledby="adoption-title">
+      <p class="eyebrow">Separate platform &amp; branding review questions</p>
+      <h2 id="adoption-title">Platform and Horizon visual identity decisions</h2>
+      <p class="adoption-intro">
+        As requested by members, adopting the Reclaim platform and adopting the Horizon visual identity (including the logo) are preserved as two distinct review questions, separate from individual policy ballots.
+      </p>
+      <div class="adoption-grid">
+        {adoptionBallots.map((ballot, index) => (
+          <article id={ballot.ballotId} class={`adoption-card ${ballot.ballotId.includes('horizon') ? 'adoption-card--identity' : ''}`}>
+            {ballot.ballotId.includes('horizon') && (
+              <img src="/fusion_horizon_logo_light.svg" alt="Fusion Horizon logo" width="56" height="56" />
+            )}
+            <span class="ballot-badge">Decision {index + 1} · {ballot.status} · <code>{ballot.policyRevisionId}</code></span>
+            <h3>{ballot.title}</h3>
+            <p>{ballot.summary}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    {continuousBallots.length > 0 && (
+      <section class="ballot-section section-space" aria-labelledby="continuous-title">
+        <div class="list-heading">
+          <div>
+            <p class="eyebrow">Continuous policy development · Follow-on round</p>
+            <h2 id="continuous-title">Newly proposed policies in consultation ({continuousBallots.length})</h2>
+          </div>
+          <a class="text-link" href="/consultations/?roundId=continuous-policy-round-2027-q1">
+            Join Q1 2027 consultation <span aria-hidden="true">→</span>
+          </a>
+        </div>
+        <div class="ballot-list">
+          {continuousBallots.map((ballot) => {
+            const policy = policyById.get(ballot.proposalId);
+            return (
+              <article id={ballot.ballotId} class="ballot-row">
+                <div class="ballot-row__top">
+                  <span class="ballot-badge">{ballot.status} · Follow-on round</span>
+                  <span class="ballot-revision">Pinned revision: <code>{ballot.policyRevisionId}</code></span>
+                </div>
+                <h3>{policy ? <a href={`${policy.sectionPath}#${policy.slug}`}>{ballot.title}</a> : ballot.title}</h3>
+                <p class="ballot-summary">{ballot.summary}</p>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    )}
+
+    <section class="round-summary" aria-labelledby="draft-round-title">
+      <div>
+        <p class="eyebrow">AGM Initial Review Round · {scheduledAgmBallots.length} remaining in consultation</p>
+        <h2 id="draft-round-title">{initialRound.dateLabel}</h2>
+        <p>36 priority proposals across 4 domains · Review meeting {initialRound.meeting.date}</p>
+      </div>
+      <a class="text-link" href="/governance/">See governance rules &amp; release gates <span aria-hidden="true">→</span></a>
+    </section>
+
+    <details class="draft-proposals">
+      <summary>Browse the {scheduledAgmBallots.length} AGM Round 1 ballots currently in draft awaiting settled wording</summary>
+      <p>Each ballot is pinned to an immutable policy revision and can be opened once consultation concludes and wording is settled.</p>
+      <ul>
+        {scheduledAgmBallots.map((ballot) => {
+          const policy = policyById.get(ballot.proposalId);
+          return (
+            <li id={ballot.ballotId}>
+              <div>
+                <strong>
+                  {policy ? <a href={`${policy.sectionPath}#${policy.slug}`}>{ballot.proposalId} · {ballot.title}</a> : ballot.title}
+                </strong>
+                <div class="draft-meta">
+                  <code>{ballot.policyRevisionId}</code>
+                  {policy && <span> · {provenanceLabels[policy.provenance.classification] ?? policy.provenance.classification}</span>}
+                </div>
+              </div>
+              <span>{ballot.summary}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   </div>
 </SiteLayout>
 <script>
-  const list = document.querySelector<HTMLElement>('#ballot-list');
-  const count = document.querySelector<HTMLElement>('#ballot-count');
-  const session = await fetch('/api/session', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => null);
-  const response = await fetch('/api/ballots').catch(() => null);
-  const payload = response?.ok ? await response.json().catch(() => null) : null;
-  const ballots = (payload?.ballots ?? []).filter((ballot: { mode?: string }) => ballot.mode === 'simulation');
-  if (count) count.textContent = `${ballots.length} demos loaded`;
-  if (!list) throw new Error('Ballot list element is missing.');
-  if (!ballots.length) {
-    list.innerHTML = '<p class="empty-state">No demos are loaded. All 36 policy ballots remain draft-only.</p>';
-  } else {
-    list.innerHTML = '';
-    for (const ballot of ballots) {
-      const article = document.createElement('article'); article.className = 'ballot-row';
-      const label = ballot.mode === 'simulation' ? 'Synthetic simulation' : 'Formal ballot';
-      const title = document.createElement('h3'); title.textContent = ballot.title;
-      const badge = document.createElement('span'); badge.className = 'ballot-badge'; badge.textContent = `${label} · ${ballot.status}`;
-      const details = document.createElement('p'); details.textContent = ballot.mode === 'simulation' ? 'Test vote only. It cannot affect a Fusion decision.' : 'Formal voting is disabled until release requirements are met.';
-      article.append(badge, title, details);
-      if (ballot.mode === 'simulation' && ballot.status === 'open' && session?.identity?.source === 'synthetic') {
-        const controls = document.createElement('div'); controls.className = 'ballot-controls';
-        for (const [choice, text] of [['approve','Approve'], ['do-not-approve','Do Not Approve']]) {
-          const button = document.createElement('button'); button.className = choice === 'approve' ? 'button' : 'button button--outline'; button.type = 'button'; button.textContent = text;
-          button.addEventListener('click', async () => {
-            button.disabled = true;
-            const saved = await fetch('/api/votes', { method:'POST', credentials:'same-origin', headers:{'content-type':'application/json'}, body:JSON.stringify({ballotId:ballot.ballotId, choice}) });
-            const result = await saved.json().catch(() => ({}));
-            const status = article.querySelector('.ballot-status');
-            if (status) status.textContent = saved.ok ? 'Test vote saved. You can change it until this demo closes.' : result.error;
-            else { const p=document.createElement('p');p.className='ballot-status';p.setAttribute('role','status');p.textContent=saved.ok ? 'Test vote saved. You can change it until this demo closes.' : result.error;article.append(p); }
-            button.disabled = false;
-          }); controls.append(button);
+  const buttons = document.querySelectorAll<HTMLButtonElement>('.vote-btn');
+  for (const button of buttons) {
+    button.addEventListener('click', async () => {
+      const ballotId = button.dataset.ballotId;
+      const choice = button.dataset.choice;
+      if (!ballotId || !choice) return;
+
+      const container = button.closest<HTMLElement>('[data-ballot-controls]');
+      const statusEl = container?.querySelector<HTMLElement>('.ballot-status');
+      const siblingButtons = container?.querySelectorAll<HTMLButtonElement>('.vote-btn') ?? [];
+      for (const btn of siblingButtons) btn.disabled = true;
+
+      if (statusEl) statusEl.textContent = 'Recording vote…';
+      const response = await fetch('/api/votes', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ballotId, choice }),
+      });
+      const result = await response.json().catch(() => ({}));
+
+      for (const btn of siblingButtons) {
+        btn.disabled = false;
+        if (response.ok) {
+          const isThis = btn.dataset.choice === choice;
+          btn.classList.toggle('vote-btn--selected', isThis);
+          btn.classList.toggle('button--outline', !isThis);
+          btn.textContent =
+            btn.dataset.choice === 'approve'
+              ? isThis
+                ? '✓ Approved (current)'
+                : 'Approve'
+              : isThis
+                ? '✓ Do Not Approve (current)'
+                : 'Do Not Approve';
         }
-        article.append(controls);
-      } else if (ballot.mode === 'simulation' && ballot.status === 'open') {
-        const link = document.createElement('a'); link.href='/member/'; link.className='text-link'; link.textContent='Sign in with a synthetic preview identity'; article.append(link);
       }
-      list.append(article);
-    }
+
+      if (statusEl) {
+        statusEl.textContent = response.ok
+          ? `Vote saved (${choice === 'approve' ? 'Approve' : 'Do Not Approve'}). You can change your selection until the ballot closes.`
+          : (result.error ?? 'Could not record vote.');
+      }
+    });
   }
 </script>
 <style>
-  .adoption-decisions{margin:0 0 2rem;padding:1.6rem;background:#f2eef9;border-radius:.85rem}.adoption-decisions h2{max-width:19ch;margin:.1rem 0 .65rem;font-size:clamp(1.8rem,3vw,2.5rem)}.adoption-intro,.adoption-separation{margin:.5rem 0 1.2rem;color:#54465f;line-height:1.6}.adoption-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.adoption-card{display:flex;min-height:14rem;flex-direction:column;align-items:flex-start;padding:1.3rem;background:white;border:1px solid #ded6e7;border-top:4px solid #00c9d2;border-radius:.65rem}.adoption-card h3{margin:.8rem 0 .35rem;font-size:1.5rem}.adoption-card p{max-width:48ch;margin:.25rem 0 0;color:#54465f;line-height:1.6}.adoption-card--identity img{width:3.2rem;height:3.2rem;object-fit:contain;margin-bottom:.7rem}.adoption-separation{margin:1.1rem 0 0;font-size:.9rem}.notice-box{padding:1.3rem 1.5rem;background:#e4f9fa;border-radius:.75rem;color:#173d42}.notice-box p{max-width:75ch;margin:.35rem 0 0;line-height:1.6}.round-summary{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;margin:2rem 0 3rem;padding:1.4rem 0;border-block:1px solid #ded6e7}.round-summary h2{margin:.1rem 0;font-size:1.5rem}.round-summary p{margin:.4rem 0 0;color:#54465f}.list-heading{display:flex;align-items:baseline;justify-content:space-between;gap:1rem}.list-heading h2{margin:.1rem 0 1.2rem}.list-heading span{color:#54465f}.ballot-list{display:grid;gap:.8rem;padding-bottom:5rem}.ballot-row{padding:1.35rem 1.4rem;border:1px solid #ded6e7;border-radius:.75rem}.ballot-row h3{margin:.55rem 0;font-size:1.35rem}.ballot-row p{max-width:65ch;color:#54465f;line-height:1.55}.ballot-badge{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5c4d6a}.ballot-controls{display:flex;flex-wrap:wrap;gap:.7rem;margin-top:1rem}.empty-state{padding:1.5rem;background:#f2eef9;border-radius:.7rem;color:#54465f}.ballot-status{font-weight:600}
-  .draft-proposals{margin-bottom:3rem;border:1px solid #ded6e7;border-radius:.75rem}.draft-proposals>summary{padding:1rem 1.2rem;font-weight:700;cursor:pointer}.draft-proposals>p{margin:0 1.2rem 1.2rem;color:#54465f}.draft-proposals section{padding:0 1.2rem 1rem}.draft-proposals h3{font-size:1.2rem}.draft-proposals h3 small{font:600 .8rem Outfit,sans-serif;color:#625171}.draft-proposals ul{list-style:none;padding:0}.draft-proposals li{display:grid;grid-template-columns:minmax(12rem,.45fr) 1fr;gap:1.2rem;padding:.75rem 0;border-top:1px solid #ded6e7;font-size:.91rem;line-height:1.55}.draft-proposals li span{color:#54465f}
-  @media(max-width:600px){.adoption-decisions{padding:1.1rem}.adoption-grid{grid-template-columns:1fr}.adoption-card{min-height:0}.round-summary,.list-heading{align-items:flex-start;flex-direction:column}.ballot-row{padding:1rem}.ballot-controls{align-items:stretch;flex-direction:column}.ballot-controls button{width:100%}}
+  .notice-box{padding:1.25rem 1.5rem;background:#e4f9fa;border-radius:.75rem;color:#173d42;margin-bottom:1.5rem}.notice-box p{max-width:78ch;margin:.35rem 0 0;line-height:1.6}
+  .ballot-section{border-top:1px solid #ded6e7}
+  .list-heading{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;margin-bottom:1.25rem}.list-heading h2{margin:.1rem 0 0}
+  .signed-in-badge{font-size:.88rem;color:#54465f}
+  .ballot-list{display:grid;gap:1rem}
+  .ballot-row{padding:1.4rem 1.5rem;background:#fff;border:1px solid #ded6e7;border-radius:.8rem}
+  .ballot-row--highlight{border:2px solid #32105a;background:#faf7fd}
+  .ballot-row--closed{background:#f9f7fc}
+  .ballot-row__top{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;margin-bottom:.5rem;font-size:.82rem;color:#54465f}
+  .ballot-row h3{margin:.3rem 0 .45rem;font-size:1.35rem}.ballot-row h3 a{color:inherit;text-decoration:none}.ballot-row h3 a:hover{text-decoration:underline}
+  .ballot-summary{max-width:70ch;margin:0 0 .5rem;color:#2c1d3b;line-height:1.6}
+  .ballot-change-note{margin:.5rem 0;padding:.6rem .85rem;background:#f2eef9;border-left:3px solid #32105a;border-radius:.35rem;font-size:.9rem;color:#392a49}
+  .ballot-links{margin:.5rem 0 0;font-size:.9rem}
+  .ballot-badge{display:inline-block;padding:.15rem .55rem;border-radius:99px;font-size:.73rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:#e2d4f8;color:#32105a}
+  .ballot-badge--open{background:#d4f4f6;color:#0b4b50}
+  .ballot-badge--approved{background:#d1f2d9;color:#114b21}
+  .ballot-badge--rejected{background:#f9d7d7;color:#691919}
+  .ballot-badge--synthetic{background:#fff3cd;color:#664d03;border:1px solid #ffecb5}
+  .ballot-controls{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin-top:1rem;padding-top:.9rem;border-top:1px solid #eee8f5}
+  .vote-btn--selected{background:#32105a;color:#fff;border-color:#32105a}
+  .ballot-status{font-size:.9rem;font-weight:600;color:#32105a}
+  .signin-hint{margin:.85rem 0 0}
+  .tally-box{display:flex;flex-wrap:wrap;gap:.75rem 1.5rem;margin-top:.85rem;padding:.75rem 1rem;background:#fff;border:1px solid #ded6e7;border-radius:.5rem;font-size:.9rem}
+  .adoption-decisions{padding:1.6rem;background:#f2eef9;border-radius:.85rem}.adoption-decisions h2{margin:.1rem 0 .65rem;font-size:clamp(1.6rem,2.6vw,2.2rem)}.adoption-intro{max-width:72ch;margin:.4rem 0 1.2rem;color:#54465f;line-height:1.6}.adoption-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.adoption-card{display:flex;flex-direction:column;align-items:flex-start;padding:1.3rem;background:white;border:1px solid #ded6e7;border-top:4px solid #00c9d2;border-radius:.65rem}.adoption-card h3{margin:.7rem 0 .35rem;font-size:1.35rem}.adoption-card p{margin:.2rem 0 0;color:#54465f;line-height:1.55}.adoption-card--identity img{width:3rem;height:3rem;object-fit:contain;margin-bottom:.6rem}
+  .round-summary{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;margin:2rem 0 1.5rem;padding:1.4rem 0;border-block:1px solid #ded6e7}.round-summary h2{margin:.1rem 0;font-size:1.5rem}.round-summary p{margin:.4rem 0 0;color:#54465f}
+  .draft-proposals{margin-bottom:4rem;border:1px solid #ded6e7;border-radius:.75rem;background:#fff}.draft-proposals>summary{padding:1rem 1.2rem;font-weight:700;cursor:pointer}.draft-proposals>p{margin:0 1.2rem 1rem;color:#54465f}.draft-proposals ul{list-style:none;padding:0 1.2rem 1rem;margin:0}.draft-proposals li{display:grid;grid-template-columns:minmax(16rem,.5fr) 1fr;gap:1.2rem;padding:.85rem 0;border-top:1px solid #ded6e7;font-size:.92rem;line-height:1.55}.draft-proposals li a{color:#32105a;text-decoration:none}.draft-proposals li a:hover{text-decoration:underline}.draft-meta{margin-top:.2rem;font-size:.8rem;color:#54465f}
+  .empty-state{padding:1.4rem;background:#f2eef9;border-radius:.7rem;color:#54465f}
+  @media(max-width:700px){.adoption-grid{grid-template-columns:1fr}.round-summary,.list-heading{align-items:flex-start;flex-direction:column}.draft-proposals li{grid-template-columns:1fr;gap:.4rem}.ballot-controls{align-items:stretch;flex-direction:column}.ballot-controls button{width:100%}}
 </style>

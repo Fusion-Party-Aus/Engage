@@ -12,11 +12,10 @@ export async function GET({ request, params, locals }: { request: Request; param
   try {
     const db = await getDatabase(env);
     await ensureIndexes(db);
-    const ballot = await db.collection("ballots").findOne({ ballotId: params.ballotId }, { projection: { _id: 0, ballotId: 1, mode: 1 } });
+    const ballot = await db.collection("ballots").findOne({ ballotId: params.ballotId }, { projection: { _id: 0, ballotId: 1 } });
     if (!ballot) return json({ error: "Ballot not found." }, 404);
-    const collection = resolution.identity.source === "synthetic" ? "preview_votes" : "votes";
-    const vote = await db.collection(collection).findOne({ ballotId: params.ballotId, memberId: resolution.identity.memberId }, { projection: { _id: 1 } });
-    return json({ participated: Boolean(vote), synthetic: resolution.identity.source === "synthetic" });
+    const vote = await db.collection<{ choice?: string }>("votes").findOne({ ballotId: params.ballotId, memberId: resolution.identity.memberId }, { projection: { _id: 1, choice: 1 } });
+    return json({ participated: Boolean(vote), choice: vote?.choice ?? null });
   } catch {
     return json({ error: "Participation status is temporarily unavailable." }, 503);
   }

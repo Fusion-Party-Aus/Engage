@@ -1,33 +1,98 @@
----
 import SiteLayout from '../layouts/SiteLayout.astro';
 import PreviewNotice from '../components/PreviewNotice.astro';
 import HeroSplit from '../components/HeroSplit.astro';
+import copy from '../data/site-copy.json';
 import policies from '../data/policies.json';
+import { loadPolicyCatalogue } from '../lib/platform/catalogue';
+import { platformEnv } from '../lib/platform/http';
+
+export const prerender = false;
+
+const catalogue = await loadPolicyCatalogue(platformEnv(Astro.locals));
+const openConsultations = catalogue.filter((policy) => policy.consultationRounds.some((round) => round.status === 'open'));
+const featured = catalogue.slice(0, 3);
 const economy = policies.filter((policy) => policy.slug.startsWith('/reclaim-our-economy/'));
 const future = policies.filter((policy) => policy.slug.startsWith('/reclaim-our-future/'));
 ---
-<SiteLayout title="Fusion policy platform" description="Explore Fusion policies and take part in member consultations." canonical={`${Astro.url.origin}/`}>
+<SiteLayout title={copy.home.title} description={copy.home.description} canonical={`${Astro.url.origin}/`}>
   <PreviewNotice slot="notice" />
-  <HeroSplit title="Two decisions for members." copy="Adopt the Reclaim platform as it existed. Separately, adopt the Horizon visual identity and new logo. Both decisions remain in draft; voting is not open." image="/melbourne-station.webp" imageAlt="Commuters travelling through a Melbourne station" primaryHref="/ballots/" primaryLabel="Review the decisions" />
+  <HeroSplit
+    title={copy.home.hero.title}
+    copy={copy.home.hero.copy}
+    image={copy.home.hero.image}
+    imageAlt={copy.home.hero.imageAlt}
+    primaryHref={copy.home.hero.primaryAction.href}
+    primaryLabel={copy.home.hero.primaryAction.label}
+    secondaryHref={copy.home.hero.secondaryAction.href}
+    secondaryLabel={copy.home.hero.secondaryAction.label}
+  />
+
+  <section class="now-section" aria-labelledby="now-title">
+    <div class="page-wrap now-layout">
+      <div class="now-intro">
+        <p class="eyebrow">Your voice shapes what comes next</p>
+        <h2 id="now-title">{openConsultations.length ? 'Open for your input' : 'Start with the issues that matter to you'}</h2>
+        <p>{openConsultations.length ? 'Read a proposal, tell us what works and what needs to change.' : 'Explore the commitments and proposals behind Reclaim.'}</p>
+        <a class="text-link" href={openConsultations.length ? '/consultations/' : '/policies/'}>
+          {openConsultations.length ? 'Join the discussion' : 'Browse the policy library'} <span aria-hidden="true">→</span>
+        </a>
+      </div>
+      {openConsultations.length ? (
+        <ul class="now-list">
+          {openConsultations.slice(0, 3).map((policy) => (
+            <li>
+              <span class="now-label">Open for comment</span>
+              <a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a>
+              <span>{policy.domain}</span>
+              <a class="inline-action" href={`/consultations/?policyId=${encodeURIComponent(policy.policyId)}`}>Comment or suggest a change <span aria-hidden="true">↗</span></a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul class="now-list">
+          {featured.map((policy) => (
+            <li>
+              <span class="now-label">{policy.domain}</span>
+              <a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a>
+              <span>{policy.statement}</span>
+              <a class="inline-action" href={policy.url}>Read the proposal <span aria-hidden="true">↗</span></a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  </section>
+
   <section class="areas" aria-labelledby="areas-title">
     <div class="page-wrap section-space">
-      <p class="eyebrow">Policy library</p>
-      <h2 id="areas-title">Explore the policy areas</h2>
+      <p class="eyebrow">Find your place in the conversation</p>
+      <h2 id="areas-title">What would you like to change?</h2>
       <div class="area-grid">
-        <a class="area-link" href="/reclaim-our-economy/"><span>01 · Economy</span><h3>Reclaim our economy</h3><p>{economy.length} policy areas to build security and shared prosperity.</p><b aria-hidden="true">↗</b></a>
-        <a class="area-link" href="/reclaim-our-future/"><span>02 · Future</span><h3>Reclaim our future</h3><p>{future.length} policy areas for thriving communities and a stronger democracy.</p><b aria-hidden="true">↗</b></a>
+        <a class="area-link" href="/reclaim-our-economy/">
+          <span>Reclaim our economy</span>
+          <h3>A fair go, shared prosperity</h3>
+          <p>Explore policy areas including housing, work, tax, energy and transport.</p>
+          <b aria-hidden="true">↗</b>
+        </a>
+        <a class="area-link" href="/reclaim-our-future/">
+          <span>Reclaim our future</span>
+          <h3>A future we shape together</h3>
+          <p>Explore policy areas including climate, democracy, health and education.</p>
+          <b aria-hidden="true">↗</b>
+        </a>
       </div>
-      <a class="text-link area-all" href="/policies/">Browse all policies <span aria-hidden="true">→</span></a>
+      <div class="area-footer">
+        <a class="text-link" href="/policies/">Browse all policy areas <span aria-hidden="true">→</span></a>
+        <a class="text-link" href="/ballots/">See decisions open to members <span aria-hidden="true">→</span></a>
+      </div>
     </div>
   </section>
 </SiteLayout>
 <style>
-  .areas{background:#f4f0fa}.areas h2{margin:.1rem 0 2rem}
-  .area-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
-  .area-link{position:relative;display:flex;min-height:17rem;flex-direction:column;align-items:flex-start;padding:clamp(1.4rem,3.5vw,2.7rem);background:#fff;color:#32105a;text-decoration:none;border-radius:.8rem;transition:transform .2s ease,background .2s ease}
-  .area-link:hover{transform:translateY(-3px);background:#e4f9fa}.area-link>span{font-size:.8rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#54465f}
-  .area-link h3{margin:auto 0 .55rem;font-size:clamp(1.8rem,3vw,2.7rem)}.area-link p{max-width:36ch;margin:0;color:#54465f;line-height:1.55}.area-link b{position:absolute;right:1.5rem;bottom:1.15rem;font-size:1.4rem}
-  .area-all{margin-top:1.7rem}
-  @media(max-width:700px){.area-grid{grid-template-columns:1fr}.area-link{min-height:14rem}}
+  .now-section{background:#fff;border-block:1px solid #ded6e7}.now-layout{display:grid;grid-template-columns:minmax(16rem,.75fr) minmax(0,1.4fr);gap:clamp(2rem,6vw,6rem);padding-block:clamp(3.5rem,7vw,6rem)}
+  .now-intro{align-self:start;position:sticky;top:2rem}.now-intro h2{margin:.1rem 0 .8rem;font-size:clamp(2rem,3.6vw,3.1rem)}.now-intro p:not(.eyebrow){max-width:34ch;color:#54465f;line-height:1.6}.now-intro .text-link{margin-top:.5rem}
+  .now-list{list-style:none;padding:0;margin:0}.now-list li{display:grid;grid-template-columns:1fr auto;gap:.35rem 1rem;padding:1.25rem 0;border-top:1px solid #ded6e7}.now-list li:last-child{border-bottom:1px solid #ded6e7}.now-label{grid-column:1/-1;color:#625171;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.now-list li>a:not(.inline-action){font:600 clamp(1.35rem,2vw,1.8rem)/1.2 Newsreader,Georgia,serif;text-decoration:none}.now-list li>span:nth-last-child(2){grid-column:1;color:#54465f;font-size:.9rem;line-height:1.5}.inline-action{grid-column:2;grid-row:3;align-self:end;color:#32105a;font-size:.88rem;font-weight:700}
+  .areas{background:#f4f0fa}.areas h2{margin:.1rem 0 2rem}.area-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.area-link{position:relative;display:flex;min-height:17rem;flex-direction:column;align-items:flex-start;padding:clamp(1.4rem,3.5vw,2.7rem);background:#fff;color:#32105a;text-decoration:none;border-radius:.8rem;transition:transform .2s ease,background .2s ease}.area-link:hover{transform:translateY(-3px);background:#e4f9fa}.area-link>span{font-size:.8rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#54465f}.area-link h3{margin:auto 0 .55rem;font-size:clamp(1.8rem,3vw,2.7rem)}.area-link p{max-width:36ch;margin:0;color:#54465f;line-height:1.55}.area-link b{position:absolute;right:1.5rem;bottom:1.15rem;font-size:1.4rem}.area-footer{display:flex;flex-wrap:wrap;gap:1.5rem;margin-top:1.7rem}
+  @media(max-width:760px){.now-layout{grid-template-columns:1fr;gap:1.5rem}.now-intro{position:static}.now-list li{grid-template-columns:1fr}.inline-action{grid-column:1;grid-row:auto}.now-list li>span:nth-last-child(2){grid-column:1}.area-grid{grid-template-columns:1fr}.area-link{min-height:14rem}}
   @media(prefers-reduced-motion:no-preference){.hero__copy{animation:arrive .65s cubic-bezier(.16,1,.3,1) both}@keyframes arrive{from{opacity:.5;transform:translateY(1.2rem);filter:blur(5px)}to{opacity:1;transform:none;filter:blur(0)}}}
 </style>

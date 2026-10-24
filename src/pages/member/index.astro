@@ -2,14 +2,52 @@
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import PreviewNotice from '../../components/PreviewNotice.astro';
 ---
-<SiteLayout title="Member portal · Fusion" description="Sign in to the synthetic preview member portal." noIndex>
+<SiteLayout title="Member portal · Fusion" description="Sign in to participate in member policy consultations and ballots." noIndex>
   <PreviewNotice slot="notice" />
   <div class="page-wrap member-page">
-    <header class="page-intro"><p class="eyebrow">Member portal · Preview</p><h1>Try the member experience.</h1><p>Choose a test account to try consultations and voting demos. Preview sign-in does not connect to Underground or verify membership.</p></header>
-    <section id="signin-panel" class="panel" aria-labelledby="signin-title"><div><p class="eyebrow">Start here</p><h2 id="signin-title">Choose a test account.</h2><p>Members can try the forms and demos. Moderators can review test submissions.</p></div>
-      <form id="signin-form"><label class="field"><span>Test account</span><select name="memberId" required><option value="preview-member-01">Member preview 1</option><option value="preview-member-02">Member preview 2</option><option value="preview-admin-01">Moderator preview</option></select></label><button class="button" type="submit">Start preview</button><p id="signin-status" class="form-status" role="status" aria-live="polite"></p></form>
+    <header class="page-intro">
+      <p class="eyebrow">Member portal · Authentication adapter</p>
+      <h1>Member participation &amp; review history.</h1>
+      <p>In preview mode, sign in with a synthetic member or moderator identity to exercise the full policy consultation, amendment, and voting workflows. Production authentication connects to Underground CRM and fails closed until configured.</p>
+    </header>
+    <section id="signin-panel" class="panel" aria-labelledby="signin-title">
+      <div>
+        <p class="eyebrow">Preview identity adapter</p>
+        <h2 id="signin-title">Choose a preview identity.</h2>
+        <p>Members can submit consultation comments, propose amendments, and vote on open policy ballots. Moderators can review submissions, settle policy revisions, and manage consultation rounds and ballots.</p>
+      </div>
+      <form id="signin-form">
+        <label class="field">
+          <span>Preview account</span>
+          <select name="memberId" required>
+            <option value="preview-member-01">Member 1 (preview-member-01)</option>
+            <option value="preview-member-02">Member 2 (preview-member-02)</option>
+            <option value="preview-admin-01">Moderator &amp; Administrator (preview-admin-01)</option>
+          </select>
+        </label>
+        <button class="button" type="submit">Sign in</button>
+        <p id="signin-status" class="form-status" role="status" aria-live="polite"></p>
+      </form>
     </section>
-    <section id="dashboard" class="dashboard" hidden aria-labelledby="dashboard-title"><div class="dashboard-head"><div><p class="eyebrow">Test account</p><h2 id="dashboard-title">Your activity</h2></div><button id="signout" class="button button--outline" type="button">Sign out</button></div><p class="callout">All activity is synthetic. This account cannot establish eligibility for a real Fusion vote.</p><div id="dashboard-content" class="dashboard-content"><p>Loading your activity…</p></div><a id="admin-link" class="text-link" href="/admin/" hidden>Review test submissions <span aria-hidden="true">→</span></a></section>
+    <section id="dashboard" class="dashboard" hidden aria-labelledby="dashboard-title">
+      <div class="dashboard-head">
+        <div>
+          <p class="eyebrow" id="identity-eyebrow">Active session</p>
+          <h2 id="dashboard-title">Your policy review activity</h2>
+        </div>
+        <div class="dashboard-actions">
+          <a id="admin-link" class="button button--outline" href="/admin/" hidden>Open moderation &amp; lifecycle workspace →</a>
+          <button id="signout" class="button button--outline" type="button">Sign out</button>
+        </div>
+      </div>
+      <p class="callout">Preview safeguard active: synthetic participation exercises the unified consultation and voting workflows without creating binding party outcomes.</p>
+      <div class="quick-links">
+        <a class="text-link" href="/policies/">Browse all 76 baseline &amp; proposed policies →</a>
+        <a class="text-link" href="/consultations/">Submit consultation feedback or amendment →</a>
+        <a class="text-link" href="/ballots/">Vote on open policy ballots →</a>
+      </div>
+      <div id="dashboard-content" class="dashboard-content"><p>Loading your activity…</p></div>
+    </section>
   </div>
 </SiteLayout>
 <script>
@@ -19,48 +57,141 @@ import PreviewNotice from '../../components/PreviewNotice.astro';
   const status = document.querySelector<HTMLElement>('#signin-status');
   const content = document.querySelector<HTMLElement>('#dashboard-content');
   const adminLink = document.querySelector<HTMLElement>('#admin-link');
+  const eyebrow = document.querySelector<HTMLElement>('#identity-eyebrow');
+
   async function refresh() {
     const session = await fetch('/api/session', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => null);
     if (!session?.identity || !dashboard || !panel) return;
-    panel.hidden = true; dashboard.hidden = false;
+    panel.hidden = true;
+    dashboard.hidden = false;
     const roleNames = session.identity.roles?.join(', ') ?? 'member';
-    dashboard.querySelector('#dashboard-title')!.textContent = roleNames.includes('moderator') ? 'Moderator preview' : 'Member preview';
-    if (session.identity.roles?.some((role:string) => ['administrator','moderator'].includes(role)) && adminLink) adminLink.hidden = false;
-    const [submissionsResponse, ballotsResponse] = await Promise.all([fetch('/api/consultations'), fetch('/api/ballots')]);
+    if (eyebrow) eyebrow.textContent = `${session.identity.memberId} · Roles: ${roleNames}`;
+    dashboard.querySelector('#dashboard-title')!.textContent = roleNames.includes('moderator')
+      ? 'Moderator & Member workspace'
+      : 'Your policy review activity';
+    if (session.identity.roles?.some((role: string) => ['administrator', 'moderator'].includes(role)) && adminLink) {
+      adminLink.hidden = false;
+    }
+
+    const [submissionsResponse, ballotsResponse] = await Promise.all([
+      fetch('/api/consultations', { credentials: 'same-origin' }),
+      fetch('/api/ballots', { credentials: 'same-origin' }),
+    ]);
     const submissionsData = await submissionsResponse.json().catch(() => ({}));
     const ballotData = await ballotsResponse.json().catch(() => ({}));
     if (!content) return;
     content.replaceChildren();
-    const submissionsHeading = document.createElement('h3'); submissionsHeading.textContent = 'Consultation submissions'; content.append(submissionsHeading);
+
+    const submissionsHeading = document.createElement('h3');
+    submissionsHeading.textContent = 'Your consultation submissions & amendment proposals';
+    content.append(submissionsHeading);
     const submissions = submissionsData.submissions ?? [];
-    if (!submissions.length) { const p=document.createElement('p');p.textContent='No feedback yet. Open the consultation form to try it.';content.append(p); }
+    if (!submissions.length) {
+      const p = document.createElement('p');
+      p.textContent = 'You have not submitted any consultation feedback yet. Visit Consultations to comment or propose an amendment.';
+      content.append(p);
+    }
     for (const submission of submissions) {
       const row = document.createElement('article');
       row.className = 'activity-row';
+      const left = document.createElement('div');
       const title = document.createElement('strong');
-      const kinds: Record<string, string> = { comment: 'Comment', amendment: 'Suggested amendment', alternative: 'Alternative direction' };
-      title.textContent = submission.title || kinds[submission.kind] || 'Feedback';
+      const kinds: Record<string, string> = {
+        comment: 'Comment',
+        amendment: 'Proposed amendment',
+        alternative: 'Alternative direction',
+      };
+      title.textContent = `${submission.policyId} · ${submission.title || kinds[submission.kind] || 'Feedback'}`;
+      const bodyPreview = document.createElement('p');
+      bodyPreview.className = 'activity-body';
+      bodyPreview.textContent = submission.body;
+      left.append(title, bodyPreview);
+      if (submission.moderatorResponse) {
+        const modNote = document.createElement('p');
+        modNote.className = 'activity-mod';
+        modNote.textContent = `Moderator note: ${submission.moderatorResponse}`;
+        left.append(modNote);
+      }
+
       const meta = document.createElement('span');
-      const statuses: Record<string, string> = { pending: 'Awaiting review', accepted: 'Reviewed', 'needs-changes': 'Changes requested', declined: 'Closed' };
-      const state = statuses[submission.status] || 'Submitted';
-      meta.textContent = `${state} · ${new Date(submission.createdAt).toLocaleDateString()}`;
-      row.append(title, meta);
+      const statuses: Record<string, string> = {
+        pending: 'Awaiting review',
+        accepted: 'Accepted & published',
+        'needs-changes': 'Published (changes requested)',
+        declined: 'Declined',
+      };
+      const state = statuses[submission.status] || submission.status;
+      meta.textContent = `${state} · ${submission.policyRevisionId} · ${new Date(submission.createdAt).toLocaleDateString()}`;
+      row.append(left, meta);
       content.append(row);
     }
-    const ballotsHeading = document.createElement('h3'); ballotsHeading.textContent = 'Ballots'; content.append(ballotsHeading);
-    const ballots = ballotData.ballots ?? [];
-    if (!ballots.length) { const p=document.createElement('p');p.textContent='No synthetic ballot simulations are loaded.';content.append(p); }
+
+    const ballotsHeading = document.createElement('h3');
+    ballotsHeading.textContent = 'Open & completed policy ballots';
+    content.append(ballotsHeading);
+    const ballots = (ballotData.ballots ?? []).filter((b: any) => b.status === 'open' || b.status === 'closed');
+    if (!ballots.length) {
+      const p = document.createElement('p');
+      p.textContent = 'No open or closed ballots found.';
+      content.append(p);
+    }
     for (const ballot of ballots) {
-      const row=document.createElement('article');row.className='activity-row';const title=document.createElement('strong');title.textContent=ballot.title;const meta=document.createElement('span');const ballotState=ballot.status==='open'?'Open':ballot.status==='closed'?'Closed':'Draft';meta.textContent=`${ballot.mode === 'simulation' ? 'Demo' : 'Formal ballot'} · ${ballotState}`;row.append(title,meta);
-      if (ballot.mode === 'simulation') { const response=await fetch(`/api/ballots/${encodeURIComponent(ballot.ballotId)}/participation`);const participation=await response.json().catch(()=>({}));const state=document.createElement('span');state.textContent=participation.participated?'You tried this demo.':'Not tried yet';row.append(state); }
+      const row = document.createElement('article');
+      row.className = 'activity-row';
+      const left = document.createElement('div');
+      const title = document.createElement('a');
+      title.href = `/ballots/#${encodeURIComponent(ballot.ballotId)}`;
+      title.className = 'activity-title-link';
+      title.textContent = `${ballot.proposalId} · ${ballot.title}`;
+      const rev = document.createElement('p');
+      rev.className = 'activity-body';
+      rev.textContent = `Pinned revision: ${ballot.policyRevisionId} · Status: ${ballot.status}`;
+      left.append(title, rev);
+
+      const response = await fetch(`/api/ballots/${encodeURIComponent(ballot.ballotId)}/participation`, {
+        credentials: 'same-origin',
+      });
+      const participation = await response.json().catch(() => ({}));
+      const state = document.createElement('span');
+      if (participation.participated) {
+        const choiceLabel = participation.choice === 'approve' ? 'Approve' : 'Do Not Approve';
+        state.textContent = `Voted: ${choiceLabel}`;
+      } else {
+        state.textContent = ballot.status === 'open' ? 'Not voted yet — open for voting' : 'Did not vote';
+      }
+      row.append(left, state);
       content.append(row);
     }
   }
-  form?.addEventListener('submit', async (event) => { event.preventDefault(); if(!status||!form.reportValidity()) return; status.textContent='Starting synthetic preview session…'; const memberId=String(new FormData(form).get('memberId'));const response=await fetch('/api/auth/demo',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({memberId})});const result=await response.json().catch(()=>({}));if(!response.ok){status.textContent=result.error??'Preview sign-in is unavailable.';return;}status.textContent='Signed in to synthetic preview.';await refresh(); });
-  document.querySelector<HTMLButtonElement>('#signout')?.addEventListener('click',async()=>{await fetch('/api/session',{method:'DELETE',credentials:'same-origin'});location.reload();});
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!status || !form.reportValidity()) return;
+    status.textContent = 'Starting preview session…';
+    const memberId = String(new FormData(form).get('memberId'));
+    const response = await fetch('/api/auth/demo', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ memberId }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      status.textContent = result.error ?? 'Preview sign-in is unavailable.';
+      return;
+    }
+    status.textContent = 'Signed in.';
+    await refresh();
+  });
+
+  document.querySelector<HTMLButtonElement>('#signout')?.addEventListener('click', async () => {
+    await fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' });
+    location.reload();
+  });
+
   await refresh();
 </script>
 <style>
-  .member-page{max-width:72rem;padding-bottom:5rem}.panel{display:grid;grid-template-columns:1fr minmax(16rem,.8fr);gap:2.5rem;padding:clamp(1.4rem,4vw,2.5rem);border:1px solid #ded6e7;border-radius:.9rem}.panel h2,.dashboard h2{margin:.1rem 0 .7rem}.panel p:not(.eyebrow){max-width:48ch;color:#54465f;line-height:1.65}.panel form{align-self:center}.panel[hidden],.dashboard[hidden]{display:none}.dashboard{padding-block:1rem 4rem}.dashboard-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.2rem}.dashboard-content{padding-top:1.3rem}.dashboard-content h3{font-family:Outfit,sans-serif;font-size:1.05rem;margin:1.8rem 0 .7rem}.activity-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 0;border-bottom:1px solid #ded6e7}.activity-row span{color:#54465f;font-size:.9rem}
-  @media(max-width:700px){.panel{grid-template-columns:1fr}.dashboard-head{align-items:flex-start}.activity-row{align-items:flex-start;flex-direction:column}}
+  .member-page{max-width:74rem;padding-bottom:5rem}.panel{display:grid;grid-template-columns:1fr minmax(16rem,.8fr);gap:2.5rem;padding:clamp(1.4rem,4vw,2.5rem);border:1px solid #ded6e7;border-radius:.9rem;background:#fff}.panel h2,.dashboard h2{margin:.1rem 0 .7rem}.panel p:not(.eyebrow){max-width:52ch;color:#54465f;line-height:1.65}.panel form{align-self:center}.panel[hidden],.dashboard[hidden]{display:none}.dashboard{padding-block:1rem 4rem}.dashboard-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.2rem}.dashboard-actions{display:flex;flex-wrap:wrap;gap:.65rem}.quick-links{display:flex;flex-wrap:wrap;gap:.75rem 1.5rem;margin:1rem 0 1.5rem;padding:1rem 1.25rem;background:#f2eef9;border-radius:.65rem}.dashboard-content{padding-top:.5rem}.dashboard-content h3{font-family:Outfit,sans-serif;font-size:1.15rem;margin:2rem 0 .75rem}.activity-row{display:flex;align-items:flex-start;justify-content:space-between;gap:1.2rem;padding:1rem 0;border-bottom:1px solid #ded6e7}.activity-row span{color:#54465f;font-size:.88rem;white-space:nowrap}.activity-body{margin:.3rem 0 0;color:#54465f;font-size:.92rem;line-height:1.5;max-width:58ch}.activity-mod{margin:.35rem 0 0;color:#32105a;font-size:.88rem;font-weight:500}.activity-title-link{font-weight:700;color:#32105a;text-decoration:none}.activity-title-link:hover{text-decoration:underline}
+  @media(max-width:700px){.panel{grid-template-columns:1fr}.dashboard-head{align-items:flex-start;flex-direction:column}.activity-row{align-items:flex-start;flex-direction:column}.activity-row span{white-space:normal}}
 </style>

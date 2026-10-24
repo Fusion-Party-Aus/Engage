@@ -1,9 +1,9 @@
-import { ensureIndexes, getDatabase } from "../../../../../lib/platform/database";
-import { platformRoles, resolveIdentity } from "../../../../../lib/platform/auth";
-import { reviewSubmission } from "../../../../../lib/platform/consultations";
-import { json, platformEnv, readJson, requireSameOrigin } from "../../../../../lib/platform/http";
-import type { RuntimeLocals } from "../../../../../lib/platform/types";
-import { consumeRateLimit } from "../../../../../lib/platform/rate-limit";
+import { ensureIndexes, getDatabase } from "../../../../../lib/platform/database.ts";
+import { platformRoles, resolveIdentity } from "../../../../../lib/platform/auth.ts";
+import { reviewSubmission } from "../../../../../lib/platform/consultations.ts";
+import { json, platformEnv, readJson, requireSameOrigin } from "../../../../../lib/platform/http.ts";
+import type { RuntimeLocals } from "../../../../../lib/platform/types.ts";
+import { consumeRateLimit } from "../../../../../lib/platform/rate-limit.ts";
 
 export const prerender = false;
 

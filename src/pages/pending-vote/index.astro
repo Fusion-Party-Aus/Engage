@@ -1,9 +1,87 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import PreviewNotice from '../../components/PreviewNotice.astro';
+import { loadPolicyCatalogue } from '../../lib/platform/catalogue';
+import { platformEnv } from '../../lib/platform/http';
+
+export const prerender = false;
+
+const catalogue = await loadPolicyCatalogue(platformEnv(Astro.locals));
+const flaggedInStaticExport = catalogue.filter((p) => p.provenance.flaggedNewInStaticExport);
+const unverifiedPolicies = catalogue.filter((p) => p.provenance.classification === 'unverified');
+
+const provenanceLabels: Record<string, string> = {
+  'existing-repackaged': 'Existing policy · repackaged',
+  'materially-revised': 'Materially revised proposal',
+  'new-proposal': 'New policy proposal',
+  'draft-derived': 'Draft-derived proposal',
+  unverified: 'Lineage mapping unverified',
+};
 ---
-<SiteLayout title="Pending vote · Fusion" description="See policy ballot and voting release status." canonical={`${Astro.url.origin}/pending-vote/`}>
+<SiteLayout title="Pending vote & provenance reconciliation · Fusion" description="Reconciliation of policies flagged 'New' in the static Reclaim export with the AGM policy review catalogue and provenance status." canonical={`${Astro.url.origin}/pending-vote/`}>
   <PreviewNotice slot="notice" />
-  <div class="page-wrap section-space"><p class="eyebrow">Legacy route · Voting</p><h1>Policy ballots are not yet active.</h1><p class="lede">The first-round schedule is preserved as draft configuration while identity integration, governance, policy integrity, and security gates are completed.</p><a class="button" href="/ballots/">See ballot status</a></div>
+  <div class="page-wrap section-space">
+    <p class="eyebrow">Provenance reconciliation · AGM review</p>
+    <h1>Static export &lsquo;New&rsquo; flags &amp; unverified lineage mappings.</h1>
+    <p class="lede">
+      In the original Reclaim static export, {flaggedInStaticExport.length} policies were badged &lsquo;New&rsquo; on <code>/pending-vote/</code>, while {unverifiedPolicies.length} other baseline policies lacked verified lineage mappings to prior approved Fusion policies. This page reconciles both groups transparently without fabricating historical revisions.
+    </p>
+    <div class="action-bar">
+      <a class="button" href="/policies/">Browse full {catalogue.length}-policy catalogue</a>
+      <a class="button button--outline" href="/ballots/">View open &amp; scheduled policy ballots</a>
+    </div>
+
+    <section class="reconcile-section">
+      <h2>1. Policies badged &lsquo;New&rsquo; in the static Reclaim export ({flaggedInStaticExport.length})</h2>
+      <p>Each of these policies is linked to its domain review section, provenance classification, and consultation/ballot status.</p>
+      <div class="policy-list">
+        {flaggedInStaticExport.map((policy) => (
+          <article class="policy-item">
+            <div class="policy-item__meta">
+              <code>{policy.id}</code>
+              <span class="badge">{provenanceLabels[policy.provenance.classification] ?? policy.provenance.classification}</span>
+              <span>{policy.domain}</span>
+              {policy.ballot && <span>Ballot: <strong>{policy.ballot.status}</strong></span>}
+            </div>
+            <h3><a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a></h3>
+            <p>{policy.statement}</p>
+            <p class="provenance-note">{policy.provenance.summary}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="reconcile-section">
+      <h2>2. Policies with unverified lineage to prior approved wording ({unverifiedPolicies.length})</h2>
+      <p>These policies were not included in the 36-policy AGM Round 1 lineage audit and are explicitly marked <em>unverified</em> until their relationship to prior approved party policy is confirmed by members.</p>
+      <div class="policy-list">
+        {unverifiedPolicies.map((policy) => (
+          <article class="policy-item">
+            <div class="policy-item__meta">
+              <code>{policy.id}</code>
+              <span class="badge badge--warn">Lineage mapping unverified</span>
+              <span>{policy.domain}</span>
+            </div>
+            <h3><a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a></h3>
+            <p>{policy.statement}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  </div>
 </SiteLayout>
-<style>.page-wrap{max-width:70rem}.lede{max-width:60ch;margin:1.5rem 0 2rem;color:#54465f;font-size:1.1rem;line-height:1.65}</style>
+<style>
+  .page-wrap{max-width:74rem}.lede{max-width:68ch;margin:1rem 0 1.5rem;color:#54465f;font-size:1.08rem;line-height:1.65}
+  .action-bar{display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:2.5rem}
+  .reconcile-section{margin-top:2.5rem;padding-top:2rem;border-top:1px solid #ded6e7}
+  .reconcile-section h2{margin:0 0 .4rem;font-size:1.5rem}
+  .reconcile-section>p{margin:0 0 1.25rem;color:#54465f}
+  .policy-list{display:grid;gap:.85rem}
+  .policy-item{padding:1.15rem 1.3rem;background:#fff;border:1px solid #ded6e7;border-radius:.7rem}
+  .policy-item__meta{display:flex;flex-wrap:wrap;gap:.5rem .9rem;align-items:center;font-size:.82rem;color:#54465f;margin-bottom:.35rem}
+  .policy-item h3{margin:.15rem 0 .35rem;font-size:1.2rem}.policy-item h3 a{color:#32105a;text-decoration:none}.policy-item h3 a:hover{text-decoration:underline}
+  .policy-item p{margin:0;color:#2c1d3b;line-height:1.55;font-size:.94rem}
+  .provenance-note{margin-top:.45rem!important;color:#54465f!important;font-size:.85rem!important}
+  .badge{padding:.12rem .5rem;border-radius:99px;background:#e2d4f8;color:#32105a;font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}
+  .badge--warn{background:#fdecc8;color:#664300}
+</style>

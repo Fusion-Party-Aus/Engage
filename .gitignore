@@ -5,7 +5,7 @@ dist/
 .dev.vars*
 .env*
 !.env.example
-data/
+/data/
 backups/
 coverage/
 playwright-report/

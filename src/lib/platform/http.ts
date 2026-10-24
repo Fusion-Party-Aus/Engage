@@ -1,4 +1,4 @@
-import type { PlatformEnv, RuntimeLocals } from "./types";
+import type { PlatformEnv, RuntimeLocals } from "./types.ts";
 
 export function platformEnv(locals: RuntimeLocals): PlatformEnv {
   return locals.runtime?.env ?? locals.env ?? process.env;
@@ -15,7 +15,14 @@ export function requireSameOrigin(request: Request): Response | null {
   const origin = request.headers.get("origin");
   if (!origin) return json({ error: "A same-origin request is required." }, 403);
   try {
-    if (new URL(origin).origin !== new URL(request.url).origin) return json({ error: "A same-origin request is required." }, 403);
+    const originUrl = new URL(origin);
+    const requestUrl = new URL(request.url);
+    const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || request.headers.get("host")?.trim();
+    const expectedHosts = new Set([requestUrl.host]);
+    if (forwardedHost) expectedHosts.add(forwardedHost);
+    if (!expectedHosts.has(originUrl.host)) {
+      return json({ error: "A same-origin request is required." }, 403);
+    }
     return null;
   } catch {
     return json({ error: "A valid request origin is required." }, 403);
