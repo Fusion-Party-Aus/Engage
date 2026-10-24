@@ -1,5 +1,7 @@
 # B1 — administration workspace checkpoint
 
+Draft review: [PR #10](https://github.com/Fusion-Party-Aus/Engage/pull/10).
+
 B1 is developed on `codex/m1-admin-workspace`, based on PR #9 head `a4de58f`. PR #9 remains a merge dependency; this change does not merge or repeat its taxonomy/privacy work. Main at the initial check is `6ab7929` (PR #8). Rebase onto reviewed main after #9 merges, and review only B1's diff against #9 until then.
 
 ## Operator navigation

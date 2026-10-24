@@ -15,7 +15,7 @@ Plan and assessment: [plan.md](plan.md).
 - [x] Add policy catalogue/creation and canonical workspace with four-layer wording, taxonomy/provenance, revision selectors/text comparison, consultation context and decision history.
 - [x] Move existing moderation, scheduling, ballot, audit/health and membership controls into their areas; retain server safeguards and design loading/error/mobile/keyboard states.
 - [x] Verify focused tests, `pnpm check`, `pnpm test`, replica-set cutoff/auth tests, build and SSR access boundaries; document partial native Chrome coverage and outstanding browser checks.
-- [ ] B1 checkpoint: independently reviewable change and clear report before B2.
+- [x] B1 checkpoint: draft [PR #10](https://github.com/Fusion-Party-Aus/Engage/pull/10) opened against #9; local checks pass, partial browser coverage documented. Independent review remains required before proceeding to B2.
 
 Dependencies: reviewed PR #9. Likely files: `src/layouts/AdminLayout.astro`, `src/pages/admin/**`, focused admin components/scripts, context filters in moderation API and admin tests. Implement as small slices: navigation → Work → policy workspace → existing controls.
 
