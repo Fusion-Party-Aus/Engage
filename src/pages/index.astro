@@ -3,7 +3,7 @@ import SiteLayout from '../layouts/SiteLayout.astro';
 import PreviewNotice from '../components/PreviewNotice.astro';
 import HeroSplit from '../components/HeroSplit.astro';
 import copy from '../data/site-copy.json';
-import { loadPolicyCatalogue } from '../lib/platform/catalogue';
+import { loadPublicPolicyCatalogue } from '../lib/platform/catalogue';
 import { platformEnv } from '../lib/platform/http';
 import { getDatabase } from '../lib/platform/database';
 import { listBallots } from '../lib/platform/ballots';
@@ -11,7 +11,7 @@ import { listBallots } from '../lib/platform/ballots';
 export const prerender = false;
 
 const env = platformEnv(Astro.locals);
-const [catalogue, allBallots] = await Promise.all([loadPolicyCatalogue(env), getDatabase(env).then(listBallots)]);
+const [catalogue, allBallots] = await Promise.all([loadPublicPolicyCatalogue(env), getDatabase(env).then(listBallots)]);
 const openConsultations = catalogue.filter((policy) => !policy.syntheticFixture && policy.consultationRounds.some((round) => round.status === 'open'));
 const highlightedConsultationIds = ['POL-010', 'POL-039', 'POL-025'];
 const highlightedConsultations = [

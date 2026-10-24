@@ -3,13 +3,13 @@ import SiteLayout from '../../layouts/SiteLayout.astro';
 import PreviewNotice from '../../components/PreviewNotice.astro';
 import policies from '../../data/policies.json';
 import DomainPolicyReview from '../../components/DomainPolicyReview.astro';
-import { loadPolicyCatalogue } from '../../lib/platform/catalogue.ts';
+import { loadPublicPolicyCatalogue } from '../../lib/platform/catalogue.ts';
 import { platformEnv } from '../../lib/platform/http.ts';
 
 export const prerender = false;
 Astro.response.headers.set("Cache-Control", "private, no-store");
 
-const catalogue = await loadPolicyCatalogue(platformEnv(Astro.locals));
+const catalogue = await loadPublicPolicyCatalogue(platformEnv(Astro.locals));
 const publicCatalogue = catalogue.filter((p) => !p.syntheticFixture);
 const selectedPolicyId = Astro.url.searchParams.get('policy');
 const selectedPolicy = catalogue.find(policy => policy.policyId === selectedPolicyId);

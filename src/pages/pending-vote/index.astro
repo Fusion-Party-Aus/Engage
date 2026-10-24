@@ -1,12 +1,12 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import PreviewNotice from '../../components/PreviewNotice.astro';
-import { loadPolicyCatalogue } from '../../lib/platform/catalogue';
+import { loadPublicPolicyCatalogue } from '../../lib/platform/catalogue';
 import { platformEnv } from '../../lib/platform/http';
 
 export const prerender = false;
 
-const catalogue = await loadPolicyCatalogue(platformEnv(Astro.locals));
+const catalogue = await loadPublicPolicyCatalogue(platformEnv(Astro.locals));
 const flaggedInStaticExport = catalogue.filter((p) => p.provenance.flaggedNewInStaticExport);
 const unverifiedPolicies = catalogue.filter((p) => p.provenance.classification === 'unverified');
 

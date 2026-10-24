@@ -3,7 +3,7 @@ import SiteLayout from '../../layouts/SiteLayout.astro';
 import PreviewNotice from '../../components/PreviewNotice.astro';
 import DomainPolicyReview from '../../components/DomainPolicyReview.astro';
 import policies from '../../data/policies.json';
-import { loadPolicyCatalogue } from '../../lib/platform/catalogue.ts';
+import { loadPublicPolicyCatalogue } from '../../lib/platform/catalogue.ts';
 import { platformEnv } from '../../lib/platform/http.ts';
 
 export const prerender = false;
@@ -11,7 +11,7 @@ Astro.response.headers.set("Cache-Control", "private, no-store");
 
 const route = `/reclaim-our-economy/${Astro.params.slug ?? ''}/`;
 const policy = policies.find((p) => p.slug === route);
-const allCatalogue = await loadPolicyCatalogue(platformEnv(Astro.locals));
+const allCatalogue = await loadPublicPolicyCatalogue(platformEnv(Astro.locals));
 const domainItems = allCatalogue.filter((item) => item.domainSlug === route);
 const found = Boolean(policy || domainItems.length > 0);
 if (!found) Astro.response.status = 404;

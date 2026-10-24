@@ -384,3 +384,67 @@ export async function loadPolicyCatalogue(env: PlatformEnv): Promise<PolicyLifec
 
   return views;
 }
+
+export type PublicPolicyView = Omit<PolicyLifecycleView, 'activeRevision' | 'pendingSettledRevision' | 'submissions'>;
+
+/** The static export is public. Database wording requires an explicit publication timestamp. */
+export function publicPolicyCatalogue(policies: PolicyLifecycleView[], now = new Date()): PublicPolicyView[] {
+  return policies.flatMap(policy => {
+    const baseline = baselineCatalogue.find(entry => entry.policyId === policy.policyId);
+    const published = policy.revisions.filter(revision => revision.publishedAt && new Date(revision.publishedAt).getTime() <= now.getTime());
+    published.sort((a, b) => new Date(a.publishedAt!).getTime() - new Date(b.publishedAt!).getTime());
+    const revision = published.at(-1) ?? (baseline ? defaultRevisionFor(baseline) : null);
+    if (!revision) return [];
+    // Pick fields rather than spreading a database revision or lifecycle object.
+    const publicRevision: PolicyRevisionRecord = {
+      policyId: policy.policyId, revisionId: revision.revisionId, version: revision.version,
+      title: revision.title, statement: revision.statement, outcomes: revision.outcomes,
+      details: revision.details ?? revision.body ?? '', publishedAt: revision.publishedAt,
+    };
+    const provenance = revision.provenance ?? baseline?.provenance;
+    if (!provenance) return [];
+    const ballot = policy.ballot;
+    const publicBallot = ballot && ballot.status !== 'draft' && ballot.policyRevisionId === revision.revisionId ? {
+      ballotId: ballot.ballotId, proposalId: ballot.proposalId, policyRevisionId: ballot.policyRevisionId,
+      title: revision.title, status: ballot.status, opensAt: ballot.opensAt, closesAt: ballot.closesAt,
+      results: ballot.finalizedAt ? ballot.results : null,
+      outcome: ballot.finalizedAt ? ballot.outcome : null,
+      syntheticFixture: ballot.syntheticFixture,
+    } : null;
+    return [{
+      ...policyTaxonomy(revision), policyId: policy.policyId, id: policy.policyId,
+      version: revision.version, title: revision.title, statement: revision.statement,
+      outcomes: revision.outcomes, details: publicRevision.details!,
+      detailHtml: baseline && !published.length ? baseline.detailHtml : renderDetailsToHtml(publicRevision.details!),
+      division: revision.division ?? baseline?.division ?? '',
+      domainSummary: baseline?.domainSummary ?? '', domainSlug: revision.domainSlug ?? baseline?.domainSlug ?? '/policies/',
+      anchor: revision.anchor ?? baseline?.anchor ?? policy.policyId.toLowerCase(),
+      url: revision.url ?? baseline?.url ?? `/policies/?policy=${encodeURIComponent(policy.policyId)}`,
+      slug: revision.anchor ?? baseline?.anchor ?? policy.policyId.toLowerCase(),
+      sectionPath: revision.domainSlug ?? baseline?.domainSlug ?? '/policies/',
+      provenance: {
+        category: provenance.category, classification: provenance.category, label: provenance.label,
+        summary: provenance.summary, flaggedNewInStaticExport: provenance.flaggedNewInStaticExport,
+        lineageVerified: provenance.lineageVerified, uncertaintyNote: provenance.uncertaintyNote,
+        lineage: provenance.lineage.map(link => ({ label: link.label, url: link.url, description: link.description })),
+        valuesAlignment: provenance.valuesAlignment,
+      },
+      initialAgmRound: baseline?.initialAgmRound ?? { included: false, roundId: null, ballotId: null },
+      publishedRevisionId: revision.revisionId, activeRevisionId: revision.revisionId,
+      revisions: [publicRevision],
+      consultationRounds: policy.consultationRounds.filter(round => round.status === 'open' || round.status === 'closed').map(round => ({
+        roundId: round.roundId, program: round.program, status: round.status,
+        opensAt: round.opensAt, closesAt: round.closesAt,
+        syntheticFixture: round.syntheticFixture, fixtureNotice: round.fixtureNotice,
+      })),
+      consultationRoundId: policy.consultationRounds.find(round => round.status === 'open')?.roundId ?? null,
+      ballot: publicBallot, adoptedRevisionId: revision.approvedByBallotId ? revision.revisionId : null,
+      adoptionIsSynthetic: Boolean(revision.syntheticFixture), syntheticFixture: Boolean(revision.syntheticFixture),
+      fixtureNotice: revision.fixtureNotice,
+    }];
+  });
+}
+
+export async function loadPublicPolicyCatalogue(env: PlatformEnv): Promise<PublicPolicyView[]> {
+  return publicPolicyCatalogue(await loadPolicyCatalogue(env));
+}

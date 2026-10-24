@@ -1,5 +1,5 @@
 ---
-import type { PolicyLifecycleView } from '../lib/platform/catalogue.ts';
+import type { PublicPolicyView } from '../lib/platform/catalogue.ts';
 import { resolveIdentity } from '../lib/platform/auth';
 import { tryGetDb } from '../lib/platform/catalogue';
 import { canReadDiscussion } from '../lib/platform/discussion-access';
@@ -13,7 +13,7 @@ interface Props {
   domainSlug: string;
   domainTitle: string;
   domainSummary: string;
-  items: PolicyLifecycleView[];
+  items: PublicPolicyView[];
 }
 
 const { division, divisionHref = '/policies/', domainSlug, domainTitle, domainSummary, items: publicItems, navigation: divisionDomains = [] } = Astro.props;
@@ -29,7 +29,7 @@ const currentIndex = divisionDomains.findIndex((p) => p.slug === domainSlug);
 const prevDomain = currentIndex > 0 ? divisionDomains[currentIndex - 1] : null;
 const nextDomain = currentIndex >= 0 && currentIndex < divisionDomains.length - 1 ? divisionDomains[currentIndex + 1] : null;
 
-const publicStatus = (item: PolicyLifecycleView) => item.ballot?.status === 'open'
+const publicStatus = (item: PublicPolicyView) => item.ballot?.status === 'open'
   ? 'Open for a member decision'
   : item.consultationRounds.some((round) => round.status === 'open')
     ? 'Open for comment'
@@ -113,22 +113,6 @@ const publicStatus = (item: PolicyLifecycleView) => item.ballot?.status === 'ope
                 </div>
               </div>
             </details>
-
-            {item.pendingSettledRevision && (
-              <div class="pending-revision-callout" data-pending-revision-id={item.pendingSettledRevision.revisionId}>
-                <p class="tier-label">
-                  Wording proposed for a member decision
-                  {item.pendingSettledRevision.syntheticFixture && <span class="synthetic-inline"> · Preview proposal</span>}
-                </p>
-                <p>{item.pendingSettledRevision.statement}</p>
-                {item.pendingSettledRevision.changeSummary && (
-                  <p class="pending-revision-note"><strong>What changed:</strong> {item.pendingSettledRevision.changeSummary}</p>
-                )}
-                <p class="pending-revision-note">
-                  <em>This is the exact wording members will decide on. The policy above remains in place unless members approve the change.</em>
-                </p>
-              </div>
-            )}
 
             <details class="provenance-panel">
               <summary>

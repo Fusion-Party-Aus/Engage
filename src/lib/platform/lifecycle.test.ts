@@ -324,16 +324,25 @@ test("Engage readiness & dynamic publication via application HTTP APIs for a new
   assert.equal(createdBody.policy.domain, 'Telecommunications');
   assert.equal(createdBody.policy.url, '/policies/?policy=POL-078');
 
-  // 2. REVIEW: Verify POL-078 appears immediately in the public policy catalogue API with v1-proposed wording
+  // 2. REVIEW: Creating a proposal does not implicitly publish its wording.
   const reviewRes1 = await getPoliciesApi({
-    request: new Request("http://localhost:4321/api/policies?policyId=POL-078"),
-    locals,
+    request: new Request("http://localhost:4321/api/policies?policyId=POL-078"), locals,
   });
-  const reviewData1 = await reviewRes1.json();
-  assert.equal(reviewData1.policies.length, 1);
-  assert.equal(reviewData1.policies[0].publishedRevisionId, "POL-078:v1-proposed");
-  assert.equal(reviewData1.policies[0].syntheticFixture, true);
-  assert.equal(reviewData1.policies[0].adoptedRevisionId, null);
+  assert.deepEqual((await reviewRes1.json()).policies, []);
+
+  // An explicit editorial publication can release proposal wording before adoption.
+  await db.collection('policy_revisions').updateOne(
+    { policyId: 'POL-078', revisionId: 'POL-078:v1-proposed' },
+    { $set: { publishedAt: new Date(Date.now() - 1000) } },
+  );
+  const publicProposal = await getPoliciesApi({
+    request: new Request("http://localhost:4321/api/policies?policyId=POL-078"), locals,
+  });
+  const proposal = (await publicProposal.json()).policies[0];
+  assert.equal(proposal.publishedRevisionId, 'POL-078:v1-proposed');
+  assert.equal(proposal.adoptedRevisionId, null);
+  assert.equal(proposal.pendingSettledRevision, undefined);
+  assert.equal(proposal.activeRevision, undefined);
 
   // 3. COMMENT / AMEND: Member submits an amendment via POST /api/consultations, Moderator accepts via POST /api/admin/consultations/[submissionId]/review
   const subRes = await createConsultationPost({

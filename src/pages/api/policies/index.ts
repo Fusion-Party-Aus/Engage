@@ -1,4 +1,4 @@
-import { loadPolicyCatalogue } from "../../../lib/platform/catalogue.ts";
+import { loadPublicPolicyCatalogue } from "../../../lib/platform/catalogue.ts";
 import { json, platformEnv } from "../../../lib/platform/http.ts";
 import type { RuntimeLocals } from "../../../lib/platform/types.ts";
 
@@ -10,7 +10,7 @@ export async function GET({ request, locals }: { request: Request; locals: Runti
     const domainSlug = url.searchParams.get("domainSlug");
     const policyId = url.searchParams.get("policyId");
     const roundId = url.searchParams.get("roundId");
-    const catalogue = await loadPolicyCatalogue(platformEnv(locals));
+    const catalogue = await loadPublicPolicyCatalogue(platformEnv(locals));
     const filtered = catalogue.filter((policy) => {
       for (const field of ['programme', 'pillar', 'editorialHeading', 'domain'] as const) {
         const filter = url.searchParams.get(field);

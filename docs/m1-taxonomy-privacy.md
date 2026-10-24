@@ -28,3 +28,21 @@ Run `pnpm check`, `pnpm test`, `pnpm test:cutoff`, `pnpm build`, then `AUTH_TEST
 PR B follows review of PR A: improve the existing admin journey and implement only the accepted minimum editor/reviewer/Election Officer separation, preserving ballot authorisation gates. No identifiable-vote retrieval endpoint without an operational need, ordinary-review transactions without a demonstrated consistency failure, workflow framework or recovery subsystem. Existing ballot administration remains in place; the new-policy form no longer manufactures a draft ballot.
 
 M1 still requires governance separation, usable evidence entry, organisational approvals, security review, human pilot, live OAuth/HTTPS and production recovery/host acceptance. Nothing here enables binding voting or constitutes a policy decision. M2 scope remains deferred.
+
+### Public wording boundary
+
+Public pages and `/api/policies` use `loadPublicPolicyCatalogue`, a field allowlist
+separate from the operator lifecycle view. The checked-in catalogue is the public
+baseline. Database revisions enter that projection only when `publishedAt` is at
+or before the current time; adding a revision, attaching it to consultation or a
+ballot, or calculating approval alone does not publish it. This also applies to
+new policies: they remain absent until explicitly published. Publication may
+release proposal wording as well as adopted wording; it does not itself imply
+adoption. The public view exposes only the selected wording, curated provenance,
+open/closed consultation metadata, and matching non-draft ballot metadata with
+finalized outcomes. Pending drafts and internal revision history remain available
+through authorized operator endpoints.
+
+Known Reclaim editorial pillars and headings must use the Reclaim programme, and
+heading/pillar pairs must occur in the checked-in catalogue. Other programmes
+retain free-text editorial classifications, without a national taxonomy registry.

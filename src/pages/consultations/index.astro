@@ -2,7 +2,7 @@
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import PreviewNotice from '../../components/PreviewNotice.astro';
 import initialRound from '../../data/initial-round.json';
-import { loadPolicyCatalogue } from '../../lib/platform/catalogue';
+import { loadPublicPolicyCatalogue } from '../../lib/platform/catalogue';
 import { getDatabase } from '../../lib/platform/database';
 import { platformEnv } from '../../lib/platform/http';
 import { resolveIdentity } from '../../lib/platform/auth';
@@ -14,7 +14,7 @@ export const prerender = false;
 
 const env = platformEnv(Astro.locals);
 const [policies, db] = await Promise.all([
-  loadPolicyCatalogue(env),
+  loadPublicPolicyCatalogue(env),
   getDatabase(env),
 ]);
 

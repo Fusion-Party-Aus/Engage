@@ -57,6 +57,14 @@ export function validateTaxonomy(input: Record<string, unknown>, previous?: Lega
     value[key] = typeof field === 'string' ? field.trim() || null : null;
   }
   if (!value.programme && (value.pillar || value.editorialHeading)) return { error: 'Choose a programme for an editorial pillar or heading.' };
+  const knownPillar = [...pillars].find(label => label.toLowerCase() === value.pillar?.toLowerCase());
+  const knownHeading = [...headings].find(label => label.toLowerCase() === value.editorialHeading?.toLowerCase());
+  if ((knownPillar || knownHeading) && value.programme !== 'Reclaim') return { error: 'Reclaim editorial pillars and headings require the Reclaim programme.' };
+  if (value.programme === 'Reclaim') {
+    if (value.pillar && !pillars.has(value.pillar)) return { error: 'Choose a known Reclaim editorial pillar.' };
+    if (value.editorialHeading && !headings.has(value.editorialHeading)) return { error: 'Choose a known Reclaim editorial heading.' };
+    if (value.pillar && value.editorialHeading && !catalogue.some(entry => entry.division === value.pillar && entry.domain === value.editorialHeading)) return { error: 'The editorial heading does not belong to that Reclaim pillar.' };
+  }
   if (value.domain && editorialLabels.has(value.domain.toLowerCase())) return { error: 'Use a subject domain rather than a Reclaim editorial pillar or heading.' };
   return { value };
 }

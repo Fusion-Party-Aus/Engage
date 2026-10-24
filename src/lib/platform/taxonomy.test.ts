@@ -36,3 +36,13 @@ test('future programmes and standalone policies retain explicit taxonomy', () =>
   assert.equal(policyTaxonomy({ policyId: 'FUTURE-1', domain: 'Transport' }).programme, null);
   assert.deepEqual(taxonomyMigrationPatch({ ...catalogue[0], taxonomyVersion: 1, domain: 'Social security' }), {});
 });
+
+test('known Reclaim labels must retain their programme and pillar relationships', () => {
+  const entry = catalogue[0]!;
+  assert.ok('error' in validateTaxonomy({ programme: 'Future', pillar: entry.division }));
+  assert.ok('error' in validateTaxonomy({ programme: 'Future', editorialHeading: entry.domain }));
+  const other = catalogue.find(item => item.division !== entry.division)!;
+  assert.ok('error' in validateTaxonomy({ programme: 'Reclaim', pillar: other.division, editorialHeading: entry.domain }));
+  assert.ok('value' in validateTaxonomy({ programme: 'Reclaim', pillar: entry.division, editorialHeading: entry.domain }));
+  assert.ok('error' in validateTaxonomy({ programme: 'Future' }, policyTaxonomy(entry)));
+});
