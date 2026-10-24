@@ -1,0 +1,28 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import PolicyForm from '../../../components/admin/PolicyForm.astro';
+import { adminPageContext } from '../../../lib/platform/admin-access';
+import { platformEnv } from '../../../lib/platform/http';
+import { loadPolicyCatalogue } from '../../../lib/platform/catalogue';
+export const prerender = false;
+const context = await adminPageContext(Astro.request, platformEnv(Astro.locals));
+if (context instanceof Response) return context;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+let error = false;
+let policies: Awaited<ReturnType<typeof loadPolicyCatalogue>> = [];
+let rounds: Array<{ roundId: string; program?: string; label?: string }> = [];
+try {
+  [policies, rounds] = await Promise.all([loadPolicyCatalogue(context.env), context.db.collection<(typeof rounds)[number]>('consultation_rounds').find({}, { projection: { _id: 0, roundId: 1, program: 1, label: 1 } }).sort({ opensAt: -1 }).limit(100).toArray()]);
+} catch { error = true; Astro.response.status = 503; }
+const query = (Astro.url.searchParams.get('q') ?? '').trim();
+const matches = policies.filter(policy => `${policy.title} ${policy.domain ?? ''} ${policy.programme ?? ''}`.toLowerCase().includes(query.toLowerCase()));
+---
+<AdminLayout title="Policies" description="Open a policy workspace to review wording, provenance, member feedback and decisions." area="Policies" administrator={context.administrator}>
+  {error ? <p class="admin-error">Policy records could not be loaded. <a href="/admin/policies/">Retry</a>.</p> : <>
+    <div class="admin-actions"><a class="button" href="#new-policy-form">Create policy draft</a></div>
+    <form method="get"><label class="field"><span>Find a policy by title, programme or subject</span><input type="search" name="q" value={query} /></label><button class="button button--outline" type="submit">Search policies</button></form>
+    <p class="admin-meta">{matches.length} policies</p>
+    {matches.length ? <ul class="admin-list">{matches.map(policy => <li><a href={`/admin/policies/${encodeURIComponent(policy.id)}/`}>{policy.title}</a><p class="admin-meta">{[policy.programme, policy.pillar, policy.domain ?? 'Subject unclassified'].filter(Boolean).join(' · ')} · {policy.provenance.category === 'new-proposal' ? 'Proposal' : 'Catalogue policy'} · {policy.revisions.length} saved versions</p></li>)}</ul> : <p class="admin-empty">No matching policies. Try another title or clear the search.</p>}
+    <PolicyForm rounds={rounds} />
+  </>}
+</AdminLayout>

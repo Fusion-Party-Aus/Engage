@@ -9,6 +9,7 @@ import { membershipStatus } from '../../src/lib/platform/membership.ts';
 import { ensureIndexes, closeDatabase } from '../../src/lib/platform/database.ts';
 import { GET as sessionGET, DELETE as logout } from '../../src/pages/api/session.ts';
 import { PATCH as verify, GET as members } from '../../src/pages/api/admin/members.ts';
+import { GET as adminWork } from '../../src/pages/api/admin/work.ts';
 import { adminPageDenial } from '../../src/lib/platform/admin-access.ts';
 import { GET as discussion } from '../../src/pages/api/consultations/index.ts';
 import { GET as moderation } from '../../src/pages/api/admin/consultations/index.ts';
@@ -93,7 +94,7 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
     assert.equal(restored.identity?.memberId, first.user.id);
     const roundId = 'auth-test-round'; const ballotId = 'auth-test-ballot'; const now = new Date();
     await db.collection('consultation_rounds').insertOne({ roundId, status: 'open', opensAt: new Date(now.getTime() - 10000), closesAt: new Date(now.getTime() + 3600000), policyIds: ['POL-001'] });
-    await db.collection('policy_revisions').insertOne({ policyId: 'POL-001', revisionId: 'r1', version: 'v1' });
+    await db.collection('policy_revisions').insertOne({ policyId: 'POL-001', revisionId: 'r1', version: 'v1', createdAt: new Date(0), importedAt: new Date(0), title: 'Synthetic policy for operator verification', statement: 'Synthetic policy wording for operator verification only.', outcomes: ['A synthetic test outcome.'], details: 'Synthetic detail used only in disposable test records.' });
     const ballot: BallotRecord = { ballotId, proposalId: 'POL-001', policyRevisionId: 'r1', title: 'Test ballot', status: 'open', opensAt: new Date(now.getTime() - 10000), closesAt: new Date(now.getTime() + 3600000), bindingBallotsEnabled: true, authorization: { approvedBy: 'governance-test', approvedAt: now, evidence: Object.fromEntries(ballotSafeguards.map((key) => [key, 'Controlled evidence reference for ' + key])) } };
     await db.collection('ballots').insertOne(ballot);
     const contribution = { roundId, policyId: 'POL-001', policyRevisionId: 'r1', kind: 'comment', body: 'A meaningful policy comment.' };
@@ -122,6 +123,21 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
         assert.equal((await catalogue.text()).includes(privateMarker), false);
       }
     }
+    async function checkAdminPages(cookie: string, expected: number) {
+      const response = await adminWork({ request: request('/api/admin/work', cookie), locals });
+      assert.equal(response.status, expected, 'Work API authorisation');
+      if (!server) return;
+      for (const path of ['/admin/', '/admin/policies/', '/admin/policies/POL-001/', '/admin/consultations/', '/admin/decisions/']) {
+        const page = await fetch('http://127.0.0.1:4339' + path, { headers: { cookie } });
+        assert.equal(page.status, expected, path);
+        assert.match(page.headers.get('cache-control') ?? '', /no-store/);
+        const html = await page.text();
+        if (expected !== 200) assert.doesNotMatch(html, /Synthetic policy for operator verification|MEMBER_ONLY_DELIBERATION_MARKER|name="policyRevisionId"|data-admin-api/);
+        else assert.match(html, /Administration navigation/);
+      }
+    }
+    await checkAdminPages('', 401);
+    await checkAdminPages(first.cookie, 403);
     await checkDiscussion('', 401);
     await checkDiscussion(first.cookie, 403);
     assert.equal((await submit({ request: request('/api/consultations', first.cookie, 'POST', contribution), locals })).status, 403);
@@ -131,6 +147,7 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
     const admin = await signIn('admin');
     await db.collection('application_roles').insertOne({ memberId: admin.user.id, role: 'administrator' });
     assert.equal((await adminPageDenial(request('/admin/', admin.cookie), env))?.status, 403);
+    await checkAdminPages(admin.cookie, 403);
     assert.equal(await adminPageDenial(request('/admin/members/', admin.cookie), env, true), null);
     assert.equal((await moderation({ request: request('/api/admin/consultations', admin.cookie), locals })).status, 403);
     if (server) {
@@ -144,6 +161,11 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
     assert.equal((await verify({ request: request('/api/admin/members', admin.cookie, 'PATCH', { memberId: first.user.id, status: 'verified' }), locals })).status, 200);
     await checkDiscussion(first.cookie, 200);
     assert.equal((await adminPageDenial(request('/admin/', first.cookie), env))?.status, 403);
+    await checkAdminPages(first.cookie, 403);
+    await db.collection('application_roles').insertOne({ memberId: first.user.id, role: 'moderator' });
+    await checkAdminPages(first.cookie, 200);
+    assert.equal((await members({ request: request('/api/admin/members', first.cookie), locals })).status, 403);
+    await db.collection('application_roles').deleteOne({ memberId: first.user.id, role: 'moderator' });
     await db.collection('ballots').updateOne({ ballotId }, { $set: { status: 'draft', bindingBallotsEnabled: false }, $unset: { authorization: '' } });
     const transition = (body: unknown) => ({ request: request('/api/admin/ballots/' + ballotId, admin.cookie, 'PATCH', body), params: { ballotId }, locals });
     assert.equal((await openBallot(transition({ status: 'open' }))).status, 423, 'login and configuration alone cannot open binding voting');
@@ -157,9 +179,20 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
     await checkDiscussion(first.cookie, 403);
     await db.collection('memberships').updateOne({ memberId: admin.user.id }, { $set: { status: 'verified' } }, { upsert: true });
     assert.equal(await adminPageDenial(request('/admin/', admin.cookie), env), null);
+    await db.collection('policy_revisions').insertOne({ policyId: 'POL-001', revisionId: 'r2', version: 'v2', createdAt: new Date(), title: 'Synthetic latest working revision', statement: 'Latest synthetic wording for operator verification.', outcomes: ['Latest synthetic outcome.'], details: 'Latest synthetic detail for the operator workspace.' });
+    await checkAdminPages(admin.cookie, 200);
+    if (server) {
+      const workspace = await fetch('http://127.0.0.1:4339/admin/policies/POL-001/', { headers: { cookie: admin.cookie } });
+      const html = await workspace.text();
+      assert.match(html, /value="Synthetic latest working revision"/);
+      assert.match(html, /Latest synthetic wording for operator verification/);
+      const administration = await fetch('http://127.0.0.1:4339/admin/administration/', { headers: { cookie: admin.cookie } });
+      assert.equal(administration.status, 200);
+    }
     assert.equal((await moderation({ request: request('/api/admin/consultations', admin.cookie), locals })).status, 200);
     await db.collection('memberships').updateOne({ memberId: admin.user.id }, { $set: { status: 'suspended' } });
     assert.equal((await moderation({ request: request('/api/admin/consultations', admin.cookie), locals })).status, 403);
+    await checkAdminPages(admin.cookie, 403);
     await db.collection('votes').insertOne({ ballotId, memberId: 'synthetic-contamination', identitySource: 'synthetic', choice: 'approve' });
     await finalizeBallot(db, ballotId);
     assert.equal((await getBallotResults(db, (await db.collection<BallotRecord>('ballots').findOne({ ballotId }))!))?.approve, 1, 'synthetic activity never contributes to a binding tally');

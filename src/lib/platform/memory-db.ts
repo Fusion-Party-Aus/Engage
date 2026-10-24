@@ -143,6 +143,11 @@ class InMemoryCursor<T> {
     return this;
   }
 
+  skip(n: number): this {
+    this.items = this.items.slice(n);
+    return this;
+  }
+
   limit(n: number): this {
     this.items = this.items.slice(0, n);
     return this;

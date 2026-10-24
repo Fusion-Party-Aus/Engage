@@ -1,0 +1,19 @@
+---
+import SiteLayout from './SiteLayout.astro';
+import PreviewNotice from '../components/PreviewNotice.astro';
+import '../styles/admin.css';
+interface Props { title: string; description: string; area: string; administrator?: boolean; participation?: boolean }
+const { title, description, area, administrator = false, participation = true } = Astro.props;
+const areas = [ ['Work', '/admin/'], ['Policies', '/admin/policies/'], ['Consultations', '/admin/consultations/'], ['Decisions', '/admin/decisions/'], ['Administration', '/admin/administration/'] ];
+---
+<SiteLayout title={`${title} · Engage administration`} description={description} noIndex>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap admin-shell">
+    <nav class="admin-nav" aria-label="Administration navigation">
+      {areas.filter(([label]) => label === 'Administration' ? administrator : participation).map(([label, href]) => <a href={href} aria-current={area === label ? 'page' : undefined}>{label}</a>)}
+    </nav>
+    <header class="admin-intro"><p class="eyebrow">Engage · {area}</p><h1>{title}</h1><p>{description}</p></header>
+    <noscript><p class="admin-empty">Enable JavaScript to load work and feedback queues and save administrative forms. Policy wording and saved records remain readable.</p></noscript>
+    <slot />
+  </div>
+</SiteLayout>

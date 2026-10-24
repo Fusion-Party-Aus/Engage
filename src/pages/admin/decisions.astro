@@ -1,0 +1,79 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { adminPageContext } from '../../lib/platform/admin-access';
+import { platformEnv } from '../../lib/platform/http';
+import type { BallotRecord } from '../../lib/platform/ballots';
+import type { PolicyRevisionRecord } from '../../lib/platform/catalogue';
+export const prerender = false;
+const context = await adminPageContext(Astro.request, platformEnv(Astro.locals));
+if (context instanceof Response) return context;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+const preview = context.env.APP_MODE === 'preview';
+const requestedStatus = Astro.url.searchParams.get('status');
+const status = requestedStatus === 'draft' || requestedStatus === 'open' || requestedStatus === 'closed' ? requestedStatus : '';
+const offset = Math.max(0, Math.min(10000, Number.parseInt(Astro.url.searchParams.get('offset') ?? '0') || 0));
+let ballots: BallotRecord[] = []; let revisions: PolicyRevisionRecord[] = []; let error = false;
+try {
+  [ballots, revisions] = await Promise.all([
+    context.db.collection<BallotRecord>('ballots').find(status ? { status } : {}, { projection: { _id: 0, ballotId: 1, proposalId: 1, policyRevisionId: 1, title: 1, summary: 1, status: 1, opensAt: 1, closesAt: 1, finalizedAt: 1, results: 1, syntheticOutcome: 1, bindingBallotsEnabled: 1 } }).sort({ createdAt: -1, ballotId: 1 }).skip(offset).limit(101).toArray(),
+    context.db.collection<PolicyRevisionRecord>('policy_revisions').find({}, { projection: { _id: 0, policyId: 1, revisionId: 1, version: 1, title: 1 } }).sort({ title: 1, createdAt: 1 }).toArray(),
+  ]);
+} catch { error = true; Astro.response.status = 503; }
+const policies = [...new Map(revisions.map(revision => [revision.policyId, revision])).values()];
+const selectedPolicy = policies.find(policy => policy.policyId === Astro.url.searchParams.get('policyId'))?.policyId ?? policies[0]?.policyId;
+---
+<AdminLayout title="Decisions" description="Prepare exact wording for a ballot, inspect voting status and record outcomes. Drafts and synthetic outcomes are separate from authorised binding decisions." area="Decisions" administrator={context.administrator}>
+  {error ? <p class="admin-error">Decision records could not be loaded. Please reload to retry.</p> : <>
+    {!preview && <p class="admin-empty">Opening binding voting requires recorded governance evidence, independent review and the formal-ballot gate. The officer evidence form and role separation are pending the next delivery; binding opening is unavailable in this interface.</p>}
+    <form method="get" class="admin-actions"><label class="field"><span>Decision status</span><select name="status"><option value="">All decisions</option>{['draft', 'open', 'closed'].map(value => <option selected={status === value}>{value}</option>)}</select></label><button class="button button--outline" type="submit">Filter decisions</button><a href="#prepare-decision">Prepare a policy decision</a></form>
+    {!ballots.length && <p class="admin-empty">No decisions in this view. A consultation does not automatically create a ballot.</p>}
+    {ballots.slice(0, 100).map(ballot => {
+      const choices = revisions.filter(revision => revision.policyId === ballot.proposalId);
+      const pinned = choices.find(revision => revision.revisionId === ballot.policyRevisionId);
+      const api = `/api/admin/ballots/${encodeURIComponent(ballot.ballotId)}`;
+      return <section class="admin-card" id={ballot.ballotId}>
+        <p class="eyebrow">{ballot.status} · {ballot.bindingBallotsEnabled ? 'Binding decision' : 'Non-binding / preparation'}</p><h2>{ballot.title}</h2><p>{ballot.summary}</p>
+        {choices.length > 0 && <p><a href={`/admin/policies/${encodeURIComponent(ballot.proposalId)}/#compare`}>Inspect policy wording and feedback</a></p>}
+        <p class="admin-meta">Pinned wording: {pinned?.version ?? 'Unresolved reference'} · Window (UTC): {ballot.opensAt.toISOString()} → {ballot.closesAt.toISOString()}</p>
+        {!pinned && <p class="admin-empty">The pinned wording cannot be resolved to a policy revision. Standalone organisational propositions require the later standalone decision delivery. This record cannot be opened here.</p>}
+        {ballot.status === 'draft' && !ballot.bindingBallotsEnabled && choices.length > 0 && <details><summary>Configure pinned wording and draft schedule</summary>
+          <form method="post" data-admin-api={api} data-method="PATCH"><label class="field"><span>Exact policy revision</span><select name="policyRevisionId" required>{!pinned && <option value="">Choose wording</option>}{choices.map(revision => <option value={revision.revisionId} selected={ballot.policyRevisionId === revision.revisionId}>{revision.version} · {revision.title}</option>)}</select></label><p class="admin-meta">Draft schedule changes require future dates. Times use your device timezone.</p>
+            <div class="admin-grid"><label class="field"><span>Opens</span><input name="opensAt" type="datetime-local" data-utc={ballot.opensAt.toISOString()} required /></label><label class="field"><span>Closes</span><input name="closesAt" type="datetime-local" data-utc={ballot.closesAt.toISOString()} required /></label></div>
+            <button class="button button--outline" type="submit">Save draft configuration</button><p role="status" aria-live="polite"></p>
+          </form>
+        </details>}
+        {preview && pinned && ballot.status === 'draft' && !ballot.bindingBallotsEnabled && <details><summary>Open a synthetic voting window</summary><p>This is a non-binding rehearsal. Choose an opening at or before now and a future closing time. These entries do not attest governance approval.</p>
+          <form method="post" data-admin-api={api} data-method="PATCH"><input type="hidden" name="status" value="open" /><div class="admin-grid"><label class="field"><span>Opens (device timezone)</span><input name="opensAt" type="datetime-local" required /></label><label class="field"><span>Closes (device timezone)</span><input name="closesAt" type="datetime-local" required /></label></div><button class="button" type="submit">Open non-binding ballot</button><p role="status" aria-live="polite"></p></form>
+        </details>}
+        {ballot.status === 'open' && <p>{ballot.closesAt <= new Date() ? 'The voting window has elapsed. Vote admission is closed; record the outcome.' : 'Voting window active. Eligible members can vote and replace their selection until the cutoff.'}</p>}
+        {(preview || context.administrator) && (ballot.status === 'open' || (ballot.status === 'closed' && !ballot.finalizedAt)) && <form method="post" data-admin-api={api} data-method="PATCH"><input type="hidden" name="status" value="closed" /><p>Closing ends admission and records the permanent tally. An early close is recorded as administrative closure.</p><button class="button button--outline" type="submit">{ballot.status === 'closed' ? 'Retry outcome finalisation' : 'Close and record outcome'}</button><p role="status" aria-live="polite"></p></form>}
+        {ballot.finalizedAt && ballot.results && <div class="admin-context"><h3>Recorded outcome{ballot.syntheticOutcome ? ' · synthetic' : ''}</h3><p>{ballot.results.outcome} · {ballot.results.approve} approve · {ballot.results.doNotApprove} do not approve · {ballot.results.votesCast} votes cast</p></div>}
+        <details><summary>Technical references</summary><p>Decision: {ballot.ballotId} · Revision: {ballot.policyRevisionId}</p></details>
+      </section>;
+    })}
+    <nav class="admin-actions" aria-label="Decision pages">{offset > 0 && <a href={`?status=${status}&offset=${Math.max(0, offset - 100)}`}>Previous decisions</a>}{ballots.length > 100 && <a href={`?status=${status}&offset=${offset + 100}`}>Next decisions</a>}</nav>
+    <section class="admin-card" id="prepare-decision"><h2>Prepare a policy decision</h2><p>Select exact saved wording. Creation produces a draft without authorisation or votes.</p>
+      {policies.length ? <form method="post" data-admin-api="/api/admin/ballots"><input type="hidden" name="ballotId" value={`decision-${crypto.randomUUID()}`} />
+        <label class="field"><span>Policy</span><select name="proposalId" id="decision-policy" required>{policies.map(policy => <option value={policy.policyId} selected={policy.policyId === selectedPolicy}>{policy.title}</option>)}</select></label>
+        <label class="field"><span>Exact saved wording</span><select name="policyRevisionId" id="decision-revision" required>{revisions.map(revision => <option value={revision.revisionId} data-policy-id={revision.policyId}>{revision.version} · {revision.title}</option>)}</select></label>
+        <p class="admin-meta">Dates are preparation only and do not establish an approved voting schedule. Times use your device timezone.</p><div class="admin-grid"><label class="field"><span>Proposed opening</span><input name="opensAt" type="datetime-local" required /></label><label class="field"><span>Proposed closing</span><input name="closesAt" type="datetime-local" required /></label></div>
+        <button class="button" type="submit">Create draft decision</button><p role="status" aria-live="polite"></p>
+      </form> : <p>Create an immutable policy revision first in <a href="/admin/policies/">Policies</a>.</p>}
+    </section>
+  </>}
+</AdminLayout>
+<script>
+  import { bindAdminForms } from '../../scripts/admin-forms';
+  bindAdminForms();
+  for (const input of document.querySelectorAll<HTMLInputElement>('input[data-utc]')) {
+    const date = new Date(input.dataset.utc!); input.value = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+  const policy = document.querySelector<HTMLSelectElement>('#decision-policy');
+  const revision = document.querySelector<HTMLSelectElement>('#decision-revision');
+  function syncRevisions() {
+    if (!policy || !revision) return;
+    for (const option of revision.options) option.hidden = option.disabled = option.dataset.policyId !== policy.value;
+    revision.value = Array.from(revision.options).filter(option => !option.disabled).at(-1)?.value ?? '';
+  }
+  policy?.addEventListener('change', syncRevisions); syncRevisions();
+</script>

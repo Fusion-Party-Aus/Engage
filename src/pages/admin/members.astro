@@ -1,20 +1,26 @@
 ---
-import SiteLayout from '../../layouts/SiteLayout.astro';
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { resolveIdentity } from '../../lib/platform/auth';
+import { canReadDiscussion } from '../../lib/platform/discussion-access';
+import { getDatabase } from '../../lib/platform/database';
 import { adminPageDenial } from '../../lib/platform/admin-access';
 import { platformEnv } from '../../lib/platform/http';
 export const prerender = false;
-const denial = await adminPageDenial(Astro.request, platformEnv(Astro.locals), true);
+const env = platformEnv(Astro.locals);
+const denial = await adminPageDenial(Astro.request, env, true);
 if (denial) return denial;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
+const { identity } = await resolveIdentity(Astro.request, env);
+const participation = await canReadDiscussion(await getDatabase(env), identity, env);
 ---
-<SiteLayout title="Membership verification · Engage" description="Review membership verification." noIndex>
-  <div class="page-wrap section-space">
-    <p class="eyebrow">Administration</p><h1>Membership verification</h1>
+<AdminLayout title="Membership verification" description="Review eligibility against authoritative party records." area="Administration" administrator participation={participation}>
+  <div>
+    <a href="/admin/administration/">← Administration</a>
     <p>Check eligibility against the authoritative party membership records before confirming membership. Do not copy membership records or sensitive notes into Engage.</p>
-    <p id="status" role="status" aria-live="polite"></p><div id="accounts"></div>
-    <button class="button button--outline" id="more" hidden>Load more accounts</button>
+    {identity?.source === 'synthetic' ? <p class="admin-empty">Membership verification requires an Engage administrator session. Synthetic preview accounts cannot read or change membership records.</p> : <><p id="status" role="status" aria-live="polite">Loading accounts…</p><div id="accounts"></div>
+    <button class="button button--outline" id="more" hidden>Load more accounts</button></>}
   </div>
-</SiteLayout>
+</AdminLayout>
 <script>
   const status = document.querySelector<HTMLElement>('#status')!;
   const accounts = document.querySelector<HTMLElement>('#accounts')!;
@@ -24,8 +30,9 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
     const response = await fetch('/api/admin/members' + (next ? '?after=' + encodeURIComponent(next) : ''));
     const data = await response.json();
     if (!response.ok) { status.textContent = data.error; return; }
+    status.textContent = data.accounts.length ? 'Accounts loaded.' : next ? 'No further accounts.' : 'No accounts to review.';
     for (const account of data.accounts) {
-      const row = document.createElement('article'); row.className = 'activity-row';
+      const row = document.createElement('article'); row.className = 'admin-card';
       const label = document.createElement('p'); label.textContent = `${account.name} · ${account.email} · ${account.status}`;
       const select = document.createElement('select'); select.setAttribute('aria-label', `Verification for ${account.name}`);
       for (const state of ['pending', 'verified', 'suspended']) { const option = new Option(state, state); option.selected = state === account.status; select.add(option); }
@@ -43,5 +50,6 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
     }
     next = data.next; more.hidden = !next;
   }
-  more.addEventListener('click', load); await load();
+  async function safeLoad() { more.disabled = true; try { await load(); } catch { status.textContent = 'Accounts could not be loaded. Reload to retry.'; } finally { more.disabled = false; } }
+  more?.addEventListener('click', safeLoad); if (accounts) await safeLoad();
 </script>

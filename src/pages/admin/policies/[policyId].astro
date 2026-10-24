@@ -1,0 +1,58 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import PolicyForm from '../../../components/admin/PolicyForm.astro';
+import ModerationQueue from '../../../components/admin/ModerationQueue.astro';
+import { adminPageContext } from '../../../lib/platform/admin-access';
+import { platformEnv } from '../../../lib/platform/http';
+import { policyTaxonomy } from '../../../lib/platform/taxonomy';
+import { loadPolicyCatalogue, type PolicyLifecycleView } from '../../../lib/platform/catalogue';
+export const prerender = false;
+const context = await adminPageContext(Astro.request, platformEnv(Astro.locals));
+if (context instanceof Response) return context;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+let policy: PolicyLifecycleView | undefined;
+let decisions: Array<{ ballotId: string; title: string; status: string; policyRevisionId: string; outcome?: string; finalizedAt?: Date; syntheticOutcome?: boolean }> = [];
+let error = false;
+try {
+  policy = (await loadPolicyCatalogue(context.env)).find(policy => policy.id === Astro.params.policyId);
+  if (policy) {
+    const revisionTime = (revision: PolicyLifecycleView['revisions'][number]) => (revision.createdAt ?? revision.importedAt)?.getTime() ?? 0;
+    policy.revisions.sort((a, b) => revisionTime(a) - revisionTime(b) || a.revisionId.localeCompare(b.revisionId));
+    const latest = policy.revisions.at(-1)!;
+    policy = { ...policy, title: latest.title, statement: latest.statement, outcomes: latest.outcomes ?? [], details: latest.details ?? latest.body ?? '', ...policyTaxonomy(latest), provenance: latest.provenance ?? policy.provenance, activeRevision: latest };
+  }
+  if (policy) decisions = await context.db.collection<(typeof decisions)[number]>('ballots').find({ proposalId: policy.id }, { projection: { _id: 0, ballotId: 1, title: 1, status: 1, policyRevisionId: 1, outcome: 1, finalizedAt: 1, syntheticOutcome: 1 } }).sort({ createdAt: -1 }).limit(100).toArray();
+} catch { error = true; Astro.response.status = 503; }
+if (!error && !policy) Astro.response.status = 404;
+const left = policy?.revisions.find(revision => revision.revisionId === Astro.url.searchParams.get('from')) ?? policy?.revisions[0];
+const right = policy?.revisions.find(revision => revision.revisionId === Astro.url.searchParams.get('to')) ?? policy?.activeRevision;
+const wording = (revision: NonNullable<typeof left>) => [revision.title, revision.statement, revision.outcomes?.join('\n'), revision.details ?? revision.body].filter(Boolean).join('\n\n');
+---
+<AdminLayout title={policy?.title ?? (error ? 'Policy unavailable' : 'Policy not found')} description="Policy workspace · wording, feedback, revisions and decision history." area="Policies" administrator={context.administrator}>
+  <a href="/admin/policies/">← All policies</a>
+  {error ? <p class="admin-error">This workspace could not be loaded. Please reload to retry.</p> : !policy ? <p class="admin-empty">No policy matches this workspace. Choose a policy from the catalogue.</p> : <>
+    <nav class="admin-tabs" aria-label="Policy workspace sections"><a href="#wording">Current wording</a><a href="#provenance">Provenance</a><a href="#feedback">Feedback</a><a href="#compare">Compare revisions</a><a href="#settle-revision-form">Prepare revision</a><a href="#decisions">Decisions</a></nav>
+    {policy.syntheticFixture && <p class="admin-empty">Synthetic fixture — not an actual Fusion proposal or decision.</p>}
+    <section class="admin-card" id="wording"><h2>Current working wording</h2>
+      <p class="admin-meta">{[policy.programme, policy.pillar, policy.editorialHeading, policy.domain ?? 'Subject unclassified'].filter(Boolean).join(' · ')}</p>
+      <p>Working version: <strong>{policy.activeRevision.version}</strong>. Saving a revision does not publish it.</p>
+      <h3>1 · {policy.title}</h3><h3>2 · Policy statement</h3><p class="admin-wording">{policy.statement}</p>
+      <h3>3 · Key outcomes</h3><ul>{policy.outcomes.map(outcome => <li>{outcome}</li>)}</ul>
+      <details><summary>4 · Further detail</summary><div class="admin-wording">{policy.details}</div></details>
+      <p class="admin-meta">Published revision: {policy.revisions.filter(revision => revision.publishedAt).at(-1)?.version ?? 'No separate publication recorded'} · {decisions.some(decision => decision.finalizedAt && decision.outcome === 'approved') ? 'See recorded outcomes below' : 'No finalised adopted outcome'}</p>
+    </section>
+    <section class="admin-card" id="provenance"><h2>Provenance</h2><p><strong>{policy.provenance.label}</strong></p><p>{policy.provenance.summary}</p>
+      {policy.provenance.uncertaintyNote && <p class="admin-empty">{policy.provenance.uncertaintyNote}</p>}
+      <ul>{policy.provenance.lineage.map(source => <li>{source.url && /^(https?:\/\/|\/)/.test(source.url) ? <a href={source.url}>{source.label}</a> : source.label}<p>{source.description}</p></li>)}</ul>
+    </section>
+    <section class="admin-card"><h2>Consultation history</h2>{policy.consultationRounds.length ? <ul class="admin-list">{policy.consultationRounds.map(round => <li><a href={`/admin/consultations/?roundId=${encodeURIComponent(round.roundId)}#feedback`}>{round.program}</a> · {round.status}<p class="admin-meta">{round.opensAt.toISOString()} → {round.closesAt.toISOString()}</p></li>)}</ul> : <p>No consultations reference this policy yet.</p>}</section>
+    <ModerationQueue policyId={policy.id} policies={[policy]} rounds={policy.consultationRounds} />
+    <section class="admin-card" id="compare"><h2>Compare revisions</h2><p>Read the exact wording side by side. Version labels identify immutable saved revisions.</p>
+      <form method="get" action="#compare"><div class="admin-grid">{[['from', 'Earlier wording', left], ['to', 'Compare with', right]].map(([name, label, selected]) => <label class="field"><span>{String(label)}</span><select name={String(name)}>{policy!.revisions.map(revision => <option value={revision.revisionId} selected={revision.revisionId === (selected as typeof left)?.revisionId}>{revision.version} · {revision.title}</option>)}</select></label>)}</div><button class="button button--outline" type="submit">Compare wording</button></form>
+      {left && right && <div class="admin-comparison"><article><h3>{left.version}</h3><p class="admin-wording">{wording(left)}</p></article><article><h3>{right.version}</h3><p class="admin-wording">{wording(right)}</p></article></div>}
+    </section>
+    <PolicyForm policy={policy} />
+    <p class="admin-empty">Independent wording review will be available in the next delivery. This workspace does not record a reviewer approval or authorise binding voting.</p>
+    <section class="admin-card" id="decisions"><h2>Associated decisions and outcomes</h2>{decisions.length ? <ul class="admin-list">{decisions.map(decision => <li><a href={`/admin/decisions/#${encodeURIComponent(decision.ballotId)}`}>{decision.title}</a> · {decision.status}<p class="admin-meta">Revision {decision.policyRevisionId} · {decision.finalizedAt ? `Recorded result: ${decision.outcome}${decision.syntheticOutcome ? ' (synthetic)' : ''}` : 'No finalised outcome'}</p></li>)}</ul> : <p>No decision has been prepared for this policy.</p>}<a href={`/admin/decisions/?policyId=${encodeURIComponent(policy.id)}#prepare-decision`}>Prepare a decision for this policy</a></section>
+  </>}
+</AdminLayout>
