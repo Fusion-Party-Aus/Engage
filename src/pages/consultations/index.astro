@@ -47,6 +47,14 @@ const publicSubmissions = await db
   .toArray();
 
 const roundStatus = (status: string) => status === 'open' ? 'Open for comments' : status === 'closed' ? 'Comments closed' : 'Coming soon';
+const roundTitle = (round: ConsultationRoundRecord) => {
+  if (round.roundId === 'first-priority-policy-round-2026') return 'First priority policy consultation';
+  if (round.roundId === 'continuous-policy-round-2027-q1') return 'New policy proposals';
+  return (round.title ?? round.label ?? round.program ?? 'Policy consultation')
+    .replace(/^\[Synthetic Preview Fixture\]\s*/i, '')
+    .replace(/\s*\(Q1 2027 simulation\)/i, '')
+    .replace(/continuous policy development round/i, 'Policy consultation');
+};
 const contributionKind = (kind: string) => kind === 'amendment' ? 'Suggested wording' : kind === 'alternative' ? 'Alternative proposal' : 'Comment';
 ---
 <SiteLayout title="Consultations · Fusion" description="Review proposed policy wording, share feedback, and propose amendments in Fusion member consultations." canonical={`${Astro.url.origin}/consultations/`}>
@@ -66,7 +74,7 @@ const contributionKind = (kind: string) => kind === 'amendment' ? 'Suggested wor
             class={`round-tab ${round.roundId === activeRoundId ? 'round-tab--active' : ''}`}
           >
             <span class="round-tab__status">{roundStatus(round.status)}</span>
-            <strong>{round.title ?? round.program ?? round.label ?? round.roundId}</strong>
+            <strong>{roundTitle(round)}</strong>
           </a>
         ))}
       </div>
@@ -76,8 +84,8 @@ const contributionKind = (kind: string) => kind === 'amendment' ? 'Suggested wor
       <section class="round-panel" aria-labelledby="round-title">
         <div>
           <p class="eyebrow">{roundStatus(selectedRound.status)}</p>
-          <h2 id="round-title">{selectedRound.title ?? selectedRound.program ?? selectedRound.label ?? selectedRound.roundId}</h2>
-          <p>{selectedRound.description || 'Read the proposals below and share feedback or suggested wording.'}</p>
+          <h2 id="round-title">{roundTitle(selectedRound)}</h2>
+          <p>Read a proposal below, share your view, or suggest wording you think would work better.</p>
         </div>
         {selectedRound.roundId === 'first-priority-policy-round-2026' ? (
           <div class="round-grid">
@@ -122,7 +130,7 @@ const contributionKind = (kind: string) => kind === 'amendment' ? 'Suggested wor
           <select name="roundId" id="round-select">
             {rounds.map((round) => (
               <option value={round.roundId} selected={round.roundId === activeRoundId}>
-                {round.title ?? round.program ?? round.label ?? round.roundId} ({roundStatus(round.status)})
+                {roundTitle(round)} ({roundStatus(round.status)})
               </option>
             ))}
           </select>
@@ -182,7 +190,7 @@ const contributionKind = (kind: string) => kind === 'amendment' ? 'Suggested wor
                 <div class="discussion-card__meta">
                   <span class={`kind-badge kind-badge--${sub.kind}`}>{contributionKind(sub.kind)}</span>
                   <span>
-                    Policy: {policy ? <a href={`${policy.sectionPath}#${policy.slug}`}>{policy.id} · {policy.title}</a> : sub.policyId}
+                    Proposal: {policy ? <a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a> : 'Policy proposal'}
                   </span>
                   <span>Published contribution</span>
                 </div>
@@ -254,7 +262,7 @@ const contributionKind = (kind: string) => kind === 'amendment' ? 'Suggested wor
     });
     const result = await response.json().catch(() => ({}));
     status.textContent = response.ok
-      ? `Submitted (${result.submission?.submissionId ?? 'recorded'}). Moderators can now review it or settle a policy revision.`
+      ? 'Thanks. Your contribution has been submitted for review.'
       : (result.error ?? 'Could not submit feedback. Try again.');
     if (response.ok) form.reset();
   });

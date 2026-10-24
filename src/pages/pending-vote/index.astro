@@ -32,38 +32,51 @@ const provenanceLabels: Record<string, string> = {
     </div>
 
     <section class="reconcile-section">
-      <h2>1. Policies badged &lsquo;New&rsquo; in the static Reclaim export ({flaggedInStaticExport.length})</h2>
-      <p>Each of these policies is linked to its domain review section, provenance classification, and consultation/ballot status.</p>
+      <h2>1. Proposals badged &lsquo;New&rsquo; in the static Reclaim export ({flaggedInStaticExport.length})</h2>
+      <p>Each proposal below links to its issue section and includes its evidence-based provenance classification and uncertainty notes.</p>
       <div class="policy-list">
         {flaggedInStaticExport.map((policy) => (
           <article class="policy-item">
             <div class="policy-item__meta">
-              <code>{policy.id}</code>
-              <span class="badge">{provenanceLabels[policy.provenance.classification] ?? policy.provenance.classification}</span>
+              <span class="badge">{policy.provenance.label || provenanceLabels[policy.provenance.classification]}</span>
               <span>{policy.domain}</span>
-              {policy.ballot && <span>Ballot: <strong>{policy.ballot.status}</strong></span>}
             </div>
             <h3><a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a></h3>
-            <p>{policy.statement}</p>
-            <p class="provenance-note">{policy.provenance.summary}</p>
+            <details class="item-disclosure">
+              <summary>Proposal commitment and provenance note</summary>
+              <div class="item-disclosure__body">
+                <p>{policy.statement}</p>
+                <p class="provenance-note">{policy.provenance.summary}</p>
+                {policy.provenance.uncertaintyNote && (
+                  <p class="provenance-note"><strong>What is still uncertain:</strong> {policy.provenance.uncertaintyNote}</p>
+                )}
+              </div>
+            </details>
           </article>
         ))}
       </div>
     </section>
 
     <section class="reconcile-section">
-      <h2>2. Policies with unverified lineage to prior approved wording ({unverifiedPolicies.length})</h2>
-      <p>These policies were not included in the 36-policy AGM Round 1 lineage audit and are explicitly marked <em>unverified</em> until their relationship to prior approved party policy is confirmed by members.</p>
+      <h2>2. Proposals with unverified lineage to prior approved wording ({unverifiedPolicies.length})</h2>
+      <p>These proposals were not included in the 36-policy AGM Round 1 lineage audit and remain marked <em>unverified</em> until their relationship to prior approved party policy is confirmed against the National Policy Register.</p>
       <div class="policy-list">
         {unverifiedPolicies.map((policy) => (
           <article class="policy-item">
             <div class="policy-item__meta">
-              <code>{policy.id}</code>
-              <span class="badge badge--warn">Lineage mapping unverified</span>
+              <span class="badge badge--warn">{policy.provenance.label}</span>
               <span>{policy.domain}</span>
             </div>
             <h3><a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a></h3>
-            <p>{policy.statement}</p>
+            <details class="item-disclosure">
+              <summary>Proposal commitment and uncertainty note</summary>
+              <div class="item-disclosure__body">
+                <p>{policy.statement}</p>
+                {policy.provenance.uncertaintyNote && (
+                  <p class="provenance-note"><strong>What is still uncertain:</strong> {policy.provenance.uncertaintyNote}</p>
+                )}
+              </div>
+            </details>
           </article>
         ))}
       </div>
@@ -84,4 +97,7 @@ const provenanceLabels: Record<string, string> = {
   .provenance-note{margin-top:.45rem!important;color:#54465f!important;font-size:.85rem!important}
   .badge{padding:.12rem .5rem;border-radius:99px;background:#e2d4f8;color:#32105a;font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}
   .badge--warn{background:#fdecc8;color:#664300}
+  .item-disclosure{margin-top:.55rem;padding-top:.55rem;border-top:1px solid #eee8f5}
+  .item-disclosure summary{cursor:pointer;font-size:.88rem;font-weight:600;color:#54465f}
+  .item-disclosure__body{padding-top:.55rem;display:grid;gap:.4rem}
 </style>

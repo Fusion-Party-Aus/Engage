@@ -56,7 +56,7 @@ const publicStatus = (item: PolicyLifecycleView) => item.ballot?.status === 'ope
 
     <div class="domain-policies">
       {items.map((item) => {
-        const openRound = item.consultationRounds.find((r) => r.status === 'open') ?? item.consultationRounds[0] ?? null;
+        const openRound = item.consultationRounds.find((r) => r.status === 'open') ?? null;
         return (
           <section
             id={item.anchor}
@@ -78,17 +78,30 @@ const publicStatus = (item: PolicyLifecycleView) => item.ballot?.status === 'ope
               </p>
             )}
 
-            <div class="tier-block tier-2">
-              <p class="tier-label">How it works</p>
-              <p class="policy-statement">{item.statement}</p>
-            </div>
+            {item.adoptedRevisionId && item.adoptionIsSynthetic && (
+              <p class="fixture-callout" role="note">
+                <strong>Simulated preview outcome (non-binding):</strong> Displaying settled wording approved in preview mode (<code>{item.publishedRevisionId}</code>). This is not a binding party decision.
+              </p>
+            )}
 
-            <div class="tier-block tier-3">
-              <p class="tier-label">What this aims to achieve</p>
-              <ol class="policy-outcomes">
-                {item.outcomes.map((outcome) => <li>{outcome}</li>)}
-              </ol>
-            </div>
+            <details class="policy-explanation">
+              <summary>
+                <strong>How the proposal works and what it aims to achieve</strong>
+                <span>Commitment &amp; {item.outcomes.length} {item.outcomes.length === 1 ? 'outcome' : 'outcomes'}</span>
+              </summary>
+              <div class="policy-explanation__body">
+                <div class="tier-block tier-2">
+                  <p class="tier-label">How it works</p>
+                  <p class="policy-statement">{item.statement}</p>
+                </div>
+                <div class="tier-block tier-3">
+                  <p class="tier-label">What this aims to achieve</p>
+                  <ol class="policy-outcomes">
+                    {item.outcomes.map((outcome) => <li>{outcome}</li>)}
+                  </ol>
+                </div>
+              </div>
+            </details>
 
             {item.pendingSettledRevision && (
               <div class="pending-revision-callout" data-pending-revision-id={item.pendingSettledRevision.revisionId}>
@@ -109,9 +122,14 @@ const publicStatus = (item: PolicyLifecycleView) => item.ballot?.status === 'ope
             <details class="provenance-panel">
               <summary>
                 <strong>Sources and how this proposal has changed</strong>
-                <span>Evidence and revision history</span>
+                <span>{item.provenance.label}</span>
               </summary>
               <div class="provenance-body">
+                <p class="provenance-summary">
+                  <span class={`prov-badge prov-badge--${item.provenance.classification === 'existing-repackaged' ? 'existing' : item.provenance.classification === 'materially-revised' ? 'revised' : item.provenance.classification === 'new-proposal' ? 'new' : item.provenance.classification === 'draft-derived' ? 'draft' : 'unverified'}`}>
+                    {item.provenance.label}
+                  </span>
+                </p>
                 <p class="provenance-summary">{item.provenance.summary}</p>
                 {item.provenance.uncertaintyNote && (
                   <p class="lineage-uncertainty"><strong>What is still uncertain:</strong> {item.provenance.uncertaintyNote}</p>
@@ -267,10 +285,10 @@ const publicStatus = (item: PolicyLifecycleView) => item.ballot?.status === 'ope
   .policy-outcomes { margin: .35rem 0 0; padding-left: 1.35rem; color: #362743; line-height: 1.65; }
   .policy-outcomes li + li { margin-top: .35rem; }
 
-  .provenance-panel, .detail-panel { margin-top: 1rem; border: 1px solid #ded6e7; border-radius: .65rem; background: #faf8fd; }
-  .provenance-panel summary, .detail-panel summary { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 1rem; cursor: pointer; font-size: .92rem; }
-  .provenance-panel summary span { font-size: .78rem; color: #54465f; font-weight: 600; }
-  .provenance-body, .policy-detail-html { padding: 0 1rem 1rem; border-top: 1px solid #ded6e7; font-size: .95rem; line-height: 1.65; color: #362743; }
+  .policy-explanation, .provenance-panel, .detail-panel { margin-top: 1rem; border: 1px solid #ded6e7; border-radius: .65rem; background: #faf8fd; }
+  .policy-explanation summary, .provenance-panel summary, .detail-panel summary { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 1rem; cursor: pointer; font-size: .92rem; }
+  .policy-explanation summary span, .provenance-panel summary span { font-size: .78rem; color: #54465f; font-weight: 600; }
+  .policy-explanation__body, .provenance-body, .policy-detail-html { padding: .85rem 1rem 1rem; border-top: 1px solid #ded6e7; font-size: .95rem; line-height: 1.65; color: #362743; }
   .provenance-summary { margin: .8rem 0; font-weight: 600; }
   .lineage-list, .values-alignment ul, .revision-history ul { margin: .4rem 0 0; padding-left: 1.25rem; }
   .lineage-note { margin: .5rem 0 0; color: #54465f; font-style: italic; }

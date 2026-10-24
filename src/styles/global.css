@@ -69,11 +69,12 @@ h3 { font-family: Newsreader, Georgia, serif; font-size: clamp(1.35rem, 2vw, 1.7
 .form-status { min-height: 1.5rem; color: #254e38; font-weight: 600; }
 @media (max-width: 760px) {
   .site-header { align-items: flex-start; flex-wrap: wrap; gap: .75rem; padding: .8rem 1rem; }
-  .primary-nav { width: 100%; justify-content: space-between; flex-wrap: wrap; gap: .55rem .8rem; }
+  .primary-nav { display: grid; width: 100%; grid-template-columns: repeat(2, max-content); justify-content: start; gap: .55rem 1.25rem; }
   .primary-nav a { font-size: .87rem; }
-  .primary-nav .nav-member { min-height: 2.45rem; padding: .45rem .8rem; }
+  .primary-nav .nav-member { min-height: 2.45rem; justify-self: start; padding: .45rem .8rem; }
   .page-wrap { width: min(var(--content-width), calc(100% - 2rem)); }
   .site-footer { align-items: flex-start; flex-direction: column; padding: 1.4rem 1rem; }
   .preview-notice { align-items: flex-start; justify-content: flex-start; font-size: .8rem; }
+  .preview-notice p { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
