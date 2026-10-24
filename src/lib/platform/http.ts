@@ -1,7 +1,7 @@
 import type { PlatformEnv, RuntimeLocals } from "./types";
 
 export function platformEnv(locals: RuntimeLocals): PlatformEnv {
-  return locals.runtime?.env ?? locals.env ?? {};
+  return locals.runtime?.env ?? locals.env ?? process.env;
 }
 
 export function json(data: unknown, status = 200, headers: HeadersInit = {}): Response {

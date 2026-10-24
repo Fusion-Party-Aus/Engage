@@ -1,9 +1,9 @@
 import { defineConfig } from 'astro/config';
-import cloudflare from '@astrojs/cloudflare';
+import node from '@astrojs/node';
 
 export default defineConfig({
   output: 'server',
-  adapter: cloudflare({ imageService: 'passthrough' }),
+  adapter: node({ mode: 'standalone' }),
   session: false,
   security: { checkOrigin: true },
 });

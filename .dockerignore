@@ -1,0 +1,11 @@
+.git
+.astro
+.dev.vars*
+.env*
+!.env.example
+backups
+coverage
+data
+dist
+node_modules
+playwright-report

@@ -14,7 +14,7 @@ interface Props {
   noIndex?: boolean;
 }
 const { title, description = 'Fusion’s policy library and member consultation platform.', canonical, noIndex = false } = Astro.props;
-const privateHost = Astro.url.hostname === 'localhost' || Astro.url.hostname === '127.0.0.1' || Astro.url.hostname.endsWith('.workers.dev');
+const privateHost = import.meta.env.DEV || process.env.APP_MODE === 'preview' || Astro.url.hostname === 'localhost' || Astro.url.hostname === '127.0.0.1';
 const preventIndexing = noIndex || privateHost;
 ---
 <!doctype html>

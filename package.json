@@ -3,27 +3,28 @@
   "packageManager": "pnpm@10.28.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.23.4"
+  },
   "scripts": {
-    "dev": "astro dev --background",
+    "dev": "astro dev",
     "build": "astro build",
+    "start": "node ./dist/server/entry.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "test:node": "node --experimental-strip-types --test src/**/*.test.ts",
     "test": "pnpm run test:node && python3 scripts/test-policy-migration.py && python3 scripts/test-backup-safety.py"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "14.3.4",
+    "@astrojs/node": "11.1.9",
     "@fontsource/fraunces": "5.3.0",
     "@fontsource/outfit": "5.3.0",
-    "astro": "7.3.8",
+    "astro": "7.4.2",
     "mongodb": "6.21.0"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
     "@types/node": "26.6.5",
-    "typescript": "6.0.3",
-    "wrangler": "4.149.0"
-  },
-  "pnpm": { "overrides": { "@cloudflare/vite-plugin": "1.63.1" } }
+    "typescript": "6.0.3"
+  }
 }

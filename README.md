@@ -4,22 +4,29 @@ Reconstructed Astro application for Fusion’s policy library, member consultati
 
 ## Local development
 
-Requirements: Node.js 22.12.0 or newer and pnpm 10.28.0.
+Requirements: Docker with Compose for the full app and MongoDB stack. For app-only development, Node.js 24 (or 22.23.4 or newer) and pnpm 10.28.0.
 
 ```sh
+cp .env.example .env
+# Replace all example secrets; use `openssl rand -hex 32` for each password/secret.
+docker compose up -d mongo
+set -a
+. ./.env
+set +a
 pnpm install --frozen-lockfile
-cp .dev.vars.example .dev.vars
 pnpm dev
 ```
 
-The local preview uses synthetic identities only. MongoDB settings go in `.dev.vars`; do not put credentials in tracked files. To create isolated test data, set `APP_MODE=preview`, use a dedicated preview database, then run:
+The preview is synthetic-only and formal ballots are disabled. `.env` is ignored by Git and configures a local MongoDB container. For the complete containerized stack, run `docker compose up -d --build`; the app binds to localhost by default and MongoDB is not exposed beyond localhost. Put an HTTPS reverse proxy in front before allowing remote access. Do not use this preview for genuine member identities, consultation data, or binding votes.
+
+Seed the local preview once to load the migrated policy revisions, 36 draft formal ballots, one synthetic consultation, and four simulation ballots:
 
 ```sh
-APP_MODE=preview node scripts/seed-preview.mjs --dry-run
-APP_MODE=preview node scripts/seed-preview.mjs --confirm-preview
+docker compose run --rm app node /app/scripts/seed-preview.mjs --dry-run
+docker compose run --rm app node /app/scripts/seed-preview.mjs --confirm-preview
 ```
 
-The seed command creates the 36 intended formal ballots in draft state, an isolated preview consultation, and synthetic simulation ballots. It creates no member accounts or votes.
+It creates no member accounts or votes.
 
 ## Checks
 
@@ -30,8 +37,8 @@ pnpm build
 python3 scripts/test-policy-migration.py
 ```
 
-## Preview deployment
+## Self-hosted deployment
 
-The Cloudflare Worker uses `wrangler.jsonc`. Deployment requires a current Cloudflare login and Worker secrets for `MONGODB_URI` and `SESSION_SECRET`; set `MONGODB_DB_NAME` to a dedicated preview database. The Worker config hard-codes preview mode and binding ballots disabled. See [operations](docs/operations.md) for deployment, connectivity checks, backup/restore, and rollback.
+The Docker Compose stack runs Astro’s standalone Node server and MongoDB on the same host. It persists MongoDB in a named Docker volume, creates a database-scoped application user, keeps synthetic preview mode on, and forces formal ballots off. See [operations](docs/operations.md) for deployment, connectivity checks, backup/restore, and rollback.
 
 Underground remains the authoritative identity and eligibility service. No supported independent login plus constitutional eligibility interface was found, so the production adapter fails closed. Do not use member email or CRM passwords as a fallback. See [release gates](docs/release-gates.md).

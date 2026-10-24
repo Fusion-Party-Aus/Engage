@@ -1,42 +1,65 @@
-# Preview operations
+# Self-hosted operations
 
-## Runtime and secrets
+## Container stack
 
-Deploy the app as a Worker using `wrangler.jsonc`. Use a dedicated MongoDB Atlas Free Tier preview cluster and database. Configure `MONGODB_URI` and `SESSION_SECRET` as Worker secrets, and `MONGODB_DB_NAME` as a non-secret Worker variable. Use a random session secret of at least 32 characters. Never use the production database or Underground infrastructure for preview. The Worker config always sets `APP_MODE=preview` and `FORMAL_BALLOTS_ENABLED=false`.
+The initial host is a Docker-capable NUC. Docker Compose runs the Astro standalone Node server and MongoDB 8 on a private Compose network. MongoDB data persists in the `mongo_data` named volume. The application connects with a database-scoped `readWrite` user; the MongoDB root credentials are used only for initialization and administration. No Cloudflare account, Atlas cluster, or paid service is required for this deployment.
 
-Astro/MongoDB connectivity is verified by calling `GET /api/ballots` after deployment. A successful response contains the seeded draft and synthetic simulation ballot metadata. `503` indicates missing secrets, Atlas network allow-list, or runtime connection failure. The live endpoint check must be completed after Cloudflare login and Atlas preview credentials are available; it cannot be inferred from a successful local build.
-
-To seed a newly created preview database:
+Set up the host with Docker Engine and the Compose plugin, clone the reviewed branch, then create the local environment file:
 
 ```sh
-APP_MODE=preview node scripts/seed-preview.mjs --dry-run
-APP_MODE=preview node scripts/seed-preview.mjs --confirm-preview
+cp .env.example .env
+openssl rand -hex 32 # generate unique values for each password and SESSION_SECRET
 ```
 
-The seed is idempotent. It imports immutable policy revisions and 36 intended ballots as draft, plus a separate synthetic consultation and four synthetic simulation ballots. It creates no sample member records or votes.
+Replace every example value in `.env`. Keep the Mongo app password consistent between `MONGO_APP_PASSWORD` and `MONGODB_URI`. Use hexadecimal passwords as shown so URI escaping is unnecessary. Keep `APP_BIND_ADDRESS=127.0.0.1` and `MONGO_BIND_ADDRESS=127.0.0.1`; MongoDB is not reachable from other hosts, and the app is available only to a reverse proxy on the NUC. Configure that proxy for HTTPS before remote access because preview session cookies are Secure. Do not expose port 27017 to the LAN or internet.
+
+Start the app and database, then verify database connectivity through the app health check:
+
+```sh
+docker compose up -d --build
+docker compose ps
+curl --fail http://127.0.0.1:4321/api/ballots
+```
+
+The response is successful even before seeding (an empty ballot list). `docker compose ps` should report both services healthy. To load the intended 36 draft ballots, the isolated synthetic consultation, and four synthetic simulation ballots:
+
+```sh
+docker compose run --rm app node /app/scripts/seed-preview.mjs --dry-run
+docker compose run --rm app node /app/scripts/seed-preview.mjs --confirm-preview
+```
+
+Preview is forced to `APP_MODE=preview`; formal ballots remain disabled. Do not use this host or its synthetic identities for real member activity. Production Underground identity and eligibility integration is still a release gate.
 
 ## Backups and restore drill
 
-Atlas Free Tier regular snapshots are not generally available; this platform does not enable paid backup features. `mongodump`/`mongorestore` is the supported backup path. Store archives only in an access-controlled, encrypted location with restricted operator access. Keep the URI and backup credentials in the existing secret manager or a restricted operator environment; do not place them in tracked files or a shell history.
-
-Install MongoDB Database Tools on the operator workstation, then make a preview backup:
+The MongoDB named volume protects against app container replacement, not host or disk failure. Run regular logical backups to storage outside the NUC with restricted access and encryption at rest. The repository scripts require preview mode and use `mongodump` / `mongorestore`; install MongoDB Database Tools on the host. Load the ignored environment file into the shell first so the URI points to the host-published localhost port:
 
 ```sh
-APP_MODE=preview BACKUP_DIR=/secure/fusion-preview-backups \
-  scripts/backup-preview.sh
+set -a
+. ./.env
+set +a
+APP_MODE=preview BACKUP_DIR=/secure/fusion-preview-backups scripts/backup-preview.sh
 ```
 
-For a restore drill, use a **new empty database** on the isolated preview cluster. The script refuses to restore into the source database and does not use `--drop`:
+Restore only into a new, empty database. The restore script refuses the source database and does not use `--drop`:
 
 ```sh
-APP_MODE=preview MONGODB_TARGET_DB_NAME=fusion_horizon_restore_drill \
+MONGODB_TARGET_DB_NAME=fusion_horizon_restore_drill \
   scripts/restore-preview.sh /secure/fusion-preview-backups/<archive>.archive.gz
 ```
 
-Verify the restored database has all expected collections, indexes, policy revisions, draft ballots, consultation records, and synthetic preview data, then remove the restore-drill database. Record the drill date and operator in the issue. Never include member identity or vote choices in the drill report. Restored counts and indexes can be checked with `mongosh` connected to the isolated target database.
+Verify the target contains the expected collections, indexes, policy revisions, draft ballots, consultation records, and synthetic preview fixtures. Remove the restore-drill database when verification is complete. Record only the drill date, operator, and pass/fail result; never include member identity or vote choices. Scripts were syntax-checked and exercised with safety failure cases. A live backup and restore drill must be completed on the NUC before relying on the backup process.
 
-The scripts enforce preview-mode and separate-database guards. They were syntax-checked and exercised with safe-failure cases; a real Atlas backup/restore and Worker connectivity test still requires the isolated Atlas URI and a current Cloudflare deployment login.
+## Upgrade and rollback
 
-## Deployment and rollback
+Build and retain each release under its commit tag. Keep the previous image tag available until the new version passes the preview smoke checks:
 
-From a logged-in operator environment, deploy the branch to the isolated Worker name from `wrangler.jsonc`, then confirm `/api/ballots`, `/api/session`, consultations, and synthetic sign-in. Keep the existing public Reclaim site untouched. If preview is unhealthy, roll back the Worker to its last known-good version from the Cloudflare deployment history, then verify the preview endpoint and database remain available. Do not route the public Reclaim hostname or enable binding ballots as part of preview release.
+```sh
+export APP_IMAGE_TAG="$(git rev-parse --short HEAD)"
+docker compose build app
+docker compose up -d app
+docker compose ps
+curl --fail http://127.0.0.1:4321/api/ballots
+```
+
+To roll back, set `APP_IMAGE_TAG` to the previous known-good tag and run `docker compose up -d app`. Keep the MongoDB volume unchanged during app rollback. Back up the database before any schema migration or restore operation. The public Reclaim site and any production hostname remain outside this deployment.
