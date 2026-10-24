@@ -1,0 +1,57 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+import PolicyCard from '../../components/PolicyCard.astro';
+import policies from '../../data/policies.json';
+import proposalIndex from '../../data/policy-index.json';
+const economy = policies.filter((p) => p.slug.startsWith('/reclaim-our-economy/'));
+const future = policies.filter((p) => p.slug.startsWith('/reclaim-our-future/'));
+---
+<SiteLayout title="Policy library · Fusion" description="Browse the Reclaim policy library." canonical={`${Astro.url.origin}/policies/`}>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap">
+    <header class="page-intro"><p class="eyebrow">The policy library</p><h1>Ideas for a fairer future.</h1><p>Explore the policy areas and read the full proposals, their outcomes, and their supporting detail.</p></header>
+    <form class="filters" role="search" onsubmit="return false">
+      <label class="field"><span>Search policies</span><input id="policy-search" type="search" placeholder="Try housing, small business, democracy…" autocomplete="off" /></label>
+      <label class="field"><span>Policy area</span><select id="policy-area"><option value="all">All areas</option><option value="economy">Economy</option><option value="future">Future</option></select></label>
+      <p id="policy-results" aria-live="polite">Showing {proposalIndex.length} policies</p>
+    </form>
+    <section class="policy-group" data-policy-area="economy" aria-labelledby="economy-title"><div class="group-heading"><h2 id="economy-title">Reclaim our economy</h2><span>{economy.length} policy areas</span></div><div class="area-overview">{economy.map((p) => <PolicyCard title={p.title} href={p.slug} area="Economy" summary={p.summary} />)}</div><div class="proposal-list">{proposalIndex.filter((p) => p.url.startsWith('/reclaim-our-economy/')).map((p) => <article class="proposal-entry" data-policy-entry data-search={`${p.title} ${p.domain}`.toLowerCase()}><p>{p.domain}</p><h3><a href={p.url}>{p.title}</a></h3><a class="text-link" href={p.url}>Read proposal <span aria-hidden="true">↗</span></a></article>)}</div></section>
+    <section class="policy-group" data-policy-area="future" aria-labelledby="future-title"><div class="group-heading"><h2 id="future-title">Reclaim our future</h2><span>{future.length} policy areas</span></div><div class="area-overview">{future.map((p) => <PolicyCard title={p.title} href={p.slug} area="Future" summary={p.summary} />)}</div><div class="proposal-list">{proposalIndex.filter((p) => p.url.startsWith('/reclaim-our-future/')).map((p) => <article class="proposal-entry" data-policy-entry data-search={`${p.title} ${p.domain}`.toLowerCase()}><p>{p.domain}</p><h3><a href={p.url}>{p.title}</a></h3><a class="text-link" href={p.url}>Read proposal <span aria-hidden="true">↗</span></a></article>)}</div></section>
+  </div>
+</SiteLayout>
+<script>
+  const search = document.querySelector<HTMLInputElement>('#policy-search');
+  const area = document.querySelector<HTMLSelectElement>('#policy-area');
+  const entries = [...document.querySelectorAll<HTMLElement>('[data-policy-entry]')];
+  const groups = [...document.querySelectorAll<HTMLElement>('[data-policy-area]')];
+  const result = document.querySelector<HTMLElement>('#policy-results');
+  const update = () => {
+    const query = search?.value.trim().toLocaleLowerCase() ?? '';
+    const selected = area?.value ?? 'all';
+    let visible = 0;
+    for (const entry of entries) {
+      const group = entry.closest<HTMLElement>('[data-policy-area]');
+      const groupArea = group?.dataset.policyArea ?? 'all';
+      const matches = (entry.dataset.search ?? '').includes(query) && (selected === 'all' || groupArea === selected);
+      entry.hidden = !matches;
+      visible += Number(matches);
+    }
+    for (const group of groups) {
+      const show = selected === 'all' || group.dataset.policyArea === selected;
+      group.hidden = !show;
+      const overview = group.querySelector<HTMLElement>('.area-overview');
+      if (overview) overview.hidden = Boolean(query);
+    }
+    if (result) result.textContent = `Showing ${visible} of ${entries.length} policies`;
+  };
+  search?.addEventListener('input', update);
+  area?.addEventListener('change', update);
+</script>
+<style>
+  .filters{display:grid;grid-template-columns:minmax(0,2fr) minmax(12rem,1fr);align-items:end;gap:1rem;padding:1.2rem 1.35rem;background:#f2eef9;border-radius:.85rem;margin-bottom:3.5rem}.filters .field{margin:0}.filters p{grid-column:1/-1;margin:0;color:#54465f;font-size:.9rem}
+  .policy-group{padding-bottom:4rem}.group-heading{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;border-bottom:1px solid #ded6e7;margin-bottom:1.35rem}.group-heading h2{margin:.1rem 0 1rem;font-size:clamp(1.8rem,3.4vw,2.8rem)}.group-heading span{color:#54465f;font-size:.9rem}
+  .area-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin-bottom:2rem}.policy-entry{display:flex;min-height:14rem;flex-direction:column;padding:1.3rem;border:1px solid #ded6e7;border-radius:.8rem;background:#fff}.policy-entry h3{margin:.15rem 0 .65rem}.policy-entry h3 a{text-decoration:none}.policy-entry h3 a:hover{text-decoration:underline}.policy-entry__summary{margin:0 0 1.2rem;color:#54465f;line-height:1.55;font-size:.95rem}.policy-entry .text-link{margin-top:auto}
+  .proposal-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 2rem}.proposal-entry{padding:1rem 0;border-top:1px solid #ded6e7}.proposal-entry[hidden],.policy-group[hidden]{display:none}.proposal-entry>p{margin:0 0 .25rem;color:#625171;font-size:.76rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}.proposal-entry h3{margin:.15rem 0 .6rem;font-size:1.25rem}.proposal-entry h3 a{text-decoration:none}.proposal-entry h3 a:hover{text-decoration:underline}.proposal-entry .text-link{font-size:.9rem}
+  @media(max-width:850px){.area-overview{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.filters{grid-template-columns:1fr}.filters p{grid-column:auto}.area-overview,.proposal-list{grid-template-columns:1fr}.group-heading{align-items:flex-start;flex-direction:column;gap:0}.policy-entry{min-height:0}}
+</style>

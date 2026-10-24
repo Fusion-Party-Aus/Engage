@@ -1,0 +1,63 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+import initialRound from '../../data/initial-round.json';
+const policyById = new Map(initialRound.policies.map((policy) => [policy.id, policy]));
+---
+<SiteLayout title="Ballots · Fusion" description="See the draft policy ballot schedule and synthetic voting demonstration." canonical={`${Astro.url.origin}/ballots/`}>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap">
+    <header class="page-intro"><p class="eyebrow">Formal approval is separate</p><h1>Ballots and member decisions.</h1><p>The proposed first round contains 36 individual policy ballots. Its schedule is retained as draft configuration; no binding ballots are active.</p></header>
+    <div class="notice-box"><strong>Binding ballots are disabled.</strong><p>Production voting requires verified Underground identity and eligibility, approved governance rules, and explicit activation. This preview may show synthetic simulation ballots for workflow testing. They never affect party decisions.</p></div>
+    <section class="round-summary" aria-labelledby="draft-round-title"><div><p class="eyebrow">Draft round</p><h2 id="draft-round-title">{initialRound.dateLabel}</h2><p>36 proposals · 4 policy areas · 2 December review meeting</p></div><a class="text-link" href="/governance/">View release gates <span aria-hidden="true">→</span></a></section>
+    <details class="draft-proposals"><summary>Review the 36 draft proposals</summary><p>Each proposal is linked to an immutable version for this intended round. None of these formal ballots is open.</p>{initialRound.areas.map((area) => <section><h3>{area.domain} <small>· {area.policies.length} proposals</small></h3><ul>{area.policies.map((id) => { const policy = policyById.get(id); return policy && <li><strong>{policy.title}</strong><span>{policy.statement}</span></li>; })}</ul></section>)}</details>
+    <section aria-labelledby="ballot-list-title"><div class="list-heading"><h2 id="ballot-list-title">Available ballots</h2><span id="ballot-count" aria-live="polite">Loading preview data…</span></div><div id="ballot-list" class="ballot-list"><p>Loading synthetic preview ballots…</p></div></section>
+  </div>
+</SiteLayout>
+<script>
+  const list = document.querySelector<HTMLElement>('#ballot-list');
+  const count = document.querySelector<HTMLElement>('#ballot-count');
+  const session = await fetch('/api/session', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => null);
+  const response = await fetch('/api/ballots').catch(() => null);
+  const payload = response?.ok ? await response.json().catch(() => null) : null;
+  const ballots = payload?.ballots ?? [];
+  if (count) count.textContent = `${ballots.length} preview ballots`;
+  if (!list) throw new Error('Ballot list element is missing.');
+  if (!ballots.length) {
+    list.innerHTML = '<p class="empty-state">No simulation ballots have been loaded. The 36 proposals in the intended round remain draft-only.</p>';
+  } else {
+    list.innerHTML = '';
+    for (const ballot of ballots) {
+      const article = document.createElement('article'); article.className = 'ballot-row';
+      const label = ballot.mode === 'simulation' ? 'Synthetic simulation' : 'Formal ballot';
+      const title = document.createElement('h3'); title.textContent = ballot.title;
+      const badge = document.createElement('span'); badge.className = 'ballot-badge'; badge.textContent = `${label} · ${ballot.status}`;
+      const details = document.createElement('p'); details.textContent = ballot.mode === 'simulation' ? 'Demonstration only. This selection is synthetic and cannot affect a Fusion decision.' : 'Binding ballots are unavailable until all release gates are approved.';
+      article.append(badge, title, details);
+      if (ballot.mode === 'simulation' && ballot.status === 'open' && session?.identity?.source === 'synthetic') {
+        const controls = document.createElement('div'); controls.className = 'ballot-controls';
+        for (const [choice, text] of [['approve','Approve'], ['do-not-approve','Do Not Approve']]) {
+          const button = document.createElement('button'); button.className = choice === 'approve' ? 'button' : 'button button--outline'; button.type = 'button'; button.textContent = text;
+          button.addEventListener('click', async () => {
+            button.disabled = true;
+            const saved = await fetch('/api/votes', { method:'POST', credentials:'same-origin', headers:{'content-type':'application/json'}, body:JSON.stringify({ballotId:ballot.ballotId, choice}) });
+            const result = await saved.json().catch(() => ({}));
+            const status = article.querySelector('.ballot-status');
+            if (status) status.textContent = saved.ok ? `Synthetic selection saved at ${new Date(result.receipt.receivedAt).toLocaleTimeString()}. You can change it until the demonstration closes.` : result.error;
+            else { const p=document.createElement('p');p.className='ballot-status';p.setAttribute('role','status');p.textContent=saved.ok ? `Synthetic selection saved at ${new Date(result.receipt.receivedAt).toLocaleTimeString()}.` : result.error;article.append(p); }
+            button.disabled = false;
+          }); controls.append(button);
+        }
+        article.append(controls);
+      } else if (ballot.mode === 'simulation' && ballot.status === 'open') {
+        const link = document.createElement('a'); link.href='/member/'; link.className='text-link'; link.textContent='Sign in with a synthetic preview identity'; article.append(link);
+      }
+      list.append(article);
+    }
+  }
+</script>
+<style>
+  .notice-box{padding:1.3rem 1.5rem;background:#e4f9fa;border-radius:.75rem;color:#173d42}.notice-box p{max-width:75ch;margin:.35rem 0 0;line-height:1.6}.round-summary{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;margin:2rem 0 3rem;padding:1.4rem 0;border-block:1px solid #ded6e7}.round-summary h2{margin:.1rem 0;font-size:1.5rem}.round-summary p{margin:.4rem 0 0;color:#54465f}.list-heading{display:flex;align-items:baseline;justify-content:space-between;gap:1rem}.list-heading h2{margin:.1rem 0 1.2rem}.list-heading span{color:#54465f}.ballot-list{display:grid;gap:.8rem;padding-bottom:5rem}.ballot-row{padding:1.35rem 1.4rem;border:1px solid #ded6e7;border-radius:.75rem}.ballot-row h3{margin:.55rem 0;font-size:1.35rem}.ballot-row p{max-width:65ch;color:#54465f;line-height:1.55}.ballot-badge{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5c4d6a}.ballot-controls{display:flex;flex-wrap:wrap;gap:.7rem;margin-top:1rem}.empty-state{padding:1.5rem;background:#f2eef9;border-radius:.7rem;color:#54465f}.ballot-status{font-weight:600}
+  .draft-proposals{margin-bottom:3rem;border:1px solid #ded6e7;border-radius:.75rem}.draft-proposals>summary{padding:1rem 1.2rem;font-weight:700;cursor:pointer}.draft-proposals>p{margin:0 1.2rem 1.2rem;color:#54465f}.draft-proposals section{padding:0 1.2rem 1rem}.draft-proposals h3{font-size:1.2rem}.draft-proposals h3 small{font:600 .8rem Outfit,sans-serif;color:#625171}.draft-proposals ul{list-style:none;padding:0}.draft-proposals li{display:grid;grid-template-columns:minmax(12rem,.45fr) 1fr;gap:1.2rem;padding:.75rem 0;border-top:1px solid #ded6e7;font-size:.91rem;line-height:1.55}.draft-proposals li span{color:#54465f}
+  @media(max-width:600px){.round-summary,.list-heading{align-items:flex-start;flex-direction:column}.ballot-row{padding:1rem}.ballot-controls{align-items:stretch;flex-direction:column}.ballot-controls button{width:100%}}
+</style>

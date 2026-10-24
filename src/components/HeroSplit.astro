@@ -1,0 +1,29 @@
+---
+import Ribbon from './Ribbon.astro';
+interface Props { title:string; copy:string; image:string; imageAlt:string; primaryHref:string; primaryLabel:string; secondaryHref?:string; secondaryLabel?:string }
+const { title, copy, image, imageAlt, primaryHref, primaryLabel, secondaryHref, secondaryLabel } = Astro.props;
+---
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero__copy">
+    <p class="hero__kicker">Fusion · Policy platform</p>
+    <h1 id="hero-title">{title}</h1>
+    <p class="hero__intro">{copy}</p>
+    <div class="hero__actions">
+      <a class="button" href={primaryHref}>{primaryLabel}</a>
+      {secondaryHref && secondaryLabel && <a class="button button--outline" href={secondaryHref}>{secondaryLabel}</a>}
+    </div>
+  </div>
+  <div class="hero__photo"><img src={image} alt={imageAlt} width="1024" height="543" fetchpriority="high" /></div>
+  <Ribbon />
+</section>
+<style>
+  .hero{position:relative;isolation:isolate;display:grid;grid-template-columns:1.05fr .95fr;min-height:min(690px,78vh);overflow:hidden;background:#32105a;color:white}
+  .hero__copy{z-index:2;align-self:center;max-width:55rem;padding:clamp(3.2rem,7vw,7rem) clamp(1.4rem,7vw,7rem)}
+  .hero__kicker{margin:0 0 1.3rem;color:#b8f2f3;font-weight:700;letter-spacing:.06em}
+  h1{max-width:10ch;margin:0;font:600 clamp(3rem,6.5vw,6rem)/.99 Fraunces,Georgia,serif;letter-spacing:-.035em;text-wrap:balance}
+  .hero__intro{max-width:35rem;margin:1.4rem 0 0;color:#f8f5fb;font-size:clamp(1.02rem,1.5vw,1.2rem);line-height:1.65}
+  .hero__actions{display:flex;flex-wrap:wrap;gap:.8rem;margin-top:1.8rem}
+  .hero__photo{grid-column:2;grid-row:1;min-height:100%;background:#e3d7ec}
+  .hero__photo img{display:block;width:100%;height:100%;min-height:32rem;object-fit:cover;object-position:center}
+  @media(max-width:720px){.hero{grid-template-columns:1fr;min-height:0}.hero__copy{padding:3.5rem 1.3rem 2.6rem}.hero__photo{grid-column:1;grid-row:2;height:clamp(14rem,60vw,24rem);min-height:0}.hero__photo img{min-height:0}.hero__intro{max-width:33rem}}
+</style>

@@ -1,0 +1,9 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+---
+<SiteLayout title="Pending vote · Fusion" description="See policy ballot and voting release status." canonical={`${Astro.url.origin}/pending-vote/`}>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap section-space"><p class="eyebrow">Legacy route · Voting</p><h1>Policy ballots are not yet active.</h1><p class="lede">The first-round schedule is preserved as draft configuration while identity integration, governance, policy integrity, and security gates are completed.</p><a class="button" href="/ballots/">See ballot status</a></div>
+</SiteLayout>
+<style>.page-wrap{max-width:70rem}.lede{max-width:60ch;margin:1.5rem 0 2rem;color:#54465f;font-size:1.1rem;line-height:1.65}</style>

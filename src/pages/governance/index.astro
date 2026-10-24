@@ -1,0 +1,16 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+import initialRound from '../../data/initial-round.json';
+---
+<SiteLayout title="Governance and release status · Fusion" description="The governance and production readiness gates for Fusion policy ballots." noIndex>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap governance-page"><header class="page-intro"><p class="eyebrow">Governance and release status</p><h1>Members decide. The platform records and verifies the result.</h1><p>Certification confirms the decision determined by the ballot rules. It is not discretionary administrative approval. Challenges or exceptional intervention require an explicitly authorised and auditable process.</p></header>
+    <section class="governance-panel"><p class="eyebrow">Ballot model in this implementation</p><ul><li>Approve or Do Not Approve for each proposal.</li><li>No quorum; strict majority of votes cast. A tie does not pass.</li><li>Members may change their selection until the ballot closes.</li><li>Eligibility is checked when a ballot is cast. A valid vote remains counted if membership is later revoked.</li><li>One current counted selection per member per ballot. Replaced selections do not enter the tally.</li><li>Results are calculated automatically when a ballot closes.</li></ul></section>
+    <section class="gate-section"><h2>Before binding ballots can open</h2><ol>{initialRound.activationGates.map((gate) => <li>{gate}</li>)}<li>Confirm challenge authority, invalidation procedure, and returning-officer responsibilities.</li></ol></section>
+    <section class="release-status"><h2>Current release status</h2><p><strong>Preview only.</strong> Underground does not currently expose a complete independent login and constitutional eligibility interface. Synthetic preview records are not genuine member activity. No binding ballots are active.</p><p>The intended first round remains a draft: {initialRound.policies.length} individual proposals across four policy areas, scheduled {initialRound.dateLabel}; review meeting {initialRound.meeting.date}.</p></section>
+  </div>
+</SiteLayout>
+<style>
+  .governance-page{max-width:72rem;padding-bottom:6rem}.governance-panel{padding:1.6rem 1.8rem;background:#f2eef9;border-radius:.85rem}.governance-panel ul,.gate-section ol{padding-left:1.4rem;line-height:1.8}.governance-panel li+li,.gate-section li+li{margin-top:.5rem}.gate-section{padding-block:3rem}.gate-section h2,.release-status h2{margin:.1rem 0 .7rem;font-size:clamp(1.8rem,3.4vw,2.6rem)}.release-status{padding:1.5rem;background:#e4f9fa;border-radius:.85rem;color:#173d42}.release-status p{max-width:72ch;line-height:1.7}
+</style>
