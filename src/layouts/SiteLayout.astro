@@ -26,14 +26,14 @@ const preventIndexing = noIndex || privateHost;
     <meta name="description" content={description} />
     {preventIndexing && <meta name="robots" content="noindex, nofollow" />}
     {canonical && <link rel="canonical" href={canonical} />}
-    <link rel="icon" href="/fusion_horizon_logo.svg" type="image/svg+xml" />
+    <link rel="icon" href="/fusion_horizon_logo_light.svg" type="image/svg+xml" />
     <title>{title}</title>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
       <a class="brand" href="/" aria-label="Fusion Horizon policy platform home">
-        <img src="/fusion_horizon_logo.svg" alt="" width="42" height="42" />
+        <img src="/fusion_horizon_logo_light.svg" alt="" width="42" height="42" />
         <span class="brand__word">FUSION<span>HORIZON</span></span>
       </a>
       <nav class="primary-nav" aria-label="Primary navigation">
@@ -47,10 +47,10 @@ const preventIndexing = noIndex || privateHost;
     <main id="main-content"><slot /></main>
     <footer class="site-footer">
       <a class="footer-brand" href="/">
-        <img src="/fusion_horizon_logo.svg" alt="" width="34" height="34" />
+        <img src="/fusion_horizon_logo_light.svg" alt="" width="34" height="34" />
         <span>Fusion policy platform</span>
       </a>
-      <p>Reason. Rights. Results.</p>
+      <p>Read policies · share feedback · track decisions</p>
       <a href="/governance/">Governance and release status</a>
     </footer>
   </body>

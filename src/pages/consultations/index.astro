@@ -7,20 +7,20 @@ const relevantPolicies = initialRound.policies;
 <SiteLayout title="Consultations · Fusion" description="Share feedback and propose policy changes through Fusion consultations." canonical={`${Astro.url.origin}/consultations/`}>
   <PreviewNotice slot="notice" />
   <div class="page-wrap">
-    <header class="page-intro"><p class="eyebrow">Member consultation</p><h1>Policy gets stronger when more people shape it.</h1><p>Share a comment, suggest an amendment, or make the case for a different direction. Consultation feedback is reviewed separately from formal voting.</p></header>
+    <header class="page-intro"><p class="eyebrow">Consultations · Preview</p><h1>Share feedback on a proposal.</h1><p>Choose one proposal. Add a comment, suggest an amendment, or offer another direction. Feedback is separate from formal voting.</p></header>
     <section class="round-panel" aria-labelledby="round-title">
-      <div><p class="eyebrow">Intended first round · Draft schedule</p><h2 id="round-title">Four areas for member feedback</h2><p>Scheduled 26 October – 26 November 2026 (AEDT). The configured round remains draft until its release gates are complete.</p></div>
+      <div><p class="eyebrow">Planned member round · Draft</p><h2 id="round-title">36 proposals across four areas</h2><p>Planned for 26 October–26 November 2026. This schedule is not active. The preview form below uses synthetic activity.</p></div>
       <div class="round-grid">{initialRound.areas.map((area) => <article><span>{area.policies.length} proposals</span><h3>{area.domain}</h3></article>)}</div>
-      <p class="schedule-note">Review meeting: {initialRound.meeting.date}, {initialRound.meeting.starts}–{initialRound.meeting.ends} AEDT.</p>
+      <p class="schedule-note">Planned review meeting: {initialRound.meeting.date}, {initialRound.meeting.starts}–{initialRound.meeting.ends} AEDT.</p>
     </section>
     <section class="submission-panel section-space" aria-labelledby="submit-title">
-      <div class="submission-copy"><p class="eyebrow">Contribute</p><h2 id="submit-title">What should change?</h2><p>Preview submissions use synthetic identities and data. Production participation is unavailable until Underground identity and eligibility verification is connected.</p><p id="sign-in-prompt"><a class="text-link" href="/member/">Sign in with a synthetic preview identity <span aria-hidden="true">→</span></a></p></div>
+      <div class="submission-copy"><p class="eyebrow">Try the preview</p><h2 id="submit-title">What should change?</h2><p>Preview comments use test accounts and are visible to preview moderators. Real member participation is not connected.</p><p id="sign-in-prompt"><a class="text-link" href="/member/">Sign in to try the form <span aria-hidden="true">→</span></a></p></div>
       <form id="consultation-form" class="consultation-form" hidden>
-        <label class="field"><span>Policy proposal</span><select name="policyId" required><option value="">Choose a proposal</option>{relevantPolicies.map((policy) => <option value={policy.id} data-revision={policy.policyVersion}>{policy.title} · {policy.domain}</option>)}</select></label>
-        <label class="field"><span>How would you like to contribute?</span><select name="kind" required><option value="comment">Comment</option><option value="amendment">Proposed amendment</option><option value="alternative">Alternative direction</option></select></label>
+        <label class="field"><span>Choose a proposal</span><select name="policyId" required><option value="">Select one proposal</option>{relevantPolicies.map((policy) => <option value={policy.id} data-revision={policy.policyVersion}>{policy.title} · {policy.domain}</option>)}</select></label>
+        <label class="field"><span>Choose how to contribute</span><select name="kind" required><option value="comment">Comment</option><option value="amendment">Suggest an amendment</option><option value="alternative">Offer another direction</option></select></label>
         <label class="field"><span>Title <small>(optional)</small></span><input name="title" maxlength="160" /></label>
-        <label class="field"><span>Your feedback</span><textarea name="body" minlength="10" maxlength="10000" required placeholder="Explain the issue, the change you suggest, or the evidence you want considered."></textarea></label>
-        <button class="button" type="submit">Submit feedback</button><p class="form-status" id="consultation-status" role="status" aria-live="polite"></p>
+        <label class="field"><span>Your feedback</span><textarea name="body" minlength="10" maxlength="10000" required placeholder="Describe the issue or change you suggest."></textarea></label>
+        <button class="button" type="submit">Send feedback</button><p class="form-status" id="consultation-status" role="status" aria-live="polite"></p>
       </form>
     </section>
   </div>
@@ -44,10 +44,10 @@ const relevantPolicies = initialRound.policies;
     const policyId = String(values.policyId);
     const selection = form.elements.namedItem('policyId') as HTMLSelectElement;
     const request = { roundId: 'preview-demo-consultation', policyId, policyRevisionId: selection.selectedOptions[0]?.dataset.revision, kind: values.kind, title: values.title, body: values.body };
-    status.textContent = 'Saving your synthetic preview submission…';
+    status.textContent = 'Sending preview feedback…';
     const response = await fetch('/api/consultations', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
     const result = await response.json().catch(() => ({}));
-    status.textContent = response.ok ? 'Your preview submission was saved for moderator review.' : (result.error ?? 'We could not save that submission. Please try again.');
+    status.textContent = response.ok ? 'Feedback sent to preview moderators.' : (result.error ?? 'Could not send feedback. Try again.');
     if (response.ok) form.reset();
   });
 </script>

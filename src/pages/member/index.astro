@@ -5,11 +5,11 @@ import PreviewNotice from '../../components/PreviewNotice.astro';
 <SiteLayout title="Member portal · Fusion" description="Sign in to the synthetic preview member portal." noIndex>
   <PreviewNotice slot="notice" />
   <div class="page-wrap member-page">
-    <header class="page-intro"><p class="eyebrow">Member portal · Preview</p><h1>Take part in shaping policy.</h1><p>Preview access uses synthetic identities only. It does not connect to Underground or represent a real membership record.</p></header>
-    <section id="signin-panel" class="panel" aria-labelledby="signin-title"><div><p class="eyebrow">Synthetic sign-in</p><h2 id="signin-title">Choose a preview identity</h2><p>Use a member identity to test consultations and simulated ballots, or a moderator identity to review synthetic submissions.</p></div>
-      <form id="signin-form"><label class="field"><span>Preview role</span><select name="memberId" required><option value="preview-member-01">Synthetic member 01</option><option value="preview-member-02">Synthetic member 02</option><option value="preview-admin-01">Synthetic moderator</option></select></label><button class="button" type="submit">Sign in to preview</button><p id="signin-status" class="form-status" role="status" aria-live="polite"></p></form>
+    <header class="page-intro"><p class="eyebrow">Member portal · Preview</p><h1>Try the member experience.</h1><p>Choose a test account to try consultations and voting demos. Preview sign-in does not connect to Underground or verify membership.</p></header>
+    <section id="signin-panel" class="panel" aria-labelledby="signin-title"><div><p class="eyebrow">Start here</p><h2 id="signin-title">Choose a test account.</h2><p>Members can try the forms and demos. Moderators can review test submissions.</p></div>
+      <form id="signin-form"><label class="field"><span>Test account</span><select name="memberId" required><option value="preview-member-01">Member preview 1</option><option value="preview-member-02">Member preview 2</option><option value="preview-admin-01">Moderator preview</option></select></label><button class="button" type="submit">Start preview</button><p id="signin-status" class="form-status" role="status" aria-live="polite"></p></form>
     </section>
-    <section id="dashboard" class="dashboard" hidden aria-labelledby="dashboard-title"><div class="dashboard-head"><div><p class="eyebrow">Synthetic preview session</p><h2 id="dashboard-title">Your participation</h2></div><button id="signout" class="button button--outline" type="button">Sign out</button></div><p class="callout">This dashboard displays synthetic activity only. It cannot establish eligibility for a real Fusion ballot.</p><div id="dashboard-content" class="dashboard-content"><p>Loading your preview activity…</p></div><a id="admin-link" class="text-link" href="/admin/" hidden>Open moderation workspace <span aria-hidden="true">→</span></a></section>
+    <section id="dashboard" class="dashboard" hidden aria-labelledby="dashboard-title"><div class="dashboard-head"><div><p class="eyebrow">Test account</p><h2 id="dashboard-title">Your activity</h2></div><button id="signout" class="button button--outline" type="button">Sign out</button></div><p class="callout">All activity is synthetic. This account cannot establish eligibility for a real Fusion vote.</p><div id="dashboard-content" class="dashboard-content"><p>Loading your activity…</p></div><a id="admin-link" class="text-link" href="/admin/" hidden>Review test submissions <span aria-hidden="true">→</span></a></section>
   </div>
 </SiteLayout>
 <script>
@@ -24,7 +24,7 @@ import PreviewNotice from '../../components/PreviewNotice.astro';
     if (!session?.identity || !dashboard || !panel) return;
     panel.hidden = true; dashboard.hidden = false;
     const roleNames = session.identity.roles?.join(', ') ?? 'member';
-    dashboard.querySelector('#dashboard-title')!.textContent = `${session.identity.memberId} · ${roleNames}`;
+    dashboard.querySelector('#dashboard-title')!.textContent = roleNames.includes('moderator') ? 'Moderator preview' : 'Member preview';
     if (session.identity.roles?.some((role:string) => ['administrator','moderator'].includes(role)) && adminLink) adminLink.hidden = false;
     const [submissionsResponse, ballotsResponse] = await Promise.all([fetch('/api/consultations'), fetch('/api/ballots')]);
     const submissionsData = await submissionsResponse.json().catch(() => ({}));
@@ -33,14 +33,26 @@ import PreviewNotice from '../../components/PreviewNotice.astro';
     content.replaceChildren();
     const submissionsHeading = document.createElement('h3'); submissionsHeading.textContent = 'Consultation submissions'; content.append(submissionsHeading);
     const submissions = submissionsData.submissions ?? [];
-    if (!submissions.length) { const p=document.createElement('p');p.textContent='No feedback submitted yet. Visit an open consultation to contribute.';content.append(p); }
-    for (const submission of submissions) { const row=document.createElement('article');row.className='activity-row';const title=document.createElement('strong');title.textContent=submission.title||submission.kind;const meta=document.createElement('span');meta.textContent=`${submission.status} · ${new Date(submission.createdAt).toLocaleDateString()}`;row.append(title,meta);content.append(row); }
+    if (!submissions.length) { const p=document.createElement('p');p.textContent='No feedback yet. Open the consultation form to try it.';content.append(p); }
+    for (const submission of submissions) {
+      const row = document.createElement('article');
+      row.className = 'activity-row';
+      const title = document.createElement('strong');
+      const kinds: Record<string, string> = { comment: 'Comment', amendment: 'Suggested amendment', alternative: 'Alternative direction' };
+      title.textContent = submission.title || kinds[submission.kind] || 'Feedback';
+      const meta = document.createElement('span');
+      const statuses: Record<string, string> = { pending: 'Awaiting review', accepted: 'Reviewed', 'needs-changes': 'Changes requested', declined: 'Closed' };
+      const state = statuses[submission.status] || 'Submitted';
+      meta.textContent = `${state} · ${new Date(submission.createdAt).toLocaleDateString()}`;
+      row.append(title, meta);
+      content.append(row);
+    }
     const ballotsHeading = document.createElement('h3'); ballotsHeading.textContent = 'Ballots'; content.append(ballotsHeading);
     const ballots = ballotData.ballots ?? [];
     if (!ballots.length) { const p=document.createElement('p');p.textContent='No synthetic ballot simulations are loaded.';content.append(p); }
     for (const ballot of ballots) {
-      const row=document.createElement('article');row.className='activity-row';const title=document.createElement('strong');title.textContent=ballot.title;const meta=document.createElement('span');meta.textContent=`${ballot.mode === 'simulation' ? 'Synthetic simulation' : 'Formal'} · ${ballot.status}`;row.append(title,meta);
-      if (ballot.mode === 'simulation') { const response=await fetch(`/api/ballots/${encodeURIComponent(ballot.ballotId)}/participation`);const participation=await response.json().catch(()=>({}));const state=document.createElement('span');state.textContent=participation.participated?'You participated in this synthetic simulation.':'You have not participated in this synthetic simulation.';row.append(state); }
+      const row=document.createElement('article');row.className='activity-row';const title=document.createElement('strong');title.textContent=ballot.title;const meta=document.createElement('span');const ballotState=ballot.status==='open'?'Open':ballot.status==='closed'?'Closed':'Draft';meta.textContent=`${ballot.mode === 'simulation' ? 'Demo' : 'Formal ballot'} · ${ballotState}`;row.append(title,meta);
+      if (ballot.mode === 'simulation') { const response=await fetch(`/api/ballots/${encodeURIComponent(ballot.ballotId)}/participation`);const participation=await response.json().catch(()=>({}));const state=document.createElement('span');state.textContent=participation.participated?'You tried this demo.':'Not tried yet';row.append(state); }
       content.append(row);
     }
   }

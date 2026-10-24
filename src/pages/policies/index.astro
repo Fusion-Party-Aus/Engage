@@ -10,11 +10,11 @@ const future = policies.filter((p) => p.slug.startsWith('/reclaim-our-future/'))
 <SiteLayout title="Policy library · Fusion" description="Browse the Reclaim policy library." canonical={`${Astro.url.origin}/policies/`}>
   <PreviewNotice slot="notice" />
   <div class="page-wrap">
-    <header class="page-intro"><p class="eyebrow">The policy library</p><h1>Ideas for a fairer future.</h1><p>Explore the policy areas and read the full proposals, their outcomes, and their supporting detail.</p></header>
+    <header class="page-intro"><p class="eyebrow">Policy library · 76 proposals</p><h1>Find a policy proposal.</h1><p>Search by topic or choose a policy area. Open a result to read the full proposal and its supporting detail.</p></header>
     <form class="filters" role="search" onsubmit="return false">
-      <label class="field"><span>Search policies</span><input id="policy-search" type="search" placeholder="Try housing, small business, democracy…" autocomplete="off" /></label>
+      <label class="field"><span>Search proposals</span><input id="policy-search" type="search" placeholder="e.g. housing or democracy" autocomplete="off" /></label>
       <label class="field"><span>Policy area</span><select id="policy-area"><option value="all">All areas</option><option value="economy">Economy</option><option value="future">Future</option></select></label>
-      <p id="policy-results" aria-live="polite">Showing {proposalIndex.length} policies</p>
+      <p id="policy-results" aria-live="polite">Showing {proposalIndex.length} proposals</p>
     </form>
     <section class="policy-group" data-policy-area="economy" aria-labelledby="economy-title"><div class="group-heading"><h2 id="economy-title">Reclaim our economy</h2><span>{economy.length} policy areas</span></div><div class="area-overview">{economy.map((p) => <PolicyCard title={p.title} href={p.slug} area="Economy" summary={p.summary} />)}</div><div class="proposal-list">{proposalIndex.filter((p) => p.url.startsWith('/reclaim-our-economy/')).map((p) => <article class="proposal-entry" data-policy-entry data-search={`${p.title} ${p.domain}`.toLowerCase()}><p>{p.domain}</p><h3><a href={p.url}>{p.title}</a></h3><a class="text-link" href={p.url}>Read proposal <span aria-hidden="true">↗</span></a></article>)}</div></section>
     <section class="policy-group" data-policy-area="future" aria-labelledby="future-title"><div class="group-heading"><h2 id="future-title">Reclaim our future</h2><span>{future.length} policy areas</span></div><div class="area-overview">{future.map((p) => <PolicyCard title={p.title} href={p.slug} area="Future" summary={p.summary} />)}</div><div class="proposal-list">{proposalIndex.filter((p) => p.url.startsWith('/reclaim-our-future/')).map((p) => <article class="proposal-entry" data-policy-entry data-search={`${p.title} ${p.domain}`.toLowerCase()}><p>{p.domain}</p><h3><a href={p.url}>{p.title}</a></h3><a class="text-link" href={p.url}>Read proposal <span aria-hidden="true">↗</span></a></article>)}</div></section>
@@ -43,7 +43,7 @@ const future = policies.filter((p) => p.slug.startsWith('/reclaim-our-future/'))
       const overview = group.querySelector<HTMLElement>('.area-overview');
       if (overview) overview.hidden = Boolean(query);
     }
-    if (result) result.textContent = `Showing ${visible} of ${entries.length} policies`;
+    if (result) result.textContent = `Showing ${visible} of ${entries.length} proposals`;
   };
   search?.addEventListener('input', update);
   area?.addEventListener('change', update);

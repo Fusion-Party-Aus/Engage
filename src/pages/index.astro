@@ -8,11 +8,7 @@ const future = policies.filter((policy) => policy.slug.startsWith('/reclaim-our-
 ---
 <SiteLayout title="Fusion policy platform" description="Explore Fusion policies and take part in member consultations." canonical={`${Astro.url.origin}/`}>
   <PreviewNotice slot="notice" />
-  <HeroSplit title="Good ideas. Better lives." copy="Explore the policies Fusion members are shaping for a fairer, more capable Australia. Read the detail, join a consultation, and see how decisions are made." image="/melbourne-station.webp" imageAlt="Commuters travelling through a Melbourne station" primaryHref="/policies/" primaryLabel="Explore policies" secondaryHref="/consultations/" secondaryLabel="Join a consultation" />
-  <section class="intro page-wrap section-space" aria-labelledby="intro-title">
-    <div><p class="eyebrow">An open policy process</p><h2 id="intro-title">Reason. Rights. Results.</h2></div>
-    <p>Policy begins with ideas and improves through scrutiny. Browse the library, offer a different direction, and follow each proposal from consultation to a published decision.</p>
-  </section>
+  <HeroSplit title="Two decisions for members." copy="Adopt the Reclaim platform as it existed. Separately, adopt the Horizon visual identity and new logo. Both decisions remain in draft; voting is not open." image="/melbourne-station.webp" imageAlt="Commuters travelling through a Melbourne station" primaryHref="/ballots/" primaryLabel="Review the decisions" />
   <section class="areas" aria-labelledby="areas-title">
     <div class="page-wrap section-space">
       <p class="eyebrow">Policy library</p>
@@ -24,19 +20,14 @@ const future = policies.filter((policy) => policy.slug.startsWith('/reclaim-our-
       <a class="text-link area-all" href="/policies/">Browse all policies <span aria-hidden="true">→</span></a>
     </div>
   </section>
-  <section class="participate" aria-labelledby="participate-title">
-    <div class="page-wrap participate__inner"><div><p class="eyebrow">Have your say</p><h2 id="participate-title">Good policy gets better in the open.</h2><p>Share experience, identify gaps, or suggest an amendment through the consultation process.</p></div><a class="button button--light" href="/consultations/">View consultations <span aria-hidden="true">→</span></a></div>
-  </section>
 </SiteLayout>
 <style>
-  .intro{display:grid;grid-template-columns:.9fr 1.1fr;gap:clamp(2rem,7vw,7rem);align-items:start}
-  .intro h2{max-width:10ch;margin:0}.intro>p{max-width:58ch;margin:.3rem 0;color:#493b55;font-size:1.18rem;line-height:1.75}
   .areas{background:#f4f0fa}.areas h2{margin:.1rem 0 2rem}
   .area-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
   .area-link{position:relative;display:flex;min-height:17rem;flex-direction:column;align-items:flex-start;padding:clamp(1.4rem,3.5vw,2.7rem);background:#fff;color:#32105a;text-decoration:none;border-radius:.8rem;transition:transform .2s ease,background .2s ease}
   .area-link:hover{transform:translateY(-3px);background:#e4f9fa}.area-link>span{font-size:.8rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#54465f}
   .area-link h3{margin:auto 0 .55rem;font-size:clamp(1.8rem,3vw,2.7rem)}.area-link p{max-width:36ch;margin:0;color:#54465f;line-height:1.55}.area-link b{position:absolute;right:1.5rem;bottom:1.15rem;font-size:1.4rem}
-  .area-all{margin-top:1.7rem}.participate{position:relative;isolation:isolate;overflow:hidden;background:#32105a;color:white}.participate__inner{display:flex;align-items:center;justify-content:space-between;gap:2rem;padding-block:clamp(3rem,7vw,6rem)}.participate h2{max-width:16ch;margin:0}.participate p:not(.eyebrow){max-width:55ch;color:#f2eef9;line-height:1.65}.participate .eyebrow{color:#b8f2f3}
-  @media(max-width:700px){.intro{grid-template-columns:1fr;gap:1rem}.area-grid{grid-template-columns:1fr}.area-link{min-height:14rem}.participate__inner{align-items:flex-start;flex-direction:column}}
+  .area-all{margin-top:1.7rem}
+  @media(max-width:700px){.area-grid{grid-template-columns:1fr}.area-link{min-height:14rem}}
   @media(prefers-reduced-motion:no-preference){.hero__copy{animation:arrive .65s cubic-bezier(.16,1,.3,1) both}@keyframes arrive{from{opacity:.5;transform:translateY(1.2rem);filter:blur(5px)}to{opacity:1;transform:none;filter:blur(0)}}}
 </style>
