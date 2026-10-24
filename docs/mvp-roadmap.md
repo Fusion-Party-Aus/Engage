@@ -56,7 +56,7 @@ Keep these commitments tracked without treating them as M1 dependencies:
 
 ### Testing / deployment verification
 
-- Run hosted CI with the real replica set and all integration commands; require its check for merge through repository settings if not already required.
+- Restore GitHub Actions runner access, then run hosted CI with the real replica set and all integration commands; require its check for merge through repository settings if not already required. [PR #8's initial run](https://github.com/Fusion-Party-Aus/Engage/actions/runs/40081176623) did not start any steps: GitHub reports recent account payments failed or the spending limit must increase. This is an account/organisation administration dependency, not a passing check.
 - Rehearse the actual Compose bootstrap and existing-volume upgrade, scoped-user transactions, restart and recovery on the Docker host. A native MongoDB replica-set test does not verify the container bootstrap.
 - Complete live Google OAuth/returning login/logout and secure cookie checks behind HTTPS.
 - Create and rehearse an encrypted production backup/restore procedure. Preview-only scripts deliberately refuse production. Include accounts, sessions, membership history, revisions, ballots, results and audits.
@@ -87,3 +87,5 @@ Keep the primary journey about reading, commenting and deciding policy. Reclaim'
 On Node 24.22.1 / pinned pnpm 10.28.0, `pnpm check`, `pnpm test`, `pnpm test:cutoff`, `pnpm test:auth` and `pnpm build` pass: 20 existing Node tests, seven real-MongoDB cutoff regressions, one controlled-provider authentication/API integration test and seven Python checks, with no skips. Integration tests used a separate native MongoDB 8 single-node replica set and dropped their test databases. Three new regressions failed before the fix (late admission after closure, stale deadline, and saved selection after audit failure). A deliberate closing-inclusive mutation was also caught by the exact-boundary test and restored.
 
 Local limitations: this host has neither a running Docker daemon nor the Compose plugin. Container bootstrap, scoped-user replica transactions, existing-volume upgrade/restart and production recovery were not verified here. Controlled Google tests do not prove live Google OAuth. Hosted CI execution and target-host verification remain separate evidence, not inferred from local success. No public deployment, production member-data migration or binding activation was performed.
+
+Hosted CI was attempted for both push and PR. GitHub assigned no runner and executed zero steps because of the billing/spending-limit restriction above. An account owner must resolve that restriction before hosted workflow verification is possible; do not bypass it by marking skipped/unavailable checks successful.
