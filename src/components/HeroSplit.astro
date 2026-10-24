@@ -1,29 +1,52 @@
 ---
-import Ribbon from './Ribbon.astro';
 interface Props { title:string; copy:string; image:string; imageAlt:string; primaryHref:string; primaryLabel:string; secondaryHref?:string; secondaryLabel?:string }
 const { title, copy, image, imageAlt, primaryHref, primaryLabel, secondaryHref, secondaryLabel } = Astro.props;
 ---
-<section class="hero" aria-labelledby="hero-title">
-  <div class="hero__copy">
-    <p class="hero__kicker">Fusion · Policy platform</p>
-    <h1 id="hero-title">{title}</h1>
-    <p class="hero__intro">{copy}</p>
-    <div class="hero__actions">
-      <a class="button" href={primaryHref}>{primaryLabel}</a>
-      {secondaryHref && secondaryLabel && <a class="button button--outline" href={secondaryHref}>{secondaryLabel}</a>}
+<section class="home-hero" aria-labelledby="hero-title">
+  <figure class="home-hero-photo">
+    <img src={image} alt={imageAlt} width="1024" height="543" fetchpriority="high" />
+  </figure>
+  <svg class="home-ribbons" viewBox="0 0 360 800" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <path fill="var(--horizon-purple)" d="M0 0H360C275 105 150 180 20 330C125 280 215 460 215 585C250 650 300 740 360 800H0Z"></path>
+    <path fill="var(--horizon-purple-deep)" d="M100 0H310C230 115 65 165 78 300S230 530 260 800H130C150 640 35 485 20 330S35 100 100 0Z"></path>
+    <path fill="var(--horizon-accent)" d="M235 0H360C275 105 150 180 20 330C35 210 120 105 235 0Z"></path>
+    <path fill="#E2D4F8" d="M20 330C125 280 215 460 215 585C120 515 35 425 20 330Z"></path>
+    <path fill="#F2EEF9" d="M20 330C105 380 100 485 215 585C190 460 150 350 100 305C70 300 40 310 20 330Z"></path>
+    <path fill="var(--horizon-accent)" d="M215 585C250 650 300 740 360 800H260C240 730 225 650 215 585Z"></path>
+  </svg>
+  <div class="home-shell">
+    <div class="home-hero-copy">
+      <p class="home-eyebrow">Fusion · Policy platform</p>
+      <h1 id="hero-title">{title}</h1>
+      <p class="home-deck">{copy}</p>
+      <div class="home-actions">
+        <a class="home-button home-button-light" href={primaryHref}>{primaryLabel} <span aria-hidden="true">→</span></a>
+        {secondaryHref && secondaryLabel && <a class="home-button home-button-outline" href={secondaryHref}>{secondaryLabel}</a>}
+      </div>
     </div>
   </div>
-  <div class="hero__photo"><img src={image} alt={imageAlt} width="1024" height="543" fetchpriority="high" /></div>
-  <Ribbon />
 </section>
 <style>
-  .hero{position:relative;isolation:isolate;display:grid;grid-template-columns:1.05fr .95fr;min-height:min(690px,78vh);overflow:hidden;background:#32105a;color:white}
-  .hero__copy{z-index:2;align-self:center;max-width:55rem;padding:clamp(3.2rem,7vw,7rem) clamp(1.4rem,7vw,7rem)}
-  .hero__kicker{margin:0 0 1.3rem;color:#b8f2f3;font-weight:700;letter-spacing:.06em}
-  h1{max-width:10ch;margin:0;font:600 clamp(3rem,6.5vw,6rem)/.99 Newsreader,Georgia,serif;letter-spacing:-.035em;text-wrap:balance}
-  .hero__intro{max-width:35rem;margin:1.4rem 0 0;color:#f8f5fb;font-size:clamp(1.02rem,1.5vw,1.2rem);line-height:1.65}
-  .hero__actions{display:flex;flex-wrap:wrap;gap:.8rem;margin-top:1.8rem}
-  .hero__photo{grid-column:2;grid-row:1;min-height:100%;background:#e3d7ec}
-  .hero__photo img{display:block;width:100%;height:100%;min-height:32rem;object-fit:cover;object-position:center}
-  @media(max-width:720px){.hero{grid-template-columns:1fr;min-height:0}.hero__copy{padding:3.5rem 1.3rem 2.6rem}.hero__photo{grid-column:1;grid-row:2;height:clamp(14rem,60vw,24rem);min-height:0}.hero__photo img{min-height:0}.hero__intro{max-width:33rem}}
+  .home-hero{position:relative;isolation:isolate;overflow:hidden;min-height:600px;padding-block:clamp(3rem,5vw,5rem);background:var(--horizon-purple);color:#fff}
+  .home-shell{width:min(100%,1280px);margin-inline:auto;padding-inline:clamp(1.25rem,4vw,3rem)}
+  .home-hero-copy{position:relative;z-index:2;width:44%;padding-block:2rem}
+  .home-eyebrow{margin:0 0 1.5rem;color:#E2D4F8;font-size:.95rem;font-weight:600}
+  h1{max-width:10ch;margin:0;font:600 clamp(3.25rem,6vw,5.5rem)/.99 Newsreader,Georgia,serif;letter-spacing:-.03em;text-wrap:balance}
+  .home-deck{max-width:35rem;margin:1.75rem 0 2rem;color:#f2eef9;font-size:clamp(1.15rem,1.5vw,1.3rem);line-height:1.6}
+  .home-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.75rem}
+  .home-button{display:inline-flex;min-height:48px;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1.25rem;border:1px solid #fff;border-radius:3px;background:#fff;color:var(--horizon-purple);font-weight:700;text-decoration:none;transition:background-color 180ms ease-out}
+  .home-button:hover{background:var(--horizon-lavender);text-decoration:none}
+  .home-button-outline{background:transparent;color:#fff}
+  .home-button-outline:hover{background:var(--horizon-purple-deep)}
+  .home-hero-photo{position:absolute;z-index:-1;inset:0 0 0 49%;margin:0;overflow:hidden}
+  .home-hero-photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:62% 78%}
+  .home-ribbons{position:absolute;z-index:1;inset:0 auto 0 46%;width:24%;height:100%;pointer-events:none;transform-origin:0% 50%}
+  @media(max-width:800px){.home-hero{display:flex;flex-direction:column;min-height:0;padding:0}.home-shell{order:1;padding-block:3rem 2.5rem}.home-hero-copy{width:100%;padding:0}.home-hero-photo{position:relative;inset:auto;z-index:0;order:2;height:clamp(220px,64vw,360px)}.home-ribbons{inset:auto -1px 0 auto;z-index:1;width:40%;height:clamp(220px,64vw,360px)}}
+  @media(max-width:500px){h1{font-size:clamp(3rem,13vw,4.25rem)}}
+  @media(prefers-reduced-motion:no-preference){.home-hero h1{animation:home-title-enter 640ms cubic-bezier(.22,1,.36,1) both}.home-deck{animation:home-deck-enter 640ms 60ms cubic-bezier(.22,1,.36,1) both}.home-hero-photo img{animation:home-photo-settle 800ms cubic-bezier(.16,1,.3,1) both}.home-ribbons{animation:home-ribbon-settle 800ms cubic-bezier(.16,1,.3,1) both}}
+  @keyframes home-title-enter{from{transform:translateY(12px)}to{transform:translateY(0)}}
+  @keyframes home-deck-enter{from{transform:translateY(8px)}to{transform:translateY(0)}}
+  @keyframes home-photo-settle{from{transform:scale(1.035)}to{transform:scale(1)}}
+  @keyframes home-ribbon-settle{from{transform:scale(1.08,1.025)}to{transform:scale(1)}}
+  @media(prefers-reduced-motion:reduce){.home-hero h1,.home-deck,.home-hero-photo img,.home-ribbons{animation:none;transform:none}}
 </style>
