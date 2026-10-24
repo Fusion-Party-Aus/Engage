@@ -63,3 +63,13 @@ curl --fail http://127.0.0.1:4321/api/ballots
 ```
 
 To roll back, set `APP_IMAGE_TAG` to the previous known-good tag and run `docker compose up -d app`. Keep the MongoDB volume unchanged during app rollback. Back up the database before any schema migration or restore operation. The public Reclaim site and any production hostname remain outside this deployment.
+
+## Ballot closure and recovery
+
+MongoDB runs standalone; ballot closure does not require replica-set transactions. Both deadline and administrator closure call `finalizeBallot`. Closure records its actor and timestamp, then a conditional write records one authoritative tally. Results endpoints use that stored tally. A closed ballot cannot reopen; create a new ballot for another decision.
+
+Approved revision publication and operational audit writes are retryable effects of that recorded result. `finalizedAt` and `publishedRevisionId` are set only after those writes succeed. Publication uses a conditional revision update; audit events use deterministic IDs. Concurrent calls and retries preserve the tally, closure provenance and completed effects. Database failures propagate rather than being treated as successful closure.
+
+To locate incomplete closures, inspect `ballots` with `{ status: "closed", finalizedAt: { $exists: false } }`. Restore a missing revision or resolve a conflicting publication, then repeat the administrator's close request. Normal ballot/catalogue reads also retry incomplete closures. Do not clear results or manually recalculate a recorded outcome. A published revision can exist before a failed audit write is repaired; the ballot remains incomplete until recovery succeeds. Older finalised records without results require restoration of the authoritative record, not an invented tally.
+
+Membership transitions are audited in `memberships.auditHistory`, atomically with the status change. Each entry records actor, previous status, new status and timestamp. `auditVersion` prevents two reviewers from overwriting the same transition. A conflict requires reloading and retrying; an unchanged status adds no completed transition. Legacy `operational_audit` request entries remain historical requests and must not be interpreted as completed verification. Back up membership documents with their embedded history.

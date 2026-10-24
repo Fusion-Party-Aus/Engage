@@ -50,7 +50,10 @@ Production uses Better Auth with Google OAuth and manual membership verification
 Use Node 24 (`nvm use`) and run `pnpm check`, `pnpm test` and `pnpm build`. For the MongoDB-backed authentication/API tests, start an isolated server (for example `docker run -d --name engage-auth-test -p 127.0.0.1:27029:27017 mongo:8.0`) and run:
 
 ```sh
+GOVERNANCE_TEST_MONGODB_URI=mongodb://127.0.0.1:27029 pnpm test:governance
 AUTH_TEST_MONGODB_URI=mongodb://127.0.0.1:27029 pnpm test:auth
 ```
 
 The test creates and drops a unique test database. It uses Better Auth's supported controlled Google provider options; it does not claim live Google authentication. It checks account creation/returning identity, PKCE authorisation initiation, session restoration/logout, manual verification, API access, revotes, revocation, email-linking rejection and ballot safeguards. To also verify the actual Docker application and a container restart, build `docker build -t engage-auth-verified:test .`, then add `AUTH_TEST_DOCKER_IMAGE=engage-auth-verified:test` to that test command (requires Docker Desktop, the test MongoDB port 27029 and free app port 4329). The test removes its app container.
+
+Migration details, validation evidence and remaining release blockers are recorded in [the migration notes](docs/engage-migration.md).

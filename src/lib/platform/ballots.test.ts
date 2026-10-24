@@ -5,6 +5,14 @@ import { validateOpenBallotSchedule } from "./draft-admin.mjs";
 import type { PlatformIdentity } from "./types.ts";
 
 function createFakeVoteDb(initialBallots: BallotRecord[], initialRevisions: Record<string, unknown>[] = []) {
+  const matches = (doc: Record<string, any>, filter: Record<string, any>) => Object.entries(filter).every(([key, value]) => {
+    if (value === null) return doc[key] == null;
+    if (value && typeof value === "object" && !(value instanceof Date)) {
+      if ("$exists" in value) return (doc[key] !== undefined) === value.$exists;
+      if ("$ne" in value) return doc[key] !== value.$ne;
+    }
+    return doc[key] === value;
+  });
   const ballots = initialBallots.map((b) => ({ ...b }));
   const revisions = initialRevisions.map((r) => ({ ...r }));
   const votes = new Map<string, Record<string, unknown>>();
@@ -53,10 +61,10 @@ function createFakeVoteDb(initialBallots: BallotRecord[], initialRevisions: Reco
             return ballots.find((b) => b.ballotId === filter.ballotId) ?? null;
           },
           async updateOne(filter: { ballotId: string }, update: { $set: Record<string, unknown> }) {
-            const target = ballots.find((b) => b.ballotId === filter.ballotId);
-            if (!target) return { modifiedCount: 0 };
+            const target = ballots.find((b) => matches(b, filter));
+            if (!target) return { matchedCount: 0, modifiedCount: 0 };
             Object.assign(target, update.$set);
-            return { modifiedCount: 1 };
+            return { matchedCount: 1, modifiedCount: 1 };
           },
           async updateMany(filter: { status: string; closesAt: { $lte: Date } }, update: { $set: { status: string; closedAt: Date } }) {
             let modifiedCount = 0;
@@ -77,15 +85,19 @@ function createFakeVoteDb(initialBallots: BallotRecord[], initialRevisions: Reco
             return revisions.find((r) => r.policyId === filter.policyId && r.revisionId === filter.revisionId) ?? null;
           },
           async updateOne(filter: { policyId: string; revisionId: string }, update: { $set: Record<string, unknown> }) {
-            const target = revisions.find((r) => r.policyId === filter.policyId && r.revisionId === filter.revisionId);
-            if (!target) return { modifiedCount: 0 };
+            const target = revisions.find((r) => matches(r, filter));
+            if (!target) return { matchedCount: 0, modifiedCount: 0 };
             Object.assign(target, update.$set);
-            return { modifiedCount: 1 };
+            return { matchedCount: 1, modifiedCount: 1 };
           },
         };
       }
       if (name === "operational_audit") {
         return {
+          async updateOne(filter: Record<string, any>, update: { $setOnInsert: Record<string, unknown> }) {
+            if (!audits.some((audit) => String(audit._id) === String(filter._id))) audits.push({ _id: filter._id, ...update.$setOnInsert });
+            return { matchedCount: 1 };
+          },
           async insertOne(doc: Record<string, unknown>) {
             audits.push(doc);
             return { insertedId: doc._id };
@@ -107,7 +119,7 @@ test("unified ballot engine records votes in votes collection, tallies strict ma
     opensAt: new Date("2026-10-20T00:00:00Z"),
     closesAt: new Date("2026-10-24T00:00:00Z"),
   };
-  const db = createFakeVoteDb([ballot]);
+  const db = createFakeVoteDb([ballot], [{ policyId: ballot.proposalId, revisionId: ballot.policyRevisionId }]);
   const member1: PlatformIdentity = { memberId: "preview-member-01", source: "synthetic", roles: ["member"] };
   const member2: PlatformIdentity = { memberId: "preview-member-02", source: "synthetic", roles: ["member"] };
   const member3: PlatformIdentity = { memberId: "preview-admin-01", source: "synthetic", roles: ["member", "administrator"] };

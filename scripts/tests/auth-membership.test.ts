@@ -13,7 +13,7 @@ import { POST as submit } from '../../src/pages/api/consultations/index.ts';
 import { PATCH as openBallot } from '../../src/pages/api/admin/ballots/[ballotId].ts';
 import { POST as vote } from '../../src/pages/api/votes.ts';
 import { ballotSafeguards } from '../../src/lib/platform/ballot-authorization.ts';
-import { castVote, getBallotResults, type BallotRecord } from '../../src/lib/platform/ballots.ts';
+import { castVote, finalizeBallot, getBallotResults, type BallotRecord } from '../../src/lib/platform/ballots.ts';
 import type { PlatformEnv } from '../../src/lib/platform/types.ts';
 
 const uri = process.env.AUTH_TEST_MONGODB_URI;
@@ -79,9 +79,10 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
     assert.equal((await submit({ request: request('/api/consultations', first.cookie, 'POST', contribution), locals })).status, 403);
     assert.notEqual((await vote({ request: request('/api/votes', first.cookie, 'POST', { ballotId, choice: 'do-not-approve' }), locals })).status, 200);
     await db.collection('votes').insertOne({ ballotId, memberId: 'synthetic-contamination', identitySource: 'synthetic', choice: 'approve' });
-    assert.equal((await getBallotResults(db, { ...ballot, status: 'closed' }))?.approve, 1, 'synthetic activity never contributes to a binding tally');
+    await finalizeBallot(db, ballotId);
+    assert.equal((await getBallotResults(db, (await db.collection<BallotRecord>('ballots').findOne({ ballotId }))!))?.approve, 1, 'synthetic activity never contributes to a binding tally');
     await assert.rejects(() => castVote(db, { memberId: 'preview-member-01', source: 'synthetic', roles: ['member'] }, ballot, 'approve', env), /Engage member identity/);
-    const audit = await db.collection('operational_audit').findOne({ action: 'membership_change_requested', targetId: first.user.id });
+    const audit = (await db.collection('memberships').findOne({ memberId: first.user.id }))?.auditHistory[0];
     assert.equal(audit?.actorId, admin.user.id);
     const foreignSubject = await auth.api.signInSocial({ body: { provider: 'google', idToken: { token: 'controlled:different-provider-subject' } }, headers: new Headers({ origin }), asResponse: true });
     assert.notEqual(foreignSubject.status, 200, 'same email cannot link a new subject');

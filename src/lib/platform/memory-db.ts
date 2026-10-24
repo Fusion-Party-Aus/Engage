@@ -3,12 +3,22 @@ import { ObjectId } from "mongodb";
 import catalogueData from "../../data/policy-catalogue.json" with { type: "json" };
 import initialRoundData from "../../data/initial-round.json" with { type: "json" };
 
+function clone<T>(value: T): T {
+  if (value instanceof ObjectId) return new ObjectId(value.toHexString()) as T;
+  if (value instanceof Date) return new Date(value) as T;
+  if (Array.isArray(value)) return value.map(clone) as T;
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, clone(item)])) as T;
+  return value;
+}
+
 type DocRecord = Record<string, any>;
 
 function matchesCondition(value: any, condition: any): boolean {
   if (condition && typeof condition === "object" && !(condition instanceof Date) && !(condition instanceof ObjectId)) {
     for (const [op, target] of Object.entries(condition)) {
-      if (op === "$in" && Array.isArray(target)) {
+      if (op === "$exists") {
+        if ((value !== undefined) !== target) return false;
+      } else if (op === "$in" && Array.isArray(target)) {
         if (!target.includes(value)) return false;
       } else if (op === "$ne") {
         if (value === target) return false;
@@ -32,7 +42,7 @@ function matchesCondition(value: any, condition: any): boolean {
   if (value instanceof ObjectId && condition instanceof ObjectId) {
     return value.toHexString() === condition.toHexString();
   }
-  return value === condition;
+  return condition === null ? value === null || value === undefined : value === condition;
 }
 
 function matchesFilter(doc: DocRecord, filter: DocRecord = {}): boolean {
@@ -43,18 +53,18 @@ function matchesFilter(doc: DocRecord, filter: DocRecord = {}): boolean {
 }
 
 function applyProjection(doc: DocRecord, projection?: DocRecord): DocRecord {
-  if (!projection) return structuredClone(doc);
+  if (!projection) return clone(doc);
   const entries = Object.entries(projection);
   const inclusions = entries.filter(([k, v]) => k !== "_id" && Boolean(v)).map(([k]) => k);
   if (inclusions.length > 0) {
     const out: DocRecord = {};
     if (projection._id !== 0 && "_id" in doc) out._id = doc._id;
     for (const key of inclusions) {
-      if (key in doc) out[key] = structuredClone(doc[key]);
+      if (key in doc) out[key] = clone(doc[key]);
     }
     return out;
   }
-  const out = structuredClone(doc);
+  const out = clone(doc);
   for (const [key, val] of entries) {
     if (!val) delete out[key];
   }
@@ -63,11 +73,17 @@ function applyProjection(doc: DocRecord, projection?: DocRecord): DocRecord {
 
 function applyUpdate(target: DocRecord, update: DocRecord, isInsert: boolean): void {
   if (update.$set) {
-    Object.assign(target, structuredClone(update.$set));
+    Object.assign(target, clone(update.$set));
   }
   if (isInsert && update.$setOnInsert) {
     for (const [k, v] of Object.entries(update.$setOnInsert)) {
-      if (!(k in target)) target[k] = structuredClone(v);
+      if (!(k in target)) target[k] = clone(v);
+    }
+  }
+  if (update.$push) {
+    for (const [key, value] of Object.entries(update.$push)) {
+      if (!Array.isArray(target[key])) target[key] = [];
+      target[key].push(clone(value));
     }
   }
   if (update.$inc) {
@@ -162,7 +178,7 @@ class InMemoryCollection<TSchema extends Document = Document> {
   }
 
   async insertOne(doc: DocRecord): Promise<{ insertedId: MongoObjectId }> {
-    const copy = structuredClone(doc);
+    const copy = clone(doc);
     if (!copy._id) copy._id = new ObjectId();
     this.checkUnique(copy);
     this.docs.push(copy);
@@ -172,7 +188,7 @@ class InMemoryCollection<TSchema extends Document = Document> {
   async updateOne(filter: Filter<TSchema>, update: UpdateFilter<TSchema>, options?: UpdateOptions) {
     const existing = this.docs.find((doc) => matchesFilter(doc, filter as DocRecord));
     if (existing) {
-      const candidate = structuredClone(existing);
+      const candidate = clone(existing);
       applyUpdate(candidate, update as DocRecord, false);
       this.checkUnique(candidate, existing);
       Object.assign(existing, candidate);
@@ -182,7 +198,7 @@ class InMemoryCollection<TSchema extends Document = Document> {
       const created: DocRecord = { _id: new ObjectId() };
       for (const [k, v] of Object.entries(filter as DocRecord)) {
         if (!v || typeof v !== "object" || v instanceof Date || v instanceof ObjectId) {
-          created[k] = structuredClone(v);
+          created[k] = clone(v);
         }
       }
       applyUpdate(created, update as DocRecord, true);

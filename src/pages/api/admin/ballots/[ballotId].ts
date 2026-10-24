@@ -30,6 +30,9 @@ export async function PATCH({ request, params, locals }: { request: Request; par
     if (!ballot) return json({ error: "Ballot not found." }, 404);
     const now = new Date();
     if (body.status !== undefined && Object.keys(body).every((key) => statusTransitionKeys.has(key))) {
+      if (body.status !== "closed" && (ballot.status === "closed" || ballot.results || ballot.finalizedAt)) {
+        return json({ error: "A closed ballot cannot be reopened. Create a new ballot for a new decision." }, 409);
+      }
       let authorization = ballot.authorization;
       if (env.APP_MODE !== "preview") {
         if (identity.source !== "engage" || !(await platformRoles(identity, env)).includes("administrator")) return json({ error: "Administrator role required." }, 403);

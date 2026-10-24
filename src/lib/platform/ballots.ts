@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ObjectId, type Db, type Document } from "mongodb";
 import type { PlatformEnv, PlatformIdentity, VoteChoice } from "./types.ts";
 import { calculateStrictMajority, formalVotingIsEnabled, isBallotOpen, upsertCurrentVote, validateVoteChoice } from "./voting.mjs";
@@ -17,6 +18,8 @@ export interface BallotRecord extends Document {
   closesAt: Date;
   closedAt?: Date;
   finalizedAt?: Date;
+  resultsRecordedAt?: Date;
+  closure?: { actorId: string; actorSource: string; closeReason: string; syntheticOutcome: boolean };
   outcome?: "approved" | "not-approved" | "no-valid-votes" | null;
   results?: BallotResults | null;
   publishedRevisionId?: string | null;
@@ -53,7 +56,7 @@ export async function listBallots(db: Db): Promise<BallotRecord[]> {
     projection: {
       _id: 0, ballotId: 1, proposalId: 1, policyRevisionId: 1, roundId: 1,
       title: 1, summary: 1, domain: 1, status: 1, opensAt: 1, closesAt: 1, closedAt: 1,
-      finalizedAt: 1, outcome: 1, results: 1, publishedRevisionId: 1, syntheticOutcome: 1,
+      finalizedAt: 1, resultsRecordedAt: 1, outcome: 1, results: 1, publishedRevisionId: 1, syntheticOutcome: 1,
       priority: 1, bindingBallotsEnabled: 1, syntheticFixture: 1, fixtureNotice: 1,
     },
   }).sort({ priority: 1, opensAt: 1, title: 1 }).toArray();
@@ -79,157 +82,89 @@ export async function finalizeBallot(
   const ballot = await ballots.findOne({ ballotId });
   if (!ballot) return null;
 
-  const alreadyFinalized = Boolean(ballot.finalizedAt) && ballot.status === "closed";
-  const closedAt = ballot.closedAt instanceof Date ? ballot.closedAt : new Date(ballot.closedAt ?? now);
-  const finalizedAt = ballot.finalizedAt instanceof Date ? ballot.finalizedAt : now;
-  const isSynthetic =
-    options.isSyntheticOverride ??
-    (Boolean(ballot.syntheticFixture) || ballot.bindingBallotsEnabled !== true || actorSource === "synthetic");
-
-  const voterFilter = ballot.bindingBallotsEnabled === true ? { identitySource: "engage" } : {};
-  const [approve, doNotApprove] = await Promise.all([
-    db.collection("votes").countDocuments({ ballotId: ballot.ballotId, choice: "approve", ...voterFilter }),
-    db.collection("votes").countDocuments({ ballotId: ballot.ballotId, choice: "do-not-approve", ...voterFilter }),
-  ]);
-  const { votesCast, outcome } = calculateStrictMajority(approve, doNotApprove);
-  const results: BallotResults = {
-    approve,
-    doNotApprove,
-    votesCast,
-    outcome: outcome as BallotResults["outcome"],
-  };
-  const publishedRevisionId = results.outcome === "approved" ? ballot.policyRevisionId : null;
-
-  if (!alreadyFinalized) {
-    await ballots.updateOne(
-      { ballotId },
-      {
-        $set: {
-          status: "closed",
-          closedAt,
-          finalizedAt,
-          outcome: results.outcome,
-          results,
-          publishedRevisionId,
-          syntheticOutcome: isSynthetic,
-          updatedAt: now,
-          updatedBy: actorId,
-        },
-      },
-    );
+  const alreadyFinalized = Boolean(ballot.finalizedAt);
+  if (alreadyFinalized && !ballot.results) throw new Error("Recorded ballot result is missing; restore the authoritative record before retrying.");
+  // First close admission. The winning caller records the closure provenance.
+  await ballots.updateOne({ ballotId, status: { $ne: "closed" } }, { $set: {
+    status: "closed", closedAt: now,
+    closure: { actorId, actorSource, closeReason, syntheticOutcome: options.isSyntheticOverride ??
+      (Boolean(ballot.syntheticFixture) || ballot.bindingBallotsEnabled !== true || actorSource === "synthetic") },
+  } });
+  let recorded = (await ballots.findOne({ ballotId }))!;
+  if (!recorded.results) {
+    const voterFilter = recorded.bindingBallotsEnabled === true ? { identitySource: "engage" } : {};
+    const [approve, doNotApprove] = await Promise.all([
+      db.collection("votes").countDocuments({ ballotId, choice: "approve", ...voterFilter }),
+      db.collection("votes").countDocuments({ ballotId, choice: "do-not-approve", ...voterFilter }),
+    ]);
+    const { votesCast, outcome } = calculateStrictMajority(approve, doNotApprove);
+    // Compare-and-set: only one tally becomes authoritative, including across workers.
+    await ballots.updateOne({ ballotId, results: null }, { $set: {
+      results: { approve, doNotApprove, votesCast, outcome: outcome as BallotResults["outcome"] }, outcome: outcome as BallotResults["outcome"],
+      resultsRecordedAt: now, publishedRevisionId: null,
+      syntheticOutcome: recorded.closure?.syntheticOutcome ?? Boolean(recorded.syntheticOutcome),
+    } });
+    recorded = (await ballots.findOne({ ballotId }))!;
   }
-
-  if (results.outcome === "approved" && ballot.policyRevisionId) {
-    try {
+  if (!recorded.results) throw new Error("Ballot result could not be recorded; retry closure.");
+  const results = recorded.results;
+  const closedAt = recorded.closedAt ?? now;
+  const closure = recorded.closure ?? { actorId, actorSource, closeReason, syntheticOutcome: Boolean(recorded.syntheticOutcome) };
+  const publishedRevisionId = results.outcome === "approved" ? recorded.policyRevisionId : null;
+  // A durable result is the outbox. Until all effects succeed finalizedAt stays absent.
+  if (!recorded.finalizedAt) {
+    const audit = async (kind: string, event: Document) => {
+      const _id = new ObjectId(createHash("sha256").update(`ballot:${ballotId}:${kind}`).digest("hex").slice(0, 24));
+      await db.collection("operational_audit").updateOne({ _id }, { $setOnInsert: event }, { upsert: true });
+    };
+    if (publishedRevisionId) {
       const revisions = db.collection("policy_revisions");
-      const existingRev = await revisions.findOne({
-        policyId: ballot.proposalId,
-        revisionId: ballot.policyRevisionId,
-      });
-      if (existingRev && !existingRev.publishedAt) {
-        await revisions.updateOne(
-          { policyId: ballot.proposalId, revisionId: ballot.policyRevisionId },
-          {
-            $set: {
-              approvedAt: existingRev.approvedAt ?? closedAt,
-              publishedAt: existingRev.publishedAt ?? closedAt,
-              approvedByBallotId: ballotId,
-              syntheticOutcome: isSynthetic,
-            },
-          },
-        );
-        await db.collection("operational_audit").insertOne({
-          actorId,
-          actorSource,
-          action: "approved_revision_published",
-          targetType: "policy",
-          targetId: ballot.proposalId,
-          revisionId: ballot.policyRevisionId,
-          ballotId,
-          closeReason,
-          syntheticOutcome: isSynthetic,
-          createdAt: now,
-        });
+      const key = { policyId: recorded.proposalId, revisionId: publishedRevisionId };
+      const revision = await revisions.findOne(key);
+      if (!revision) throw new Error("Approved revision is missing; restore it and retry ballot closure.");
+      if (revision.publishedAt && revision.approvedByBallotId !== ballotId) {
+        throw new Error("Revision was published by another decision; resolve the conflict before retrying closure.");
       }
-    } catch {
-      // Allow lightweight test doubles that only mock votes/ballots/operational_audit to succeed
+      await revisions.updateOne({ ...key, publishedAt: null }, { $set: {
+        approvedAt: revision.approvedAt ?? closedAt, publishedAt: closedAt,
+        approvedByBallotId: ballotId, syntheticOutcome: closure.syntheticOutcome,
+      } });
+      const published = await revisions.findOne(key);
+      if (!published?.publishedAt || published.approvedByBallotId !== ballotId) throw new Error("Revision publication did not complete; retry closure.");
+      await audit("publication", {
+        ...closure, action: "approved_revision_published", targetType: "policy", targetId: recorded.proposalId,
+        revisionId: publishedRevisionId, ballotId, createdAt: closedAt,
+      });
     }
-  }
-
-  if (!alreadyFinalized) {
-    await db.collection("operational_audit").insertOne({
-      actorId,
-      actorSource,
-      action: closeReason === "deadline" ? "ballot_closed_at_deadline" : "ballot_status_updated",
-      targetType: "ballot",
-      targetId: ballotId,
-      status: "closed",
-      closeReason,
-      outcome: results.outcome,
-      votesCast: results.votesCast,
-      publishedRevisionId,
-      syntheticOutcome: isSynthetic,
-      createdAt: now,
+    await audit("closure", {
+      ...closure, action: closure.closeReason === "deadline" ? "ballot_closed_at_deadline" : "ballot_status_updated",
+      targetType: "ballot", targetId: ballotId, ballotId, status: "closed", outcome: results.outcome,
+      votesCast: results.votesCast, publishedRevisionId, createdAt: closedAt,
     });
+    await ballots.updateOne({ ballotId, finalizedAt: { $exists: false } }, { $set: {
+      finalizedAt: now, publishedRevisionId, updatedAt: now, updatedBy: closure.actorId,
+    } });
+    recorded = (await ballots.findOne({ ballotId }))!;
   }
-
   return {
-    ballotId,
-    status: "closed",
-    closedAt,
-    finalizedAt,
-    results,
-    outcome: results.outcome,
-    publishedRevisionId,
-    syntheticOutcome: isSynthetic,
-    alreadyFinalized,
+    ballotId, status: "closed", closedAt, finalizedAt: recorded.finalizedAt!, results,
+    outcome: results.outcome, publishedRevisionId: recorded.publishedRevisionId ?? null,
+    syntheticOutcome: Boolean(recorded.syntheticOutcome), alreadyFinalized,
   };
 }
 
 export async function closeExpiredBallots(db: Db, now = new Date()): Promise<number> {
   const ballots = db.collection<BallotRecord>("ballots");
-  if (typeof ballots.find === "function") {
-    const expired = await ballots.find({ status: "open", closesAt: { $lte: now } }).toArray();
-    for (const ballot of expired) {
-      await finalizeBallot(db, ballot.ballotId, {
-        actorId: "system",
-        actorSource: "system",
-        now,
-        closeReason: "deadline",
-      });
-    }
-    if (expired.length > 0) {
-      await db.collection("operational_audit").insertOne({
-        actorId: "system",
-        actorSource: "system",
-        action: "ballots_automatically_closed",
-        targetType: "ballot_collection",
-        createdAt: now,
-        closedCount: expired.length,
-      });
-    }
-    return expired.length;
+  const expired = await ballots.find({ status: "open", closesAt: { $lte: now } }).toArray();
+  const incomplete = await ballots.find({ status: "closed", finalizedAt: { $exists: false } }).toArray();
+  for (const ballot of [...expired, ...incomplete]) {
+    await finalizeBallot(db, ballot.ballotId, { now, closeReason: "deadline" });
   }
-  const result = await ballots.updateMany(
-    { status: "open", closesAt: { $lte: now } },
-    { $set: { status: "closed", closedAt: now } },
-  );
-  if (result.modifiedCount > 0) await db.collection("operational_audit").insertOne({
-    actorId: "system", actorSource: "system", action: "ballots_automatically_closed",
-    targetType: "ballot_collection", createdAt: now, closedCount: result.modifiedCount,
-  });
-  return result.modifiedCount;
+  return expired.length;
 }
 
-export async function getBallotResults(db: Db, ballot: BallotRecord): Promise<BallotResults | null> {
-  if (ballot.status !== "closed") return null;
-  const voterFilter = ballot.bindingBallotsEnabled === true ? { identitySource: "engage" } : {};
-  const [approve, doNotApprove] = await Promise.all([
-    db.collection("votes").countDocuments({ ballotId: ballot.ballotId, choice: "approve", ...voterFilter }),
-    db.collection("votes").countDocuments({ ballotId: ballot.ballotId, choice: "do-not-approve", ...voterFilter }),
-  ]);
-  const { votesCast, outcome } = calculateStrictMajority(approve, doNotApprove);
-  return { approve, doNotApprove, votesCast, outcome: outcome as BallotResults["outcome"] };
+export async function getBallotResults(_db: Db, ballot: BallotRecord): Promise<BallotResults | null> {
+  return ballot.status === "closed" ? ballot.results ?? null : null;
 }
 
 async function addAudit(db: Db, identity: PlatformIdentity, action: string, ballotId: string, now: Date): Promise<void> {

@@ -1,6 +1,6 @@
 # Editorial policy for website copy
 
-This policy guides public and member-facing copy on the Fusion Horizon Policy Platform. It applies to page introductions, policy catalogue labels, consultations, ballots, forms, system messages, administration, metadata, and accessibility text.
+This policy guides public and member-facing copy in Engage. It applies to page introductions, policy catalogue labels, consultations, ballots, forms, system messages, administration, metadata, and accessibility text.
 
 ## Editorial standard
 
