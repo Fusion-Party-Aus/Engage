@@ -12,3 +12,5 @@ The initial identity approach is Better Auth with Google OAuth and MongoDB-backe
 Alongside individual policy review, the platform preserves the two separate member review questions requested for the Reclaim platform and the Horizon visual identity (including the logo).
 
 Website copy follows the [editorial policy](docs/editorial-policy.md). Page-specific copy belongs in content data; presentation components should render it without owning or duplicating page claims.
+
+Delivery is split into [M1 — Reclaim AGM Policy Review and M2 — Ongoing Engage Platform](docs/mvp-roadmap.md). M2 integrations and branch tenancy are not M1 prerequisites unless an explicit security, correctness or governance dependency requires them. Architecture is recorded in [ADR 0003](docs/adr/0003-reclaim-mvp-node-mongodb.md); existing behaviour is not evidence of governance approval.

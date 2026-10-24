@@ -6,6 +6,10 @@ import type { PlatformIdentity } from "./types.ts";
 
 function createFakeVoteDb(initialBallots: BallotRecord[], initialRevisions: Record<string, unknown>[] = []) {
   const matches = (doc: Record<string, any>, filter: Record<string, any>) => Object.entries(filter).every(([key, value]) => {
+    if (key === "$expr") return value.$and.every((clause: Record<string, any>) => {
+      const [field, time] = clause.$lte ?? clause.$gt;
+      return clause.$lte ? doc[field.slice(1)] <= time : doc[field.slice(1)] > time;
+    });
     if (value === null) return doc[key] == null;
     if (value && typeof value === "object" && !(value instanceof Date)) {
       if ("$exists" in value) return (doc[key] !== undefined) === value.$exists;
@@ -18,6 +22,7 @@ function createFakeVoteDb(initialBallots: BallotRecord[], initialRevisions: Reco
   const votes = new Map<string, Record<string, unknown>>();
   const audits: Record<string, unknown>[] = [];
   return {
+    client: { withSession: async (use: Function) => use({ withTransaction: async (write: Function) => write() }) },
     ballots,
     revisions,
     votes,
@@ -46,6 +51,12 @@ function createFakeVoteDb(initialBallots: BallotRecord[], initialRevisions: Reco
       }
       if (name === "ballots") {
         return {
+          async findOneAndUpdate(filter: Record<string, any>, _update: Record<string, unknown>[]) {
+            const target = ballots.find((b) => matches(b, filter));
+            if (!target) return null;
+            target.lastAdmissionAt = new Date();
+            return target;
+          },
           find(filter: { status?: string; closesAt?: { $lte: Date } }) {
             return {
               async toArray() {
@@ -60,10 +71,11 @@ function createFakeVoteDb(initialBallots: BallotRecord[], initialRevisions: Reco
           async findOne(filter: { ballotId: string }) {
             return ballots.find((b) => b.ballotId === filter.ballotId) ?? null;
           },
-          async updateOne(filter: { ballotId: string }, update: { $set: Record<string, unknown> }) {
+          async updateOne(filter: { ballotId: string }, update: { $set: Record<string, unknown>; $currentDate?: Record<string, boolean> }) {
             const target = ballots.find((b) => matches(b, filter));
             if (!target) return { matchedCount: 0, modifiedCount: 0 };
             Object.assign(target, update.$set);
+            if (update.$currentDate?.closedAt) target.closedAt = new Date();
             return { matchedCount: 1, modifiedCount: 1 };
           },
           async updateMany(filter: { status: string; closesAt: { $lte: Date } }, update: { $set: { status: string; closedAt: Date } }) {

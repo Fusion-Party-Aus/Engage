@@ -21,3 +21,7 @@ Docker container execution and restart checks could not run: the host has a Dock
 No committed private environment files, database dumps or high-confidence credential patterns were found in the transferred history. Membership-related records in tests are controlled or synthetic fixtures.
 
 Before release, complete live Google callback and cookie checks behind HTTPS, Docker deployment/restart validation, production backup/restore rehearsal, eligibility-review assignments, in-flight vote cutoff validation and governance authorisation. The provider test does **not** prove live Google authentication. Keep formal ballots disabled until the [release gates](release-gates.md) are met. Underground integration remains deferred pending coordination with Stewart and Owen; Firebase is not introduced.
+
+## Subsequent M1 prefactor
+
+The standalone MongoDB validation above is historical. [ADR 0003](adr/0003-reclaim-mvp-node-mongodb.md) supersedes that deployment boundary: voting admission and closure now require a replica set. The prefactor adds actual MongoDB cutoff regressions and CI; target Docker bootstrap/restart, live OAuth, production recovery and governance approval remain distinct release gates. See [remaining M1 work](mvp-roadmap.md).
