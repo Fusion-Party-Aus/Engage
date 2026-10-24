@@ -23,7 +23,7 @@ services:
       - no-new-privileges:true
 
   app:
-    image: fusion-horizon-policy:${APP_IMAGE_TAG:-local}
+    image: fusion-engage:${APP_IMAGE_TAG:-local}
     build: .
     restart: unless-stopped
     depends_on:

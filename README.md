@@ -1,6 +1,8 @@
-# Fusion Horizon Policy Platform
+# Engage
 
-Reconstructed Astro application for Fusion’s policy library, member consultation, and policy ballot workflows. The public Reclaim static export remains in the repository as the migration source until the replacement is accepted.
+Fusion Party Australia’s ongoing policy development, consultation and member decision platform. Engage is the product; Reclaim is its initial policy review programme for the 2026 AGM. The public Reclaim static export remains in the repository as the migration source until the replacement is accepted.
+
+Canonical repository: **Fusion-Party-Aus/Engage**. The application was transferred with its history from `Fusion-Party-Aus/reclaim-platform`, branch `codex/horizon-policy-platform` (`d98b409`). The source repository is retained as a historical reference; continue application development in Engage only. Reclaim policy content and the separate Reclaim platform and Horizon branding decisions are preserved.
 
 ## Local development
 
