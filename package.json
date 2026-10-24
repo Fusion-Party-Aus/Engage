@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@astrojs/node": "11.1.9",
-    "@fontsource/fraunces": "5.3.0",
+    "@fontsource/newsreader": "5.3.0",
     "@fontsource/outfit": "5.3.0",
     "astro": "7.4.2",
     "mongodb": "6.21.0"

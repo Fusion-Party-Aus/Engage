@@ -11,7 +11,7 @@ importers:
       '@astrojs/node':
         specifier: 11.1.9
         version: 11.1.9(astro@7.4.2(@types/node@26.6.5)(esbuild@0.28.2)(yaml@2.9.1))
-      '@fontsource/fraunces':
+      '@fontsource/newsreader':
         specifier: 5.3.0
         version: 5.3.0
       '@fontsource/outfit':
@@ -416,8 +416,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@fontsource/fraunces@5.3.0':
-    resolution: {integrity: sha512-LEHTOBiZufQzAvnAe2rZ8ZknbDS28Q9kzwb0L+gZJEmjLGr8hhZ/5NuHXwDuHBWhVXYoiGGXmrb0H6Ko/RrHTg==}
+  '@fontsource/newsreader@5.3.0':
+    resolution: {integrity: sha512-AFR6ZKY89GNL+9qBI2P2+66NhD5bhOj/v6fsLnFYLM4E0JnMB1yKb+Ro8cA64i1hwAWoBfTq5CHJGWH1toLDkw==}
 
   '@fontsource/outfit@5.3.0':
     resolution: {integrity: sha512-0AVHzTTVJSxWDOxPKSfMeHhZeBFDU3cmgrcOb76ZEyhGo0+xgyG3GsLF3h9+X8w0IX7G4jzjJgFQEBiWdX6VgA==}
@@ -2195,7 +2195,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@fontsource/fraunces@5.3.0': {}
+  '@fontsource/newsreader@5.3.0': {}
 
   '@fontsource/outfit@5.3.0': {}
 
