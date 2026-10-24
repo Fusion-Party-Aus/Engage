@@ -1,5 +1,11 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import { adminPageDenial } from '../../lib/platform/admin-access';
+import { platformEnv } from '../../lib/platform/http';
+export const prerender = false;
+const denial = await adminPageDenial(Astro.request, platformEnv(Astro.locals), true);
+if (denial) return denial;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
 ---
 <SiteLayout title="Membership verification · Engage" description="Review membership verification." noIndex>
   <div class="page-wrap section-space">

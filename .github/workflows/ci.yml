@@ -50,9 +50,11 @@ jobs:
         run: pnpm test
       - name: Real MongoDB vote cutoff regressions
         run: pnpm test:cutoff
-      - name: Controlled Google authentication and membership API checks
-        run: pnpm test:auth
       - run: pnpm build
+      - name: Controlled Google authentication, membership and rendered privacy checks
+        env:
+          AUTH_TEST_SSR: "true"
+        run: pnpm test:auth
       - name: MongoDB logs on failure
         if: failure()
         run: docker logs engage-ci-mongo

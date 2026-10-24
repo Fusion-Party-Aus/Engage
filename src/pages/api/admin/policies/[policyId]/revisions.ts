@@ -1,3 +1,4 @@
+import { validateTaxonomy } from "../../../../../lib/platform/taxonomy.ts";
 import { ensureIndexes, getDatabase } from "../../../../../lib/platform/database.ts";
 import { platformRoles, resolveIdentity } from "../../../../../lib/platform/auth.ts";
 import { renderDetailsToHtml } from "../../../../../lib/platform/catalogue.ts";
@@ -25,8 +26,10 @@ export async function POST({ request, params, locals }: { request: Request; para
     if (!(await platformRoles(identity, env)).some((role) => role === "administrator" || role === "moderator")) return json({ error: "You are not authorised to create policy revisions." }, 403);
     if (!(await consumeRateLimit(db, "policy-revision-create", identity.memberId, 20, 60 * 60_000))) return json({ error: "Too many revisions created. Please try again later." }, 429, { "retry-after": "3600" });
     const revisions = db.collection("policy_revisions");
-    const existing = await revisions.findOne({ policyId: params.policyId }, { projection: { _id: 0, domain: 1, division: 1, domainSlug: 1, anchor: 1, url: 1, provenance: 1, syntheticFixture: 1 } });
+    const existing = await revisions.findOne({ policyId: params.policyId }, { projection: { _id: 0, domain: 1, division: 1, domainSlug: 1, anchor: 1, url: 1, provenance: 1, syntheticFixture: 1, taxonomyVersion: 1, programme: 1, pillar: 1, editorialHeading: 1 }, sort: { createdAt: -1, importedAt: -1, version: -1 } });
     if (!existing) return json({ error: "The policy does not exist in the platform policy catalogue." }, 404);
+    const taxonomy = validateTaxonomy(body, { ...existing, policyId: params.policyId });
+    if ("error" in taxonomy) return json({ error: taxonomy.error }, 400);
     const revisionId = `${params.policyId}:${parsed.value.version}`;
     const now = new Date();
     const isSynthetic = Boolean(existing.syntheticFixture) || env.APP_MODE === "preview" || identity.source === "synthetic";
@@ -41,7 +44,7 @@ export async function POST({ request, params, locals }: { request: Request; para
       body: parsed.value.details,
       detailHtml,
       outcomes: parsed.value.outcomes,
-      domain: parsed.value.domain ?? existing.domain,
+      ...taxonomy.value,
       syntheticFixture: isSynthetic,
       ...(isSynthetic
         ? {

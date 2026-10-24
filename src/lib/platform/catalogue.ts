@@ -3,6 +3,7 @@ import catalogueData from "../../data/policy-catalogue.json" with { type: "json"
 import initialRoundData from "../../data/initial-round.json" with { type: "json" };
 import { ensureIndexes, getDatabase } from "./database.ts";
 import { closeExpiredBallots, getBallotResults, type BallotRecord, type BallotResults } from "./ballots.ts";
+import { policyTaxonomy, type PolicyTaxonomy } from "./taxonomy.ts";
 import type { PlatformEnv } from "./types.ts";
 
 export interface ProvenanceLink {
@@ -27,12 +28,11 @@ export interface PolicyProvenance {
   valuesAlignment: string[];
 }
 
-export interface PolicyCatalogueEntry {
+export interface PolicyCatalogueEntry extends PolicyTaxonomy {
   policyId: string;
   version: string;
   title: string;
   division: string;
-  domain: string;
   domainSummary: string;
   domainSlug: string;
   anchor: string;
@@ -57,7 +57,11 @@ export interface PolicyRevisionRecord {
   version: string;
   title: string;
   division?: string;
-  domain?: string;
+  domain?: string | null;
+  taxonomyVersion?: number;
+  programme?: string | null;
+  pillar?: string | null;
+  editorialHeading?: string | null;
   domainSlug?: string;
   anchor?: string;
   url?: string;
@@ -137,7 +141,7 @@ export function renderDetailsToHtml(details: string, changeSummary?: string): st
   return htmlParts.join("");
 }
 
-const baselineCatalogue = catalogueData as PolicyCatalogueEntry[];
+const baselineCatalogue = catalogueData.map(entry => ({ ...entry, ...policyTaxonomy(entry) })) as PolicyCatalogueEntry[];
 
 function defaultRevisionFor(entry: PolicyCatalogueEntry): PolicyRevisionRecord {
   const inRound = initialRoundData.policies.find((p) => p.id === entry.policyId);
@@ -148,7 +152,7 @@ function defaultRevisionFor(entry: PolicyCatalogueEntry): PolicyRevisionRecord {
     version,
     title: entry.title,
     division: entry.division,
-    domain: entry.domain,
+    ...policyTaxonomy(entry),
     domainSlug: entry.domainSlug,
     anchor: entry.anchor,
     url: entry.url,
@@ -222,16 +226,13 @@ export async function loadPolicyCatalogue(env: PlatformEnv): Promise<PolicyLifec
   }
 
   await closeExpiredBallots(db);
-  const [dbRevisions, dbRounds, dbSubmissions, dbBallots] = await Promise.all([
-    db.collection<PolicyRevisionRecord>("policy_revisions").find({}, { projection: { _id: 0 } }).sort({ importedAt: 1, createdAt: 1, version: 1 }).toArray(),
+  const [rawRevisions, dbRounds, dbBallots] = await Promise.all([
+    db.collection<PolicyRevisionRecord>("policy_revisions").find({}, { projection: { _id: 0, createdBy: 0 } }).sort({ importedAt: 1, createdAt: 1, version: 1 }).toArray(),
     db.collection<{ roundId: string; program?: string; label?: string; status: string; opensAt: Date; closesAt: Date; policyIds?: string[]; syntheticFixture?: boolean; fixtureNotice?: string }>("consultation_rounds").find({}, { projection: { _id: 0 } }).toArray(),
-    db.collection<{ submissionId: string; roundId: string; policyId: string; policyRevisionId: string; kind: string; title?: string; body: string; status: string; createdAt: Date; moderatorResponse?: string; syntheticFixture?: boolean }>("consultation_submissions").find(
-      { status: { $in: ["accepted", "needs-changes"] } },
-      { projection: { _id: 0 } },
-    ).sort({ createdAt: -1 }).toArray(),
-    db.collection<BallotRecord>("ballots").find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray(),
+    db.collection<BallotRecord>("ballots").find({}, { projection: { _id: 0, authorization: 0, closure: 0, createdBy: 0, updatedBy: 0 } }).sort({ createdAt: -1 }).toArray(),
   ]);
 
+  const dbRevisions = rawRevisions.map(revision => ({ ...revision, ...policyTaxonomy(revision) }));
   const revisionsByPolicy = new Map<string, PolicyRevisionRecord[]>();
   for (const rev of dbRevisions) {
     const list = revisionsByPolicy.get(rev.policyId) ?? [];
@@ -246,13 +247,6 @@ export async function loadPolicyCatalogue(env: PlatformEnv): Promise<PolicyLifec
     ballotsByProposal.set(ballot.proposalId, list);
   }
 
-  const submissionsByPolicy = new Map<string, typeof dbSubmissions>();
-  for (const sub of dbSubmissions) {
-    const list = submissionsByPolicy.get(sub.policyId) ?? [];
-    list.push(sub);
-    submissionsByPolicy.set(sub.policyId, list);
-  }
-
   // Include both baseline 76 policies and any newly created policies in MongoDB
   const seenPolicyIds = new Set(baselineCatalogue.map((e) => e.policyId));
   const extraEntries: PolicyCatalogueEntry[] = [];
@@ -264,10 +258,10 @@ export async function loadPolicyCatalogue(env: PlatformEnv): Promise<PolicyLifec
       policyId,
       version: initial.version,
       title: initial.title,
-      division: initial.division ?? "RECLAIM OUR ECONOMY",
-      domain: initial.domain ?? "Additional Policy Proposals",
+      division: initial.division ?? "",
+      ...policyTaxonomy(initial),
       domainSummary: "Newly proposed policy under member review.",
-      domainSlug: initial.domainSlug ?? "/reclaim-our-economy/build-up-small-businesses/",
+      domainSlug: initial.domainSlug ?? `/policies/?policy=${encodeURIComponent(policyId)}`,
       anchor: initial.anchor ?? policyId.toLowerCase(),
       url: initial.url ?? `/policies/?policy=${encodeURIComponent(policyId)}`,
       statement: initial.statement,
@@ -360,6 +354,7 @@ export async function loadPolicyCatalogue(env: PlatformEnv): Promise<PolicyLifec
 
     views.push({
       ...entry,
+      ...policyTaxonomy(displayedRev),
       id: entry.policyId,
       slug: entry.anchor,
       sectionPath: entry.domainSlug,
@@ -379,7 +374,7 @@ export async function loadPolicyCatalogue(env: PlatformEnv): Promise<PolicyLifec
       pendingSettledRevision,
       revisions: allRevs,
       consultationRounds: rounds,
-      submissions: submissionsByPolicy.get(entry.policyId) ?? [],
+      submissions: [],
       ballot: ballotWithResults,
       adoptedRevisionId,
       adoptionIsSynthetic,

@@ -1,5 +1,5 @@
 import test from 'node:test';
-import { execFileSync } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { MongoClient } from 'mongodb';
 import { betterAuth } from 'better-auth';
@@ -9,6 +9,9 @@ import { membershipStatus } from '../../src/lib/platform/membership.ts';
 import { ensureIndexes, closeDatabase } from '../../src/lib/platform/database.ts';
 import { GET as sessionGET, DELETE as logout } from '../../src/pages/api/session.ts';
 import { PATCH as verify, GET as members } from '../../src/pages/api/admin/members.ts';
+import { adminPageDenial } from '../../src/lib/platform/admin-access.ts';
+import { GET as discussion } from '../../src/pages/api/consultations/index.ts';
+import { GET as moderation } from '../../src/pages/api/admin/consultations/index.ts';
 import { POST as submit } from '../../src/pages/api/consultations/index.ts';
 import { PATCH as openBallot } from '../../src/pages/api/admin/ballots/[ballotId].ts';
 import { POST as vote } from '../../src/pages/api/votes.ts';
@@ -23,11 +26,44 @@ const locals = { env };
 const origin = 'http://localhost:4321';
 function request(path: string, cookie: string, method = 'GET', body?: unknown) { return new Request(origin + path, { method, headers: { cookie, origin, 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); }
 
+test('taxonomy migration dry-run and repeat application preserve wording and relationships', async () => {
+  const client = await MongoClient.connect(uri);
+  const db = client.db('engage_taxonomy_test_' + Date.now());
+  try {
+    const legacy = { policyId: 'POL-010', revisionId: 'original-r1', version: 'v1', division: 'RECLAIM OUR ECONOMY', domain: 'Solve the Housing Crisis', url: '/reclaim-our-economy/solve-the-housing-crisis/#original', statement: 'Original policy wording.', provenance: { summary: 'Original provenance.' }, roundId: 'original-round', approvedByBallotId: 'original-ballot' };
+    const explicit = { policyId: 'FUTURE-1', revisionId: 'future-r1', taxonomyVersion: 1, programme: 'Future programme', pillar: null, editorialHeading: null, domain: 'Transport', statement: 'Future wording.' };
+    await db.collection('policy_revisions').insertMany([{ ...legacy }, { ...explicit }]);
+    const migrate = (...args: string[]) => {
+      const output = execFileSync(process.execPath, ['scripts/migrate-policy-taxonomy.mjs', ...args], { env: { ...process.env, MONGODB_URI: uri, MONGODB_DB_NAME: db.databaseName }, encoding: 'utf8' });
+      return JSON.parse(output.trim().split('\n').at(-1)!);
+    };
+    assert.equal(migrate().changed, 1);
+    assert.equal((await db.collection('policy_revisions').findOne({ policyId: 'POL-010' }))?.domain, legacy.domain);
+    assert.equal(migrate('--apply').changed, 1);
+    const migrated = await db.collection('policy_revisions').findOne({ policyId: 'POL-010' });
+    assert.equal(migrated?.programme, 'Reclaim');
+    assert.equal(migrated?.editorialHeading, legacy.domain);
+    assert.equal(migrated?.domain, 'Housing');
+    for (const key of ['policyId', 'revisionId', 'version', 'url', 'statement', 'provenance', 'roundId', 'approvedByBallotId'] as const) assert.deepEqual(migrated?.[key], legacy[key]);
+    assert.equal(migrate('--apply').changed, 0);
+    const { _id, ...unchanged } = (await db.collection('policy_revisions').findOne({ policyId: 'FUTURE-1' }))!;
+    assert.deepEqual(unchanged, explicit);
+  } finally { await db.dropDatabase(); await client.close(); }
+});
+
 test('controlled Google provider flow, Mongo sessions, manual verification, API access and vote preservation', async () => {
   const client = await MongoClient.connect(uri);
   const db = client.db(env.MONGODB_DB_NAME);
+  let server: ReturnType<typeof spawn> | undefined;
   try {
     await ensureIndexes(db);
+    if (process.env.AUTH_TEST_SSR === 'true') {
+      server = spawn(process.execPath, ['dist/server/entry.mjs'], { env: { ...process.env, ...env, HOST: '127.0.0.1', PORT: '4339' }, stdio: ['ignore', 'pipe', 'pipe'] });
+      for (let attempt = 0; ; attempt++) {
+        try { await fetch('http://127.0.0.1:4339/member/'); break; }
+        catch (error) { if (attempt >= 40) throw error; await new Promise(resolve => setTimeout(resolve, 250)); }
+      }
+    }
     const base = createEngageAuth(db, env);
     // Controlled provider boundary only: no live Google authentication is claimed.
     const auth = betterAuth({ ...base.options, socialProviders: { google: { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET!, verifyIdToken: async (token) => token.startsWith('controlled:'), getUserInfo: async (token) => {
@@ -61,13 +97,53 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
     const ballot: BallotRecord = { ballotId, proposalId: 'POL-001', policyRevisionId: 'r1', title: 'Test ballot', status: 'open', opensAt: new Date(now.getTime() - 10000), closesAt: new Date(now.getTime() + 3600000), bindingBallotsEnabled: true, authorization: { approvedBy: 'governance-test', approvedAt: now, evidence: Object.fromEntries(ballotSafeguards.map((key) => [key, 'Controlled evidence reference for ' + key])) } };
     await db.collection('ballots').insertOne(ballot);
     const contribution = { roundId, policyId: 'POL-001', policyRevisionId: 'r1', kind: 'comment', body: 'A meaningful policy comment.' };
+    const privateMarker = 'MEMBER_ONLY_DELIBERATION_MARKER';
+    await db.collection('consultation_submissions').insertOne({ submissionId: 'privacy-check', memberId: first.user.id, identitySource: 'engage', roundId, policyId: 'POL-001', policyRevisionId: 'r1', status: 'accepted', kind: 'comment', body: privateMarker, moderatorResponse: privateMarker + '_REVIEW', createdAt: now });
+    await db.collection('consultation_submissions').insertOne({ submissionId: 'synthetic-private-check', memberId: first.user.id, identitySource: 'synthetic', roundId, policyId: 'POL-001', status: 'accepted', body: 'SYNTHETIC_DISCUSSION_MARKER', createdAt: now });
+    async function checkDiscussion(cookie: string, expected: number) {
+      for (const query of ['', '?policyId=POL-001', '?roundId=' + roundId]) {
+        const response = await discussion({ request: request('/api/consultations' + query, cookie), locals });
+        assert.equal(response.status, expected);
+        const data = await response.text();
+        assert.equal(data.includes(privateMarker), expected === 200);
+        assert.equal(data.includes('SYNTHETIC_DISCUSSION_MARKER'), false);
+      }
+      if (server) {
+        for (const path of ['/consultations/?roundId=' + roundId, '/reclaim-our-economy/restore-the-fair-go/']) {
+          const response = await fetch('http://127.0.0.1:4339' + path, { headers: { cookie } });
+          assert.equal(response.status, 200);
+          assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+          const html = await response.text();
+          assert.equal(html.includes(privateMarker), expected === 200, path);
+          assert.equal(html.includes('SYNTHETIC_DISCUSSION_MARKER'), false);
+        }
+        const catalogue = await fetch('http://127.0.0.1:4339/api/policies', { headers: { cookie } });
+        assert.equal(catalogue.status, 200);
+        assert.equal((await catalogue.text()).includes(privateMarker), false);
+      }
+    }
+    await checkDiscussion('', 401);
+    await checkDiscussion(first.cookie, 403);
     assert.equal((await submit({ request: request('/api/consultations', first.cookie, 'POST', contribution), locals })).status, 403);
     assert.notEqual((await vote({ request: request('/api/votes', first.cookie, 'POST', { ballotId, choice: 'approve', membershipStatus: 'verified' }), locals })).status, 200);
     assert.equal((await verify({ request: request('/api/admin/members', first.cookie, 'PATCH', { memberId: first.user.id, status: 'verified' }), locals })).status, 403);
     assert.equal((await members({ request: request('/api/admin/members', first.cookie), locals })).status, 403);
     const admin = await signIn('admin');
     await db.collection('application_roles').insertOne({ memberId: admin.user.id, role: 'administrator' });
+    assert.equal((await adminPageDenial(request('/admin/', admin.cookie), env))?.status, 403);
+    assert.equal(await adminPageDenial(request('/admin/members/', admin.cookie), env, true), null);
+    assert.equal((await moderation({ request: request('/api/admin/consultations', admin.cookie), locals })).status, 403);
+    if (server) {
+      assert.equal((await fetch('http://127.0.0.1:4339/admin/')).status, 401);
+      const denied = await fetch('http://127.0.0.1:4339/admin/', { headers: { cookie: admin.cookie } });
+      assert.equal(denied.status, 403);
+      assert.doesNotMatch(await denied.text(), /revision-policy-select|MEMBER_ONLY_DELIBERATION_MARKER/);
+      assert.equal((await fetch('http://127.0.0.1:4339/admin/members/')).status, 401);
+      assert.equal((await fetch('http://127.0.0.1:4339/admin/members/', { headers: { cookie: admin.cookie } })).status, 200);
+    }
     assert.equal((await verify({ request: request('/api/admin/members', admin.cookie, 'PATCH', { memberId: first.user.id, status: 'verified' }), locals })).status, 200);
+    await checkDiscussion(first.cookie, 200);
+    assert.equal((await adminPageDenial(request('/admin/', first.cookie), env))?.status, 403);
     await db.collection('ballots').updateOne({ ballotId }, { $set: { status: 'draft', bindingBallotsEnabled: false }, $unset: { authorization: '' } });
     const transition = (body: unknown) => ({ request: request('/api/admin/ballots/' + ballotId, admin.cookie, 'PATCH', body), params: { ballotId }, locals });
     assert.equal((await openBallot(transition({ status: 'open' }))).status, 423, 'login and configuration alone cannot open binding voting');
@@ -78,6 +154,12 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
     assert.equal((await verify({ request: request('/api/admin/members', admin.cookie, 'PATCH', { memberId: first.user.id, status: 'suspended' }), locals })).status, 200);
     assert.equal((await submit({ request: request('/api/consultations', first.cookie, 'POST', contribution), locals })).status, 403);
     assert.notEqual((await vote({ request: request('/api/votes', first.cookie, 'POST', { ballotId, choice: 'do-not-approve' }), locals })).status, 200);
+    await checkDiscussion(first.cookie, 403);
+    await db.collection('memberships').updateOne({ memberId: admin.user.id }, { $set: { status: 'verified' } }, { upsert: true });
+    assert.equal(await adminPageDenial(request('/admin/', admin.cookie), env), null);
+    assert.equal((await moderation({ request: request('/api/admin/consultations', admin.cookie), locals })).status, 200);
+    await db.collection('memberships').updateOne({ memberId: admin.user.id }, { $set: { status: 'suspended' } });
+    assert.equal((await moderation({ request: request('/api/admin/consultations', admin.cookie), locals })).status, 403);
     await db.collection('votes').insertOne({ ballotId, memberId: 'synthetic-contamination', identitySource: 'synthetic', choice: 'approve' });
     await finalizeBallot(db, ballotId);
     assert.equal((await getBallotResults(db, (await db.collection<BallotRecord>('ballots').findOne({ ballotId }))!))?.approve, 1, 'synthetic activity never contributes to a binding tally');
@@ -124,5 +206,5 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
     assert.equal(own.membershipStatus, 'suspended'); assert.equal('accounts' in own, false);
     await logout({ request: request('/api/session', first.cookie, 'DELETE'), locals });
     assert.equal((await resolveIdentity(request('/api/session', first.cookie), env)).identity, null);
-  } finally { await db.dropDatabase(); await client.close(); await closeDatabase(); }
+  } finally { if (server) { server.kill(); await new Promise<void>(resolve => server!.once("exit", () => resolve())); } await db.dropDatabase(); await client.close(); await closeDatabase(); }
 });

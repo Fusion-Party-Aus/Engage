@@ -2,45 +2,44 @@
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import PreviewNotice from '../../components/PreviewNotice.astro';
 import policies from '../../data/policies.json';
+import DomainPolicyReview from '../../components/DomainPolicyReview.astro';
 import { loadPolicyCatalogue } from '../../lib/platform/catalogue.ts';
 import { platformEnv } from '../../lib/platform/http.ts';
 
 export const prerender = false;
+Astro.response.headers.set("Cache-Control", "private, no-store");
 
 const catalogue = await loadPolicyCatalogue(platformEnv(Astro.locals));
 const publicCatalogue = catalogue.filter((p) => !p.syntheticFixture);
-const economy = policies.filter((p) => p.slug.startsWith('/reclaim-our-economy/'));
-const future = policies.filter((p) => p.slug.startsWith('/reclaim-our-future/'));
+const selectedPolicyId = Astro.url.searchParams.get('policy');
+const selectedPolicy = catalogue.find(policy => policy.policyId === selectedPolicyId);
 const openPolicyIds = new Set(publicCatalogue.filter((p) => p.consultationRounds.some((r) => r.status === 'open')).map((p) => p.policyId));
-
-const groups = [
-  {
-    id: 'economy',
-    eyebrow: 'Work, security and shared prosperity',
-    title: 'Reclaim our economy',
-    href: '/reclaim-our-economy/',
-    domains: economy.map((domain) => ({
-      ...domain,
-      proposals: publicCatalogue.filter((p) => p.domainSlug === domain.slug),
-    })),
-  },
-  {
-    id: 'future',
-    eyebrow: 'A future shaped by people and communities',
-    title: 'Reclaim our future',
-    href: '/reclaim-our-future/',
-    domains: future.map((domain) => ({
-      ...domain,
-      proposals: publicCatalogue.filter((p) => p.domainSlug === domain.slug),
-    })),
-  },
-];
+const subjects = [...new Set(publicCatalogue.map(policy => policy.domain ?? 'Unclassified'))].sort();
+const buckets = new Map<string, typeof publicCatalogue>();
+for (const policy of publicCatalogue) {
+  const key = [policy.programme ?? 'Other policies', policy.pillar].filter(Boolean).join(' · ');
+  buckets.set(key, [...(buckets.get(key) ?? []), policy]);
+}
+const groups = [...buckets].map(([title, entries], index) => {
+  const sections = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    const heading = entry.editorialHeading ?? entry.domain ?? 'Unclassified';
+    sections.set(heading, [...(sections.get(heading) ?? []), entry]);
+  }
+  const first = entries[0]!;
+  const href = first.pillar && policies.some(section => section.slug === first.domainSlug) ? `/${first.domainSlug.split('/')[1]}/` : '/policies/';
+  return { id: first.division && first.pillar === first.division ? first.division.split(" ").at(-1)!.toLowerCase() : `group-${index}`, eyebrow: first.pillar ? 'Programme · Editorial pillar' : 'Programme', title, href,
+    domains: [...sections].map(([heading, proposals]) => ({ title: heading, slug: proposals[0]!.editorialHeading ? proposals[0]!.domainSlug : proposals[0]!.url,
+      summary: proposals[0]!.editorialHeading ? policies.find(p => p.slug === proposals[0]!.domainSlug)?.summary ?? '' : '', proposals })),
+  };
+});
 ---
-<SiteLayout title="Policy library · Fusion" description="Explore Reclaim's policy commitments and proposals by issue." canonical={`${Astro.url.origin}/policies/`}>
+<SiteLayout title={selectedPolicy ? `${selectedPolicy.title} · Fusion` : "Policy library · Fusion"} description="Explore policy commitments and proposals by subject or programme." canonical={selectedPolicy ? new URL(selectedPolicy.url, Astro.url.origin).href : `${Astro.url.origin}/policies/`}>
   <PreviewNotice slot="notice" />
-  <div class="page-wrap">
+  {selectedPolicy && <DomainPolicyReview division={selectedPolicy.pillar ?? selectedPolicy.programme ?? 'Policy review'} domainSlug={selectedPolicy.domainSlug} domainTitle={selectedPolicy.title} domainSummary={selectedPolicy.editorialHeading ?? ''} items={[selectedPolicy]} />}
+  {!selectedPolicy && <div class="page-wrap">
     <header class="page-intro">
-      <p class="eyebrow">The Reclaim policy library</p>
+      <p class="eyebrow">Policy library</p>
       <h1>What should a fairer Australia look like?</h1>
       <p>Start with an issue area, then open any proposal to see its core commitment, intended outcomes, supporting rationale, and how members can shape it.</p>
     </header>
@@ -50,13 +49,13 @@ const groups = [
         <input id="policy-search" type="search" placeholder="Try housing, Medicare, small business or democracy" autocomplete="off" />
       </label>
       <label class="field">
-        <span>Browse by program</span>
+        <span>Programme / editorial pillar</span>
         <select id="policy-area">
-          <option value="all">All policy areas</option>
-          <option value="economy">Reclaim our economy</option>
-          <option value="future">Reclaim our future</option>
+          <option value="all">All programmes and pillars</option>
+          {groups.map(group => <option value={group.id}>{group.title}</option>)}
         </select>
       </label>
+      <label class="field"><span>Policy domain (subject)</span><select id="policy-domain"><option value="all">All subjects</option>{subjects.map(subject => <option value={subject}>{subject}</option>)}</select></label>
       <label class="field">
         <span>Member review</span>
         <select id="policy-review">
@@ -64,7 +63,7 @@ const groups = [
           <option value="open">Open for comment</option>
         </select>
       </label>
-      <p id="policy-results" aria-live="polite">Choose a policy area below or search by topic.</p>
+      <p id="policy-results" aria-live="polite">Choose a programme or subject below or search by topic.</p>
     </form>
 
     {groups.map((group) => (
@@ -96,11 +95,12 @@ const groups = [
                     <li
                       class="proposal-entry"
                       data-policy-entry
+                      data-subject={proposal.domain ?? "Unclassified"}
                       data-open={openPolicyIds.has(proposal.policyId) ? 'true' : 'false'}
-                      data-search={`${proposal.title} ${proposal.domain} ${proposal.domainSummary} ${proposal.statement}`.toLocaleLowerCase()}
+                      data-search={`${proposal.title} ${proposal.editorialHeading ?? ""} ${proposal.domain ?? "Unclassified"} ${proposal.domainSummary} ${proposal.statement}`.toLocaleLowerCase()}
                     >
                       <div class="proposal-entry__main">
-                        <a class="proposal-entry__title" href={`${proposal.sectionPath}#${proposal.slug}`}>{proposal.title}</a>
+                        <a class="proposal-entry__title" href={proposal.url}>{proposal.title}</a>
                         {openPolicyIds.has(proposal.policyId) && (
                           <a class="review-label" href={`/consultations/?policyId=${encodeURIComponent(proposal.policyId)}`}>
                             Open for comment ↗
@@ -116,11 +116,12 @@ const groups = [
         </div>
       </section>
     ))}
-  </div>
+  </div>}
 </SiteLayout>
 <script>
   const search = document.querySelector<HTMLInputElement>('#policy-search');
   const area = document.querySelector<HTMLSelectElement>('#policy-area');
+  const subject = document.querySelector<HTMLSelectElement>("#policy-domain");
   const review = document.querySelector<HTMLSelectElement>('#policy-review');
   const entries = [...document.querySelectorAll<HTMLElement>('[data-policy-entry]')];
   const domainCards = [...document.querySelectorAll<HTMLElement>('[data-domain-card]')];
@@ -131,12 +132,13 @@ const groups = [
     const query = search?.value.trim().toLocaleLowerCase() ?? '';
     const selectedArea = area?.value ?? 'all';
     const selectedReview = review?.value ?? 'all';
-    const isFiltering = Boolean(query) || selectedReview !== 'all';
+    const isFiltering = subject?.value !== "all" || Boolean(query) || selectedReview !== 'all';
     let visible = 0;
 
     for (const entry of entries) {
       const group = entry.closest<HTMLElement>('[data-policy-area]');
       const matches = (selectedArea === 'all' || group?.dataset.policyArea === selectedArea)
+        && (!subject || subject.value === 'all' || entry.dataset.subject === subject.value)
         && (selectedReview === 'all' || entry.dataset.open === 'true')
         && (entry.dataset.search ?? '').includes(query);
       entry.hidden = !matches;
@@ -165,11 +167,12 @@ const groups = [
     if (result) {
       result.textContent = isFiltering || selectedArea !== 'all'
         ? `${visible} ${visible === 1 ? 'proposal' : 'proposals'} matching your filter`
-        : 'Choose a policy area below, expand a domain to browse its proposals, or search by topic.';
+        : 'Choose a programme or subject below, expand an editorial heading or subject to browse its proposals, or search by topic.';
     }
   };
   search?.addEventListener('input', update);
   area?.addEventListener('change', update);
+  subject?.addEventListener('change', update);
   review?.addEventListener('change', update);
 </script>
 <style>

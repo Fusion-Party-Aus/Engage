@@ -4,7 +4,7 @@ import { renderDetailsToHtml } from "../../../../lib/platform/catalogue.ts";
 import { validPolicyId, validatePolicyRevisionInput } from "../../../../lib/platform/policy-revisions.mjs";
 import { json, platformEnv, readJson, requireSameOrigin } from "../../../../lib/platform/http.ts";
 import { consumeRateLimit } from "../../../../lib/platform/rate-limit.ts";
-import type { BallotRecord } from "../../../../lib/platform/ballots.ts";
+import { validateTaxonomy } from "../../../../lib/platform/taxonomy.ts";
 import type { RuntimeLocals } from "../../../../lib/platform/types.ts";
 
 export const prerender = false;
@@ -17,17 +17,6 @@ const allowedCategories = new Set([
   "unverified",
 ]);
 
-type DraftBallot = BallotRecord & {
-  choices: string[];
-  mandatoryDoNotApproveReason: boolean;
-  createdAt: Date;
-  createdBy: string;
-};
-
-function slugify(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "proposal";
-}
-
 export async function POST({ request, locals }: { request: Request; locals: RuntimeLocals }): Promise<Response> {
   const originError = requireSameOrigin(request);
   if (originError) return originError;
@@ -38,7 +27,8 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
   if (!body) return json({ error: "Provide a valid JSON policy proposal." }, 400);
   const policyId = typeof body.policyId === "string" ? body.policyId.trim() : "";
   if (!validPolicyId(policyId)) return json({ error: "Provide a valid policyId (e.g. POL-077)." }, 400);
-  const division = body.division === "RECLAIM OUR FUTURE" ? "RECLAIM OUR FUTURE" : "RECLAIM OUR ECONOMY";
+  const taxonomy = validateTaxonomy(body);
+  if ("error" in taxonomy) return json({ error: taxonomy.error }, 400);
   const provenanceCategory = typeof body.provenanceCategory === "string" && allowedCategories.has(body.provenanceCategory)
     ? body.provenanceCategory
     : "new-proposal";
@@ -47,10 +37,9 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
     : "Newly proposed policy drafted for member consultation and ballot review.";
   const roundId = typeof body.roundId === "string" && body.roundId.trim() ? body.roundId.trim() : undefined;
 
-  const { policyId: _pid, division: _div, provenanceCategory: _cat, provenanceSummary: _sum, roundId: _rid, ...revisionFields } = body;
+  const { policyId: _pid, provenanceCategory: _cat, provenanceSummary: _sum, roundId: _rid, ...revisionFields } = body;
   const parsed = validatePolicyRevisionInput(revisionFields);
   if ("error" in parsed) return json({ error: parsed.error }, 400);
-  if (!parsed.value.domain) return json({ error: "Provide the policy domain." }, 400);
 
   try {
     const db = await getDatabase(env);
@@ -68,19 +57,18 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
     const now = new Date();
     const isSynthetic = env.APP_MODE === "preview" || identity.source === "synthetic";
     const revisionId = `${policyId}:${parsed.value.version}`;
-    const domainSlug = `/${division === "RECLAIM OUR FUTURE" ? "reclaim-our-future" : "reclaim-our-economy"}/${slugify(parsed.value.domain)}/`;
-    const anchor = slugify(parsed.value.title);
+    const url = `/policies/?policy=${encodeURIComponent(policyId)}`;
+    const anchor = policyId.toLowerCase();
     const detailHtml = renderDetailsToHtml(parsed.value.details, parsed.value.changeSummary);
     const document = {
       policyId,
       revisionId,
       version: parsed.value.version,
       title: parsed.value.title,
-      division,
-      domain: parsed.value.domain,
-      domainSlug,
+      ...taxonomy.value,
+      domainSlug: url,
       anchor,
-      url: `${domainSlug}#${anchor}`,
+      url,
       statement: parsed.value.statement,
       details: parsed.value.details,
       body: parsed.value.details,
@@ -119,30 +107,6 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
         { $addToSet: { policyIds: policyId }, $set: { updatedAt: now, updatedBy: identity.memberId } },
       );
     }
-    const defaultBallotId = `ballot-${slugify(policyId)}`;
-    const ballots = db.collection<DraftBallot>("ballots");
-    let draftBallot: DraftBallot | null = await ballots.findOne({ ballotId: defaultBallotId }, { projection: { _id: 0 } });
-    if (!draftBallot) {
-      draftBallot = {
-        ballotId: defaultBallotId,
-        proposalId: policyId,
-        policyRevisionId: revisionId,
-        ...(roundId ? { roundId } : {}),
-        title: parsed.value.title,
-        summary: parsed.value.statement,
-        domain: parsed.value.domain,
-        status: "draft",
-        opensAt: new Date(now.getTime() + 7 * 24 * 60 * 60_000),
-        closesAt: new Date(now.getTime() + 21 * 24 * 60 * 60_000),
-        choices: ["approve", "do-not-approve"],
-        mandatoryDoNotApproveReason: false,
-        bindingBallotsEnabled: false,
-        syntheticFixture: isSynthetic,
-        createdAt: now,
-        createdBy: identity.memberId,
-      };
-      await ballots.insertOne(draftBallot);
-    }
     await db.collection("operational_audit").insertOne({
       actorId: identity.memberId,
       actorSource: identity.source,
@@ -151,11 +115,10 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
       targetId: policyId,
       revisionId,
       roundId: roundId ?? null,
-      ballotId: defaultBallotId,
       syntheticFixture: isSynthetic,
       createdAt: now,
     });
-    return json({ policy: document, ballot: draftBallot, immutable: true }, 201);
+    return json({ policy: document, immutable: true }, 201);
   } catch {
     return json({ error: "The policy proposal could not be created." }, 503);
   }

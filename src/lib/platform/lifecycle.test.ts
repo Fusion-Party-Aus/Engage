@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadPolicyCatalogue } from "./catalogue.ts";
 import { getDatabase } from "./database.ts";
-import { createSubmission, listPublicSubmissions, reviewSubmission } from "./consultations.ts";
+import { createSubmission, listMemberSubmissions, reviewSubmission } from "./consultations.ts";
 import { castVote, getBallotResults, type BallotRecord } from "./ballots.ts";
 import { validatePolicyRevisionInput } from "./policy-revisions.mjs";
 import { createPreviewSessionCookie } from "./auth.ts";
 import { POST as createPolicyPost } from "../../pages/api/admin/policies/index.ts";
 import { POST as createRevisionPost } from "../../pages/api/admin/policies/[policyId]/revisions.ts";
+import { POST as createBallotPost } from "../../pages/api/admin/ballots/index.ts";
 import { PATCH as patchBallot } from "../../pages/api/admin/ballots/[ballotId].ts";
 import { POST as createConsultationPost } from "../../pages/api/consultations/index.ts";
 import { POST as reviewConsultationPost } from "../../pages/api/admin/consultations/[submissionId]/review.ts";
@@ -39,6 +40,35 @@ const moderator: PlatformIdentity = {
   roles: ["member", "moderator", "administrator"],
 };
 
+test('standalone policy creation and taxonomy revisions never require Reclaim or create a ballot', async () => {
+  const locals = { env: previewEnv };
+  const cookie = (await createPreviewSessionCookie('preview-admin-01', previewEnv)).split(';')[0]!;
+  const wording = { version: 'v1', title: 'Regional transport connections', statement: 'Improve regional transport connections with accessible services.', details: 'Connect regional communities through accessible and reliable transport.', outcomes: ['More accessible regional services.'] };
+  const request = (path: string, body: unknown) => new Request('http://localhost:4321' + path, { method: 'POST', headers: { origin: 'http://localhost:4321', cookie, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const response = await createPolicyPost({ request: request('/api/admin/policies', { policyId: 'REGIONAL-1', ...wording, domain: 'Transport' }), locals });
+  assert.equal(response.status, 201);
+  const created = (await response.json()).policy;
+  assert.equal(created.programme, null);
+  assert.equal(created.pillar, null);
+  assert.equal(created.editorialHeading, null);
+  assert.equal(created.domain, 'Transport');
+  const db = await getDatabase(previewEnv);
+  assert.equal(await db.collection('ballots').countDocuments({ proposalId: 'REGIONAL-1' }), 0);
+  const revise = (version: string, taxonomy: object) => createRevisionPost({ request: request('/api/admin/policies/REGIONAL-1/revisions', { ...wording, version, ...taxonomy }), params: { policyId: 'REGIONAL-1' }, locals });
+  const second = await revise('v2', { programme: 'Regional review', pillar: 'Connections', editorialHeading: 'Public transport', domain: 'Transport' });
+  assert.equal(second.status, 201);
+  assert.equal((await second.json()).revision.programme, 'Regional review');
+  const third = await revise('v3', {});
+  assert.equal(third.status, 201);
+  assert.equal((await third.json()).revision.programme, 'Regional review');
+  const fourth = await revise('v4', { programme: null, pillar: null, editorialHeading: null, domain: null });
+  assert.equal(fourth.status, 201);
+  const cleared = (await fourth.json()).revision;
+  assert.equal(cleared.programme, null);
+  assert.equal(cleared.domain, null);
+  assert.equal(cleared.url, created.url);
+});
+
 test("Complete policy lifecycle & Engage-readiness: consultation -> amendment review -> settled revision -> ballot vote -> recorded outcome", async () => {
   const db = await getDatabase(previewEnv);
 
@@ -62,7 +92,7 @@ test("Complete policy lifecycle & Engage-readiness: consultation -> amendment re
         kind: "amendment",
         title: "Wrong round test",
         body: "Attempting to submit POL-077 into the AGM round where it does not belong.",
-      }),
+      }, new Date(), previewEnv),
     /not included in the selected consultation round/
   );
 
@@ -74,7 +104,7 @@ test("Complete policy lifecycle & Engage-readiness: consultation -> amendment re
     kind: "amendment",
     title: "Include independent diagnostic tools for medical devices",
     body: "Extend Outcome 1 so regional clinics and biomedical technicians also receive diagnostic schematics.",
-  });
+  }, new Date(), previewEnv);
   assert.ok(submissionId, "Expected submissionId to be generated");
 
   // 3. Moderator reviews and accepts the amendment using the returned submissionId
@@ -83,14 +113,14 @@ test("Complete policy lifecycle & Engage-readiness: consultation -> amendment re
     moderator,
     submissionId,
     "accepted",
-    "Accepted: incorporated into settled revision POL-077:v2-settled."
+    "Accepted: incorporated into settled revision POL-077:v2-settled.", previewEnv
   );
   assert.equal(reviewedOk, true, "Expected reviewSubmission to match by submissionId");
 
-  const publicSubs = await listPublicSubmissions(db, { policyId: "POL-077" });
+  const publicSubs = await listMemberSubmissions(db, member1, previewEnv, { policyId: "POL-077" });
   assert.ok(
     publicSubs.some((s) => s.submissionId === submissionId && s.status === "accepted"),
-    "Expected accepted amendment to appear in public submissions"
+    "Expected accepted amendment to appear in member submissions"
   );
 
   // 4. Moderator creates an immutable settled policy revision POL-077:v2-settled
@@ -268,8 +298,8 @@ test("Engage readiness & dynamic publication via application HTTP APIs for a new
     request: jsonReq("http://localhost:4321/api/admin/policies", "POST", adminCookie, {
       policyId: "POL-078",
       version: "v1-proposed",
-      division: "RECLAIM OUR ECONOMY",
-      domain: "Build up Small Businesses",
+      programme: "Regional connectivity",
+      domain: "Telecommunications",
       roundId: "continuous-policy-round-2027-q1",
       title: "Establish Regional Open-Access Fibre Backhaul",
       statement: "Provide open-access wholesale dark fibre along regional highway and rail corridors so small ISPs and regional businesses can connect on non-discriminatory terms.",
@@ -286,7 +316,13 @@ test("Engage readiness & dynamic publication via application HTTP APIs for a new
   assert.equal(createdBody.policy.policyId, "POL-078");
   assert.equal(createdBody.policy.revisionId, "POL-078:v1-proposed");
   assert.equal(createdBody.policy.syntheticFixture, true);
-  assert.equal(createdBody.ballot.ballotId, "ballot-pol-078");
+  assert.equal(createdBody.ballot, undefined);
+  const db = await getDatabase(previewEnv);
+  assert.equal(await db.collection('ballots').countDocuments({ proposalId: 'POL-078' }), 0);
+  assert.equal(createdBody.policy.programme, 'Regional connectivity');
+  assert.equal(createdBody.policy.pillar, null);
+  assert.equal(createdBody.policy.domain, 'Telecommunications');
+  assert.equal(createdBody.policy.url, '/policies/?policy=POL-078');
 
   // 2. REVIEW: Verify POL-078 appears immediately in the public policy catalogue API with v1-proposed wording
   const reviewRes1 = await getPoliciesApi({
@@ -344,6 +380,13 @@ test("Engage readiness & dynamic publication via application HTTP APIs for a new
   });
   assert.equal(settleRes.status, 201);
 
+  const ballotRes = await createBallotPost({
+    request: jsonReq("http://localhost:4321/api/admin/ballots", "POST", adminCookie, {
+      ballotId: 'ballot-pol-078', proposalId: 'POL-078', policyRevisionId: 'POL-078:v1-proposed',
+      opensAt: new Date(Date.now() + 3600_000).toISOString(), closesAt: new Date(Date.now() + 86400_000).toISOString(),
+    }), locals,
+  });
+  assert.equal(ballotRes.status, 201);
   const pinRes = await patchBallot({
     request: jsonReq("http://localhost:4321/api/admin/ballots/ballot-pol-078", "PATCH", adminCookie, {
       policyRevisionId: "POL-078:v2-settled",

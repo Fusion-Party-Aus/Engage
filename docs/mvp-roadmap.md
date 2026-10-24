@@ -47,7 +47,8 @@ Keep these commitments tracked without treating them as M1 dependencies:
 
 ### Code defects / delivery gaps
 
-- **Member-only deliberation:** `listPublicSubmissions`, the public consultation API and catalogue render accepted submission bodies without member verification. Restrict deliberation reads to the authorised member audience and test public/pending/suspended access. Public policy/provenance browsing remains available. This is a concrete privacy defect against the accepted #2/#6 scope, not a request for M2 public consultation.
+- **Member-only deliberation (PR A):** public catalogue loading no longer reads submission bodies; consultation APIs, moderation reads and rendered discussion check current verification. Pending/suspended accounts cannot use privileged roles to bypass this boundary. Administration pages authorise before loading data. See [taxonomy/privacy migration and checks](m1-taxonomy-privacy.md). Human pilot and independent security acceptance remain outstanding.
+- **Taxonomy (PR A):** Reclaim programme, pillars and editorial headings are separate from nullable subject domains. Existing links/content/relationships are preserved; new policies have programme-neutral routes and no automatic ballot. Conservative compatibility mapping and an idempotent metadata migration are documented above.
 - **Separation of duties:** current roles are member/moderator/administrator. The same moderator/admin can settle revisions and control ballots; no separate wording-review sign-off or Election Officer-only identifiable-record boundary exists. Implement and test the accepted editor → independent wording reviewer → separate Election Officer controls before live M1 voting. Do not treat broad database/operator access as proof of ballot confidentiality.
 
 - The admin UI cannot provide the `authorizationEvidence` required to open a production ballot; the API supports it. Provide a minimal authorised-operator flow or an explicitly accepted, documented API procedure before pilot acceptance. Do not bypass the evidence gate.
@@ -73,7 +74,9 @@ Keep these commitments tracked without treating them as M1 dependencies:
 
 All M2 items above remain open. None is an M1 blocker without an explicit security, correctness or governance dependency.
 
-## UX follow-up; no redesign in this prefactor
+## PR B follow-up; after taxonomy/privacy review
+
+Keep PR B separately reviewable: improve existing operator journeys and implement the minimum accepted separation of responsibilities. Preserve ballot gates; add neither identifiable-vote retrieval without demonstrated need nor ordinary-review transactions without a concrete consistency failure. Reuse small fixtures.
 
 Keep the primary journey about reading, commenting and deciding policy. Reclaim's original content, four layers and provenance remain intact. Follow up on these observed issues:
 

@@ -7,6 +7,7 @@ import { loadPolicyCatalogue } from '../../lib/platform/catalogue.ts';
 import { platformEnv } from '../../lib/platform/http.ts';
 
 export const prerender = false;
+Astro.response.headers.set("Cache-Control", "private, no-store");
 
 const route = `/reclaim-our-future/${Astro.params.slug ?? ''}/`;
 const policy = policies.find((p) => p.slug === route);
@@ -15,7 +16,7 @@ const domainItems = allCatalogue.filter((item) => item.domainSlug === route);
 const found = Boolean(policy || domainItems.length > 0);
 if (!found) Astro.response.status = 404;
 
-const domainTitle = policy?.title ?? domainItems[0]?.domain ?? 'Policy Review Section';
+const domainTitle = policy?.title ?? domainItems[0]?.editorialHeading ?? 'Policy Review Section';
 const domainSummary = domainItems[0]?.domainSummary ?? policy?.summary ?? '';
 const metaTitle = policy?.metaTitle ?? `${domainTitle} · Fusion`;
 const description = policy?.description ?? domainSummary;
@@ -25,6 +26,8 @@ const description = policy?.description ?? domainSummary;
     <PreviewNotice slot="notice" />
     <DomainPolicyReview
       division="RECLAIM OUR FUTURE"
+      divisionHref="/reclaim-our-future/"
+      navigation={policies.filter(p => p.slug.startsWith("/reclaim-our-future/"))}
       domainSlug={route}
       domainTitle={domainTitle}
       domainSummary={domainSummary}

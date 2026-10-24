@@ -3,11 +3,16 @@ import SiteLayout from '../../layouts/SiteLayout.astro';
 import PreviewNotice from '../../components/PreviewNotice.astro';
 import initialRound from '../../data/initial-round.json';
 import { loadPolicyCatalogue } from '../../lib/platform/catalogue';
+import { adminPageDenial } from '../../lib/platform/admin-access';
 import { platformEnv } from '../../lib/platform/http';
 
 export const prerender = false;
 
-const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
+const env = platformEnv(Astro.locals);
+const denial = await adminPageDenial(Astro.request, env);
+if (denial) return denial;
+Astro.response.headers.set("Cache-Control", "private, no-store");
+const policies = await loadPolicyCatalogue(env);
 ---
 <SiteLayout title="Moderation & lifecycle workspace · Fusion" description="Review consultation submissions, settle immutable policy revisions, and manage policy ballots." noIndex>
   <PreviewNotice slot="notice" />
@@ -15,7 +20,7 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
     <header class="page-intro">
       <p class="eyebrow">Moderator &amp; Administrator workspace</p>
       <a class="text-link" href="/admin/members/">Review membership verification →</a><h1>Policy lifecycle &amp; review queue.</h1>
-      <p>Review member consultation submissions, publish accepted comments and amendments, create immutable settled policy revisions, propose new policies for future rounds, and manage ballot status.</p>
+      <p>Review member consultation submissions, share accepted comments and amendments with verified members, create immutable settled policy revisions, propose new policies for future rounds, and manage ballot status.</p>
     </header>
 
     <div class="admin-toolbar">
@@ -23,8 +28,8 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
         <span>Consultation submission queue</span>
         <select id="queue-status">
           <option value="pending">Awaiting review (pending)</option>
-          <option value="accepted">Accepted &amp; published</option>
-          <option value="needs-changes">Published (needs changes)</option>
+          <option value="accepted">Accepted for members</option>
+          <option value="needs-changes">Visible to members (needs changes)</option>
           <option value="declined">Declined</option>
         </select>
       </label>
@@ -54,7 +59,7 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
                 <option
                   value={p.id}
                   data-title={p.title}
-                  data-domain={p.domain}
+                  data-domain={p.domain ?? ""} data-programme={p.programme ?? ""} data-pillar={p.pillar ?? ""} data-editorial-heading={p.editorialHeading ?? ""}
                   data-statement={p.statement}
                   data-outcomes={p.outcomes.join('\n')}
                   data-details={p.details || p.statement}
@@ -88,6 +93,12 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
             <span>Change summary (how member feedback was incorporated)</span>
             <input name="changeSummary" placeholder="e.g. Incorporated member amendment clarifying implementation timeline." />
           </label>
+          <div class="schedule-fields">
+            <label class="field"><span>Programme (optional)</span><input name="programme" id="rev-programme" maxlength="120" placeholder="e.g. Reclaim" /></label>
+            <label class="field"><span>Editorial pillar (optional)</span><input name="pillar" id="rev-pillar" maxlength="120" /></label>
+            <label class="field"><span>Editorial heading (optional)</span><input name="editorialHeading" id="rev-editorialHeading" maxlength="120" /></label>
+            <label class="field"><span>Policy domain (optional subject)</span><input name="domain" id="rev-domain" maxlength="120" placeholder="e.g. Housing; leave blank if uncertain" /></label>
+          </div>
           <button class="button" type="submit">Create immutable revision</button>
           <p id="revision-status" class="form-status" role="status" aria-live="polite"></p>
         </form>
@@ -98,7 +109,7 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
           <div class="schedule-fields">
             <label class="field">
               <span>New Policy ID</span>
-              <input name="policyId" required placeholder="e.g. POL-078" pattern="POL-[0-9]{3,}" />
+              <input name="policyId" required placeholder="e.g. POL-078" pattern="[A-Za-z0-9][A-Za-z0-9._-]{1,99}" />
             </label>
             <label class="field">
               <span>Initial version</span>
@@ -106,21 +117,14 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
             </label>
           </div>
           <div class="schedule-fields">
-            <label class="field">
-              <span>Division</span>
-              <select name="division">
-                <option value="RECLAIM OUR ECONOMY">RECLAIM OUR ECONOMY</option>
-                <option value="RECLAIM OUR FUTURE">RECLAIM OUR FUTURE</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Domain</span>
-              <input name="domain" required placeholder="e.g. Build up Small Businesses" value="Build up Small Businesses" />
-            </label>
+            <label class="field"><span>Programme (optional)</span><input name="programme" maxlength="120" placeholder="e.g. Reclaim" /></label>
+            <label class="field"><span>Editorial pillar (optional)</span><input name="pillar" maxlength="120" /></label>
+            <label class="field"><span>Editorial heading (optional)</span><input name="editorialHeading" maxlength="120" /></label>
+            <label class="field"><span>Policy domain (optional subject)</span><input name="domain" maxlength="120" placeholder="e.g. Housing; leave blank if uncertain" /></label>
           </div>
           <label class="field">
-            <span>Consultation round</span>
-            <input name="roundId" value="continuous-policy-round-2027-q1" required />
+            <span>Consultation round (optional)</span>
+            <input name="roundId" placeholder="Existing consultation round ID" />
           </label>
           <label class="field">
             <span>Policy title</span>
@@ -178,6 +182,10 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
   function syncPolicyFields() {
     const opt = policySelect?.selectedOptions[0];
     if (!opt) return;
+    for (const key of ['programme', 'pillar', 'editorialHeading', 'domain']) {
+      const input = document.querySelector<HTMLInputElement>('#rev-' + key);
+      if (input) input.value = opt.dataset[key] ?? '';
+    }
     (document.querySelector<HTMLInputElement>('#rev-title')!).value = opt.dataset.title ?? '';
     (document.querySelector<HTMLTextAreaElement>('#rev-statement')!).value = opt.dataset.statement ?? '';
     (document.querySelector<HTMLTextAreaElement>('#rev-outcomes')!).value = opt.dataset.outcomes ?? '';
@@ -204,6 +212,7 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
       outcomes,
       details: String(data.get('details')).trim(),
     };
+    for (const key of ['programme', 'pillar', 'editorialHeading', 'domain']) payload[key] = String(data.get(key) ?? '').trim() || null;
     const changeSummary = String(data.get('changeSummary') ?? '').trim();
     if (changeSummary) payload.changeSummary = changeSummary;
 
@@ -234,8 +243,10 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
     const payload = {
       policyId: String(data.get('policyId')).trim(),
       version: String(data.get('version')).trim(),
-      division: String(data.get('division')),
-      domain: String(data.get('domain')).trim(),
+      programme: String(data.get('programme') ?? '').trim() || null,
+      pillar: String(data.get('pillar') ?? '').trim() || null,
+      editorialHeading: String(data.get('editorialHeading') ?? '').trim() || null,
+      domain: String(data.get('domain') ?? '').trim() || null,
       roundId: String(data.get('roundId')).trim(),
       title: String(data.get('title')).trim(),
       statement: String(data.get('statement')).trim(),
@@ -251,7 +262,7 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
     });
     const body = await res.json().catch(() => ({}));
     out.textContent = res.ok
-      ? `Created policy ${body.policy?.policyId} (${body.policy?.revisionId}) and added to round ${payload.roundId}.`
+      ? `Created policy ${body.policy?.policyId} (${body.policy?.revisionId}).${payload.roundId ? ` Added to round ${payload.roundId}.` : ""}`
       : (body.error ?? 'Could not create policy proposal.');
     if (res.ok) {
       form.reset();
@@ -298,8 +309,8 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
         const actions = document.createElement('div');
         actions.className = 'review-actions';
         for (const [state, text] of [
-          ['accepted', 'Accept & publish'],
-          ['needs-changes', 'Publish (request changes)'],
+          ['accepted', 'Accept for members'],
+          ['needs-changes', 'Request changes (visible to members)'],
           ['declined', 'Decline'],
         ]) {
           const button = document.createElement('button');

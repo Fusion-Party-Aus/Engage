@@ -1,6 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
-import { membershipEligibility } from "./membership.ts";
-import type { PlatformIdentity } from "./types.ts";
+import { requireDiscussionAccess, discussionAudience } from "./discussion-access.ts";
+import type { PlatformIdentity, PlatformEnv, ConsultationSubmissionRecord } from "./types.ts";
 
 export type SubmissionKind = "comment" | "amendment" | "alternative";
 const validKinds = new Set<SubmissionKind>(["comment", "amendment", "alternative"]);
@@ -22,8 +22,8 @@ export function validateSubmission(value: Record<string, unknown>): Consultation
   return { roundId, policyId, policyRevisionId, kind: kind as SubmissionKind, title: typeof title === "string" ? title.trim() : undefined, body: body.trim() };
 }
 
-export async function createSubmission(db: Db, identity: PlatformIdentity, input: ConsultationSubmissionInput, now = new Date()): Promise<string> {
-  if (identity.source !== "synthetic" && (identity.source !== "engage" || !(await membershipEligibility(db, identity.memberId)).eligible)) throw new Error("Membership verification is required before participation.");
+export async function createSubmission(db: Db, identity: PlatformIdentity, input: ConsultationSubmissionInput, now = new Date(), env: PlatformEnv = {}): Promise<string> {
+  await requireDiscussionAccess(db, identity, env);
   const round = await db.collection<{ roundId: string; status: string; opensAt: Date; closesAt: Date; policyIds?: unknown; syntheticFixture?: boolean }>("consultation_rounds").findOne({ roundId: input.roundId, status: "open" });
   if (identity.source === "engage" && round?.syntheticFixture) throw new Error("Synthetic consultations cannot accept real member participation.");
   if (!round || !(round.opensAt instanceof Date) || !(round.closesAt instanceof Date) || now < round.opensAt || now >= round.closesAt) throw new Error("This consultation is not open for submissions.");
@@ -47,11 +47,13 @@ export async function createSubmission(db: Db, identity: PlatformIdentity, input
   return submissionId;
 }
 
-export async function listPublicSubmissions(db: Db, filters: { policyId?: string; roundId?: string } = {}) {
-  const query: Record<string, unknown> = { status: { $in: ["accepted", "needs-changes"] } };
+export async function listMemberSubmissions(db: Db, identity: PlatformIdentity, env: PlatformEnv, filters: { policyId?: string; roundId?: string; policyIds?: string[] } = {}) {
+  await requireDiscussionAccess(db, identity, env);
+  const query: Record<string, unknown> = { ...discussionAudience(identity), status: { $in: ["accepted", "needs-changes"] } };
+  if (filters.policyIds) query.policyId = { $in: filters.policyIds };
   if (filters.policyId) query.policyId = filters.policyId;
   if (filters.roundId) query.roundId = filters.roundId;
-  return db.collection("consultation_submissions").find(query, {
+  return db.collection<ConsultationSubmissionRecord>("consultation_submissions").find(query, {
     projection: {
       _id: 0, submissionId: 1, roundId: 1, policyId: 1, policyRevisionId: 1,
       kind: 1, title: 1, body: 1, status: 1, createdAt: 1, moderatorResponse: 1,
@@ -59,17 +61,19 @@ export async function listPublicSubmissions(db: Db, filters: { policyId?: string
   }).sort({ createdAt: -1 }).limit(100).toArray();
 }
 
-export async function listOwnSubmissions(db: Db, memberId: string) {
-  return db.collection("consultation_submissions").find({ memberId }, {
+export async function listOwnSubmissions(db: Db, identity: PlatformIdentity, env: PlatformEnv) {
+  await requireDiscussionAccess(db, identity, env);
+  return db.collection<ConsultationSubmissionRecord>("consultation_submissions").find({ memberId: identity.memberId, ...discussionAudience(identity) }, {
     projection: { _id: 0, submissionId: 1, roundId: 1, policyId: 1, policyRevisionId: 1, kind: 1, title: 1, body: 1, status: 1, createdAt: 1, moderatorResponse: 1 },
   }).sort({ createdAt: -1 }).limit(100).toArray();
 }
 
-export async function reviewSubmission(db: Db, identity: PlatformIdentity, submissionId: string, status: "accepted" | "declined" | "needs-changes", moderatorResponse?: string): Promise<boolean> {
+export async function reviewSubmission(db: Db, identity: PlatformIdentity, submissionId: string, status: "accepted" | "declined" | "needs-changes", moderatorResponse?: string, env: PlatformEnv = {}): Promise<boolean> {
+  await requireDiscussionAccess(db, identity, env);
   if (moderatorResponse && moderatorResponse.length > 2_000) throw new Error("Moderator response is too long.");
   const now = new Date();
   const updated = await db.collection("consultation_submissions").updateOne(
-    { submissionId, status: "pending" },
+    { submissionId, status: "pending", ...discussionAudience(identity) },
     { $set: { status, moderatorResponse: moderatorResponse?.trim() || undefined, reviewedBy: identity.memberId, reviewedAt: now, updatedAt: now } },
   );
   if (updated.modifiedCount) await db.collection("operational_audit").insertOne({

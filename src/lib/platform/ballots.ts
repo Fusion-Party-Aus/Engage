@@ -12,7 +12,7 @@ export interface BallotRecord extends Document {
   roundId?: string;
   title: string;
   summary?: string;
-  domain?: string;
+  domain?: string | null;
   status: "draft" | "open" | "closed";
   admissionId?: ObjectId;
   lastAdmissionAt?: Date;

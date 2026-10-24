@@ -39,7 +39,7 @@ const provenanceLabels: Record<string, string> = {
           <article class="policy-item">
             <div class="policy-item__meta">
               <span class="badge">{policy.provenance.label || provenanceLabels[policy.provenance.classification]}</span>
-              <span>{policy.domain}</span>
+              <span>{policy.domain ?? "Unclassified subject"}</span>
             </div>
             <h3><a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a></h3>
             <details class="item-disclosure">
@@ -65,7 +65,7 @@ const provenanceLabels: Record<string, string> = {
           <article class="policy-item">
             <div class="policy-item__meta">
               <span class="badge badge--warn">{policy.provenance.label}</span>
-              <span>{policy.domain}</span>
+              <span>{policy.domain ?? "Unclassified subject"}</span>
             </div>
             <h3><a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a></h3>
             <details class="item-disclosure">

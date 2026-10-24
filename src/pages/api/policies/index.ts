@@ -12,6 +12,10 @@ export async function GET({ request, locals }: { request: Request; locals: Runti
     const roundId = url.searchParams.get("roundId");
     const catalogue = await loadPolicyCatalogue(platformEnv(locals));
     const filtered = catalogue.filter((policy) => {
+      for (const field of ['programme', 'pillar', 'editorialHeading', 'domain'] as const) {
+        const filter = url.searchParams.get(field);
+        if (filter !== null && policy[field] !== (filter || null)) return false;
+      }
       if (domainSlug && policy.domainSlug !== domainSlug) return false;
       if (policyId && policy.policyId !== policyId) return false;
       if (roundId && !policy.consultationRounds.some((r) => r.roundId === roundId)) return false;

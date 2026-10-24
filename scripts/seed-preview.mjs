@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { policyTaxonomy } from '../src/lib/platform/taxonomy.ts';
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -32,7 +33,7 @@ const revisions = catalogue.map((entry) => {
     version,
     title: entry.title,
     division: entry.division,
-    domain: entry.domain,
+    ...policyTaxonomy(entry),
     domainSlug: entry.domainSlug,
     anchor: entry.anchor,
     url: entry.url,
@@ -56,7 +57,7 @@ const settledPol010Revision = {
   version: "v2-settled",
   title: pol010Base.title,
   division: pol010Base.division,
-  domain: pol010Base.domain,
+  ...policyTaxonomy(pol010Base),
   domainSlug: pol010Base.domainSlug,
   anchor: pol010Base.anchor,
   url: pol010Base.url,
@@ -262,7 +263,7 @@ if (!dryRun) {
     for (const revision of [...revisions, settledPol010Revision, followOnPolicyRevision]) {
       await db.collection("policy_revisions").updateOne(
         { policyId: revision.policyId, version: revision.version },
-        { $set: revision },
+        { $set: { ...revision, ...policyTaxonomy(revision) } },
         { upsert: true },
       );
     }

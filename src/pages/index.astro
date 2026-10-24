@@ -48,7 +48,7 @@ const memberDecisions = allBallots.filter((ballot) => !ballot.syntheticFixture &
         <ul class="now-list">
           {highlightedConsultations.map((policy) => (
             <li>
-              <span class="now-label">Open for comment · {policy.domain}</span>
+              <span class="now-label">Open for comment · {policy.domain ?? "Unclassified subject"}</span>
               <a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a>
               <span>{policy.statement}</span>
               <a class="inline-action" href={`/consultations/?policyId=${encodeURIComponent(policy.policyId)}`}>Comment or suggest a change <span aria-hidden="true">↗</span></a>
@@ -59,7 +59,7 @@ const memberDecisions = allBallots.filter((ballot) => !ballot.syntheticFixture &
         <ul class="now-list">
           {featured.map((policy) => (
             <li>
-              <span class="now-label">{policy.domain}</span>
+              <span class="now-label">{policy.domain ?? "Unclassified subject"}</span>
               <a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a>
               <span>{policy.statement}</span>
               <a class="inline-action" href={policy.url}>Read the proposal <span aria-hidden="true">↗</span></a>

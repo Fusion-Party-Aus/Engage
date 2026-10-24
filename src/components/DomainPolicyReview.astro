@@ -1,20 +1,30 @@
 ---
 import type { PolicyLifecycleView } from '../lib/platform/catalogue.ts';
-import policies from '../data/policies.json';
+import { resolveIdentity } from '../lib/platform/auth';
+import { tryGetDb } from '../lib/platform/catalogue';
+import { canReadDiscussion } from '../lib/platform/discussion-access';
+import { listMemberSubmissions } from '../lib/platform/consultations';
+import { platformEnv } from '../lib/platform/http';
 
 interface Props {
-  division: 'RECLAIM OUR ECONOMY' | 'RECLAIM OUR FUTURE';
+  division: string;
+  divisionHref?: string;
+  navigation?: Array<{ slug: string; title: string }>;
   domainSlug: string;
   domainTitle: string;
   domainSummary: string;
   items: PolicyLifecycleView[];
 }
 
-const { division, domainSlug, domainTitle, domainSummary, items } = Astro.props;
-const divisionHref = division === 'RECLAIM OUR ECONOMY' ? '/reclaim-our-economy/' : '/reclaim-our-future/';
-const divisionLabel = division === 'RECLAIM OUR ECONOMY' ? 'Reclaim our economy' : 'Reclaim our future';
+const { division, divisionHref = '/policies/', domainSlug, domainTitle, domainSummary, items: publicItems, navigation: divisionDomains = [] } = Astro.props;
+const divisionLabel = division;
+const env = platformEnv(Astro.locals);
+const { identity } = await resolveIdentity(Astro.request, env);
+const db = identity ? await tryGetDb(env) : null;
+const discussionAllowed = db && await canReadDiscussion(db, identity, env);
+const discussion = db && identity && discussionAllowed ? await listMemberSubmissions(db, identity, env, { policyIds: publicItems.map(item => item.policyId) }) : [];
+const items = publicItems.map(item => ({ ...item, submissions: discussion.filter(sub => sub.policyId === item.policyId) }));
 
-const divisionDomains = policies.filter((p) => p.area === division);
 const currentIndex = divisionDomains.findIndex((p) => p.slug === domainSlug);
 const prevDomain = currentIndex > 0 ? divisionDomains[currentIndex - 1] : null;
 const nextDomain = currentIndex >= 0 && currentIndex < divisionDomains.length - 1 ? divisionDomains[currentIndex + 1] : null;
@@ -70,6 +80,7 @@ const publicStatus = (item: PolicyLifecycleView) => item.ballot?.status === 'ope
             <div class="policy-card-top">
               <div class="policy-badges"><span class="lifecycle-badge">{publicStatus(item)}</span></div>
               <h3>{item.title}</h3>
+              <p>Policy domain: {item.domain ?? "Unclassified — subject review needed"}</p>
             </div>
 
             {item.syntheticFixture && item.fixtureNotice && (
@@ -202,6 +213,7 @@ const publicStatus = (item: PolicyLifecycleView) => item.ballot?.status === 'ope
                 )}
               </div>
 
+              {!discussionAllowed && <p><a href="/member/">Verified members can read and contribute to this discussion.</a></p>}
               {item.submissions.length > 0 && (
                 <div class="policy-discussion">
                   <p class="tier-label">Reviewed member discussion & proposed amendments ({item.submissions.length})</p>

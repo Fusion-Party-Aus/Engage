@@ -93,7 +93,7 @@ test("consultation submission rejects policies not included in the consultation 
   });
   assert.ok(input);
   await assert.rejects(
-    () => createSubmission(db as never, syntheticMember, input, new Date("2026-10-27T00:00:00Z")),
+    () => createSubmission(db as never, syntheticMember, input, new Date("2026-10-27T00:00:00Z"), { APP_MODE: "preview" }),
     /not included in the selected consultation round/,
   );
   assert.equal(db.submissions.length, 0);
@@ -110,7 +110,7 @@ test("consultation submission returns consistent submissionId matching _id and m
     body: "Specify the holding-period lookback window for crediting recent stamp duty payments against Land Value Tax.",
   });
   assert.ok(input);
-  const returnedId = await createSubmission(db as never, syntheticMember, input, new Date("2026-10-27T00:00:00Z"));
+  const returnedId = await createSubmission(db as never, syntheticMember, input, new Date("2026-10-27T00:00:00Z"), { APP_MODE: "preview" });
   assert.equal(db.submissions.length, 1);
   const stored = db.submissions[0]!;
   assert.equal(stored.submissionId, returnedId);
@@ -121,7 +121,7 @@ test("consultation submission returns consistent submissionId matching _id and m
     syntheticModerator,
     returnedId,
     "accepted",
-    "Adopted into settled revision v2 for ballot.",
+    "Adopted into settled revision v2 for ballot.", { APP_MODE: "preview" },
   );
   assert.equal(reviewed, true);
   assert.equal(stored.status, "accepted");

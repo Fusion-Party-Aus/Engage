@@ -1,4 +1,4 @@
-const fields = new Set(["version", "title", "statement", "details", "outcomes", "domain", "changeSummary"]);
+const fields = new Set(["version", "title", "statement", "details", "outcomes", "domain", "programme", "pillar", "editorialHeading", "changeSummary"]);
 
 function cleanString(value, minimum, maximum) {
   if (typeof value !== "string") return null;
@@ -19,7 +19,7 @@ export function validatePolicyRevisionInput(value) {
   const outcomes = value.outcomes.map((outcome) => cleanString(outcome, 1, 500));
   if (outcomes.some((outcome) => outcome === null) || outcomes.reduce((total, outcome) => total + (outcome?.length ?? 0), 0) > 6_000) return { error: "Each outcome must be at most 500 characters and total outcomes at most 6,000 characters." };
   let domain;
-  if (value.domain !== undefined) {
+  if (value.domain !== undefined && value.domain !== null && value.domain !== "") {
     domain = cleanString(value.domain, 1, 120);
     if (!domain) return { error: "Domain must be at most 120 characters." };
   }

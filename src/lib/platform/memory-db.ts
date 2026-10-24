@@ -1,3 +1,4 @@
+import { policyTaxonomy } from './taxonomy.ts';
 import type { Collection, Db, Document, Filter, FindOptions, ObjectId as MongoObjectId, UpdateFilter, UpdateOptions } from "mongodb";
 import { ObjectId } from "mongodb";
 import catalogueData from "../../data/policy-catalogue.json" with { type: "json" };
@@ -185,9 +186,9 @@ class InMemoryCollection<TSchema extends Document = Document> {
   }
 
   async findOne<T = TSchema>(filter: Filter<TSchema> = {}, options?: FindOptions): Promise<T | null> {
-    const found = this.docs.find((doc) => matchesFilter(doc, filter as DocRecord));
-    if (!found) return null;
-    return applyProjection(found, options?.projection as DocRecord | undefined) as T;
+    const cursor = this.find<T>(filter, options);
+    if (options?.sort) cursor.sort(options.sort as Record<string, 1 | -1>);
+    return (await cursor.limit(1).toArray())[0] ?? null;
   }
 
   async insertOne(doc: DocRecord): Promise<{ insertedId: MongoObjectId }> {
@@ -315,7 +316,7 @@ export async function getInMemoryPreviewDb(): Promise<Db> {
           version,
           title: entry.title,
           division: entry.division,
-          domain: entry.domain,
+          ...policyTaxonomy(entry),
           domainSlug: entry.domainSlug,
           anchor: entry.anchor,
           url: entry.url,
@@ -338,7 +339,7 @@ export async function getInMemoryPreviewDb(): Promise<Db> {
         version: "v2-settled",
         title: pol010Base.title,
         division: pol010Base.division,
-        domain: pol010Base.domain,
+        ...policyTaxonomy(pol010Base),
         domainSlug: pol010Base.domainSlug,
         anchor: pol010Base.anchor,
         url: pol010Base.url,
@@ -390,7 +391,7 @@ export async function getInMemoryPreviewDb(): Promise<Db> {
         createdAt: now,
         createdBy: "preview-admin-01",
       };
-      await db.collection("policy_revisions").insertOne(followOnPolicyRevision);
+      await db.collection("policy_revisions").insertOne({ ...followOnPolicyRevision, ...policyTaxonomy(followOnPolicyRevision) });
 
       await db.collection("consultation_rounds").insertOne({
         roundId: initialRoundData.id,
