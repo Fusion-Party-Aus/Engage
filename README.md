@@ -43,7 +43,7 @@ python3 scripts/test-policy-migration.py
 
 ## Self-hosted deployment
 
-The Docker Compose stack runs Astro’s standalone Node server and a single-node MongoDB replica set on the same host. It persists MongoDB in a named Docker volume, creates a database-scoped application user, keeps synthetic preview mode on, and forces formal ballots off. See [operations](docs/operations.md) for deployment, connectivity checks, backup/restore, and rollback.
+The Docker Compose stack runs Astro’s standalone Node server and a single-node MongoDB replica set on the same host. It persists MongoDB in a named Docker volume, creates a database-scoped application user, keeps synthetic preview mode on, and defaults formal ballots off. See [operations](docs/operations.md) for deployment, connectivity checks, backup/restore, and rollback.
 
 Production uses Better Auth with Google OAuth and manual membership verification. Configure the production auth environment and a separate MongoDB database, then bootstrap an administrator using `node scripts/grant-engage-admin.mjs <existing-Better-Auth-user-ID>`. Accounts await verification before comments, amendments or voting. Underground is a future integration, independent of current login and eligibility. See [release gates](docs/release-gates.md).
 
@@ -57,6 +57,8 @@ GOVERNANCE_TEST_MONGODB_URI="mongodb://127.0.0.1:27029/?directConnection=true" p
 AUTH_TEST_MONGODB_URI="mongodb://127.0.0.1:27029/?directConnection=true" pnpm test:auth
 ```
 
-The test creates and drops a unique test database. It uses Better Auth's supported controlled Google provider options; it does not claim live Google authentication. It checks account creation/returning identity, PKCE authorisation initiation, session restoration/logout, manual verification, API access, revotes, revocation, email-linking rejection and ballot safeguards. To also verify the actual Docker application and a container restart, build `docker build -t engage-auth-verified:test .`, then add `AUTH_TEST_DOCKER_IMAGE=engage-auth-verified:test` to that test command (requires Docker Desktop, the test MongoDB port 27029 and free app port 4329). The test removes its app container.
+The test creates and drops a unique test database. It uses Better Auth's supported controlled Google provider options; it does not claim live Google authentication. It checks account creation/returning identity, PKCE authorisation initiation, session restoration/logout, manual verification, API access, revotes, revocation, email-linking rejection and ballot safeguards. To also verify the actual Docker application and a container restart, build `docker build -t engage-auth-verified:test .`, then add `AUTH_TEST_DOCKER_IMAGE=engage-auth-verified:test` to that test command (requires a working Docker runtime such as Docker Desktop or Colima, the test MongoDB port 27029 and free app port 4329). The test removes its app container.
 
 Migration details, validation evidence and remaining release blockers are recorded in [the migration notes](docs/engage-migration.md).
+
+Local Docker bootstrap, upgrade, persistence and preview recovery evidence is recorded in [deployment verification](docs/deployment-verification.md).

@@ -93,3 +93,7 @@ docker exec engage-auth-test mongosh --quiet --eval 'db.hello().isWritablePrimar
 Wait for the last command to print `true`; do not run integration tests against an uninitialised or standalone server. Use `mongodb://127.0.0.1:27029/?directConnection=true` for the test URI. The CI workflow performs bounded readiness polling and fails if election does not complete. Each integration runner creates and drops its own uniquely named test database; never point it at a production service.
 
 Before deployment acceptance, rehearse new-volume bootstrap, existing-volume conversion, scoped-user vote transactions, app/MongoDB restart and restored-data operation on the actual Docker host. Native replica-set tests cannot certify the entrypoint scripts. Keep the previous application image for non-voting rollback, but never restore a writer with the old admission race after real voting starts. Do not remove the volume or discard authoritative results as a rollback strategy.
+
+## Local verification evidence
+
+The actual Docker image and Compose stack have passed local bootstrap, scoped-user transactions, HTTP participation, restarts/container replacement, a disposable standalone-volume upgrade and preview backup/restore. See [the verification report](deployment-verification.md) for commands, limits and the host/database clock regression correction. Repeat acceptance on the target host; production encrypted off-host recovery and live HTTPS/OAuth remain unverified.
