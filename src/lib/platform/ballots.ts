@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { ObjectId, type Db, type Document } from "mongodb";
+import { ObjectId, type Db, type Document, type ClientSession } from "mongodb";
 import type { PlatformEnv, PlatformIdentity, VoteChoice } from "./types.ts";
-import { calculateStrictMajority, formalVotingIsEnabled, isBallotOpen, upsertCurrentVote, validateVoteChoice } from "./voting.mjs";
+import { calculateStrictMajority, formalVotingIsEnabled, validateVoteChoice } from "./voting.mjs";
 import { bindingBallotAuthorised } from "./ballot-authorization.ts";
 import { membershipEligibility } from "./membership.ts";
 
@@ -14,6 +14,8 @@ export interface BallotRecord extends Document {
   summary?: string;
   domain?: string;
   status: "draft" | "open" | "closed";
+  admissionId?: ObjectId;
+  lastAdmissionAt?: Date;
   opensAt: Date;
   closesAt: Date;
   closedAt?: Date;
@@ -48,6 +50,14 @@ export interface BallotFinalizationResult {
   publishedRevisionId: string | null;
   syntheticOutcome: boolean;
   alreadyFinalized: boolean;
+}
+
+// Admission and closure must contend on the same ballot document. A transaction
+// keeps that write and the member's selection atomic; standalone MongoDB fails closed.
+async function ballotWrite<T>(db: Db, write: (session: ClientSession) => Promise<T>): Promise<T> {
+  return db.client.withSession((session) => session.withTransaction(() => write(session), {
+    readConcern: { level: "snapshot" }, writeConcern: { w: "majority" }, readPreference: "primary",
+  }));
 }
 
 export async function listBallots(db: Db): Promise<BallotRecord[]> {
@@ -85,11 +95,12 @@ export async function finalizeBallot(
   const alreadyFinalized = Boolean(ballot.finalizedAt);
   if (alreadyFinalized && !ballot.results) throw new Error("Recorded ballot result is missing; restore the authoritative record before retrying.");
   // First close admission. The winning caller records the closure provenance.
-  await ballots.updateOne({ ballotId, status: { $ne: "closed" } }, { $set: {
-    status: "closed", closedAt: now,
+  await ballotWrite(db, (session) => ballots.updateOne({ ballotId, status: { $ne: "closed" } }, { $set: {
+    status: "closed",
+    ...(options.now ? { closedAt: options.now } : {}),
     closure: { actorId, actorSource, closeReason, syntheticOutcome: options.isSyntheticOverride ??
       (Boolean(ballot.syntheticFixture) || ballot.bindingBallotsEnabled !== true || actorSource === "synthetic") },
-  } });
+  }, ...(!options.now ? { $currentDate: { closedAt: true } } : {}) }, { session }));
   let recorded = (await ballots.findOne({ ballotId }))!;
   if (!recorded.results) {
     const voterFilter = recorded.bindingBallotsEnabled === true ? { identitySource: "engage" } : {};
@@ -101,7 +112,7 @@ export async function finalizeBallot(
     // Compare-and-set: only one tally becomes authoritative, including across workers.
     await ballots.updateOne({ ballotId, results: null }, { $set: {
       results: { approve, doNotApprove, votesCast, outcome: outcome as BallotResults["outcome"] }, outcome: outcome as BallotResults["outcome"],
-      resultsRecordedAt: now, publishedRevisionId: null,
+      resultsRecordedAt: options.now ?? new Date(), publishedRevisionId: null,
       syntheticOutcome: recorded.closure?.syntheticOutcome ?? Boolean(recorded.syntheticOutcome),
     } });
     recorded = (await ballots.findOne({ ballotId }))!;
@@ -142,7 +153,7 @@ export async function finalizeBallot(
       votesCast: results.votesCast, publishedRevisionId, createdAt: closedAt,
     });
     await ballots.updateOne({ ballotId, finalizedAt: { $exists: false } }, { $set: {
-      finalizedAt: now, publishedRevisionId, updatedAt: now, updatedBy: closure.actorId,
+      finalizedAt: options.now ?? new Date(), publishedRevisionId, updatedAt: options.now ?? new Date(), updatedBy: closure.actorId,
     } });
     recorded = (await ballots.findOne({ ballotId }))!;
   }
@@ -153,9 +164,9 @@ export async function finalizeBallot(
   };
 }
 
-export async function closeExpiredBallots(db: Db, now = new Date()): Promise<number> {
+export async function closeExpiredBallots(db: Db, now?: Date): Promise<number> {
   const ballots = db.collection<BallotRecord>("ballots");
-  const expired = await ballots.find({ status: "open", closesAt: { $lte: now } }).toArray();
+  const expired = await ballots.find({ status: "open", closesAt: { $lte: now ?? new Date() } }).toArray();
   const incomplete = await ballots.find({ status: "closed", finalizedAt: { $exists: false } }).toArray();
   for (const ballot of [...expired, ...incomplete]) {
     await finalizeBallot(db, ballot.ballotId, { now, closeReason: "deadline" });
@@ -167,15 +178,15 @@ export async function getBallotResults(_db: Db, ballot: BallotRecord): Promise<B
   return ballot.status === "closed" ? ballot.results ?? null : null;
 }
 
-async function addAudit(db: Db, identity: PlatformIdentity, action: string, ballotId: string, now: Date): Promise<void> {
+async function addAudit(db: Db, identity: PlatformIdentity, action: string, ballotId: string, now: Date, session: ClientSession): Promise<void> {
   await db.collection("operational_audit").insertOne({
     _id: new ObjectId(), actorId: identity.memberId, actorSource: identity.source,
     action, targetType: "ballot", targetId: ballotId, createdAt: now,
     // Deliberately omit the selected choice and any prior choice.
-  });
+  }, { session });
 }
 
-export async function castVote(db: Db, identity: PlatformIdentity, ballot: BallotRecord, choice: VoteChoice, env: PlatformEnv, now = new Date()): Promise<void> {
+export async function castVote(db: Db, identity: PlatformIdentity, ballot: BallotRecord, choice: VoteChoice, env: PlatformEnv, now?: Date): Promise<void> {
   if (!validateVoteChoice(choice)) throw new Error("Choose Approve or Do Not Approve.");
   if (env.APP_MODE === "preview") {
     if (identity.source !== "synthetic") throw new Error("Preview voting requires a synthetic identity.");
@@ -184,15 +195,25 @@ export async function castVote(db: Db, identity: PlatformIdentity, ballot: Ballo
     if (identity.source !== "engage") throw new Error("Production voting requires an Engage member identity.");
     if (!formalVotingIsEnabled(env)) throw new Error("Binding ballots are disabled until governance authorisation is recorded.");
   }
-  if (env.APP_MODE !== "preview" && !bindingBallotAuthorised(ballot)) throw new Error("This ballot is not authorised for binding voting.");
-  if (!isBallotOpen(ballot, now)) throw new Error("This ballot is not open.");
   const eligibility = identity.source === "synthetic" ? { eligible: env.APP_MODE === "preview" } : await membershipEligibility(db, identity.memberId);
   if (!eligibility.eligible) throw new Error("Your membership eligibility could not be confirmed.");
 
-  const votes = db.collection("votes");
-  const selection = { ballotId: ballot.ballotId, memberId: identity.memberId };
-  await upsertCurrentVote(votes, selection, choice, now, { identitySource: identity.source });
-  await addAudit(db, identity, "ballot_vote_recorded", ballot.ballotId, now);
+  await ballotWrite(db, async (session) => {
+    // Production always uses database time at admission, including on transaction
+    // retry. The optional clock is retained only for synthetic preview fixtures.
+    const clock = env.APP_MODE === "preview" && now ? now : "$$NOW";
+    const admitted = await db.collection<BallotRecord>("ballots").findOneAndUpdate({
+      ballotId: ballot.ballotId, status: "open",
+      $expr: { $and: [{ $lte: ["$opensAt", clock] }, { $gt: ["$closesAt", clock] }] },
+    }, [{ $set: { admissionId: new ObjectId(), lastAdmissionAt: clock } }], { session, returnDocument: "after" });
+    if (!admitted) throw new Error("This ballot is not open.");
+    if (env.APP_MODE === "preview" && admitted.bindingBallotsEnabled === true) throw new Error("Synthetic accounts cannot participate in binding ballots.");
+    if (env.APP_MODE !== "preview" && !bindingBallotAuthorised(admitted)) throw new Error("This ballot is not authorised for binding voting.");
+    const receivedAt = now && env.APP_MODE === "preview" ? now : admitted.lastAdmissionAt!;
+    await db.collection("votes").updateOne({ ballotId: admitted.ballotId, memberId: identity.memberId }, {
+      $set: { choice, updatedAt: receivedAt, identitySource: identity.source },
+      $setOnInsert: { createdAt: receivedAt },
+    }, { session, upsert: true });
+    await addAudit(db, identity, "ballot_vote_recorded", admitted.ballotId, receivedAt, session);
+  });
 }
-
-export const castPreviewVote = castVote;

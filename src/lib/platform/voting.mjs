@@ -1,7 +1,3 @@
-export function isBallotOpen(ballot, now = new Date()) {
-  return ballot.status === "open" && ballot.opensAt <= now && now < ballot.closesAt;
-}
-
 export function calculateStrictMajority(approve, doNotApprove) {
   const votesCast = approve + doNotApprove;
   return {
@@ -16,18 +12,4 @@ export function validateVoteChoice(choice) {
 
 export function formalVotingIsEnabled(env) {
   return env.APP_MODE === "production" && env.FORMAL_BALLOTS_ENABLED === "true";
-}
-
-export async function upsertCurrentVote(votes, selection, choice, now, extra = {}) {
-  const fields = { choice, updatedAt: now, ...extra };
-  try {
-    await votes.updateOne(selection, {
-      $set: fields,
-      $setOnInsert: { createdAt: now },
-    }, { upsert: true });
-  } catch (error) {
-    // A simultaneous first vote can race on the compound unique index. Retry as an update of the single current vote.
-    if (!error || typeof error !== "object" || error.code !== 11000) throw error;
-    await votes.updateOne(selection, { $set: fields });
-  }
 }

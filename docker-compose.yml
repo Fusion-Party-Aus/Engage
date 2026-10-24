@@ -2,6 +2,7 @@ services:
   mongo:
     image: mongo:8.0
     restart: unless-stopped
+    entrypoint: ["bash", "/usr/local/bin/engage-mongo-start.sh"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Set MONGO_INITDB_ROOT_USERNAME in .env}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Set MONGO_INITDB_ROOT_PASSWORD in .env}
@@ -10,11 +11,13 @@ services:
       MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in .env}
     volumes:
       - mongo_data:/data/db
+      - ./docker/mongo-start.sh:/usr/local/bin/engage-mongo-start.sh:ro
+      - ./docker/mongo-healthcheck.js:/usr/local/bin/engage-mongo-healthcheck.js:ro
       - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/10-create-app-user.js:ro
     ports:
       - "${MONGO_BIND_ADDRESS:-127.0.0.1}:${MONGO_PORT:-27017}:27017"
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      test: ["CMD", "mongosh", "--quiet", "/usr/local/bin/engage-mongo-healthcheck.js"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -33,7 +36,7 @@ services:
       APP_MODE: ${APP_MODE:-preview}
       FORMAL_BALLOTS_ENABLED: ${FORMAL_BALLOTS_ENABLED:-false}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:-fusion_horizon_policy_preview}
-      MONGODB_URI: mongodb://${MONGO_APP_USER:-fusion_app}:${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in .env}@mongo:27017/${MONGODB_DB_NAME:-fusion_horizon_policy_preview}?authSource=${MONGODB_DB_NAME:-fusion_horizon_policy_preview}
+      MONGODB_URI: mongodb://${MONGO_APP_USER:-fusion_app}:${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in .env}@mongo:27017/${MONGODB_DB_NAME:-fusion_horizon_policy_preview}?authSource=${MONGODB_DB_NAME:-fusion_horizon_policy_preview}&replicaSet=engage&directConnection=true
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

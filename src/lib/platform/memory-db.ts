@@ -47,6 +47,12 @@ function matchesCondition(value: any, condition: any): boolean {
 
 function matchesFilter(doc: DocRecord, filter: DocRecord = {}): boolean {
   for (const [key, condition] of Object.entries(filter)) {
+    if (key === "$expr") {
+      const clock = new Date();
+      const value = (operand: any) => operand === "$$NOW" ? clock : typeof operand === "string" && operand.startsWith("$") ? doc[operand.slice(1)] : operand;
+      if (!condition.$and.every((clause: DocRecord) => clause.$lte ? value(clause.$lte[0]) <= value(clause.$lte[1]) : value(clause.$gt[0]) > value(clause.$gt[1]))) return false;
+      continue;
+    }
     if (!matchesCondition(doc[key], condition)) return false;
   }
   return true;
@@ -72,6 +78,13 @@ function applyProjection(doc: DocRecord, projection?: DocRecord): DocRecord {
 }
 
 function applyUpdate(target: DocRecord, update: DocRecord, isInsert: boolean): void {
+  if (Array.isArray(update)) {
+    // The ballot admission pipeline uses constants and the command's server clock.
+    const clock = new Date();
+    for (const stage of update) for (const [key, value] of Object.entries(stage.$set)) target[key] = value === "$$NOW" ? clock : clone(value);
+    return;
+  }
+  if (update.$currentDate) for (const key of Object.keys(update.$currentDate)) target[key] = new Date();
   if (update.$set) {
     Object.assign(target, clone(update.$set));
   }
@@ -140,7 +153,7 @@ class InMemoryCursor<T> {
 }
 
 class InMemoryCollection<TSchema extends Document = Document> {
-  private docs: DocRecord[] = [];
+  docs: DocRecord[] = [];
   private uniqueIndexes: string[][] = [];
 
   async createIndex(spec: Record<string, number>, options?: { unique?: boolean }): Promise<string> {
@@ -223,9 +236,11 @@ class InMemoryCollection<TSchema extends Document = Document> {
     return { deletedCount: before - this.docs.length };
   }
 
-  async findOneAndUpdate(filter: Filter<TSchema>, update: UpdateFilter<TSchema>, options?: { upsert?: boolean; returnDocument?: string }) {
-    await this.updateOne(filter, update, { upsert: options?.upsert });
-    return this.findOne(filter);
+  async findOneAndUpdate(filter: Filter<TSchema>, update: UpdateFilter<TSchema> | Document[], options?: { upsert?: boolean; returnDocument?: string }) {
+    const before = await this.findOne(filter);
+    if (!before && !options?.upsert) return null;
+    await this.updateOne(filter, update as UpdateFilter<TSchema>, { upsert: options?.upsert });
+    return options?.returnDocument === "after" ? this.findOne(before ? { _id: before._id } as Filter<TSchema> : filter) : before;
   }
 
   async countDocuments(filter: Filter<TSchema> = {}): Promise<number> {
@@ -251,6 +266,25 @@ class InMemoryCollection<TSchema extends Document = Document> {
 
 class InMemoryDb {
   private collections = new Map<string, InMemoryCollection<any>>();
+  private transactionTail: Promise<void> = Promise.resolve();
+  // Synthetic preview only: serialize the same transaction callbacks and undo
+  // failed writes. Real admission guarantees are tested against MongoDB, not this fake.
+  readonly client = {
+    withSession: async <T>(use: (session: any) => Promise<T>): Promise<T> => use({
+      withTransaction: async (write: () => Promise<T>): Promise<T> => {
+        const previous = this.transactionTail;
+        let release!: () => void;
+        this.transactionTail = new Promise<void>((done) => { release = done; });
+        await previous;
+        const snapshot = new Map([...this.collections].map(([name, col]) => [name, clone(col.docs)]));
+        try { return await write(); }
+        catch (error) {
+          for (const [name, col] of this.collections) col.docs = snapshot.get(name) ?? [];
+          throw error;
+        } finally { release(); }
+      },
+    }),
+  };
 
   collection<TSchema extends Document = Document>(name: string): Collection<TSchema> {
     let col = this.collections.get(name);

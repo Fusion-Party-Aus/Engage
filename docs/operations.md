@@ -2,7 +2,7 @@
 
 ## Container stack
 
-The initial host is a Docker-capable NUC. Docker Compose runs the Astro standalone Node server and MongoDB 8 on a private Compose network. MongoDB data persists in the `mongo_data` named volume. The application connects with a database-scoped `readWrite` user; the MongoDB root credentials are used only for initialization and administration. No Cloudflare account, Atlas cluster, or paid service is required for this deployment.
+The initial host is a Docker-capable NUC. Docker Compose runs the Astro standalone Node server and a single-node MongoDB 8 replica set on a private Compose network. Transactions are required for vote admission and closure; standalone MongoDB is unsupported for voting. This provides no host failover. MongoDB data persists in the `mongo_data` named volume. The application connects with a database-scoped `readWrite` user; the MongoDB root credentials are used only for initialization and administration. No Cloudflare account, Atlas cluster, or paid service is required for this deployment.
 
 Set up the host with Docker Engine and the Compose plugin, clone the reviewed branch, then create the local environment file:
 
@@ -66,10 +66,30 @@ To roll back, set `APP_IMAGE_TAG` to the previous known-good tag and run `docker
 
 ## Ballot closure and recovery
 
-MongoDB runs standalone; ballot closure does not require replica-set transactions. Both deadline and administrator closure call `finalizeBallot`. Closure records its actor and timestamp, then a conditional write records one authoritative tally. Results endpoints use that stored tally. A closed ballot cannot reopen; create a new ballot for another decision.
+MongoDB must run as a replica set. Admission conditionally writes the current open ballot using database time, then saves the selection and choice-free audit in one transaction. Closure writes that same ballot through a transaction, waiting for admitted votes to commit or abort. Deadline and administrative closure therefore cannot race past a selection write. The admission interval is opening-inclusive and closing-exclusive. The recorded closure time comes from the database write, not the time a close request arrived. See [ADR 0003](adr/0003-reclaim-mvp-node-mongodb.md). Both deadline and administrator closure call `finalizeBallot`. Closure records its actor and timestamp, then a conditional write records one authoritative tally. Results endpoints use that stored tally. A closed ballot cannot reopen; create a new ballot for another decision.
 
 Approved revision publication and operational audit writes are retryable effects of that recorded result. `finalizedAt` and `publishedRevisionId` are set only after those writes succeed. Publication uses a conditional revision update; audit events use deterministic IDs. Concurrent calls and retries preserve the tally, closure provenance and completed effects. Database failures propagate rather than being treated as successful closure.
 
 To locate incomplete closures, inspect `ballots` with `{ status: "closed", finalizedAt: { $exists: false } }`. Restore a missing revision or resolve a conflicting publication, then repeat the administrator's close request. Normal ballot/catalogue reads also retry incomplete closures. Do not clear results or manually recalculate a recorded outcome. A published revision can exist before a failed audit write is repaired; the ballot remains incomplete until recovery succeeds. Older finalised records without results require restoration of the authoritative record, not an invented tally.
 
 Membership transitions are audited in `memberships.auditHistory`, atomically with the status change. Each entry records actor, previous status, new status and timestamp. `auditVersion` prevents two reviewers from overwriting the same transition. A conflict requires reloading and retrying; an unchanged status adds no completed transition. Legacy `operational_audit` request entries remain historical requests and must not be interpreted as completed verification. Back up membership documents with their embedded history.
+
+## Replica-set bootstrap and upgrade
+
+`docker/mongo-start.sh` retains an internal replica key at `/data/db/engage-replica.key`, readable only by MongoDB. The official image still creates the existing root and database-scoped app users. The authenticated health check initialises replica set `engage` after the temporary user-creation server exits, and only reports healthy when the final server is primary. Health failure blocks app startup. The existing `mongo_data` volume/database names are unchanged.
+
+Back up an existing volume before upgrading; stop the old app before switching MongoDB to replica mode. Start only MongoDB, check primary status and the scoped app user's transaction capability, then start the reviewed app. Do not run old and new app writers together. A one-node replica set adds atomic transactions, not a second copy of the data. Monitor time synchronisation: MongoDB time governs admission.
+
+The Compose replica advertises `mongo:27017`; app-only development via the host port must use `replicaSet=engage&directConnection=true` as in `.env.example`. Do not expose that port remotely. For preview backup scripts, these URI options must be quoted when exporting in a shell; sourcing `.env` with a raw unquoted `&` is unsafe. Use the quoted example in `.env.example`.
+
+For a disposable integration replica set (no real data or credentials), start:
+
+```sh
+docker run -d --name engage-auth-test -p 127.0.0.1:27029:27017 mongo:8.0 --replSet engage-test --bind_ip_all
+docker exec engage-auth-test mongosh --quiet --eval 'rs.initiate({_id:"engage-test",members:[{_id:0,host:"localhost:27017"}]})'
+docker exec engage-auth-test mongosh --quiet --eval 'db.hello().isWritablePrimary'
+```
+
+Wait for the last command to print `true`; do not run integration tests against an uninitialised or standalone server. Use `mongodb://127.0.0.1:27029/?directConnection=true` for the test URI. The CI workflow performs bounded readiness polling and fails if election does not complete. Each integration runner creates and drops its own uniquely named test database; never point it at a production service.
+
+Before deployment acceptance, rehearse new-volume bootstrap, existing-volume conversion, scoped-user vote transactions, app/MongoDB restart and restored-data operation on the actual Docker host. Native replica-set tests cannot certify the entrypoint scripts. Keep the previous application image for non-voting rollback, but never restore a writer with the old admission race after real voting starts. Do not remove the volume or discard authoritative results as a rollback strategy.

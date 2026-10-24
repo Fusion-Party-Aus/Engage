@@ -52,7 +52,6 @@ export async function PATCH({ request, params, locals }: { request: Request; par
         const finalized = await finalizeBallot(db, params.ballotId, {
           actorId: identity.memberId,
           actorSource: identity.source,
-          now,
           closeReason: "administrative",
           isSyntheticOverride: isSynthetic,
         });

@@ -17,7 +17,7 @@ test.after(async () => { if (mongoDb) await mongoDb.dropDatabase(); await client
 const testDatabase = () => mongoDb ?? getInMemoryPreviewDb();
 
 function failWrites(db: Db, collection: string): Db {
-  return { collection(name: string) {
+  return { client: db.client, collection(name: string) {
     const target = db.collection(name);
     if (name !== collection) return target;
     return new Proxy(target, { get(object, key) {

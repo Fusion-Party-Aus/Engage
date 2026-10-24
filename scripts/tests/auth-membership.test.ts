@@ -94,7 +94,7 @@ test('controlled Google provider flow, Mongo sessions, manual verification, API 
       const appOrigin = 'http://127.0.0.1:4329';
       try {
         execFileSync('docker', ['run', '-d', '--name', container, '-p', '127.0.0.1:4329:4321',
-          ...Object.entries({ ...env, BETTER_AUTH_URL: appOrigin, MONGODB_URI: 'mongodb://host.docker.internal:27029' }).flatMap(([key, value]) => ['-e', key + '=' + value]), process.env.AUTH_TEST_DOCKER_IMAGE], { stdio: 'pipe' });
+          ...Object.entries({ ...env, BETTER_AUTH_URL: appOrigin, MONGODB_URI: 'mongodb://host.docker.internal:27029/?directConnection=true' }).flatMap(([key, value]) => ['-e', key + '=' + value]), process.env.AUTH_TEST_DOCKER_IMAGE], { stdio: 'pipe' });
         async function restoredContainerSession() {
           let lastError: unknown;
           for (let attempt = 0; attempt < 40; attempt++) {
