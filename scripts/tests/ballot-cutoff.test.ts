@@ -85,7 +85,7 @@ test('concurrent selection write and closure record exactly the admitted selecti
 test('stale schedules cannot admit a vote at or beyond the current deadline', async () => {
   for (const offset of [0, -1]) {
     const ballot = await fixture('deadline-' + offset);
-    await db.collection('ballots').updateOne({ ballotId: ballot.ballotId }, { $set: { closesAt: new Date(Date.now() + offset) } });
+    await db.collection('ballots').updateOne({ ballotId: ballot.ballotId }, [{ $set: { closesAt: { $add: ['$$NOW', offset] } } }]);
     await assert.rejects(() => castVote(db, member, ballot, 'approve', env), /not open/);
     assert.equal(await db.collection('votes').countDocuments({ ballotId: ballot.ballotId }), 0);
   }
@@ -136,7 +136,7 @@ test('a request delayed before admission uses the current database deadline', { 
   const rejected = assert.rejects(pending, /not open/);
   await reached.promise;
   try {
-    await db.collection('ballots').updateOne({ ballotId: ballot.ballotId }, { $set: { closesAt: new Date() } });
+    await db.collection('ballots').updateOne({ ballotId: ballot.ballotId }, { $currentDate: { closesAt: true } });
   } finally { resume.resolve(); }
   await rejected;
   assert.equal((await finalizeBallot(db, ballot.ballotId))?.results.votesCast, 0);
