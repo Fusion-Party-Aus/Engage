@@ -18,7 +18,7 @@
 .admin-meta{color:var(--horizon-muted);font-size:.9rem}
 .admin-actions{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-block:1rem}
 .admin-empty,.admin-error{padding:1rem 1.25rem;background:var(--horizon-lavender);border-radius:.5rem;line-height:1.6}
-.admin-error{border-left:4px solid #96394b}
+.admin-error{border:1px solid var(--horizon-line)}
 .admin-shell details{margin-block:1rem}
 .admin-shell summary{cursor:pointer;font-weight:600;padding:.7rem 0}
 .admin-shell pre,.admin-wording{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7}
@@ -31,7 +31,7 @@
 .admin-status{min-height:1.5rem;line-height:1.5}
 .admin-shell textarea{min-height:8rem}
 .admin-shell button,.admin-shell input,.admin-shell select{max-width:100%}
-.admin-context{border-left:3px solid var(--horizon-accent);padding-left:1rem}
+.admin-context{padding-block:.5rem;color:var(--horizon-muted)}
 .admin-shell :target{scroll-margin-top:1rem}
 .admin-shell .field span{font-weight:600}
 @media(max-width:760px){.admin-grid,.admin-comparison{grid-template-columns:1fr}
