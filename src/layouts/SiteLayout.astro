@@ -1,0 +1,57 @@
+---
+import '@fontsource/newsreader/latin-400.css';
+import '@fontsource/newsreader/latin-600.css';
+import '@fontsource/outfit/latin-400.css';
+import '@fontsource/outfit/latin-500.css';
+import '@fontsource/outfit/latin-600.css';
+import '@fontsource/outfit/latin-700.css';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  canonical?: string;
+  noIndex?: boolean;
+}
+const { title, description = 'Fusion’s policy library and member consultation platform.', canonical, noIndex = false } = Astro.props;
+const privateHost = import.meta.env.DEV || process.env.APP_MODE === 'preview' || Astro.url.hostname === 'localhost' || Astro.url.hostname === '127.0.0.1';
+const preventIndexing = noIndex || privateHost;
+---
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#32105a" />
+    <meta name="description" content={description} />
+    {preventIndexing && <meta name="robots" content="noindex, nofollow" />}
+    {canonical && <link rel="canonical" href={canonical} />}
+    <link rel="icon" href="/fusion_horizon_logo_light.svg" type="image/svg+xml" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Engage home">
+        <img src="/fusion_horizon_logo_light.svg" alt="" width="42" height="42" />
+        <span class="brand__word">Engage</span>
+      </a>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="/policies/">Policies</a>
+        <a href="/consultations/">Consultations</a>
+        <a href="/ballots/">Ballots</a>
+        <a class="nav-member" href="/member/">Member sign in</a>
+      </nav>
+    </header>
+    <slot name="notice" />
+    <main id="main-content"><slot /></main>
+    <footer class="site-footer">
+      <a class="footer-brand" href="/">
+        <img src="/fusion_horizon_logo_light.svg" alt="" width="34" height="34" />
+        <span>Engage</span>
+      </a>
+      <p>Read policies · share feedback · track decisions</p>
+      <a href="/governance/">How member decisions work</a>
+    </footer>
+  </body>
+</html>

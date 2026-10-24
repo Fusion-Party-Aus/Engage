@@ -1,0 +1,41 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+import DomainPolicyReview from '../../components/DomainPolicyReview.astro';
+import policies from '../../data/policies.json';
+import { loadPolicyCatalogue } from '../../lib/platform/catalogue.ts';
+import { platformEnv } from '../../lib/platform/http.ts';
+
+export const prerender = false;
+
+const route = `/reclaim-our-economy/${Astro.params.slug ?? ''}/`;
+const policy = policies.find((p) => p.slug === route);
+const allCatalogue = await loadPolicyCatalogue(platformEnv(Astro.locals));
+const domainItems = allCatalogue.filter((item) => item.domainSlug === route);
+const found = Boolean(policy || domainItems.length > 0);
+if (!found) Astro.response.status = 404;
+
+const domainTitle = policy?.title ?? domainItems[0]?.domain ?? 'Policy Review Section';
+const domainSummary = domainItems[0]?.domainSummary ?? policy?.summary ?? '';
+const metaTitle = policy?.metaTitle ?? `${domainTitle} · Fusion`;
+const description = policy?.description ?? domainSummary;
+---
+{found ? (
+  <SiteLayout title={metaTitle} description={description} canonical={`${Astro.url.origin}${route}`}>
+    <PreviewNotice slot="notice" />
+    <DomainPolicyReview
+      division="RECLAIM OUR ECONOMY"
+      domainSlug={route}
+      domainTitle={domainTitle}
+      domainSummary={domainSummary}
+      items={domainItems}
+    />
+  </SiteLayout>
+) : (
+  <SiteLayout title="Policy not found · Fusion" noIndex>
+    <div class="page-wrap section-space">
+      <h1>We couldn’t find that policy section.</h1>
+      <a href="/policies/">Return to the policy library</a>
+    </div>
+  </SiteLayout>
+)}

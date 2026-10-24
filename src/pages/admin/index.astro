@@ -1,0 +1,545 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+import initialRound from '../../data/initial-round.json';
+import { loadPolicyCatalogue } from '../../lib/platform/catalogue';
+import { platformEnv } from '../../lib/platform/http';
+
+export const prerender = false;
+
+const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
+---
+<SiteLayout title="Moderation & lifecycle workspace · Fusion" description="Review consultation submissions, settle immutable policy revisions, and manage policy ballots." noIndex>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap admin-page">
+    <header class="page-intro">
+      <p class="eyebrow">Moderator &amp; Administrator workspace</p>
+      <a class="text-link" href="/admin/members/">Review membership verification →</a><h1>Policy lifecycle &amp; review queue.</h1>
+      <p>Review member consultation submissions, publish accepted comments and amendments, create immutable settled policy revisions, propose new policies for future rounds, and manage ballot status.</p>
+    </header>
+
+    <div class="admin-toolbar">
+      <label class="field">
+        <span>Consultation submission queue</span>
+        <select id="queue-status">
+          <option value="pending">Awaiting review (pending)</option>
+          <option value="accepted">Accepted &amp; published</option>
+          <option value="needs-changes">Published (needs changes)</option>
+          <option value="declined">Declined</option>
+        </select>
+      </label>
+      <p id="queue-status-message" class="form-status" role="status" aria-live="polite"></p>
+    </div>
+    <div id="review-queue" class="review-queue"><p>Loading submissions…</p></div>
+
+    <section id="operations-panel" class="operations-panel" data-round-opens={initialRound.openingInclusiveUtc} data-round-closes={initialRound.closingExclusiveUtc} hidden>
+      <div class="operations-heading">
+        <div>
+          <p class="eyebrow">Platform operations &amp; policy lifecycle</p>
+          <h2>Revisions, rounds, ballots, and system health</h2>
+        </div>
+        <span class="preview-only">Preview safeguard active · non-binding</span>
+      </div>
+
+      <div id="health-summary" class="health-summary">Loading system status…</div>
+
+      <div class="lifecycle-grid">
+        <form id="settle-revision-form" class="lifecycle-card">
+          <h3>1. Create settled policy revision</h3>
+          <p>After reviewing member feedback and amendments, record an immutable revision (e.g. <code>v2-settled</code>) ready to be pinned to a ballot.</p>
+          <label class="field">
+            <span>Policy</span>
+            <select name="policyId" id="revision-policy-select" required>
+              {policies.map((p) => (
+                <option
+                  value={p.id}
+                  data-title={p.title}
+                  data-domain={p.domain}
+                  data-statement={p.statement}
+                  data-outcomes={p.outcomes.join('\n')}
+                  data-details={p.details || p.statement}
+                >
+                  {p.id} · {p.title} (active: {p.activeRevisionId})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label class="field">
+            <span>New version label</span>
+            <input name="version" required placeholder="e.g. v2-settled" value="v2-settled" pattern="[A-Za-z0-9][A-Za-z0-9._-]*" />
+          </label>
+          <label class="field">
+            <span>Policy title</span>
+            <input name="title" id="rev-title" required />
+          </label>
+          <label class="field">
+            <span>Tier 2 · Policy statement</span>
+            <textarea name="statement" id="rev-statement" rows="2" required></textarea>
+          </label>
+          <label class="field">
+            <span>Tier 3 · Key outcomes (one per line)</span>
+            <textarea name="outcomes" id="rev-outcomes" rows="3" required></textarea>
+          </label>
+          <label class="field">
+            <span>Tier 4 · Further detail</span>
+            <textarea name="details" id="rev-details" rows="3" required></textarea>
+          </label>
+          <label class="field">
+            <span>Change summary (how member feedback was incorporated)</span>
+            <input name="changeSummary" placeholder="e.g. Incorporated member amendment clarifying implementation timeline." />
+          </label>
+          <button class="button" type="submit">Create immutable revision</button>
+          <p id="revision-status" class="form-status" role="status" aria-live="polite"></p>
+        </form>
+
+        <form id="new-policy-form" class="lifecycle-card">
+          <h3>2. Propose new policy (Engage continuous model)</h3>
+          <p>Introduce a new policy proposal into a follow-on consultation round without altering existing approved policies.</p>
+          <div class="schedule-fields">
+            <label class="field">
+              <span>New Policy ID</span>
+              <input name="policyId" required placeholder="e.g. POL-078" pattern="POL-[0-9]{3,}" />
+            </label>
+            <label class="field">
+              <span>Initial version</span>
+              <input name="version" required value="v1-proposed" />
+            </label>
+          </div>
+          <div class="schedule-fields">
+            <label class="field">
+              <span>Division</span>
+              <select name="division">
+                <option value="RECLAIM OUR ECONOMY">RECLAIM OUR ECONOMY</option>
+                <option value="RECLAIM OUR FUTURE">RECLAIM OUR FUTURE</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Domain</span>
+              <input name="domain" required placeholder="e.g. Build up Small Businesses" value="Build up Small Businesses" />
+            </label>
+          </div>
+          <label class="field">
+            <span>Consultation round</span>
+            <input name="roundId" value="continuous-policy-round-2027-q1" required />
+          </label>
+          <label class="field">
+            <span>Policy title</span>
+            <input name="title" required placeholder="e.g. Establish Community Renewable Microgrids" />
+          </label>
+          <label class="field">
+            <span>Tier 2 · Policy statement</span>
+            <textarea name="statement" rows="2" required placeholder="Concise statement of what Fusion will do and why."></textarea>
+          </label>
+          <label class="field">
+            <span>Tier 3 · Key outcomes (one per line)</span>
+            <textarea name="outcomes" rows="3" required placeholder="First key outcome&#10;Second key outcome"></textarea>
+          </label>
+          <label class="field">
+            <span>Tier 4 · Further detail</span>
+            <textarea name="details" rows="3" required placeholder="Detailed implementation mechanisms and evidence base."></textarea>
+          </label>
+          <button class="button" type="submit">Create policy proposal</button>
+          <p id="new-policy-status" class="form-status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <form id="round-schedule" class="schedule-form">
+        <h3>3. Consultation round schedule</h3>
+        <p>Times use your local timezone and are stored in UTC.</p>
+        <div class="schedule-fields">
+          <label class="field"><span>Opens</span><input name="opensAt" type="datetime-local" required /></label>
+          <label class="field"><span>Closes</span><input name="closesAt" type="datetime-local" required /></label>
+        </div>
+        <button class="button button--outline" type="submit">Save consultation schedule</button>
+        <p id="schedule-status" class="form-status" role="status" aria-live="polite"></p>
+      </form>
+
+      <div class="draft-ballot-admin">
+        <h3>4. Policy &amp; platform ballots (pin revision, open, or close)</h3>
+        <p>Pin a draft ballot to a settled policy revision, or transition ballot status (<code>draft</code> → <code>open</code> → <code>closed</code>) to record the vote outcome and adopted wording.</p>
+        <div id="draft-ballot-list"><p>Loading ballots…</p></div>
+      </div>
+
+      <div class="audit-panel">
+        <h3>5. Operational audit trail</h3>
+        <p>Immutable log of moderation reviews, revision creations, and ballot lifecycle transitions (individual member vote choices are never exposed here).</p>
+        <div id="audit-list">Loading activity…</div>
+      </div>
+    </section>
+  </div>
+</SiteLayout>
+<script>
+  const queue = document.querySelector<HTMLElement>('#review-queue');
+  const status = document.querySelector<HTMLElement>('#queue-status-message');
+  const selector = document.querySelector<HTMLSelectElement>('#queue-status');
+
+  // Pre-fill settle revision form when selecting a policy
+  const policySelect = document.querySelector<HTMLSelectElement>('#revision-policy-select');
+  function syncPolicyFields() {
+    const opt = policySelect?.selectedOptions[0];
+    if (!opt) return;
+    (document.querySelector<HTMLInputElement>('#rev-title')!).value = opt.dataset.title ?? '';
+    (document.querySelector<HTMLTextAreaElement>('#rev-statement')!).value = opt.dataset.statement ?? '';
+    (document.querySelector<HTMLTextAreaElement>('#rev-outcomes')!).value = opt.dataset.outcomes ?? '';
+    (document.querySelector<HTMLTextAreaElement>('#rev-details')!).value = opt.dataset.details ?? '';
+  }
+  policySelect?.addEventListener('change', syncPolicyFields);
+  syncPolicyFields();
+
+  document.querySelector<HTMLFormElement>('#settle-revision-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const out = document.querySelector<HTMLElement>('#revision-status');
+    if (!form.reportValidity() || !out) return;
+    const data = new FormData(form);
+    const policyId = String(data.get('policyId'));
+    const outcomes = String(data.get('outcomes'))
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const payload: Record<string, unknown> = {
+      version: String(data.get('version')).trim(),
+      title: String(data.get('title')).trim(),
+      statement: String(data.get('statement')).trim(),
+      outcomes,
+      details: String(data.get('details')).trim(),
+    };
+    const changeSummary = String(data.get('changeSummary') ?? '').trim();
+    if (changeSummary) payload.changeSummary = changeSummary;
+
+    out.textContent = 'Creating immutable revision…';
+    const res = await fetch(`/api/admin/policies/${encodeURIComponent(policyId)}/revisions`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    out.textContent = res.ok
+      ? `Created immutable revision ${body.revision?.revisionId}. You can now pin a draft ballot to it below.`
+      : (body.error ?? 'Could not create revision.');
+    if (res.ok) await loadOperations();
+  });
+
+  document.querySelector<HTMLFormElement>('#new-policy-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const out = document.querySelector<HTMLElement>('#new-policy-status');
+    if (!form.reportValidity() || !out) return;
+    const data = new FormData(form);
+    const outcomes = String(data.get('outcomes'))
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const payload = {
+      policyId: String(data.get('policyId')).trim(),
+      version: String(data.get('version')).trim(),
+      division: String(data.get('division')),
+      domain: String(data.get('domain')).trim(),
+      roundId: String(data.get('roundId')).trim(),
+      title: String(data.get('title')).trim(),
+      statement: String(data.get('statement')).trim(),
+      outcomes,
+      details: String(data.get('details')).trim(),
+    };
+    out.textContent = 'Creating new policy proposal…';
+    const res = await fetch('/api/admin/policies', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    out.textContent = res.ok
+      ? `Created policy ${body.policy?.policyId} (${body.policy?.revisionId}) and added to round ${payload.roundId}.`
+      : (body.error ?? 'Could not create policy proposal.');
+    if (res.ok) {
+      form.reset();
+      await loadOperations();
+    }
+  });
+
+  async function loadQueue() {
+    if (!queue || !selector) return;
+    queue.innerHTML = '<p>Loading review queue…</p>';
+    const response = await fetch(`/api/admin/consultations?status=${encodeURIComponent(selector.value)}`, {
+      credentials: 'same-origin',
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      queue.innerHTML = `<p class="empty-state">${data.error ?? 'The review queue is unavailable.'} <a href="/member/">Sign in as a moderator</a></p>`;
+      return;
+    }
+    queue.replaceChildren();
+    const rows = data.submissions ?? [];
+    if (!rows.length) {
+      const p = document.createElement('p');
+      p.className = 'empty-state';
+      p.textContent = 'There are no submissions in this queue.';
+      queue.append(p);
+      return;
+    }
+    for (const item of rows) {
+      const article = document.createElement('article');
+      article.className = 'review-item';
+      const h = document.createElement('h2');
+      h.textContent = item.title || `Policy feedback · ${item.kind}`;
+      const label = document.createElement('p');
+      label.className = 'review-meta';
+      label.textContent = `${item.policyId} (${item.policyRevisionId}) · Round: ${item.roundId} · ${item.kind} · ${new Date(item.createdAt).toLocaleString()} · Submission ID: ${item.submissionId}`;
+      const body = document.createElement('p');
+      body.className = 'review-body';
+      body.textContent = item.body;
+      article.append(h, label, body);
+      if (item.status === 'pending') {
+        const responseInput = document.createElement('textarea');
+        responseInput.placeholder = 'Optional moderator note (published with accepted or needs-changes submissions)';
+        responseInput.setAttribute('aria-label', 'Optional moderator response');
+        const actions = document.createElement('div');
+        actions.className = 'review-actions';
+        for (const [state, text] of [
+          ['accepted', 'Accept & publish'],
+          ['needs-changes', 'Publish (request changes)'],
+          ['declined', 'Decline'],
+        ]) {
+          const button = document.createElement('button');
+          button.className = state === 'accepted' ? 'button' : 'button button--outline';
+          button.textContent = text;
+          button.addEventListener('click', async () => {
+            button.disabled = true;
+            const result = await fetch(`/api/admin/consultations/${encodeURIComponent(item.submissionId)}/review`, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ status: state, moderatorResponse: responseInput.value }),
+            });
+            const payload = await result.json().catch(() => ({}));
+            if (!result.ok) {
+              if (status) status.textContent = payload.error ?? 'Could not save this review.';
+              button.disabled = false;
+              return;
+            }
+            if (status) status.textContent = `Review saved (${state}).`;
+            await loadQueue();
+            await loadOperations();
+          });
+          actions.append(button);
+        }
+        article.append(responseInput, actions);
+      } else if (item.moderatorResponse) {
+        const note = document.createElement('p');
+        note.className = 'mod-note';
+        note.textContent = `Moderator response: ${item.moderatorResponse}`;
+        article.append(note);
+      }
+      queue.append(article);
+    }
+  }
+
+  async function loadOperations() {
+    const panel = document.querySelector<HTMLElement>('#operations-panel');
+    const session = await fetch('/api/session', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => null);
+    if (!session?.identity?.roles?.includes('administrator') || !panel) return;
+    panel.hidden = false;
+    const summary = document.querySelector<HTMLElement>('#health-summary');
+    const localValue = (iso: string) => {
+      const date = new Date(iso);
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    };
+    const roundForm = document.querySelector<HTMLFormElement>('#round-schedule');
+    if (roundForm && !roundForm.dataset.bound) {
+      roundForm.dataset.bound = 'true';
+      (roundForm.elements.namedItem('opensAt') as HTMLInputElement).value = localValue(panel.dataset.roundOpens!);
+      (roundForm.elements.namedItem('closesAt') as HTMLInputElement).value = localValue(panel.dataset.roundCloses!);
+      roundForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!roundForm.reportValidity()) return;
+        const opensAt = new Date((roundForm.elements.namedItem('opensAt') as HTMLInputElement).value).toISOString();
+        const closesAt = new Date((roundForm.elements.namedItem('closesAt') as HTMLInputElement).value).toISOString();
+        const response = await fetch('/api/admin/consultation-rounds/first-priority-policy-round-2026', {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ opensAt, closesAt }),
+        });
+        const result = await response.json().catch(() => ({}));
+        const out = document.querySelector<HTMLElement>('#schedule-status');
+        if (out) out.textContent = response.ok ? 'Consultation schedule saved.' : (result.error ?? 'Could not save the schedule.');
+      });
+    }
+
+    const [healthResponse, ballotResponse, auditResponse] = await Promise.all([
+      fetch('/api/admin/health', { credentials: 'same-origin' }),
+      fetch('/api/ballots', { credentials: 'same-origin' }),
+      fetch('/api/admin/audit?limit=25', { credentials: 'same-origin' }),
+    ]);
+    const health = await healthResponse.json().catch(() => ({}));
+    const ballotData = await ballotResponse.json().catch(() => ({}));
+    const audit = await auditResponse.json().catch(() => ({}));
+
+    if (summary) {
+      summary.replaceChildren();
+      if (!healthResponse.ok) {
+        summary.textContent = health.error ?? 'Health data unavailable.';
+      } else {
+        const values = [
+          ['Ballots by status', health.counts?.ballotStatus],
+          ['Submissions by status', health.counts?.submissionStatus],
+          ['Consultation rounds', health.counts?.roundStatus],
+          ['Counted ballot votes', health.counts?.currentVotes],
+          ['Audit events', health.counts?.auditEvents],
+        ];
+        for (const [label, value] of values) {
+          const item = document.createElement('p');
+          const b = document.createElement('strong');
+          b.textContent = label;
+          const span = document.createElement('span');
+          span.textContent =
+            typeof value === 'object'
+              ? Object.entries(value ?? {})
+                  .map(([key, count]) => `${key}: ${count}`)
+                  .join(' · ') || '0'
+              : String(value ?? '0');
+          item.append(b, span);
+          summary.append(item);
+        }
+      }
+    }
+
+    const ballotsContainer = document.querySelector<HTMLElement>('#draft-ballot-list');
+    if (ballotsContainer) {
+      ballotsContainer.replaceChildren();
+      const allBallots = ballotData.ballots ?? [];
+      if (!allBallots.length) {
+        ballotsContainer.textContent = 'No ballots are loaded.';
+      }
+      for (const ballot of allBallots) {
+        const card = document.createElement('div');
+        card.className = 'ballot-admin-card';
+        const header = document.createElement('div');
+        header.className = 'ballot-admin-header';
+        const title = document.createElement('h4');
+        title.textContent = `${ballot.proposalId} · ${ballot.title}`;
+        const badge = document.createElement('span');
+        badge.className = 'ballot-status-pill';
+        badge.textContent = `Status: ${ballot.status} · Revision: ${ballot.policyRevisionId}`;
+        header.append(title, badge);
+
+        const opensInput = document.createElement('input');
+        opensInput.type = 'datetime-local';
+        opensInput.value = ballot.opensAt ? localValue(ballot.opensAt) : '';
+        opensInput.setAttribute('aria-label', 'Ballot opens at');
+
+        const closesInput = document.createElement('input');
+        closesInput.type = 'datetime-local';
+        closesInput.value = ballot.closesAt ? localValue(ballot.closesAt) : '';
+        closesInput.setAttribute('aria-label', 'Ballot closes at');
+
+        const actionMsg = document.createElement('span');
+        actionMsg.className = 'form-status';
+
+        const actions = document.createElement('div');
+        actions.className = 'ballot-admin-actions';
+
+        // Status transition buttons
+        for (const nextStatus of ['draft', 'open', 'closed']) {
+          if (nextStatus === ballot.status) continue;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = nextStatus === 'open' ? 'button' : 'button button--outline';
+          btn.textContent = nextStatus === 'open' ? 'Open ballot for voting' : nextStatus === 'closed' ? 'Close & record outcome' : 'Revert to draft';
+          btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            actionMsg.textContent = '';
+            const payload: Record<string, unknown> = { status: nextStatus };
+            if (nextStatus === 'open') {
+              if (opensInput.value) payload.opensAt = new Date(opensInput.value).toISOString();
+              if (closesInput.value) payload.closesAt = new Date(closesInput.value).toISOString();
+            }
+            const res = await fetch(`/api/admin/ballots/${encodeURIComponent(ballot.ballotId)}`, {
+              method: 'PATCH',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (res.ok) await loadOperations();
+            else {
+              actionMsg.textContent = body.error ?? 'Could not update ballot status.';
+              btn.disabled = false;
+            }
+          });
+          actions.append(btn);
+        }
+        actions.append(actionMsg);
+
+        // If draft, allow pinning policyRevisionId and configuring voting window
+        if (ballot.status === 'draft') {
+          const pinForm = document.createElement('form');
+          pinForm.className = 'pin-revision-form';
+          const input = document.createElement('input');
+          input.name = 'policyRevisionId';
+          input.value = ballot.policyRevisionId;
+          input.placeholder = `${ballot.proposalId}:v2-settled`;
+          input.setAttribute('aria-label', 'Pinned policy revision ID');
+          const saveBtn = document.createElement('button');
+          saveBtn.type = 'submit';
+          saveBtn.className = 'button button--outline';
+          saveBtn.textContent = 'Pin revision';
+          const msg = document.createElement('span');
+          msg.className = 'form-status';
+          pinForm.append(input, opensInput, closesInput, saveBtn, msg);
+          pinForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            saveBtn.disabled = true;
+            const res = await fetch(`/api/admin/ballots/${encodeURIComponent(ballot.ballotId)}`, {
+              method: 'PATCH',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ policyRevisionId: input.value.trim() }),
+            });
+            const payload = await res.json().catch(() => ({}));
+            msg.textContent = res.ok ? 'Pinned!' : (payload.error ?? 'Error');
+            saveBtn.disabled = false;
+            if (res.ok) await loadOperations();
+          });
+          card.append(header, pinForm, actions);
+        } else {
+          card.append(header, actions);
+        }
+
+        ballotsContainer.append(card);
+      }
+    }
+
+    const auditList = document.querySelector<HTMLElement>('#audit-list');
+    if (auditList) {
+      auditList.replaceChildren();
+      if (!auditResponse.ok) {
+        auditList.textContent = audit.error ?? 'Audit records unavailable.';
+      } else if (!(audit.events ?? []).length) {
+        auditList.textContent = 'No operational events recorded.';
+      } else {
+        for (const event of audit.events) {
+          const row = document.createElement('p');
+          row.textContent = `${new Date(event.createdAt).toLocaleString()} · ${event.action} · ${event.targetType ?? ''} ${event.targetId ?? ''} ${event.revisionId ?? ''} ${event.status ?? ''}`;
+          auditList.append(row);
+        }
+      }
+    }
+  }
+
+  selector?.addEventListener('change', loadQueue);
+  await loadQueue();
+  await loadOperations();
+</script>
+<style>
+  .admin-page{max-width:78rem;padding-bottom:5rem}.admin-toolbar{display:flex;align-items:end;gap:1rem;margin-bottom:1rem}.admin-toolbar .field{min-width:16rem}.review-queue{display:grid;gap:1rem;margin-bottom:3rem}.review-item{padding:1.4rem;background:#fff;border:1px solid #ded6e7;border-radius:.8rem}.review-item h2{margin:.1rem 0;font-size:1.35rem}.review-meta{color:#625171;font-size:.82rem}.review-body{white-space:pre-wrap;line-height:1.65}.review-item textarea{width:100%;min-height:4.5rem;padding:.7rem;border:1px solid #776b80;border-radius:.4rem}.review-actions{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:.85rem}.mod-note{margin:.6rem 0 0;padding:.55rem .8rem;background:#f2eef9;border-left:3px solid #32105a;border-radius:.3rem;font-size:.9rem}.empty-state{padding:1.4rem;background:#f2eef9;border-radius:.7rem}
+  .operations-panel{margin-bottom:3rem;padding:1.6rem;background:#f2eef9;border-radius:.85rem}.operations-panel[hidden]{display:none}.operations-heading{display:flex;justify-content:space-between;gap:1rem;align-items:center}.operations-heading h2{margin:.1rem 0 1rem;font-size:1.7rem}.preview-only{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#32105a}
+  .health-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.6rem;margin-bottom:1.5rem}.health-summary p{display:grid;gap:.3rem;margin:0;padding:.85rem;background:white;border-radius:.55rem}.health-summary span{color:#54465f;font-size:.9rem}
+  .lifecycle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.25rem;margin-top:1.5rem}.lifecycle-card{padding:1.35rem;background:#fff;border:1px solid #ded6e7;border-radius:.75rem}.lifecycle-card h3{margin:.1rem 0 .4rem;font-size:1.25rem}.lifecycle-card>p{margin:0 0 1rem;color:#54465f;font-size:.9rem;line-height:1.5}
+  .schedule-form,.draft-ballot-admin,.audit-panel{margin-top:1.7rem;padding-top:1.4rem;border-top:1px solid #d7cde2}.schedule-form h3,.draft-ballot-admin h3,.audit-panel h3{margin:.1rem 0 .4rem;font-size:1.25rem}.schedule-form>p,.draft-ballot-admin>p,.audit-panel>p{color:#54465f;font-size:.92rem}.schedule-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem}
+  #draft-ballot-list{display:grid;gap:.75rem;margin-top:1rem}.ballot-admin-card{padding:1rem 1.2rem;background:#fff;border:1px solid #ded6e7;border-radius:.65rem;display:grid;gap:.65rem}.ballot-admin-header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.5rem}.ballot-admin-header h4{margin:0;font-size:1.05rem}.ballot-status-pill{font-size:.8rem;font-weight:600;color:#54465f}.pin-revision-form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}.pin-revision-form input{flex:1;min-width:14rem;padding:.45rem .65rem;border:1px solid #8a7d96;border-radius:.35rem}.ballot-admin-actions{display:flex;flex-wrap:wrap;gap:.5rem}
+  .audit-panel>div{max-height:18rem;overflow:auto;background:#fff;padding:.75rem 1rem;border-radius:.6rem;border:1px solid #ded6e7}.audit-panel>div p{padding:.5rem 0;margin:0;border-bottom:1px solid #eee8f5;font-size:.83rem;line-height:1.4}
+  @media(max-width:900px){.lifecycle-grid{grid-template-columns:1fr}}@media(max-width:560px){.operations-heading{align-items:flex-start;flex-direction:column}.admin-toolbar{align-items:stretch;flex-direction:column}.schedule-fields{grid-template-columns:1fr}.review-actions{flex-direction:column}.review-actions button{width:100%}}
+</style>

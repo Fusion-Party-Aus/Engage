@@ -1,0 +1,301 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+import { loadPolicyCatalogue } from '../../lib/platform/catalogue';
+import { getDatabase, ensureIndexes } from '../../lib/platform/database';
+import { listBallots, getBallotResults } from '../../lib/platform/ballots';
+import { resolveIdentity } from '../../lib/platform/auth';
+import { platformEnv } from '../../lib/platform/http';
+
+export const prerender = false;
+
+const env = platformEnv(Astro.locals);
+const [policies, db, resolution] = await Promise.all([
+  loadPolicyCatalogue(env),
+  getDatabase(env),
+  resolveIdentity(Astro.request, env),
+]);
+await ensureIndexes(db);
+
+const allBallots = await listBallots(db);
+const policyById = new Map(policies.map((p) => [p.id, p]));
+const requestedBallotId = Astro.url.searchParams.get('ballotId');
+
+// Load current member selections if signed in
+const memberVotes = new Map<string, string>();
+if (resolution.identity) {
+  const votes = await db
+    .collection<{ ballotId: string; choice: string }>('votes')
+    .find({ memberId: resolution.identity.memberId })
+    .toArray();
+  for (const v of votes) {
+    memberVotes.set(v.ballotId, v.choice);
+  }
+}
+
+// Compute results for closed ballots
+const closedResults = new Map<string, Awaited<ReturnType<typeof getBallotResults>>>();
+for (const ballot of allBallots) {
+  if (ballot.status === 'closed') {
+    const res = await getBallotResults(db, ballot);
+    if (res) closedResults.set(ballot.ballotId, res);
+  }
+}
+
+const openBallots = allBallots.filter((b) => b.status === 'open');
+const closedBallots = allBallots.filter((b) => b.status === 'closed');
+const adoptionBallots = allBallots.filter((b) =>
+  ['adoption-reclaim-platform', 'adoption-horizon-identity', 'ballot-adopt-reclaim-platform-2026', 'ballot-adopt-horizon-identity-2026'].includes(b.ballotId)
+);
+const ballotDeadline = (value: Date | string) => `${new Date(value).toLocaleString('en-AU', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Australia/Melbourne' })} Melbourne time`;
+---
+<SiteLayout title="Ballots · Fusion" description="Review settled policy revisions, vote on individual policy proposals, and inspect recorded outcomes." canonical={`${Astro.url.origin}/ballots/`}>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap">
+    <header class="page-intro">
+      <p class="eyebrow">Member decisions · Policy &amp; platform ballots</p>
+      <h1>Decisions for members</h1>
+      <p>Read the wording on each open decision, then choose whether to approve it. Policy, platform and Horizon identity decisions are kept separate.</p>
+    </header>
+
+    <section class="ballot-section section-space" aria-labelledby="open-ballots-title">
+      <div class="list-heading">
+        <div>
+          <p class="eyebrow">Cast your vote</p>
+          <h2 id="open-ballots-title">Open decisions</h2>
+        </div>
+        {!resolution.identity ? (
+          <a class="button button--outline" href="/member/">Sign in to cast or change votes →</a>
+        ) : (
+          <span class="signed-in-badge">Signed in as <code>{resolution.identity.memberId}</code></span>
+        )}
+      </div>
+
+      {openBallots.length === 0 ? (
+        <p class="empty-state">There are no decisions open for voting right now. Check back when the next decision is ready.</p>
+      ) : (
+        <div class="ballot-list">
+          {openBallots.map((ballot) => {
+            const policy = policyById.get(ballot.proposalId);
+            const pinnedRevision = policy?.revisions.find((r) => r.revisionId === ballot.policyRevisionId);
+            const currentChoice = memberVotes.get(ballot.ballotId);
+            const isHighlighted = requestedBallotId === ballot.ballotId;
+            return (
+              <article
+                id={ballot.ballotId}
+                class={`ballot-row ${isHighlighted ? 'ballot-row--highlight' : ''}`}
+                data-ballot-id={ballot.ballotId}
+              >
+                <div class="ballot-row__top">
+                  <span class="ballot-badge ballot-badge--open">Open for voting</span>
+                  <span class="ballot-revision">Closes {ballotDeadline(ballot.closesAt)}</span>
+                </div>
+
+                <h3>
+                  {policy ? (
+                    <a href={`${policy.sectionPath}#${policy.slug}`}>{ballot.title}</a>
+                  ) : (
+                    ballot.title
+                  )}
+                </h3>
+
+                <div class="decision-wording"><p class="tier-label">The wording you are deciding on</p><p class="ballot-summary">{pinnedRevision?.statement || ballot.summary}</p></div>
+                {(pinnedRevision?.syntheticFixture || ballot.syntheticFixture) && <p class="preview-context">This is a preview decision and will not determine Fusion policy.</p>}
+                {pinnedRevision?.changeSummary && (
+                  <p class="ballot-change-note">
+                    <strong>What changed:</strong> {pinnedRevision.changeSummary}
+                  </p>
+                )}
+
+                {policy && (
+                  <p class="ballot-links">
+                    <a class="text-link" href={`${policy.sectionPath}#${policy.slug}`}>
+                      Read the full policy and the reasons behind it <span aria-hidden="true">→</span>
+                    </a>
+                  </p>
+                )}
+
+                {resolution.identity ? (
+                  <div class="ballot-controls" data-ballot-controls={ballot.ballotId}>
+                    <button
+                      type="button"
+                      class={`button vote-btn ${currentChoice === 'approve' ? 'vote-btn--selected' : 'button--outline'}`}
+                      data-ballot-id={ballot.ballotId}
+                      data-choice="approve"
+                    >
+                      {currentChoice === 'approve' ? '✓ Approve (your vote)' : 'Approve'}
+                    </button>
+                    <button
+                      type="button"
+                      class={`button vote-btn ${currentChoice === 'do-not-approve' ? 'vote-btn--selected' : 'button--outline'}`}
+                      data-ballot-id={ballot.ballotId}
+                      data-choice="do-not-approve"
+                    >
+                      {currentChoice === 'do-not-approve' ? '✓ Do not approve (your vote)' : 'Do not approve'}
+                    </button>
+                    <span class="ballot-status" role="status" aria-live="polite">
+                      {currentChoice
+                        ? `Your current choice: ${currentChoice === 'approve' ? 'Approve' : 'Do not approve'}`
+                        : 'You have not voted on this ballot yet.'}
+                    </span>
+                  </div>
+                ) : (
+                  <p class="signin-hint">
+                    <a class="text-link" href="/member/">Sign in to vote on this decision <span aria-hidden="true">→</span></a>
+                  </p>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+
+    <section class="ballot-section section-space" aria-labelledby="closed-ballots-title">
+      <div class="list-heading">
+        <div>
+          <p class="eyebrow">Recorded decisions · Closed ballots</p>
+          <h2 id="closed-ballots-title">Completed ballots &amp; adopted policy wording ({closedBallots.length})</h2>
+        </div>
+      </div>
+      {closedBallots.length === 0 ? (
+        <p class="empty-state">No ballots have closed yet. When an open ballot closes, its vote tally and recorded outcome (approved / not-approved) appear here and mark the adopted policy revision.</p>
+      ) : (
+        <div class="ballot-list">
+          {closedBallots.map((ballot) => {
+            const policy = policyById.get(ballot.proposalId);
+            const result = closedResults.get(ballot.ballotId);
+            const isSyntheticOutcome = env.APP_MODE === 'preview' || ballot.bindingBallotsEnabled !== true || Boolean(ballot.syntheticFixture);
+            return (
+              <article id={ballot.ballotId} class="ballot-row ballot-row--closed" data-synthetic-outcome={isSyntheticOutcome ? 'true' : 'false'}>
+                <div class="ballot-row__top">
+                  <span class={`ballot-badge ${result?.outcome === 'approved' ? 'ballot-badge--approved' : 'ballot-badge--rejected'}`}>
+                    {isSyntheticOutcome
+                      ? `Closed · Preview ${result?.outcome === 'approved' ? 'approval (non-binding)' : 'rejection (non-binding)'}`
+                      : `Closed · ${result?.outcome === 'approved' ? 'Approved & adopted' : 'Not approved'}`}
+                  </span>
+                  {isSyntheticOutcome && (
+                    <span class="ballot-badge ballot-badge--synthetic">Preview outcome · Not a party decision</span>
+                  )}
+                </div>
+                <h3>
+                  {policy ? <a href={`${policy.sectionPath}#${policy.slug}`}>{ballot.title}</a> : ballot.title}
+                </h3>
+                <p class="ballot-summary">{policy?.revisions.find((r) => r.revisionId === ballot.policyRevisionId)?.statement || ballot.summary}</p>
+                {result && (
+                  <div class="tally-box">
+                    <span>
+                      <strong>Outcome:</strong>{' '}
+                      {isSyntheticOutcome
+                        ? `${result.outcome === 'approved' ? 'Simulated preview approval (non-binding)' : 'Simulated preview rejection (non-binding)'}`
+                        : `${result.outcome === 'approved' ? 'Adopted' : 'Not adopted'}`}
+                    </span>
+                    <span><strong>Approve:</strong> {result.approve}</span>
+                    <span><strong>Do Not Approve:</strong> {result.doNotApprove}</span>
+                    <span><strong>Total counted:</strong> {result.votesCast}</span>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+
+    <section class="adoption-decisions section-space" aria-labelledby="adoption-title">
+      <p class="eyebrow">Two distinct decisions</p>
+      <h2 id="adoption-title">Reclaim and Horizon</h2>
+      <p class="adoption-intro">
+        The Reclaim platform and Horizon identity, including the logo, are separate questions with their own wording and outcomes.
+      </p>
+      <div class="adoption-grid">
+        {adoptionBallots.map((ballot) => (
+          <article id={ballot.ballotId} class={`adoption-card ${ballot.ballotId.includes('horizon') ? 'adoption-card--identity' : ''}`}>
+            {ballot.ballotId.includes('horizon') && (
+              <img src="/fusion_horizon_logo_light.svg" alt="Fusion Horizon logo" width="56" height="56" />
+            )}
+            <span class="ballot-badge">{ballot.status === 'open' ? 'Open for voting' : ballot.status === 'closed' ? 'Decision closed' : 'Decision in preparation'}</span>
+            <h3>{ballot.title}</h3>
+            <p>{ballot.summary}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+  </div>
+</SiteLayout>
+<script>
+  const buttons = document.querySelectorAll<HTMLButtonElement>('.vote-btn');
+  for (const button of buttons) {
+    button.addEventListener('click', async () => {
+      const ballotId = button.dataset.ballotId;
+      const choice = button.dataset.choice;
+      if (!ballotId || !choice) return;
+
+      const container = button.closest<HTMLElement>('[data-ballot-controls]');
+      const statusEl = container?.querySelector<HTMLElement>('.ballot-status');
+      const siblingButtons = container?.querySelectorAll<HTMLButtonElement>('.vote-btn') ?? [];
+      for (const btn of siblingButtons) btn.disabled = true;
+
+      if (statusEl) statusEl.textContent = 'Recording vote…';
+      const response = await fetch('/api/votes', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ballotId, choice }),
+      });
+      const result = await response.json().catch(() => ({}));
+
+      for (const btn of siblingButtons) {
+        btn.disabled = false;
+        if (response.ok) {
+          const isThis = btn.dataset.choice === choice;
+          btn.classList.toggle('vote-btn--selected', isThis);
+          btn.classList.toggle('button--outline', !isThis);
+          btn.textContent =
+            btn.dataset.choice === 'approve'
+              ? isThis
+                ? '✓ Approved (current)'
+                : 'Approve'
+              : isThis
+                ? '✓ Do Not Approve (current)'
+                : 'Do Not Approve';
+        }
+      }
+
+      if (statusEl) {
+        statusEl.textContent = response.ok
+          ? `Vote saved (${choice === 'approve' ? 'Approve' : 'Do Not Approve'}). You can change your selection until the ballot closes.`
+          : (result.error ?? 'Could not record vote.');
+      }
+    });
+  }
+</script>
+<style>
+  .notice-box{padding:1.25rem 1.5rem;background:#e4f9fa;border-radius:.75rem;color:#173d42;margin-bottom:1.5rem}.notice-box p{max-width:78ch;margin:.35rem 0 0;line-height:1.6}
+  .ballot-section{border-top:1px solid #ded6e7}
+  .list-heading{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;margin-bottom:1.25rem}.list-heading h2{margin:.1rem 0 0}
+  .signed-in-badge{font-size:.88rem;color:#54465f}
+  .ballot-list{display:grid;gap:1rem}
+  .ballot-row{padding:1.4rem 1.5rem;background:#fff;border:1px solid #ded6e7;border-radius:.8rem}
+  .ballot-row--highlight{border:2px solid #32105a;background:#faf7fd}
+  .ballot-row--closed{background:#f9f7fc}
+  .ballot-row__top{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;margin-bottom:.5rem;font-size:.82rem;color:#54465f}
+  .ballot-row h3{margin:.3rem 0 .45rem;font-size:1.35rem}.ballot-row h3 a{color:inherit;text-decoration:none}.ballot-row h3 a:hover{text-decoration:underline}
+  .ballot-summary{max-width:70ch;margin:0 0 .5rem;color:#2c1d3b;line-height:1.6}
+  .ballot-change-note{margin:.5rem 0;padding:.6rem .85rem;background:#f2eef9;border-left:3px solid #32105a;border-radius:.35rem;font-size:.9rem;color:#392a49}
+  .ballot-links{margin:.5rem 0 0;font-size:.9rem}
+  .ballot-badge{display:inline-block;padding:.15rem .55rem;border-radius:99px;font-size:.73rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:#e2d4f8;color:#32105a}
+  .ballot-badge--open{background:#d4f4f6;color:#0b4b50}
+  .ballot-badge--approved{background:#d1f2d9;color:#114b21}
+  .ballot-badge--rejected{background:#f9d7d7;color:#691919}
+  .ballot-badge--synthetic{background:#fff3cd;color:#664d03;border:1px solid #ffecb5}
+  .ballot-controls{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin-top:1rem;padding-top:.9rem;border-top:1px solid #eee8f5}
+  .vote-btn--selected{background:#32105a;color:#fff;border-color:#32105a}
+  .ballot-status{font-size:.9rem;font-weight:600;color:#32105a}
+  .signin-hint{margin:.85rem 0 0}
+  .tally-box{display:flex;flex-wrap:wrap;gap:.75rem 1.5rem;margin-top:.85rem;padding:.75rem 1rem;background:#fff;border:1px solid #ded6e7;border-radius:.5rem;font-size:.9rem}
+  .adoption-decisions{padding:1.6rem;background:#f2eef9;border-radius:.85rem}.adoption-decisions h2{margin:.1rem 0 .65rem;font-size:clamp(1.6rem,2.6vw,2.2rem)}.adoption-intro{max-width:72ch;margin:.4rem 0 1.2rem;color:#54465f;line-height:1.6}.adoption-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.adoption-card{display:flex;flex-direction:column;align-items:flex-start;padding:1.3rem;background:white;border:1px solid #ded6e7;border-top:4px solid #00c9d2;border-radius:.65rem}.adoption-card h3{margin:.7rem 0 .35rem;font-size:1.35rem}.adoption-card p{margin:.2rem 0 0;color:#54465f;line-height:1.55}.adoption-card--identity img{width:3rem;height:3rem;object-fit:contain;margin-bottom:.6rem}
+  .empty-state{padding:1.4rem;background:#f2eef9;border-radius:.7rem;color:#54465f}
+  @media(max-width:700px){.adoption-grid{grid-template-columns:1fr}.list-heading{align-items:flex-start;flex-direction:column}.ballot-controls{align-items:stretch;flex-direction:column}.ballot-controls button{width:100%}}
+</style>

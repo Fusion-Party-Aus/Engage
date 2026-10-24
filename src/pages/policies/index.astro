@@ -1,0 +1,194 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+import policies from '../../data/policies.json';
+import { loadPolicyCatalogue } from '../../lib/platform/catalogue.ts';
+import { platformEnv } from '../../lib/platform/http.ts';
+
+export const prerender = false;
+
+const catalogue = await loadPolicyCatalogue(platformEnv(Astro.locals));
+const publicCatalogue = catalogue.filter((p) => !p.syntheticFixture);
+const economy = policies.filter((p) => p.slug.startsWith('/reclaim-our-economy/'));
+const future = policies.filter((p) => p.slug.startsWith('/reclaim-our-future/'));
+const openPolicyIds = new Set(publicCatalogue.filter((p) => p.consultationRounds.some((r) => r.status === 'open')).map((p) => p.policyId));
+
+const groups = [
+  {
+    id: 'economy',
+    eyebrow: 'Work, security and shared prosperity',
+    title: 'Reclaim our economy',
+    href: '/reclaim-our-economy/',
+    domains: economy.map((domain) => ({
+      ...domain,
+      proposals: publicCatalogue.filter((p) => p.domainSlug === domain.slug),
+    })),
+  },
+  {
+    id: 'future',
+    eyebrow: 'A future shaped by people and communities',
+    title: 'Reclaim our future',
+    href: '/reclaim-our-future/',
+    domains: future.map((domain) => ({
+      ...domain,
+      proposals: publicCatalogue.filter((p) => p.domainSlug === domain.slug),
+    })),
+  },
+];
+---
+<SiteLayout title="Policy library · Fusion" description="Explore Reclaim's policy commitments and proposals by issue." canonical={`${Astro.url.origin}/policies/`}>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap">
+    <header class="page-intro">
+      <p class="eyebrow">The Reclaim policy library</p>
+      <h1>What should a fairer Australia look like?</h1>
+      <p>Start with an issue area, then open any proposal to see its core commitment, intended outcomes, supporting rationale, and how members can shape it.</p>
+    </header>
+    <form class="filters" role="search" onsubmit="return false">
+      <label class="field">
+        <span>Find an issue or proposal</span>
+        <input id="policy-search" type="search" placeholder="Try housing, Medicare, small business or democracy" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Browse by program</span>
+        <select id="policy-area">
+          <option value="all">All policy areas</option>
+          <option value="economy">Reclaim our economy</option>
+          <option value="future">Reclaim our future</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Member review</span>
+        <select id="policy-review">
+          <option value="all">All proposals</option>
+          <option value="open">Open for comment</option>
+        </select>
+      </label>
+      <p id="policy-results" aria-live="polite">Choose a policy area below or search by topic.</p>
+    </form>
+
+    {groups.map((group) => (
+      <section class="policy-group" data-policy-area={group.id} aria-labelledby={`${group.id}-title`}>
+        <header class="group-heading">
+          <div>
+            <p class="eyebrow">{group.eyebrow}</p>
+            <h2 id={`${group.id}-title`}><a href={group.href}>{group.title}</a></h2>
+          </div>
+          <a class="text-link" href={group.href}>View area overview <span aria-hidden="true">→</span></a>
+        </header>
+
+        <div class="domain-grid">
+          {group.domains.map((domain) => (
+            <article class="domain-card" data-domain-card>
+              <div class="domain-card__head">
+                <h3><a href={domain.slug}>{domain.title}</a></h3>
+                <p class="domain-card__summary">{domain.summary}</p>
+                <a class="text-link" href={domain.slug}>Explore {domain.title} <span aria-hidden="true">→</span></a>
+              </div>
+
+              <details class="domain-disclosure" data-domain-disclosure>
+                <summary>
+                  <span>Proposals in {domain.title}</span>
+                  <span class="domain-count" data-domain-count>{domain.proposals.length}</span>
+                </summary>
+                <ul class="proposal-list" aria-label={`${domain.title} proposals`}>
+                  {domain.proposals.map((proposal) => (
+                    <li
+                      class="proposal-entry"
+                      data-policy-entry
+                      data-open={openPolicyIds.has(proposal.policyId) ? 'true' : 'false'}
+                      data-search={`${proposal.title} ${proposal.domain} ${proposal.domainSummary} ${proposal.statement}`.toLocaleLowerCase()}
+                    >
+                      <div class="proposal-entry__main">
+                        <a class="proposal-entry__title" href={`${proposal.sectionPath}#${proposal.slug}`}>{proposal.title}</a>
+                        {openPolicyIds.has(proposal.policyId) && (
+                          <a class="review-label" href={`/consultations/?policyId=${encodeURIComponent(proposal.policyId)}`}>
+                            Open for comment ↗
+                          </a>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </article>
+          ))}
+        </div>
+      </section>
+    ))}
+  </div>
+</SiteLayout>
+<script>
+  const search = document.querySelector<HTMLInputElement>('#policy-search');
+  const area = document.querySelector<HTMLSelectElement>('#policy-area');
+  const review = document.querySelector<HTMLSelectElement>('#policy-review');
+  const entries = [...document.querySelectorAll<HTMLElement>('[data-policy-entry]')];
+  const domainCards = [...document.querySelectorAll<HTMLElement>('[data-domain-card]')];
+  const groups = [...document.querySelectorAll<HTMLElement>('[data-policy-area]')];
+  const result = document.querySelector<HTMLElement>('#policy-results');
+
+  const update = () => {
+    const query = search?.value.trim().toLocaleLowerCase() ?? '';
+    const selectedArea = area?.value ?? 'all';
+    const selectedReview = review?.value ?? 'all';
+    const isFiltering = Boolean(query) || selectedReview !== 'all';
+    let visible = 0;
+
+    for (const entry of entries) {
+      const group = entry.closest<HTMLElement>('[data-policy-area]');
+      const matches = (selectedArea === 'all' || group?.dataset.policyArea === selectedArea)
+        && (selectedReview === 'all' || entry.dataset.open === 'true')
+        && (entry.dataset.search ?? '').includes(query);
+      entry.hidden = !matches;
+      visible += Number(matches);
+    }
+
+    for (const card of domainCards) {
+      const cardEntries = [...card.querySelectorAll<HTMLElement>('[data-policy-entry]')];
+      const matchingInCard = cardEntries.filter((e) => !e.hidden).length;
+      const disclosure = card.querySelector<HTMLDetailsElement>('[data-domain-disclosure]');
+      const countBadge = card.querySelector<HTMLElement>('[data-domain-count]');
+      if (countBadge) countBadge.textContent = String(matchingInCard);
+      card.hidden = matchingInCard === 0;
+      if (disclosure) {
+        disclosure.open = isFiltering && matchingInCard > 0;
+      }
+    }
+
+    for (const group of groups) {
+      const groupArea = group.dataset.policyArea ?? '';
+      const areaMatch = selectedArea === 'all' || groupArea === selectedArea;
+      const hasVisibleCards = [...group.querySelectorAll<HTMLElement>('[data-domain-card]')].some((c) => !c.hidden);
+      group.hidden = !areaMatch || !hasVisibleCards;
+    }
+
+    if (result) {
+      result.textContent = isFiltering || selectedArea !== 'all'
+        ? `${visible} ${visible === 1 ? 'proposal' : 'proposals'} matching your filter`
+        : 'Choose a policy area below, expand a domain to browse its proposals, or search by topic.';
+    }
+  };
+  search?.addEventListener('input', update);
+  area?.addEventListener('change', update);
+  review?.addEventListener('change', update);
+</script>
+<style>
+  .filters{display:grid;grid-template-columns:minmax(16rem,1.5fr) minmax(13rem,.8fr) minmax(13rem,.8fr);align-items:end;gap:1rem;padding:1.15rem 1.35rem;background:#f2eef9;border-radius:.85rem;margin:0 0 4rem}.filters .field{margin:0}.filters p{grid-column:1/-1;margin:0;color:#54465f;font-size:.9rem}
+  .policy-group{padding-bottom:4.5rem}.group-heading{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;border-bottom:1px solid #ded6e7;margin-bottom:1.75rem}.group-heading h2{margin:.1rem 0 1rem;font-size:clamp(1.9rem,3.4vw,2.8rem)}.group-heading h2 a{text-decoration:none}.group-heading h2 a:hover{text-decoration:underline}.group-heading .eyebrow{margin-bottom:.35rem}
+  .domain-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.25rem}
+  .domain-card{display:flex;flex-direction:column;justify-content:space-between;padding:1.5rem;border:1px solid #ded6e7;border-radius:.85rem;background:#fff}
+  .domain-card[hidden],.proposal-entry[hidden],.policy-group[hidden]{display:none}
+  .domain-card__head h3{margin:0 0 .55rem;font-size:clamp(1.45rem,2.2vw,1.8rem)}.domain-card__head h3 a{text-decoration:none}.domain-card__head h3 a:hover{text-decoration:underline}
+  .domain-card__summary{margin:0 0 1rem;color:#54465f;line-height:1.6;font-size:.96rem}
+  .domain-disclosure{margin-top:1.25rem;border-top:1px solid #ded6e7;padding-top:.85rem}
+  .domain-disclosure summary{display:flex;align-items:center;justify-content:space-between;gap:.75rem;cursor:pointer;font-weight:700;font-size:.92rem;color:#32105a;list-style:none}
+  .domain-disclosure summary::-webkit-details-marker{display:none}
+  .domain-count{display:inline-flex;align-items:center;justify-content:center;min-width:1.75rem;height:1.5rem;padding:0 .5rem;border-radius:999px;background:#f2eef9;color:#32105a;font-size:.78rem;font-weight:700}
+  .proposal-list{list-style:none;padding:0;margin:.85rem 0 0;display:grid;gap:.55rem}
+  .proposal-entry{padding:.55rem 0;border-top:1px solid #eee8f5}
+  .proposal-entry__main{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
+  .proposal-entry__title{font-weight:600;text-decoration:none;line-height:1.4}.proposal-entry__title:hover{text-decoration:underline}
+  .review-label{color:#0b4b50;background:#e4f9fa;padding:.15rem .55rem;border-radius:999px;font-size:.72rem;font-weight:700;text-decoration:none;white-space:nowrap}
+  @media(max-width:850px){.filters{grid-template-columns:1fr 1fr}.filters .field:first-child{grid-column:1/-1}.domain-grid{grid-template-columns:1fr}}
+  @media(max-width:560px){.filters{grid-template-columns:1fr}.filters .field:first-child{grid-column:auto}.group-heading{flex-direction:column;align-items:flex-start;gap:.25rem}}
+</style>

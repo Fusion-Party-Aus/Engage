@@ -1,0 +1,29 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+---
+<SiteLayout title="How member decisions work · Fusion" description="How members review proposals and decide policy wording." noIndex>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap governance-page">
+    <header class="page-intro">
+      <p class="eyebrow">A clear path from proposal to decision</p>
+      <h1>Members shape the wording. Members decide what is adopted.</h1>
+      <p>Discussion and voting are separate steps. A proposal can change during consultation; a ballot always asks members to decide on specific wording.</p>
+    </header>
+    <ol class="decision-steps">
+      <li><h2>Read and respond</h2><p>Explore the policy promise, how it would work, its intended outcomes and the fuller rationale. While a consultation is open, comment on the proposal or suggest different wording.</p></li>
+      <li><h2>Review the final wording</h2><p>When a proposal is ready for a decision, its exact wording appears on its own ballot. Separate policies and the Reclaim platform and Horizon identity each have distinct decisions.</p></li>
+      <li><h2>Cast a vote</h2><p>Choose <strong>Approve</strong> or <strong>Do not approve</strong> before the deadline. Members may change their choice while voting is open.</p></li>
+      <li><h2>See the result</h2><p>After voting closes, the outcome and the wording members approved are recorded with the decision.</p></li>
+    </ol>
+    <section class="rule-note" aria-labelledby="rule-title">
+      <h2 id="rule-title">How the result is determined</h2>
+      <p>There is no quorum: a strict majority of votes cast is required for approval, and a tie does not pass.</p>
+    </section>
+    <p><a class="text-link" href="/policies/">Browse the policy library <span aria-hidden="true">→</span></a></p>
+  </div>
+</SiteLayout>
+<style>
+  .governance-page{max-width:72rem;padding-bottom:6rem}.decision-steps{list-style:none;padding:0;margin:1.5rem 0 3rem;counter-reset:step}.decision-steps li{position:relative;padding:1.5rem 0 1.5rem 4rem;border-top:1px solid #ded6e7;counter-increment:step}.decision-steps li::before{content:counter(step);position:absolute;left:0;top:1.45rem;display:grid;place-items:center;width:2.5rem;height:2.5rem;border-radius:50%;background:#e4f9fa;color:#32105a;font-weight:700}.decision-steps h2,.rule-note h2{margin:0 0 .45rem;font-size:clamp(1.6rem,2.8vw,2.1rem)}.decision-steps p,.rule-note p{max-width:68ch;margin:0;color:#54465f;line-height:1.65}.rule-note{padding:1.5rem 0;border-block:1px solid #ded6e7;margin-bottom:1.5rem}
+  @media(max-width:520px){.decision-steps li{padding-left:3.5rem}}
+</style>

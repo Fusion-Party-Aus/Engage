@@ -1,0 +1,285 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+import initialRound from '../../data/initial-round.json';
+import { loadPolicyCatalogue } from '../../lib/platform/catalogue';
+import { getDatabase } from '../../lib/platform/database';
+import { platformEnv } from '../../lib/platform/http';
+import type { ConsultationRoundRecord, ConsultationSubmissionRecord } from '../../lib/platform/types';
+
+export const prerender = false;
+
+const env = platformEnv(Astro.locals);
+const [policies, db] = await Promise.all([
+  loadPolicyCatalogue(env),
+  getDatabase(env),
+]);
+
+const rounds = await db
+  .collection<ConsultationRoundRecord>('consultation_rounds')
+  .find({})
+  .sort({ opensAt: 1 })
+  .toArray();
+
+const requestedRoundId = Astro.url.searchParams.get('roundId');
+const requestedPolicyId = Astro.url.searchParams.get('policyId') || Astro.url.searchParams.get('policy');
+const policyById = new Map(policies.map((policy) => [policy.id, policy]));
+
+// Determine selected round: either explicitly requested, or the round containing requestedPolicyId, or default to first round
+let selectedRound = rounds.find((r) => r.roundId === requestedRoundId);
+if (!selectedRound && requestedPolicyId) {
+  selectedRound = rounds.find((r) => r.policyIds.includes(requestedPolicyId));
+}
+if (!selectedRound) {
+  selectedRound = rounds[0];
+}
+
+const activeRoundId = selectedRound?.roundId ?? 'first-priority-policy-round-2026';
+const roundPolicies = (selectedRound?.policyIds ?? initialRound.policies.map((p) => p.id))
+  .map((id) => policyById.get(id))
+  .filter((policy): policy is NonNullable<typeof policy> => Boolean(policy));
+
+const publicSubmissions = await db
+  .collection<ConsultationSubmissionRecord>('consultation_submissions')
+  .find({ roundId: activeRoundId, status: { $in: ['accepted', 'needs-changes'] } })
+  .sort({ createdAt: -1 })
+  .limit(40)
+  .toArray();
+
+const roundStatus = (status: string) => status === 'open' ? 'Open for comments' : status === 'closed' ? 'Comments closed' : 'Coming soon';
+const roundTitle = (round: ConsultationRoundRecord) => {
+  if (round.roundId === 'first-priority-policy-round-2026') return 'First priority policy consultation';
+  if (round.roundId === 'continuous-policy-round-2027-q1') return 'New policy proposals';
+  return (round.title ?? round.label ?? round.program ?? 'Policy consultation')
+    .replace(/^\[Synthetic Preview Fixture\]\s*/i, '')
+    .replace(/\s*\(Q1 2027 simulation\)/i, '')
+    .replace(/continuous policy development round/i, 'Policy consultation');
+};
+const contributionKind = (kind: string) => kind === 'amendment' ? 'Suggested wording' : kind === 'alternative' ? 'Alternative proposal' : 'Comment';
+---
+<SiteLayout title="Consultations · Fusion" description="Review proposed policy wording, share feedback, and propose amendments in Fusion member consultations." canonical={`${Astro.url.origin}/consultations/`}>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap">
+    <header class="page-intro">
+      <p class="eyebrow">Member consultation · Policy review</p>
+      <h1>Discuss and refine proposed policy wording.</h1>
+      <p>Choose a proposal to read, then tell us what should stay, what should change, or how the wording could be clearer.</p>
+    </header>
+
+    <section class="round-selector" aria-label="Consultation rounds">
+      <div class="round-tabs">
+        {rounds.map((round) => (
+          <a
+            href={`/consultations/?roundId=${encodeURIComponent(round.roundId)}`}
+            class={`round-tab ${round.roundId === activeRoundId ? 'round-tab--active' : ''}`}
+          >
+            <span class="round-tab__status">{roundStatus(round.status)}</span>
+            <strong>{roundTitle(round)}</strong>
+          </a>
+        ))}
+      </div>
+    </section>
+
+    {selectedRound && (
+      <section class="round-panel" aria-labelledby="round-title">
+        <div>
+          <p class="eyebrow">{roundStatus(selectedRound.status)}</p>
+          <h2 id="round-title">{roundTitle(selectedRound)}</h2>
+          <p>Read a proposal below, share your view, or suggest wording you think would work better.</p>
+        </div>
+        {selectedRound.roundId === 'first-priority-policy-round-2026' ? (
+          <div class="round-grid">
+            {initialRound.areas.map((area) => (
+              <article>
+                <h3>{area.domain}</h3>
+                <ul>{area.policies.slice(0, 4).map((id) => {
+                  const proposal = policyById.get(id);
+                  return proposal ? <li><a href={`${proposal.sectionPath}#${proposal.slug}`}>{proposal.title}</a></li> : null;
+                })}</ul>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div class="round-grid round-grid--compact">
+            {roundPolicies.map((policy) => (
+              <article>
+                <span>{policy.domain}</span>
+                <h3><a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a></h3>
+                <p>{policy.statement}</p>
+              </article>
+            ))}
+          </div>
+        )}
+        <p class="schedule-note">
+          Commenting is open until {new Date(selectedRound.closesAt).toLocaleDateString('en-AU', { dateStyle: 'long' })}.
+        </p>
+      </section>
+    )}
+
+    <section class="submission-panel section-space" aria-labelledby="submit-title">
+      <div class="submission-copy">
+        <p class="eyebrow">Submit feedback or amendment</p>
+        <h2 id="submit-title">What should change before this policy goes to a vote?</h2>
+        <p>Choose a proposal, then leave a comment, suggest exact wording, or offer another direction. Published contributions appear with the policy they relate to.</p>
+        <p id="sign-in-prompt"><a class="text-link" href="/member/">Sign in to share your feedback <span aria-hidden="true">→</span></a></p>
+      </div>
+
+      <form id="consultation-form" class="consultation-form" data-round-id={activeRoundId} hidden>
+        <label class="field">
+          <span>Consultation round</span>
+          <select name="roundId" id="round-select">
+            {rounds.map((round) => (
+              <option value={round.roundId} selected={round.roundId === activeRoundId}>
+                {roundTitle(round)} ({roundStatus(round.status)})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label class="field">
+          <span>Choose a proposal</span>
+          <select name="policyId" id="policy-select" required>
+            <option value="">Select one proposal in this round</option>
+            {roundPolicies.map((policy) => (
+              <option
+                value={policy.id}
+                data-revision={policy.activeRevisionId}
+                selected={policy.id === requestedPolicyId || policy.title === requestedPolicyId}
+              >
+                {policy.domain} · {policy.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label class="field">
+          <span>Contribution type</span>
+          <select name="kind" required>
+            <option value="comment">Comment on the proposal</option>
+            <option value="amendment">Suggest different wording</option>
+            <option value="alternative">Offer another approach</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Summary title <small>(optional)</small></span>
+          <input name="title" maxlength="160" placeholder="e.g. Clarify national manufacturing target in Outcome 1" />
+        </label>
+        <label class="field">
+          <span>Your feedback or proposed wording</span>
+          <textarea name="body" minlength="10" maxlength="10000" required placeholder="What would you keep, change or add? If suggesting an amendment, include the wording you propose."></textarea>
+        </label>
+        <button class="button" type="submit">Share feedback</button>
+        <p class="form-status" id="consultation-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="discussion-section section-space" aria-labelledby="discussion-title">
+      <div class="discussion-header">
+        <div>
+          <p class="eyebrow">Reviewed member contributions</p>
+          <h2 id="discussion-title">Published discussion &amp; proposed amendments in this round</h2>
+        </div>
+        <span class="discussion-count">{publicSubmissions.length} reviewed {publicSubmissions.length === 1 ? 'contribution' : 'contributions'}</span>
+      </div>
+      {publicSubmissions.length === 0 ? (
+        <p class="empty-state">There are no published comments for this round yet. Be the first to share a view.</p>
+      ) : (
+        <div class="discussion-list">
+          {publicSubmissions.map((sub) => {
+            const policy = policyById.get(sub.policyId);
+            return (
+              <article class="discussion-card">
+                <div class="discussion-card__meta">
+                  <span class={`kind-badge kind-badge--${sub.kind}`}>{contributionKind(sub.kind)}</span>
+                  <span>
+                    Proposal: {policy ? <a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a> : 'Policy proposal'}
+                  </span>
+                  <span>Published contribution</span>
+                </div>
+                <h3>{sub.title || `${contributionKind(sub.kind)} on ${policy?.title ?? sub.policyId}`}</h3>
+                <p class="discussion-card__body">{sub.body}</p>
+                {sub.moderatorResponse && (
+                  <p class="discussion-card__response">
+                    <strong>Review note:</strong> {sub.moderatorResponse}
+                  </p>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  </div>
+</SiteLayout>
+<script>
+  const form = document.querySelector<HTMLFormElement>('#consultation-form');
+  const roundSelect = document.querySelector<HTMLSelectElement>('#round-select');
+  const prompt = document.querySelector<HTMLElement>('#sign-in-prompt');
+  const status = document.querySelector<HTMLElement>('#consultation-status');
+  const params = new URLSearchParams(location.search);
+  const selectedParam = params.get('policyId') || params.get('policy');
+
+  roundSelect?.addEventListener('change', () => {
+    const nextRound = roundSelect.value;
+    if (nextRound) {
+      location.href = `/consultations/?roundId=${encodeURIComponent(nextRound)}`;
+    }
+  });
+
+  const session = await fetch('/api/session', { credentials: 'same-origin' }).then((response) => response.json()).catch(() => null);
+  if (session?.identity && form) {
+    form.hidden = false;
+    if (prompt) prompt.hidden = true;
+  }
+
+  if (selectedParam && form) {
+    const selection = form.elements.namedItem('policyId') as HTMLSelectElement;
+    const option = [...selection.options].find(
+      (item) => item.value === selectedParam || item.textContent?.includes(selectedParam)
+    );
+    if (option) selection.value = option.value;
+  }
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!form.reportValidity() || !status) return;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const policyId = String(values.policyId);
+    const roundId = String(values.roundId || form.dataset.roundId || 'first-priority-policy-round-2026');
+    const selection = form.elements.namedItem('policyId') as HTMLSelectElement;
+    const request = {
+      roundId,
+      policyId,
+      policyRevisionId: selection.selectedOptions[0]?.dataset.revision,
+      kind: values.kind,
+      title: values.title,
+      body: values.body,
+    };
+    status.textContent = 'Submitting consultation contribution…';
+    const response = await fetch('/api/consultations', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    const result = await response.json().catch(() => ({}));
+    status.textContent = response.ok
+      ? 'Thanks. Your contribution has been submitted for review.'
+      : (result.error ?? 'Could not submit feedback. Try again.');
+    if (response.ok) form.reset();
+  });
+</script>
+<style>
+  .round-selector{margin:0 0 1.25rem}
+  .round-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:.75rem}
+  .round-tab{display:flex;flex-direction:column;gap:.25rem;padding:1rem 1.2rem;background:#fff;border:1px solid #ded6e7;border-radius:.7rem;color:#231631;text-decoration:none;transition:border-color .15s ease,background .15s ease}
+  .round-tab:hover{border-color:#32105a;background:#faf8fc}
+  .round-tab--active{border:2px solid #32105a;background:#f2eef9}
+  .round-tab__status{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#54465f}
+  .round-panel{margin:0 0 2rem;padding:clamp(1.4rem,4vw,2.5rem);background:#f2eef9;border-radius:.9rem}.round-panel h2{margin:.1rem 0 .6rem}.round-panel>div:first-child>p:last-child{max-width:68ch;color:#54465f;line-height:1.65}
+  .round-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-top:1.8rem}.round-grid--compact{grid-template-columns:repeat(auto-fit,minmax(18rem,1fr))}.round-grid article{padding:1.1rem;background:white;border-radius:.65rem}.round-grid span{font-size:.75rem;font-weight:700;color:#54465f;text-transform:uppercase;letter-spacing:.05em}.round-grid h3{margin:.55rem 0 .25rem;font-size:1.2rem}.round-grid h3 a{color:inherit;text-decoration:none}.round-grid h3 a:hover{text-decoration:underline}.round-grid p{margin:0;color:#54465f;font-size:.92rem;line-height:1.5}.schedule-note{margin:1.1rem 0 0;color:#54465f;font-size:.9rem}
+  .submission-panel{display:grid;grid-template-columns:.85fr 1.15fr;gap:clamp(2rem,6vw,5rem)}.submission-copy h2{margin:.1rem 0 .7rem}.submission-copy>p:not(.eyebrow){max-width:44ch;color:#54465f;line-height:1.7}.consultation-form{padding:1.5rem;background:#fff;border:1px solid #ded6e7;border-radius:.85rem}.consultation-form[hidden]{display:none}.consultation-form small{color:#54465f;font-weight:400}.form-status{margin-bottom:0}
+  .discussion-section{border-top:1px solid #ded6e7}.discussion-header{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;margin-bottom:1.25rem}.discussion-header h2{margin:.1rem 0 0}.discussion-count{color:#54465f;font-weight:600;font-size:.9rem}
+  .discussion-list{display:grid;gap:1rem}.discussion-card{padding:1.3rem 1.4rem;background:#fff;border:1px solid #ded6e7;border-radius:.75rem}.discussion-card__meta{display:flex;flex-wrap:wrap;gap:.5rem 1rem;font-size:.82rem;color:#54465f;margin-bottom:.5rem}.discussion-card h3{margin:.2rem 0 .45rem;font-size:1.2rem}.discussion-card__body{margin:0;color:#281a36;line-height:1.6}.discussion-card__response{margin:.75rem 0 0;padding:.65rem .85rem;background:#f2eef9;border-left:3px solid #32105a;border-radius:.35rem;font-size:.9rem;color:#392a49}
+  .kind-badge{display:inline-block;padding:.12rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:#e2d4f8;color:#32105a}.kind-badge--amendment{background:#d4f4f6;color:#0e4f55}.kind-badge--alternative{background:#fdecc8;color:#664300}
+  .empty-state{padding:1.4rem;background:#f2eef9;border-radius:.75rem;color:#54465f}
+  @media(max-width:850px){.round-grid{grid-template-columns:repeat(2,1fr)}.submission-panel{grid-template-columns:1fr}.discussion-header{flex-direction:column;align-items:flex-start}}@media(max-width:520px){.round-grid{grid-template-columns:1fr}.round-grid article{padding:.9rem}}
+</style>

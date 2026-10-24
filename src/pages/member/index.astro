@@ -1,0 +1,205 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PreviewNotice from '../../components/PreviewNotice.astro';
+import { platformEnv } from '../../lib/platform/http.ts';
+const preview = platformEnv(Astro.locals).APP_MODE === 'preview';
+---
+<SiteLayout title="Member portal · Fusion" description="Sign in to participate in member policy consultations and ballots." noIndex>
+  <PreviewNotice slot="notice" />
+  <div class="page-wrap member-page">
+    <header class="page-intro">
+      <p class="eyebrow">Member sign in</p>
+      <h1>Take part in the decisions.</h1>
+      <p>Sign in to share feedback on proposals, suggest changes and vote on decisions that are open to members.</p>
+    </header>
+    <section id="signin-panel" class="panel" aria-labelledby="signin-title">
+      <div>
+        <p class="eyebrow">Member account</p>
+        <h2 id="signin-title">Sign in to continue</h2>
+        <p>Choose an account to continue. You can return to your comments and votes at any time.</p>
+      </div>
+      {preview ? <form id="signin-form">
+        <label class="field">
+          <span>Synthetic preview account</span>
+          <select name="memberId" required>
+            <option value="preview-member-01">Preview member 1</option>
+            <option value="preview-member-02">Preview member 2</option>
+            <option value="preview-admin-01">Preview administrator</option>
+          </select>
+        </label>
+        <button class="button" type="submit">Sign in</button>
+        <p id="signin-status" class="form-status" role="status" aria-live="polite"></p>
+      </form> : <div><button id="google-signin" class="button" type="button">Sign in with Google</button><p>After you sign in, an authorised administrator checks your party membership. You can browse while verification is pending.</p><p id="google-status" role="status"></p></div>}
+    </section>
+    <section id="dashboard" class="dashboard" hidden aria-labelledby="dashboard-title">
+      <div class="dashboard-head">
+        <div>
+          <p class="eyebrow" id="identity-eyebrow">Active session</p>
+          <h2 id="dashboard-title">Your policy review activity</h2>
+        </div>
+        <div class="dashboard-actions">
+          <a id="admin-link" class="button button--outline" href="/admin/" hidden>Open administration →</a>
+          <button id="signout" class="button button--outline" type="button">Sign out</button>
+        </div>
+      </div>
+      <p id="membership-status" class="callout" role="status"></p>
+      <div class="quick-links">
+        <a class="text-link" href="/policies/">Browse policy areas →</a>
+        <a class="text-link" href="/consultations/">Comment or suggest a change →</a>
+        <a class="text-link" href="/ballots/">See member decisions →</a>
+      </div>
+      <div id="dashboard-content" class="dashboard-content"><p>Loading your activity…</p></div>
+    </section>
+  </div>
+</SiteLayout>
+<script>
+  import { createAuthClient } from 'better-auth/client';
+  const authClient = createAuthClient();
+  document.querySelector('#google-signin')?.addEventListener('click', async () => {
+    const status = document.querySelector<HTMLElement>('#google-status')!;
+    try { const result = await authClient.signIn.social({ provider: 'google', callbackURL: '/member/' }); if (result.error) status.textContent = 'Google sign-in is unavailable. Please try again later.'; }
+    catch { status.textContent = 'Google sign-in is unavailable. Please try again later.'; }
+  });
+  const panel = document.querySelector<HTMLElement>('#signin-panel');
+  const dashboard = document.querySelector<HTMLElement>('#dashboard');
+  const form = document.querySelector<HTMLFormElement>('#signin-form');
+  const status = document.querySelector<HTMLElement>('#signin-status');
+  const content = document.querySelector<HTMLElement>('#dashboard-content');
+  const adminLink = document.querySelector<HTMLElement>('#admin-link');
+  const eyebrow = document.querySelector<HTMLElement>('#identity-eyebrow');
+
+  async function refresh() {
+    const session = await fetch('/api/session', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => null);
+    if (!session?.identity || !dashboard || !panel) return;
+    const membership = document.querySelector<HTMLElement>('#membership-status');
+    if (membership) membership.textContent = session.membershipStatus === 'verified' ? 'Membership confirmed. You can participate in open consultations and authorised ballots.' : session.membershipStatus === 'preview' ? 'Synthetic preview account. Activity is for demonstration only.' : session.membershipStatus === 'suspended' ? 'Participation is suspended. Contact an Engage administrator about your membership verification.' : 'Verification pending. You can browse while an administrator checks your party membership. Comments, amendments and voting become available after confirmation.';
+    panel.hidden = true;
+    dashboard.hidden = false;
+    if (eyebrow) eyebrow.textContent = 'Signed in';
+    dashboard.querySelector('#dashboard-title')!.textContent = 'Your participation';
+    if (session.identity.roles?.some((role: string) => ['administrator', 'moderator'].includes(role)) && adminLink) {
+      adminLink.hidden = false;
+    }
+
+    const [submissionsResponse, ballotsResponse] = await Promise.all([
+      fetch('/api/consultations', { credentials: 'same-origin' }),
+      fetch('/api/ballots', { credentials: 'same-origin' }),
+    ]);
+    const submissionsData = await submissionsResponse.json().catch(() => ({}));
+    const ballotData = await ballotsResponse.json().catch(() => ({}));
+    if (!content) return;
+    content.replaceChildren();
+
+    const submissionsHeading = document.createElement('h3');
+    submissionsHeading.textContent = 'Your consultation submissions & amendment proposals';
+    content.append(submissionsHeading);
+    const submissions = submissionsData.submissions ?? [];
+    if (!submissions.length) {
+      const p = document.createElement('p');
+      p.textContent = 'You have not submitted any consultation feedback yet. Visit Consultations to comment or propose an amendment.';
+      content.append(p);
+    }
+    for (const submission of submissions) {
+      const row = document.createElement('article');
+      row.className = 'activity-row';
+      const left = document.createElement('div');
+      const title = document.createElement('strong');
+      const kinds: Record<string, string> = {
+        comment: 'Comment',
+        amendment: 'Proposed amendment',
+        alternative: 'Alternative direction',
+      };
+      title.textContent = submission.title || kinds[submission.kind] || 'Feedback';
+      const bodyPreview = document.createElement('p');
+      bodyPreview.className = 'activity-body';
+      bodyPreview.textContent = submission.body;
+      left.append(title, bodyPreview);
+      if (submission.moderatorResponse) {
+        const modNote = document.createElement('p');
+        modNote.className = 'activity-mod';
+        modNote.textContent = `Moderator note: ${submission.moderatorResponse}`;
+        left.append(modNote);
+      }
+
+      const meta = document.createElement('span');
+      const statuses: Record<string, string> = {
+        pending: 'Awaiting review',
+        accepted: 'Accepted & published',
+        'needs-changes': 'Published (changes requested)',
+        declined: 'Declined',
+      };
+      const state = statuses[submission.status] || submission.status;
+      meta.textContent = `${state} · ${new Date(submission.createdAt).toLocaleDateString('en-AU', { dateStyle: 'medium' })}`;
+      row.append(left, meta);
+      content.append(row);
+    }
+
+    const ballotsHeading = document.createElement('h3');
+    ballotsHeading.textContent = 'Open & completed policy ballots';
+    content.append(ballotsHeading);
+    const ballots = (ballotData.ballots ?? []).filter((b: any) => b.status === 'open' || b.status === 'closed');
+    if (!ballots.length) {
+      const p = document.createElement('p');
+      p.textContent = 'No open or closed ballots found.';
+      content.append(p);
+    }
+    for (const ballot of ballots) {
+      const row = document.createElement('article');
+      row.className = 'activity-row';
+      const left = document.createElement('div');
+      const title = document.createElement('a');
+      title.href = `/ballots/#${encodeURIComponent(ballot.ballotId)}`;
+      title.className = 'activity-title-link';
+      title.textContent = ballot.title;
+      const rev = document.createElement('p');
+      rev.className = 'activity-body';
+      rev.textContent = ballot.status === 'open' ? 'Voting is open' : 'Decision closed';
+      left.append(title, rev);
+
+      const response = await fetch(`/api/ballots/${encodeURIComponent(ballot.ballotId)}/participation`, {
+        credentials: 'same-origin',
+      });
+      const participation = await response.json().catch(() => ({}));
+      const state = document.createElement('span');
+      if (participation.participated) {
+        const choiceLabel = participation.choice === 'approve' ? 'Approve' : 'Do Not Approve';
+        state.textContent = `Voted: ${choiceLabel}`;
+      } else {
+        state.textContent = ballot.status === 'open' ? 'Not voted yet — open for voting' : 'Did not vote';
+      }
+      row.append(left, state);
+      content.append(row);
+    }
+  }
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!status || !form.reportValidity()) return;
+    status.textContent = 'Starting preview session…';
+    const memberId = String(new FormData(form).get('memberId'));
+    const response = await fetch('/api/preview/session', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ memberId }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      status.textContent = result.error ?? 'Preview sign-in is unavailable.';
+      return;
+    }
+    status.textContent = 'Signed in.';
+    await refresh();
+  });
+
+  document.querySelector<HTMLButtonElement>('#signout')?.addEventListener('click', async () => {
+    await fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' });
+    location.reload();
+  });
+
+  await refresh();
+</script>
+<style>
+  .member-page{max-width:74rem;padding-bottom:5rem}.panel{display:grid;grid-template-columns:1fr minmax(16rem,.8fr);gap:2.5rem;padding:clamp(1.4rem,4vw,2.5rem);border:1px solid #ded6e7;border-radius:.9rem;background:#fff}.panel h2,.dashboard h2{margin:.1rem 0 .7rem}.panel p:not(.eyebrow){max-width:52ch;color:#54465f;line-height:1.65}.panel form{align-self:center}.panel[hidden],.dashboard[hidden]{display:none}.dashboard{padding-block:1rem 4rem}.dashboard-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.2rem}.dashboard-actions{display:flex;flex-wrap:wrap;gap:.65rem}.quick-links{display:flex;flex-wrap:wrap;gap:.75rem 1.5rem;margin:1rem 0 1.5rem;padding:1rem 1.25rem;background:#f2eef9;border-radius:.65rem}.dashboard-content{padding-top:.5rem}.dashboard-content h3{font-family:Outfit,sans-serif;font-size:1.15rem;margin:2rem 0 .75rem}.activity-row{display:flex;align-items:flex-start;justify-content:space-between;gap:1.2rem;padding:1rem 0;border-bottom:1px solid #ded6e7}.activity-row span{color:#54465f;font-size:.88rem;white-space:nowrap}.activity-body{margin:.3rem 0 0;color:#54465f;font-size:.92rem;line-height:1.5;max-width:58ch}.activity-mod{margin:.35rem 0 0;color:#32105a;font-size:.88rem;font-weight:500}.activity-title-link{font-weight:700;color:#32105a;text-decoration:none}.activity-title-link:hover{text-decoration:underline}
+  @media(max-width:700px){.panel{grid-template-columns:1fr}.dashboard-head{align-items:flex-start;flex-direction:column}.activity-row{align-items:flex-start;flex-direction:column}.activity-row span{white-space:normal}}
+</style>
