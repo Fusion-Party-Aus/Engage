@@ -1,0 +1,58 @@
+name: Application checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'fix/**', 'codex/**']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOVERNANCE_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
+      AUTH_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: pnpm install --frozen-lockfile
+      - name: Start isolated MongoDB replica set
+        run: |
+          docker run -d --name engage-ci-mongo -p 127.0.0.1:27017:27017 mongo:8.0 --replSet engage-ci --bind_ip_all
+          node --input-type=module <<'JS'
+          import { MongoClient } from 'mongodb';
+          const client = new MongoClient(process.env.GOVERNANCE_TEST_MONGODB_URI, { serverSelectionTimeoutMS: 1000 });
+          try {
+            let ready = false;
+            for (let attempt = 0; attempt < 60; attempt++) {
+              try {
+                await client.connect();
+                const admin = client.db('admin');
+                const hello = await admin.command({ hello: 1 });
+                if (!hello.setName) await admin.command({ replSetInitiate: { _id: 'engage-ci', members: [{ _id: 0, host: 'localhost:27017' }] } });
+                if (hello.setName && hello.isWritablePrimary) { ready = true; break; }
+              } catch (error) { if (attempt === 59) throw error; }
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            if (!ready) throw new Error('MongoDB replica set never became writable');
+          } finally { await client.close(); }
+          JS
+      - run: pnpm check
+      - name: Node, MongoDB governance and Python checks
+        run: pnpm test
+      - name: Real MongoDB vote cutoff regressions
+        run: pnpm test:cutoff
+      - name: Controlled Google authentication and membership API checks
+        run: pnpm test:auth
+      - run: pnpm build
+      - name: MongoDB logs on failure
+        if: failure()
+        run: docker logs engage-ci-mongo
