@@ -32,6 +32,7 @@ test('future programmes and standalone policies retain explicit taxonomy', () =>
   assert.deepEqual(validateTaxonomy({}, future.value), future);
   assert.ok('error' in validateTaxonomy({ pillar: 'Orphan pillar' }));
   assert.ok('error' in validateTaxonomy({ domain: 'RECLAIM OUR ECONOMY' }));
+  assert.ok('error' in validateTaxonomy({ domain: 'Reclaim Our Economy' }));
   assert.equal(policyTaxonomy({ policyId: 'FUTURE-1', domain: 'Transport' }).programme, null);
   assert.deepEqual(taxonomyMigrationPatch({ ...catalogue[0], taxonomyVersion: 1, domain: 'Social security' }), {});
 });

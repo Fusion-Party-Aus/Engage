@@ -23,6 +23,7 @@ const subjectGroups: [string, number[]][] = [
 const subjects = new Map<string, string>(subjectGroups.flatMap(([subject, ids]) => ids.map(id => [`POL-${String(id).padStart(3, '0')}`, subject] as const)));
 const headings = new Set(catalogue.map(entry => entry.domain));
 const pillars = new Set(catalogue.map(entry => entry.division));
+const editorialLabels = new Set([...pillars, ...headings].map(label => label.toLowerCase()));
 
 /** Read old records without modifying their wording, IDs or public route metadata. */
 export function policyTaxonomy(record: LegacyTaxonomy): PolicyTaxonomy {
@@ -56,6 +57,6 @@ export function validateTaxonomy(input: Record<string, unknown>, previous?: Lega
     value[key] = typeof field === 'string' ? field.trim() || null : null;
   }
   if (!value.programme && (value.pillar || value.editorialHeading)) return { error: 'Choose a programme for an editorial pillar or heading.' };
-  if (value.domain && (pillars.has(value.domain) || headings.has(value.domain))) return { error: 'Use a subject domain rather than a Reclaim editorial pillar or heading.' };
+  if (value.domain && editorialLabels.has(value.domain.toLowerCase())) return { error: 'Use a subject domain rather than a Reclaim editorial pillar or heading.' };
   return { value };
 }
