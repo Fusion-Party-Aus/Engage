@@ -4,6 +4,7 @@ import { renderDetailsToHtml } from "../../../../lib/platform/catalogue.ts";
 import { validPolicyId, validatePolicyRevisionInput } from "../../../../lib/platform/policy-revisions.mjs";
 import { json, platformEnv, readJson, requireSameOrigin } from "../../../../lib/platform/http.ts";
 import { consumeRateLimit } from "../../../../lib/platform/rate-limit.ts";
+import type { BallotRecord } from "../../../../lib/platform/ballots.ts";
 import type { RuntimeLocals } from "../../../../lib/platform/types.ts";
 
 export const prerender = false;
@@ -15,6 +16,13 @@ const allowedCategories = new Set([
   "draft-derived",
   "unverified",
 ]);
+
+type DraftBallot = BallotRecord & {
+  choices: string[];
+  mandatoryDoNotApproveReason: boolean;
+  createdAt: Date;
+  createdBy: string;
+};
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "proposal";
@@ -112,8 +120,8 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
       );
     }
     const defaultBallotId = `ballot-${slugify(policyId)}`;
-    const ballots = db.collection("ballots");
-    let draftBallot = await ballots.findOne({ ballotId: defaultBallotId }, { projection: { _id: 0 } });
+    const ballots = db.collection<DraftBallot>("ballots");
+    let draftBallot: DraftBallot | null = await ballots.findOne({ ballotId: defaultBallotId }, { projection: { _id: 0 } });
     if (!draftBallot) {
       draftBallot = {
         ballotId: defaultBallotId,
@@ -121,6 +129,7 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
         policyRevisionId: revisionId,
         ...(roundId ? { roundId } : {}),
         title: parsed.value.title,
+        summary: parsed.value.statement,
         domain: parsed.value.domain,
         status: "draft",
         opensAt: new Date(now.getTime() + 7 * 24 * 60 * 60_000),

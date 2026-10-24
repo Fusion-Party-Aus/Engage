@@ -15,7 +15,7 @@ export function validateVoteChoice(choice) {
 }
 
 export function formalVotingIsEnabled(env) {
-  return env.APP_MODE === "production" && (env.FORMAL_BALLOTS_ENABLED === "true" || env.BINDING_BALLOTS_ENABLED === "true");
+  return env.APP_MODE === "production" && env.FORMAL_BALLOTS_ENABLED === "true";
 }
 
 export async function upsertCurrentVote(votes, selection, choice, now, extra = {}) {

@@ -1,4 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
+import { membershipEligibility } from "./membership.ts";
 import type { PlatformIdentity } from "./types.ts";
 
 export type SubmissionKind = "comment" | "amendment" | "alternative";
@@ -22,7 +23,9 @@ export function validateSubmission(value: Record<string, unknown>): Consultation
 }
 
 export async function createSubmission(db: Db, identity: PlatformIdentity, input: ConsultationSubmissionInput, now = new Date()): Promise<string> {
-  const round = await db.collection<{ roundId: string; status: string; opensAt: Date; closesAt: Date; policyIds?: unknown }>("consultation_rounds").findOne({ roundId: input.roundId, status: "open" });
+  if (identity.source !== "synthetic" && (identity.source !== "engage" || !(await membershipEligibility(db, identity.memberId)).eligible)) throw new Error("Membership verification is required before participation.");
+  const round = await db.collection<{ roundId: string; status: string; opensAt: Date; closesAt: Date; policyIds?: unknown; syntheticFixture?: boolean }>("consultation_rounds").findOne({ roundId: input.roundId, status: "open" });
+  if (identity.source === "engage" && round?.syntheticFixture) throw new Error("Synthetic consultations cannot accept real member participation.");
   if (!round || !(round.opensAt instanceof Date) || !(round.closesAt instanceof Date) || now < round.opensAt || now >= round.closesAt) throw new Error("This consultation is not open for submissions.");
   if (!Array.isArray(round.policyIds) || !round.policyIds.includes(input.policyId)) {
     throw new Error("This policy is not included in the selected consultation round.");

@@ -70,13 +70,19 @@ async function verifyPreviewSession(request: Request, env: PlatformEnv): Promise
 
 export interface IdentityResolution {
   identity: PlatformIdentity | null;
-  unavailableReason?: "underground_adapter_not_configured";
+  unavailableReason?: "authentication_unavailable";
 }
 
-/** Production integration seam. No supported Underground login/eligibility API was found; fail closed. */
+/** Better Auth's durable user ID is the application's stable member ID. */
 export async function resolveIdentity(request: Request, env: PlatformEnv): Promise<IdentityResolution> {
   if (env.APP_MODE === "preview") return { identity: await verifyPreviewSession(request, env) };
-  return { identity: null, unavailableReason: "underground_adapter_not_configured" };
+  const { getAuth, loginConfigured } = await import("./better-auth.ts");
+  if (!loginConfigured(env)) return { identity: null };
+  const session = await (await getAuth(env)).api.getSession({ headers: request.headers });
+  if (!session) return { identity: null };
+  const identity: PlatformIdentity = { memberId: session.user.id, source: "engage", roles: [] };
+  identity.roles = await platformRoles(identity, env);
+  return { identity };
 }
 
 export async function platformRoles(identity: PlatformIdentity, env: PlatformEnv): Promise<PlatformRole[]> {
@@ -84,13 +90,6 @@ export async function platformRoles(identity: PlatformIdentity, env: PlatformEnv
   const db = await getDatabase(env);
   const roles = await db.collection<{ role: PlatformRole }>("application_roles").find({ memberId: identity.memberId }).project<{ role: PlatformRole }>({ role: 1, _id: 0 }).toArray();
   return roles.map(({ role }) => role);
-}
-
-export async function verifyVotingEligibility(identity: PlatformIdentity, env: PlatformEnv): Promise<{ eligible: boolean; checkedAt: Date; source: string }> {
-  const checkedAt = new Date();
-  if (identity.source === "synthetic" && env.APP_MODE === "preview") return { eligible: true, checkedAt, source: "synthetic_preview" };
-  // Deliberately no email-based or guessed fallback. Replace only when Underground supplies a supported interface.
-  return { eligible: false, checkedAt, source: "underground_adapter_unavailable" };
 }
 
 export const previewSessionCookieName = SESSION_COOKIE;

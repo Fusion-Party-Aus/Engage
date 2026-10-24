@@ -1,9 +1,9 @@
-import { ensureIndexes, getDatabase } from "../../../../lib/platform/database";
-import { platformRoles, resolveIdentity } from "../../../../lib/platform/auth";
+import { ensureIndexes, getDatabase } from "../../../../lib/platform/database.ts";
+import { platformRoles, resolveIdentity } from "../../../../lib/platform/auth.ts";
 import { validPolicyId } from "../../../../lib/platform/policy-revisions.mjs";
-import { json, platformEnv, readJson, requireSameOrigin } from "../../../../lib/platform/http";
-import { consumeRateLimit } from "../../../../lib/platform/rate-limit";
-import type { RuntimeLocals } from "../../../../lib/platform/types";
+import { json, platformEnv, readJson, requireSameOrigin } from "../../../../lib/platform/http.ts";
+import { consumeRateLimit } from "../../../../lib/platform/rate-limit.ts";
+import type { RuntimeLocals } from "../../../../lib/platform/types.ts";
 
 export const prerender = false;
 
@@ -41,7 +41,7 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
     }
     const revision = await db.collection("policy_revisions").findOne(
       { policyId: proposalId, revisionId: policyRevisionId },
-      { projection: { _id: 0, title: 1, domain: 1, syntheticFixture: 1 } },
+      { projection: { _id: 0, title: 1, statement: 1, domain: 1, syntheticFixture: 1 } },
     );
     if (!revision) {
       return json({ error: "The specified immutable policy revision does not exist for this proposal." }, 400);
@@ -59,6 +59,7 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
       policyRevisionId,
       ...(roundId ? { roundId } : {}),
       title: typeof body.title === "string" && body.title.trim() ? body.title.trim() : revision.title,
+      summary: typeof body.summary === "string" && body.summary.trim() ? body.summary.trim() : revision.statement,
       domain: revision.domain,
       status,
       opensAt,

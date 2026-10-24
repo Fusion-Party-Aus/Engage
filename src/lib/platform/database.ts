@@ -54,6 +54,7 @@ export async function ensureIndexes(db: Db): Promise<void> {
     db.collection("ballots").createIndex({ proposalId: 1, status: 1 }),
     db.collection("ballots").createIndex({ status: 1, opensAt: 1, closesAt: 1 }),
     db.collection("votes").createIndex({ ballotId: 1, memberId: 1 }, { unique: true, name: "one_current_vote_per_member_ballot" }),
+    db.collection("memberships").createIndex({ memberId: 1 }, { unique: true, name: "membership_member_unique" }),
     db.collection("application_roles").createIndex({ memberId: 1, role: 1 }, { unique: true, name: "member_role_unique" }),
     db.collection("operational_audit").createIndex({ createdAt: -1 }),
     db.collection("mutation_rate_limits").createIndex({ scope: 1, subjectId: 1, window: 1 }, { unique: true, name: "rate_limit_window_unique" }),
@@ -66,4 +67,12 @@ export async function ensureIndexes(db: Db): Promise<void> {
     indexesByDatabase.delete(db);
     throw error;
   }
+}
+
+/** Close the shared pool when an integration runner or application worker shuts down. */
+export async function closeDatabase(): Promise<void> {
+  const pending = clientPromise;
+  clientPromise = undefined;
+  clientUri = undefined;
+  if (pending) await (await pending).close();
 }

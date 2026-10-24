@@ -1,14 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { castVote, closeExpiredBallots, getBallotResults, type BallotRecord } from "./ballots.ts";
+import { castVote, closeExpiredBallots, finalizeBallot, getBallotResults, type BallotRecord } from "./ballots.ts";
+import { validateOpenBallotSchedule } from "./draft-admin.mjs";
 import type { PlatformIdentity } from "./types.ts";
 
-function createFakeVoteDb(initialBallots: BallotRecord[]) {
+function createFakeVoteDb(initialBallots: BallotRecord[], initialRevisions: Record<string, unknown>[] = []) {
   const ballots = initialBallots.map((b) => ({ ...b }));
+  const revisions = initialRevisions.map((r) => ({ ...r }));
   const votes = new Map<string, Record<string, unknown>>();
   const audits: Record<string, unknown>[] = [];
   return {
     ballots,
+    revisions,
     votes,
     audits,
     collection(name: string) {
@@ -35,6 +38,26 @@ function createFakeVoteDb(initialBallots: BallotRecord[]) {
       }
       if (name === "ballots") {
         return {
+          find(filter: { status?: string; closesAt?: { $lte: Date } }) {
+            return {
+              async toArray() {
+                return ballots.filter(
+                  (b) =>
+                    (!filter.status || b.status === filter.status) &&
+                    (!filter.closesAt || b.closesAt <= filter.closesAt.$lte),
+                );
+              },
+            };
+          },
+          async findOne(filter: { ballotId: string }) {
+            return ballots.find((b) => b.ballotId === filter.ballotId) ?? null;
+          },
+          async updateOne(filter: { ballotId: string }, update: { $set: Record<string, unknown> }) {
+            const target = ballots.find((b) => b.ballotId === filter.ballotId);
+            if (!target) return { modifiedCount: 0 };
+            Object.assign(target, update.$set);
+            return { modifiedCount: 1 };
+          },
           async updateMany(filter: { status: string; closesAt: { $lte: Date } }, update: { $set: { status: string; closedAt: Date } }) {
             let modifiedCount = 0;
             for (const b of ballots) {
@@ -45,6 +68,19 @@ function createFakeVoteDb(initialBallots: BallotRecord[]) {
               }
             }
             return { modifiedCount };
+          },
+        };
+      }
+      if (name === "policy_revisions") {
+        return {
+          async findOne(filter: { policyId: string; revisionId: string }) {
+            return revisions.find((r) => r.policyId === filter.policyId && r.revisionId === filter.revisionId) ?? null;
+          },
+          async updateOne(filter: { policyId: string; revisionId: string }, update: { $set: Record<string, unknown> }) {
+            const target = revisions.find((r) => r.policyId === filter.policyId && r.revisionId === filter.revisionId);
+            if (!target) return { modifiedCount: 0 };
+            Object.assign(target, update.$set);
+            return { modifiedCount: 1 };
           },
         };
       }
@@ -99,17 +135,115 @@ test("unified ballot engine records votes in votes collection, tallies strict ma
   // Safeguard: synthetic identity cannot vote when APP_MODE is production
   await assert.rejects(
     () => castVote(db as never, member1, { ...ballot, status: "open" }, "approve", { APP_MODE: "production", FORMAL_BALLOTS_ENABLED: "true" }, voteTime),
-    /Underground member identity/,
+    /Engage member identity/,
   );
 
   // Safeguard: Underground identity cannot vote when binding ballots are disabled or Underground adapter is unavailable
   const undergroundMember: PlatformIdentity = { memberId: "ug-101", source: "underground", roles: ["member"] };
   await assert.rejects(
     () => castVote(db as never, undergroundMember, { ...ballot, status: "open" }, "approve", { APP_MODE: "production", FORMAL_BALLOTS_ENABLED: "false" }, voteTime),
-    /Binding ballots are disabled/,
+    /Engage member identity/,
   );
   await assert.rejects(
     () => castVote(db as never, undergroundMember, { ...ballot, status: "open" }, "approve", { APP_MODE: "production", FORMAL_BALLOTS_ENABLED: "true" }, voteTime),
-    /eligibility could not be confirmed/,
+    /Engage member identity/,
   );
+});
+
+test("automatic deadline closure and administrative closure use the same idempotent finalisation and publish approved revisions", async () => {
+  const deadlineBallot: BallotRecord = {
+    ballotId: "ballot-deadline-01",
+    proposalId: "POL-010",
+    policyRevisionId: "POL-010:v2",
+    title: "Make It Easier to Buy and Move Home",
+    status: "open",
+    opensAt: new Date("2026-10-20T00:00:00Z"),
+    closesAt: new Date("2026-10-24T00:00:00Z"),
+  };
+  const adminBallot: BallotRecord = {
+    ballotId: "ballot-admin-01",
+    proposalId: "POL-011",
+    policyRevisionId: "POL-011:v2",
+    title: "Make Housing Tax Fair Across Generations",
+    status: "open",
+    opensAt: new Date("2026-10-20T00:00:00Z"),
+    closesAt: new Date("2026-10-28T00:00:00Z"),
+  };
+  const db = createFakeVoteDb(
+    [deadlineBallot, adminBallot],
+    [
+      { policyId: "POL-010", revisionId: "POL-010:v2", title: "Make It Easier to Buy and Move Home" },
+      { policyId: "POL-011", revisionId: "POL-011:v2", title: "Make Housing Tax Fair Across Generations" },
+    ],
+  );
+  const member1: PlatformIdentity = { memberId: "preview-member-01", source: "synthetic", roles: ["member"] };
+  const voteTime = new Date("2026-10-22T12:00:00Z");
+
+  await castVote(db as never, member1, deadlineBallot, "approve", { APP_MODE: "preview" }, voteTime);
+  await castVote(db as never, member1, adminBallot, "approve", { APP_MODE: "preview" }, voteTime);
+
+  // 1. Automatic deadline closure via closeExpiredBallots
+  const closeNow = new Date("2026-10-25T00:00:00Z");
+  const closedCount = await closeExpiredBallots(db as never, closeNow);
+  assert.equal(closedCount, 1);
+
+  const deadlineRev = db.revisions.find((r) => r.revisionId === "POL-010:v2")!;
+  assert.ok(deadlineRev.publishedAt instanceof Date, "Deadline closure must publish the approved revision");
+  assert.equal(deadlineRev.approvedByBallotId, "ballot-deadline-01");
+  assert.equal(db.ballots[0]!.outcome, "approved");
+  assert.equal(db.ballots[0]!.publishedRevisionId, "POL-010:v2");
+
+  // 2. Administrative closure via finalizeBallot
+  const adminFinalized = await finalizeBallot(db as never, "ballot-admin-01", {
+    actorId: "preview-admin-01",
+    actorSource: "synthetic",
+    now: closeNow,
+    closeReason: "administrative",
+  });
+  assert.ok(adminFinalized);
+  assert.equal(adminFinalized.outcome, "approved");
+  assert.equal(adminFinalized.publishedRevisionId, "POL-011:v2");
+  assert.equal(adminFinalized.alreadyFinalized, false);
+
+  const adminRev = db.revisions.find((r) => r.revisionId === "POL-011:v2")!;
+  assert.ok(adminRev.publishedAt instanceof Date, "Administrative closure must publish the approved revision");
+  assert.equal(adminRev.approvedByBallotId, "ballot-admin-01");
+
+  // 3. Idempotency: calling finalizeBallot again on either ballot does not duplicate audit events or overwrite timestamps
+  const auditCountBefore = db.audits.length;
+  const repeatDeadline = await finalizeBallot(db as never, "ballot-deadline-01", { now: new Date("2026-10-26T00:00:00Z") });
+  const repeatAdmin = await finalizeBallot(db as never, "ballot-admin-01", { now: new Date("2026-10-26T00:00:00Z") });
+  assert.equal(repeatDeadline?.alreadyFinalized, true);
+  assert.equal(repeatAdmin?.alreadyFinalized, true);
+  assert.equal(db.audits.length, auditCountBefore, "Repeated finalisation must be idempotent and add no new audit events");
+});
+
+test("opening a ballot requires an explicitly configured valid voting window and rejects expired schedules", () => {
+  const now = new Date("2026-10-24T12:00:00Z");
+
+  // Expired ballot schedule must be rejected, never silently extended
+  const expired = validateOpenBallotSchedule(
+    {},
+    { opensAt: new Date("2026-10-01T00:00:00Z"), closesAt: new Date("2026-10-20T00:00:00Z") },
+    now,
+  );
+  assert.ok("error" in expired);
+  assert.match(expired.error ?? "", /expired/);
+
+  // Future opening time that has not started yet must be rejected unless an active window is configured
+  const notYetStarted = validateOpenBallotSchedule(
+    {},
+    { opensAt: new Date("2026-11-01T00:00:00Z"), closesAt: new Date("2026-11-15T00:00:00Z") },
+    now,
+  );
+  assert.ok("error" in notYetStarted);
+  assert.match(notYetStarted.error ?? "", /before its configured opening time/);
+
+  // Explicit active voting window succeeds
+  const active = validateOpenBallotSchedule(
+    { opensAt: "2026-10-24T00:00:00Z", closesAt: "2026-10-31T00:00:00Z" },
+    { opensAt: new Date("2026-10-01T00:00:00Z"), closesAt: new Date("2026-10-20T00:00:00Z") },
+    now,
+  );
+  assert.equal("error" in active, false);
 });

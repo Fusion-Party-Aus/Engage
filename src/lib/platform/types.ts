@@ -8,19 +8,22 @@ export interface PlatformEnv {
   SESSION_SECRET?: string;
   PREVIEW_MEMBER_IDS?: string;
   PREVIEW_ADMIN_ID?: string;
-  BINDING_BALLOTS_ENABLED?: string;
   FORMAL_BALLOTS_ENABLED?: string;
+  BETTER_AUTH_URL?: string;
+  BETTER_AUTH_SECRET?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
 }
 
 export interface PlatformIdentity {
   memberId: string;
-  source: "synthetic" | "underground";
+  source: "synthetic" | "engage" | "underground";
   roles: PlatformRole[];
 }
 
 export interface EligibilityResult {
   eligible: boolean;
-  source: "synthetic" | "underground";
+  source: "synthetic" | "engage" | "underground";
   checkedAt: Date;
 }
 

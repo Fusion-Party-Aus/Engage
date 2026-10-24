@@ -150,20 +150,23 @@ test("Complete policy lifecycle & Engage-readiness: consultation -> amendment re
   assert.ok(rawVote, "Expected vote in unified votes collection");
   assert.equal("synthetic" in rawVote, false, "Vote record must not contain hardcoded synthetic flag");
 
-  // 7. Close the ballot and verify recorded decision & adopted policy revision in catalogue
+  // 7. Let the ballot expire at its deadline and verify automatic deadline closure finalises and publishes POL-077:v2-settled
   await db.collection("ballots").updateOne(
     { ballotId },
     {
       $set: {
-        status: "closed",
         closesAt: new Date(Date.now() - 1_000),
-        closedAt: new Date(),
       },
     }
   );
 
+  // Calling loadPolicyCatalogue triggers closeExpiredBallots(db), which must run idempotent finalizeBallot()
+  const updatedCatalogue = await loadPolicyCatalogue(previewEnv);
   const closedBallot = await db.collection<BallotRecord>("ballots").findOne({ ballotId });
   assert.ok(closedBallot);
+  assert.equal(closedBallot.status, "closed");
+  assert.equal(closedBallot.outcome, "approved");
+  assert.equal(closedBallot.publishedRevisionId, settledRevisionId);
   const results = await getBallotResults(db, closedBallot);
   assert.deepEqual(results, {
     approve: 2,
@@ -172,7 +175,13 @@ test("Complete policy lifecycle & Engage-readiness: consultation -> amendment re
     outcome: "approved",
   });
 
-  const updatedCatalogue = await loadPolicyCatalogue(previewEnv);
+  const publishedRevDoc = await db.collection("policy_revisions").findOne({
+    policyId: "POL-077",
+    revisionId: settledRevisionId,
+  });
+  assert.ok(publishedRevDoc?.publishedAt instanceof Date, "Automatic deadline closure must stamp publishedAt on the approved revision");
+  assert.equal(publishedRevDoc?.approvedByBallotId, ballotId);
+
   const pol077After = updatedCatalogue.find((p) => p.id === "POL-077");
   assert.ok(pol077After);
   assert.equal(pol077After.adoptedRevisionId, settledRevisionId);
@@ -344,9 +353,33 @@ test("Engage readiness & dynamic publication via application HTTP APIs for a new
   });
   assert.equal(pinRes.status, 200);
 
+  // Verify that attempting to open a ballot with an expired closing time or future opening time is rejected (never silently extended by 7 days)
+  const rejectedExpiredOpen = await patchBallot({
+    request: jsonReq("http://localhost:4321/api/admin/ballots/ballot-pol-078", "PATCH", adminCookie, {
+      status: "open",
+      opensAt: new Date(Date.now() - 14 * 24 * 3600_000).toISOString(),
+      closesAt: new Date(Date.now() - 24 * 3600_000).toISOString(),
+    }),
+    params: { ballotId: "ballot-pol-078" },
+    locals,
+  });
+  assert.equal(rejectedExpiredOpen.status, 400);
+
+  const rejectedUnconfiguredOpen = await patchBallot({
+    request: jsonReq("http://localhost:4321/api/admin/ballots/ballot-pol-078", "PATCH", adminCookie, {
+      status: "open",
+    }),
+    params: { ballotId: "ballot-pol-078" },
+    locals,
+  });
+  assert.equal(rejectedUnconfiguredOpen.status, 400);
+
+  // Open ballot with an explicitly configured valid voting window
   const openRes = await patchBallot({
     request: jsonReq("http://localhost:4321/api/admin/ballots/ballot-pol-078", "PATCH", adminCookie, {
       status: "open",
+      opensAt: new Date(Date.now() - 60_000).toISOString(),
+      closesAt: new Date(Date.now() + 7 * 24 * 3600_000).toISOString(),
     }),
     params: { ballotId: "ballot-pol-078" },
     locals,

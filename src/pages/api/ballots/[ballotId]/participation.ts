@@ -8,7 +8,7 @@ export const prerender = false;
 export async function GET({ request, params, locals }: { request: Request; params: { ballotId: string }; locals: RuntimeLocals }): Promise<Response> {
   const env = platformEnv(locals);
   const resolution = await resolveIdentity(request, env);
-  if (!resolution.identity) return json({ error: resolution.unavailableReason ? "Underground sign-in and eligibility verification are not available yet." : "Sign in to view your participation." }, resolution.unavailableReason ? 503 : 401);
+  if (!resolution.identity) return json({ error: "Sign in to view your participation." }, 401);
   try {
     const db = await getDatabase(env);
     await ensureIndexes(db);

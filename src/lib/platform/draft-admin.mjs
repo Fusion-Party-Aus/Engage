@@ -13,8 +13,32 @@ function scheduleFields(input, current, now) {
   if (!(opensAt instanceof Date) || !(closesAt instanceof Date) || Number.isNaN(opensAt.getTime()) || Number.isNaN(closesAt.getTime())) {
     return { error: "Provide valid opening and closing dates." };
   }
-  if (opensAt < now || closesAt < now) return { error: "A draft schedule must use future opening and closing times." };
+  if ((input.opensAt !== undefined || input.closesAt !== undefined) && (opensAt < now || closesAt < now)) {
+    return { error: "A draft schedule must use future opening and closing times." };
+  }
   if (closesAt <= opensAt) return { error: "The closing time must be after the opening time." };
+  return { opensAt, closesAt };
+}
+
+export function validateOpenBallotSchedule(input = {}, current = {}, now = new Date()) {
+  const opensAt = input.opensAt === undefined
+    ? (current.opensAt instanceof Date ? current.opensAt : parseDate(String(current.opensAt ?? "")))
+    : parseDate(input.opensAt);
+  const closesAt = input.closesAt === undefined
+    ? (current.closesAt instanceof Date ? current.closesAt : parseDate(String(current.closesAt ?? "")))
+    : parseDate(input.closesAt);
+  if (!(opensAt instanceof Date) || !(closesAt instanceof Date) || Number.isNaN(opensAt.getTime()) || Number.isNaN(closesAt.getTime())) {
+    return { error: "Configure valid opening and closing dates before opening the ballot." };
+  }
+  if (closesAt <= opensAt) {
+    return { error: "The closing time must be after the opening time." };
+  }
+  if (closesAt <= now) {
+    return { error: "Cannot open an expired ballot. Configure a valid voting window with a future closing time." };
+  }
+  if (opensAt > now) {
+    return { error: "Cannot open a ballot before its configured opening time. Configure an active voting window that starts at or before the current time and closes in the future." };
+  }
   return { opensAt, closesAt };
 }
 

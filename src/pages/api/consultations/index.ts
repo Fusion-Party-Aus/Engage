@@ -45,7 +45,7 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
   if (originError) return originError;
   const env = platformEnv(locals);
   const { identity, unavailableReason } = await resolveIdentity(request, env);
-  if (!identity) return json({ error: unavailableReason ? "Underground sign-in is not available yet." : "Sign in to submit consultation feedback." }, unavailableReason ? 503 : 401);
+  if (!identity) return json({ error: "Sign in to submit consultation feedback." }, unavailableReason ? 503 : 401);
   const body = await readJson(request);
   const input = body && validateSubmission(body);
   if (!input) return json({ error: "Check the policy, submission type, and text. Submissions must be between 10 and 10,000 characters." }, 400);
@@ -57,7 +57,7 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
     return json({ submissionId, status: "pending" }, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Your submission could not be saved.";
-    const status = message.includes("not open") ? 409 : message.includes("not included") || message.includes("could not be found") ? 422 : 503;
+    const status = message.includes("verification") ? 403 : message.includes("not open") ? 409 : message.includes("not included") || message.includes("could not be found") ? 422 : 503;
     return json({ error: message }, status);
   }
 }

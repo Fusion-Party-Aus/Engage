@@ -25,7 +25,7 @@ export async function PATCH({ request, params, locals }: { request: Request; par
     if (!round) return json({ error: "Consultation round not found." }, 404);
     const now = new Date();
     if (body.status !== undefined && Object.keys(body).length === 1) {
-      if (env.APP_MODE !== "preview") return json({ error: "Consultation round status transitions require preview mode or release authorization." }, 423);
+      if (env.APP_MODE !== "preview" && (identity.source !== "engage" || !(await platformRoles(identity, env)).includes("administrator") || round.syntheticFixture)) return json({ error: "An administrator must open an authentic consultation round." }, 403);
       if (body.status !== "draft" && body.status !== "open" && body.status !== "closed") return json({ error: "Choose draft, open, or closed." }, 400);
       await rounds.updateOne(
         { roundId: params.roundId },

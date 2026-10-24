@@ -1,10 +1,11 @@
-import { createPreviewSessionCookie, resolveIdentity } from "../../../lib/platform/auth";
-import { json, platformEnv, readJson, requireSameOrigin } from "../../../lib/platform/http";
-import type { RuntimeLocals } from "../../../lib/platform/types";
+import { createPreviewSessionCookie, resolveIdentity } from "../../../lib/platform/auth.ts";
+import { json, platformEnv, readJson, requireSameOrigin } from "../../../lib/platform/http.ts";
+import type { RuntimeLocals } from "../../../lib/platform/types.ts";
 
 export const prerender = false;
 
 export async function GET({ request, locals }: { request: Request; locals: RuntimeLocals }): Promise<Response> {
+  if (platformEnv(locals).APP_MODE !== "preview") return json({ error: "Unavailable." }, 404);
   const { identity } = await resolveIdentity(request, platformEnv(locals));
   return json({ identity: identity ? { ...identity, label: "Synthetic preview identity" } : null, syntheticOnly: true });
 }

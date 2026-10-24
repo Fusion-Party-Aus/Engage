@@ -14,7 +14,7 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
   <div class="page-wrap admin-page">
     <header class="page-intro">
       <p class="eyebrow">Moderator &amp; Administrator workspace</p>
-      <h1>Policy lifecycle &amp; review queue.</h1>
+      <a class="text-link" href="/admin/members/">Review membership verification →</a><h1>Policy lifecycle &amp; review queue.</h1>
       <p>Review member consultation submissions, publish accepted comments and amendments, create immutable settled policy revisions, propose new policies for future rounds, and manage ballot status.</p>
     </header>
 
@@ -425,6 +425,19 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
         badge.textContent = `Status: ${ballot.status} · Revision: ${ballot.policyRevisionId}`;
         header.append(title, badge);
 
+        const opensInput = document.createElement('input');
+        opensInput.type = 'datetime-local';
+        opensInput.value = ballot.opensAt ? localValue(ballot.opensAt) : '';
+        opensInput.setAttribute('aria-label', 'Ballot opens at');
+
+        const closesInput = document.createElement('input');
+        closesInput.type = 'datetime-local';
+        closesInput.value = ballot.closesAt ? localValue(ballot.closesAt) : '';
+        closesInput.setAttribute('aria-label', 'Ballot closes at');
+
+        const actionMsg = document.createElement('span');
+        actionMsg.className = 'form-status';
+
         const actions = document.createElement('div');
         actions.className = 'ballot-admin-actions';
 
@@ -437,19 +450,30 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
           btn.textContent = nextStatus === 'open' ? 'Open ballot for voting' : nextStatus === 'closed' ? 'Close & record outcome' : 'Revert to draft';
           btn.addEventListener('click', async () => {
             btn.disabled = true;
+            actionMsg.textContent = '';
+            const payload: Record<string, unknown> = { status: nextStatus };
+            if (nextStatus === 'open') {
+              if (opensInput.value) payload.opensAt = new Date(opensInput.value).toISOString();
+              if (closesInput.value) payload.closesAt = new Date(closesInput.value).toISOString();
+            }
             const res = await fetch(`/api/admin/ballots/${encodeURIComponent(ballot.ballotId)}`, {
               method: 'PATCH',
               credentials: 'same-origin',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ status: nextStatus }),
+              body: JSON.stringify(payload),
             });
+            const body = await res.json().catch(() => ({}));
             if (res.ok) await loadOperations();
-            else btn.disabled = false;
+            else {
+              actionMsg.textContent = body.error ?? 'Could not update ballot status.';
+              btn.disabled = false;
+            }
           });
           actions.append(btn);
         }
+        actions.append(actionMsg);
 
-        // If draft, allow pinning policyRevisionId
+        // If draft, allow pinning policyRevisionId and configuring voting window
         if (ballot.status === 'draft') {
           const pinForm = document.createElement('form');
           pinForm.className = 'pin-revision-form';
@@ -464,7 +488,7 @@ const policies = await loadPolicyCatalogue(platformEnv(Astro.locals));
           saveBtn.textContent = 'Pin revision';
           const msg = document.createElement('span');
           msg.className = 'form-status';
-          pinForm.append(input, saveBtn, msg);
+          pinForm.append(input, opensInput, closesInput, saveBtn, msg);
           pinForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             saveBtn.disabled = true;

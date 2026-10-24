@@ -1,8 +1,10 @@
-import { ensureIndexes, getDatabase } from "../../../lib/platform/database";
-import { platformRoles, resolveIdentity } from "../../../lib/platform/auth";
-import { json, platformEnv } from "../../../lib/platform/http";
-import type { RuntimeLocals } from "../../../lib/platform/types";
-import { consumeRateLimit } from "../../../lib/platform/rate-limit";
+import { ensureIndexes, getDatabase } from "../../../lib/platform/database.ts";
+import { platformRoles, resolveIdentity } from "../../../lib/platform/auth.ts";
+import { json, platformEnv } from "../../../lib/platform/http.ts";
+import { formalVotingIsEnabled } from "../../../lib/platform/voting.mjs";
+import type { RuntimeLocals } from "../../../lib/platform/types.ts";
+import { consumeRateLimit } from "../../../lib/platform/rate-limit.ts";
+import { loginConfigured } from "../../../lib/platform/better-auth.ts";
 import type { Collection, Document } from "mongodb";
 
 export const prerender = false;
@@ -30,11 +32,18 @@ export async function GET({ request, locals }: { request: Request; locals: Runti
       db.collection("votes").countDocuments({}),
       db.collection("operational_audit").countDocuments({}),
     ]);
+    const loginReady = loginConfigured(env);
     return json({
       health: "available",
-      counts: { ballotStatus, submissionStatus, roundStatus, currentVotes, currentFormalVotes: currentVotes, auditEvents },
-      gates: { undergroundIdentity: "unavailable", bindingBallotsEnabled: false },
-      syntheticOnly: identity.source === "synthetic",
+      counts: { ballotStatus, submissionStatus, roundStatus, currentVotes, auditEvents },
+      gates: {
+        appMode: env.APP_MODE ?? "preview",
+        productionLoginConfigured: loginReady,
+        membershipVerification: "manual",
+        consultationEligibility: "verified_members",
+        formalBallotsEnabled: formalVotingIsEnabled(env) && loginReady,
+      },
+      syntheticOnly: identity.source === "synthetic" || env.APP_MODE === "preview",
     });
   } catch {
     return json({ health: "unavailable", error: "Operational counts are temporarily unavailable." }, 503);

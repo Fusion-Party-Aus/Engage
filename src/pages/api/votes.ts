@@ -13,12 +13,12 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
   if (originError) return originError;
   const env = platformEnv(locals);
   const resolution = await resolveIdentity(request, env);
-  if (!resolution.identity) return json({ error: resolution.unavailableReason ? "Underground sign-in and eligibility verification are not available yet." : "Sign in to participate." }, resolution.unavailableReason ? 503 : 401);
+  if (!resolution.identity) return json({ error: "Sign in to participate." }, 401);
   const body = await readJson(request);
   if (!body || typeof body.ballotId !== "string" || (body.choice !== "approve" && body.choice !== "do-not-approve")) return json({ error: "Choose a ballot and either Approve or Do Not Approve." }, 400);
   if (env.APP_MODE !== "preview") {
-    if (!formalVotingIsEnabled(env)) return json({ error: "Binding ballots are disabled until the Underground identity and governance release gates are complete." }, 423);
-    if (resolution.identity.source !== "underground") return json({ error: "Production eligibility verification requires an Underground identity." }, 403);
+    if (!formalVotingIsEnabled(env)) return json({ error: "Binding ballots require governance authorisation." }, 423);
+    if (resolution.identity.source !== "engage") return json({ error: "Production participation requires an Engage account." }, 403);
   }
   try {
     const db = await getDatabase(env);
@@ -30,7 +30,7 @@ export async function POST({ request, locals }: { request: Request; locals: Runt
     return json({ recorded: true, binding: formalVotingIsEnabled(env), receipt: { ballotId: ballot.ballotId, memberId: resolution.identity.memberId, receivedAt: new Date().toISOString() } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Your vote could not be recorded.";
-    const status = message.includes("not open") ? 409 : message.includes("Choose") ? 400 : message.includes("disabled") ? 423 : 503;
+    const status = message.includes("eligibility") || message.includes("identity") || message.includes("authorised") ? 403 : message.includes("not open") ? 409 : message.includes("Choose") ? 400 : message.includes("disabled") ? 423 : 503;
     return json({ error: message }, status);
   }
 }

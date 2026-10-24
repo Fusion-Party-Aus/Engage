@@ -30,10 +30,14 @@ services:
       mongo:
         condition: service_healthy
     environment:
-      APP_MODE: preview
-      FORMAL_BALLOTS_ENABLED: "false"
+      APP_MODE: ${APP_MODE:-preview}
+      FORMAL_BALLOTS_ENABLED: ${FORMAL_BALLOTS_ENABLED:-false}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:-fusion_horizon_policy_preview}
       MONGODB_URI: mongodb://${MONGO_APP_USER:-fusion_app}:${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in .env}@mongo:27017/${MONGODB_DB_NAME:-fusion_horizon_policy_preview}?authSource=${MONGODB_DB_NAME:-fusion_horizon_policy_preview}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
       PREVIEW_ADMIN_ID: preview-admin-01
     ports:

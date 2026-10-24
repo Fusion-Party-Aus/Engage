@@ -28,7 +28,7 @@ docker compose run --rm app node /app/scripts/seed-preview.mjs --dry-run
 docker compose run --rm app node /app/scripts/seed-preview.mjs --confirm-preview
 ```
 
-Preview is forced to `APP_MODE=preview`; formal ballots remain disabled. Do not use this host or its synthetic identities for real member activity. Production Underground identity and eligibility integration is still a release gate.
+Preview defaults to `APP_MODE=preview` with formal ballots disabled. For real member participation configure `APP_MODE=production`, a separate database, the Google OAuth credentials and Better Auth settings listed in `.env.example`. Register the public HTTPS callback origin with Google. Follow [release gates](release-gates.md) for administrator bootstrap, verification responsibilities and independent binding-ballot authorisation. Never reuse the synthetic preview database for members.
 
 ## Backups and restore drill
 
