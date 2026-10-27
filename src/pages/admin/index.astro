@@ -166,6 +166,91 @@ const stageOptions: Array<[ProposalStage, string]> = [
             </label>
           </div>
 
+          <!-- Policy Provenance & Prior Approval -->
+          <details class="admin-details" open={Boolean(editingProposal?.provenance)}>
+            <summary class="admin-details__summary">
+              <strong>Policy Provenance &amp; Prior Approval</strong>
+              <span class="admin-details__hint">
+                {editingProposal?.provenance?.label || 'Configure predecessor links, review notes, and values alignment'}
+              </span>
+            </summary>
+
+            <div class="admin-details__body">
+              <div class="admin-grid">
+                <label class="field">
+                  <span>Provenance Classification</span>
+                  <select name="provCategory" id="prov-category-select">
+                    <option value="none" selected={!editingProposal?.provenance}>None (Clear Provenance)</option>
+                    <option value="existing-repackaged" selected={editingProposal?.provenance?.category === 'existing-repackaged'}>
+                      Approved policy predecessor · Equivalence unverified
+                    </option>
+                    <option value="materially-revised" selected={editingProposal?.provenance?.category === 'materially-revised'}>
+                      Approved policy predecessor · Materially revised
+                    </option>
+                    <option value="new-proposal" selected={editingProposal?.provenance?.category === 'new-proposal'}>
+                      New proposal · No prior policy identified
+                    </option>
+                    <option value="party-governance" selected={editingProposal?.provenance?.category === 'party-governance'}>
+                      Party Governance · Internal platform review
+                    </option>
+                    <option value="draft-derived" selected={editingProposal?.provenance?.category === 'draft-derived'}>
+                      Draft branch predecessor · Unapproved
+                    </option>
+                    <option value="unverified" selected={editingProposal?.provenance?.category === 'unverified'}>
+                      Mapping unverified
+                    </option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Custom Badge Label (optional)</span>
+                  <input
+                    name="provLabel"
+                    id="prov-label-input"
+                    value={editingProposal?.provenance?.label ?? ''}
+                    placeholder="Defaults based on classification"
+                  />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Provenance Summary</span>
+                <textarea
+                  name="provSummary"
+                  rows="2"
+                  placeholder="e.g. Cites a direct predecessor on a published Fusion policy page..."
+                >{editingProposal?.provenance?.summary ?? ''}</textarea>
+              </label>
+
+              <label class="field">
+                <span>What is Still Uncertain / Scrutiny Notes</span>
+                <input
+                  name="provUncertainty"
+                  value={editingProposal?.provenance?.uncertaintyNote ?? ''}
+                  placeholder="e.g. Links only to a top-level published policy page URL without a clause-level text comparison."
+                />
+              </label>
+
+              <label class="field">
+                <span>Prior Policy Predecessors (format: Title | URL | Description)</span>
+                <textarea
+                  name="provLineage"
+                  rows="3"
+                  placeholder="Fair + Inclusive Society | https://www.fusionparty.org.au/fair_inclusive_society | Direct predecessor: replacing stamp duty with land tax"
+                >{(editingProposal?.provenance?.lineage ?? []).map((l) => [l.label, l.url, l.description].filter(Boolean).join(' | ')).join('\n')}</textarea>
+              </label>
+
+              <label class="field">
+                <span>Values &amp; Principles Alignment (one per line)</span>
+                <textarea
+                  name="provValues"
+                  rows="2"
+                  placeholder="Principle: Sustainable Urban Prosperity — Replacing transaction taxes with land-value taxation..."
+                >{(editingProposal?.provenance?.valuesAlignment ?? []).join('\n')}</textarea>
+              </label>
+            </div>
+          </details>
+
           <div class="editor-actions">
             <button class="button" type="submit">
               {editingProposal ? 'Save changes' : 'Create proposal'}
@@ -226,7 +311,10 @@ const stageOptions: Array<[ProposalStage, string]> = [
                   <a href={`/proposals/${item.slug}/`}>{item.title}</a>
                 </h3>
                 <p class="tabular">
-                  <strong>{item.proposalId}</strong> · {item.space} ·{' '}
+                  <strong>{item.proposalId}</strong> · {item.space}
+                  {item.provenance && (
+                    <> · <span class="prov-tag">{item.provenance.label}</span></>
+                  )} ·{' '}
                   <span class="tabular">
                     {item.votes.approve} approve / {item.votes.abstain} abstain / {item.votes.reject} reject
                   </span>{' '}
@@ -281,6 +369,42 @@ const stageOptions: Array<[ProposalStage, string]> = [
         .map((l) => l.trim())
         .filter(Boolean);
 
+      const provCategory = String(formData.get('provCategory') || '').trim();
+      let provenance = undefined;
+      if (provCategory && provCategory !== 'none') {
+        const lineageRaw = String(formData.get('provLineage') || '');
+        const lineage = lineageRaw
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const parts = line.split('|').map((p) => p.trim());
+            return {
+              label: parts[0] || '',
+              url: parts[1] || null,
+              description: parts[2] || '',
+            };
+          })
+          .filter((l) => l.label);
+
+        const valuesRaw = String(formData.get('provValues') || '');
+        const valuesAlignment = valuesRaw
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        provenance = {
+          category: provCategory,
+          label: String(formData.get('provLabel') || '').trim(),
+          summary: String(formData.get('provSummary') || '').trim(),
+          uncertaintyNote: String(formData.get('provUncertainty') || '').trim() || undefined,
+          lineage,
+          valuesAlignment,
+        };
+      } else if (provCategory === 'none') {
+        provenance = null;
+      }
+
       const data = {
         proposalId: editingId || undefined,
         title: formData.get('title'),
@@ -291,6 +415,7 @@ const stageOptions: Array<[ProposalStage, string]> = [
         outcomes,
         attachmentUrl: formData.get('attachmentUrl') || undefined,
         implementationNote: formData.get('implementationNote') || undefined,
+        provenance,
       };
 
       const url = editingId ? `/api/proposals/${encodeURIComponent(editingId)}` : '/api/proposals';
@@ -376,6 +501,54 @@ const stageOptions: Array<[ProposalStage, string]> = [
     border-radius: 0.45rem;
     background: var(--horizon-white);
     font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .admin-details {
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    margin-top: 1rem;
+    overflow: hidden;
+  }
+
+  .admin-details__summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1.25rem;
+    cursor: pointer;
+    background: var(--horizon-lavender);
+    font-size: 0.95rem;
+    color: var(--horizon-purple-deep);
+  }
+
+  .admin-details__hint {
+    font-size: 0.82rem;
+    color: var(--horizon-muted);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .admin-details__body {
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .prov-tag {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    background: var(--horizon-lavender);
+    border: 1px solid var(--horizon-line);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    color: var(--horizon-purple-deep);
     font-weight: 600;
   }
 </style>

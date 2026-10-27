@@ -98,8 +98,6 @@ async function ensureSeeded(db: Db): Promise<void> {
             summary: String(raw.summary || raw.statement || ""),
             outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
             details: String(raw.details || ""),
-            ...(raw.detailHtml ? { detailHtml: String(raw.detailHtml) } : {}),
-            ...(raw.provenance ? { provenance: raw.provenance } : {}),
             ...(raw.attachmentUrl ? { attachmentUrl: String(raw.attachmentUrl) } : {}),
             stage,
             authorName: "Fusion Working Group",

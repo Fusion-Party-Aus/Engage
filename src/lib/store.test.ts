@@ -100,12 +100,26 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
     assert.equal(memberProposal.authorId, memberUser.memberId);
     assert.ok(memberProposal.proposalId.startsWith("PROP-"));
 
-    // Staff can advance it to Deliberate or Decide
+    // Staff can advance it to Deliberate or Decide, and add provenance
     const advanced = await saveProposal(db, adminUser, {
       proposalId: memberProposal.proposalId,
       stage: "deliberate",
+      provenance: {
+        category: "party-governance",
+        label: "Party Governance Review",
+        summary: "Internal working group charter review.",
+        lineage: [
+          { label: "Constitution Section 4", url: "/constitution", description: "Direct democracy principles" }
+        ],
+        valuesAlignment: ["Principle: Participatory Democracy"],
+      },
     });
     assert.equal(advanced.stage, "deliberate");
+    assert.ok(advanced.provenance);
+    assert.equal(advanced.provenance.category, "party-governance");
+    assert.equal(advanced.provenance.label, "Party Governance Review");
+    assert.equal(advanced.provenance.lineage?.length, 1);
+    assert.equal(advanced.provenance.lineage[0]?.label, "Constitution Section 4");
   });
 
   it("supports structured deliberation stances (support, concern, amendment, comment) and endorsements", async () => {

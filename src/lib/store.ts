@@ -5,15 +5,35 @@ import type {
   CommentStance,
   MemberRecord,
   MembershipStatus,
+  PolicyProvenance,
   ProposalRecord,
   ProposalStage,
   ProposalSummaryView,
+  ProvenanceLink,
   SessionUser,
   UserRole,
   VoteChoice,
   VoteRecord,
   VoteTally,
 } from "./types.ts";
+
+export function getDefaultProvenanceLabel(category: string): string {
+  switch (category) {
+    case "existing-repackaged":
+      return "Approved policy predecessor · Equivalence unverified";
+    case "materially-revised":
+      return "Approved policy predecessor · Materially revised";
+    case "new-proposal":
+      return "New proposal · No prior policy identified";
+    case "party-governance":
+      return "Party Governance · Platform Review";
+    case "draft-derived":
+      return "Draft branch predecessor · Unapproved";
+    case "unverified":
+    default:
+      return "Mapping unverified";
+  }
+}
 
 export const VALID_STAGES: ProposalStage[] = [
   "propose",
@@ -333,6 +353,49 @@ export async function saveProposal(
 
   const now = new Date();
 
+  let provenance: PolicyProvenance | undefined = existing?.provenance;
+  if (user.isStaff && body.provenance !== undefined) {
+    if (!body.provenance || (typeof body.provenance === "object" && !(body.provenance as any).category)) {
+      provenance = undefined;
+    } else if (typeof body.provenance === "object") {
+      const rawProv = body.provenance as Record<string, any>;
+      const category = String(rawProv.category || "unverified").trim();
+      const label = String(rawProv.label || "").trim() || getDefaultProvenanceLabel(category);
+      const summary = String(rawProv.summary || "").trim();
+      const uncertaintyNote = rawProv.uncertaintyNote ? String(rawProv.uncertaintyNote).trim() : undefined;
+
+      let lineage: ProvenanceLink[] = [];
+      if (Array.isArray(rawProv.lineage)) {
+        lineage = rawProv.lineage
+          .map((l: any) => ({
+            label: String(l.label || "").trim(),
+            url: l.url ? String(l.url).trim() : null,
+            description: String(l.description || "").trim(),
+          }))
+          .filter((l: ProvenanceLink) => l.label);
+      }
+
+      let valuesAlignment: string[] = [];
+      if (Array.isArray(rawProv.valuesAlignment)) {
+        valuesAlignment = rawProv.valuesAlignment
+          .map((v: any) => String(v).trim())
+          .filter(Boolean);
+      }
+
+      provenance = {
+        category,
+        classification: category,
+        label,
+        summary,
+        uncertaintyNote,
+        lineage,
+        valuesAlignment,
+        flaggedNewInStaticExport: category === "new-proposal",
+        lineageVerified: category !== "unverified",
+      };
+    }
+  }
+
   if (existing) {
     const updated: ProposalRecord = {
       ...existing,
@@ -344,22 +407,29 @@ export async function saveProposal(
       attachmentUrl: attachmentUrl || undefined,
       implementationNote: implementationNote || undefined,
       stage,
+      provenance,
       updatedAt: now,
     };
+    const updateSet: Record<string, any> = {
+      title: updated.title,
+      space: updated.space,
+      summary: updated.summary,
+      outcomes: updated.outcomes,
+      details: updated.details,
+      attachmentUrl: updated.attachmentUrl,
+      implementationNote: updated.implementationNote,
+      stage: updated.stage,
+      updatedAt: now,
+    };
+    if (user.isStaff && body.provenance !== undefined) {
+      updateSet.provenance = provenance;
+    }
+
     await col.updateOne(
       { proposalId: existing.proposalId },
       {
-        $set: {
-          title: updated.title,
-          space: updated.space,
-          summary: updated.summary,
-          outcomes: updated.outcomes,
-          details: updated.details,
-          attachmentUrl: updated.attachmentUrl,
-          implementationNote: updated.implementationNote,
-          stage: updated.stage,
-          updatedAt: now,
-        },
+        $set: updateSet,
+        ...(user.isStaff && body.provenance === null ? { $unset: { provenance: 1 } } : {}),
       },
     );
     return updated;
@@ -383,6 +453,7 @@ export async function saveProposal(
     ...(attachmentUrl ? { attachmentUrl } : {}),
     ...(implementationNote ? { implementationNote } : {}),
     stage,
+    provenance,
     authorId: user.memberId,
     authorName: user.name || "Verified Member",
     createdAt: now,
