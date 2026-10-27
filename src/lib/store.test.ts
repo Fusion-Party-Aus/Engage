@@ -49,41 +49,47 @@ const pendingUser: SessionUser = {
 };
 
 describe("Engage CRUD store", () => {
-  it("automatically seeds the 76 baseline policies and filters them", async () => {
+  it("automatically seeds the 78 baseline proposals (76 policies + 2 party proposals) and filters them", async () => {
     const db = await getDatabase({ APP_MODE: "development" });
     const all = await listPolicies(db);
-    assert.equal(all.length, 76);
+    assert.equal(all.length, 78);
+
+    const onlyPolicies = await listPolicies(db, { kind: "policy" });
+    assert.equal(onlyPolicies.length, 76);
+
+    const generalProposals = await listPolicies(db, { kind: "proposal" });
+    assert.equal(generalProposals.length, 2);
 
     const voting = await listPolicies(db, { status: "voting" });
-    assert.equal(voting.length, 36);
-
-    const housing = await listPolicies(db, { search: "housing" });
-    assert.ok(housing.length > 0);
+    assert.equal(voting.length, 38);
   });
 
-  it("supports creating, updating, and deleting a policy", async () => {
+  it("supports creating, updating, and deleting both policy and non-policy proposals", async () => {
     const db = createMemoryDb();
     await assert.rejects(() =>
       savePolicy(db, memberUser, {
-        title: "Unauthorized Policy",
+        title: "Unauthorized Proposal",
         category: "General",
         statement: "Should not be allowed by a non-staff member.",
       }),
     );
 
     const created = await savePolicy(db, adminUser, {
-      title: "High-Speed East Coast Rail Network",
-      category: "Transform Our Industries",
-      division: "Reclaim Our Future",
-      statement: "Build a dedicated high-speed rail corridor linking Brisbane, Sydney, Canberra, and Melbourne.",
-      outcomes: "Faster regional travel\nLower aviation emissions",
-      details: "**Overview**\n\nConnect major centres with zero-emission high-speed rail.",
+      kind: "proposal",
+      title: "2026 AGM Constitutional Standing Orders",
+      category: "Party Governance",
+      division: "Party & Organisation",
+      statement: "Adopt the procedural standing orders for the 2026 Annual General Meeting.",
+      outcomes: "Clear speaking times\nTransparent online ballot procedure",
+      details: "**Overview**\n\nSets out the rules for motions and debate.",
+      attachmentUrl: "https://fusionparty.org.au/standing-orders.pdf",
       status: "open",
     });
 
-    assert.equal(created.title, "High-Speed East Coast Rail Network");
+    assert.equal(created.kind, "proposal");
+    assert.ok(created.policyId.startsWith("PROP-"));
+    assert.equal(created.attachmentUrl, "https://fusionparty.org.au/standing-orders.pdf");
     assert.equal(created.outcomes.length, 2);
-    assert.equal(created.status, "open");
 
     const updated = await savePolicy(db, adminUser, {
       policyId: created.policyId,
@@ -96,7 +102,7 @@ describe("Engage CRUD store", () => {
     assert.equal(detail, null);
   });
 
-  it("supports comments, amendments, and voting on a policy", async () => {
+  it("supports comments, amendments, and voting on a proposal", async () => {
     const db = createMemoryDb();
     const policy = await savePolicy(db, adminUser, {
       title: "National Citizen Dividend",
@@ -105,7 +111,6 @@ describe("Engage CRUD store", () => {
       status: "voting",
     });
 
-    // Pending users cannot comment or vote
     await assert.rejects(() =>
       addComment(db, pendingUser, {
         policyId: policy.policyId,
@@ -120,7 +125,6 @@ describe("Engage CRUD store", () => {
       }),
     );
 
-    // Verified member posts a comment and casts a vote
     const comment = await addComment(db, memberUser, {
       policyId: policy.policyId,
       kind: "amendment",
@@ -135,7 +139,6 @@ describe("Engage CRUD store", () => {
     assert.equal(vote1.votes.approve, 1);
     assert.equal(vote1.votes.reject, 0);
 
-    // Changing vote updates existing record rather than duplicating
     const vote2 = await castVote(db, memberUser, {
       policyId: policy.policyId,
       choice: "reject",

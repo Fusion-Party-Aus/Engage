@@ -14,12 +14,12 @@ const [db, user] = await Promise.all([
   getSessionUser(Astro.request, env),
 ]);
 
-// Support legacy ?policy=POL-001 deep links by redirecting to the policy page
-const legacyPolicyParam = Astro.url.searchParams.get('policy') || Astro.url.searchParams.get('policyId');
-const allPolicies = await listPolicies(db, { includeDrafts: Boolean(user?.isStaff) });
+const legacyPolicyParam =
+  Astro.url.searchParams.get('policy') || Astro.url.searchParams.get('policyId');
+const allProposals = await listPolicies(db, { includeDrafts: Boolean(user?.isStaff) });
 
 if (legacyPolicyParam) {
-  const match = allPolicies.find(
+  const match = allProposals.find(
     (p) => p.policyId === legacyPolicyParam || p.slug === legacyPolicyParam,
   );
   if (match) {
@@ -28,57 +28,69 @@ if (legacyPolicyParam) {
 }
 
 const initialQuery = (Astro.url.searchParams.get('q') ?? '').trim();
+const initialKind = (Astro.url.searchParams.get('kind') ?? 'all').trim();
 const initialCategory = (Astro.url.searchParams.get('category') ?? 'all').trim();
 const initialStatus = (Astro.url.searchParams.get('status') ?? 'all').trim();
 
-const categories = [...new Set(allPolicies.map((p) => p.category))].sort();
+const categories = [...new Set(allProposals.map((p) => p.category))].sort();
 
 const statusLabel = (status: PolicyStatus) => {
   if (status === 'voting') return 'Voting open';
   if (status === 'open') return 'Open for discussion';
-  if (status === 'adopted') return 'Adopted policy';
+  if (status === 'adopted') return 'Adopted';
   if (status === 'draft') return 'Draft (staff only)';
   return 'Archived';
 };
 ---
 <SiteLayout
-  title="Policy Library · Engage"
-  description="Browse, search, discuss, and vote on Fusion Party Australia policy proposals."
+  title="Proposals & Policies · Engage"
+  description="Browse, discuss, and vote on Fusion Party Australia proposals, organisational decisions, and policies."
   canonical={`${Astro.url.origin}/policies/`}
 >
   <div class="page-wrap section-space">
     <header class="library-header">
       <div>
-        <h1>Policy library</h1>
+        <h1>Proposals &amp; policy library</h1>
         <p>
-          Choose any proposal to read its commitment and outcomes in full, leave member feedback, or
-          vote when a decision is open.
+          Explore party proposals, visual identity and governance decisions, and national policies.
+          Open any item to read it in full, share feedback, or vote when a decision is open.
         </p>
       </div>
       {user?.isStaff && (
         <a class="button button--outline" href="/admin/#create-policy">
-          + New policy
+          + New proposal
         </a>
       )}
     </header>
 
     <form class="filter-bar" role="search" method="get" action="/policies/">
       <label class="field">
-        <span>Search proposals</span>
+        <span>Search</span>
         <input
           id="policy-search"
           name="q"
           type="search"
           value={initialQuery}
-          placeholder="Search by topic, keyword, or ID (e.g. housing, UBI, Medicare)"
+          placeholder="Search by keyword, topic, or ID (e.g. Horizon, housing, UBI)"
           autocomplete="off"
         />
       </label>
 
       <label class="field">
-        <span>Policy area</span>
+        <span>Type</span>
+        <select id="policy-kind" name="kind">
+          <option value="all" selected={initialKind === 'all'}>All proposals &amp; policies</option>
+          <option value="proposal" selected={initialKind === 'proposal'}>
+            Party &amp; general proposals
+          </option>
+          <option value="policy" selected={initialKind === 'policy'}>Policy proposals</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Area / topic</span>
         <select id="policy-category" name="category">
-          <option value="all" selected={initialCategory === 'all'}>All policy areas</option>
+          <option value="all" selected={initialCategory === 'all'}>All areas</option>
           {categories.map((cat) => (
             <option value={cat} selected={initialCategory === cat}>
               {cat}
@@ -93,7 +105,7 @@ const statusLabel = (status: PolicyStatus) => {
           <option value="all" selected={initialStatus === 'all'}>All stages</option>
           <option value="voting" selected={initialStatus === 'voting'}>Open for voting</option>
           <option value="open" selected={initialStatus === 'open'}>Open for discussion</option>
-          <option value="adopted" selected={initialStatus === 'adopted'}>Adopted policies</option>
+          <option value="adopted" selected={initialStatus === 'adopted'}>Adopted</option>
           {user?.isStaff && (
             <option value="draft" selected={initialStatus === 'draft'}>Drafts (staff)</option>
           )}
@@ -101,50 +113,54 @@ const statusLabel = (status: PolicyStatus) => {
       </label>
 
       <p id="filter-count" class="filter-count tabular" role="status" aria-live="polite">
-        Showing {allPolicies.length} proposals
+        Showing {allProposals.length} items
       </p>
     </form>
 
     <ul class="policy-register" id="policy-list">
-      {allPolicies.map((policy) => (
+      {allProposals.map((item) => (
         <li
           class="register-item"
           data-policy-item
-          data-category={policy.category}
-          data-status={policy.status}
-          data-search={`${policy.policyId} ${policy.title} ${policy.category} ${policy.division} ${policy.statement}`.toLowerCase()}
+          data-kind={item.kind}
+          data-category={item.category}
+          data-status={item.status}
+          data-search={`${item.policyId} ${item.title} ${item.category} ${item.division} ${item.statement}`.toLowerCase()}
         >
           <div class="register-item__body">
             <div class="register-item__meta">
-              <span class={`badge badge--${policy.status}`}>{statusLabel(policy.status)}</span>
-              <span>{policy.category}</span>
-              <span class="tabular">{policy.policyId}</span>
+              <span class={`badge badge--${item.status}`}>{statusLabel(item.status)}</span>
+              <span class="badge">
+                {item.kind === 'proposal' ? 'Party proposal' : 'Policy'}
+              </span>
+              <span>{item.category}</span>
+              <span class="tabular">{item.policyId}</span>
             </div>
 
             <h2>
-              <a href={`/policies/${policy.slug}/`}>{policy.title}</a>
+              <a href={`/policies/${item.slug}/`}>{item.title}</a>
             </h2>
 
-            <p>{policy.statement}</p>
+            <p>{item.statement}</p>
           </div>
 
           <div class="register-item__actions">
             <div class="register-item__stats tabular">
-              {(policy.status === 'voting' || policy.status === 'adopted' || policy.votes.total > 0) && (
+              {(item.status === 'voting' || item.status === 'adopted' || item.votes.total > 0) && (
                 <span>
-                  {policy.votes.approve} approve · {policy.votes.reject} reject
+                  {item.votes.approve} approve · {item.votes.reject} reject
                 </span>
               )}
               <span>
-                {policy.commentCount} {policy.commentCount === 1 ? 'comment' : 'comments'}
+                {item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}
               </span>
             </div>
 
             <a
-              class={`button button--small ${policy.status === 'voting' ? '' : 'button--outline'}`}
-              href={`/policies/${policy.slug}/`}
+              class={`button button--small ${item.status === 'voting' ? '' : 'button--outline'}`}
+              href={`/policies/${item.slug}/`}
             >
-              {policy.status === 'voting' ? 'Read & vote →' : 'Read & comment →'}
+              {item.status === 'voting' ? 'Read & vote →' : 'Read & comment →'}
             </a>
           </div>
         </li>
@@ -152,14 +168,15 @@ const statusLabel = (status: PolicyStatus) => {
     </ul>
 
     <p id="empty-filter" class="callout" hidden>
-      No policies match your current filter. <a href="/policies/">Reset filters</a> to view all
-      proposals.
+      No proposals match your current filter. <a href="/policies/">Reset filters</a> to view all
+      items.
     </p>
   </div>
 </SiteLayout>
 
 <script>
   const searchInput = document.querySelector<HTMLInputElement>('#policy-search');
+  const kindSelect = document.querySelector<HTMLSelectElement>('#policy-kind');
   const categorySelect = document.querySelector<HTMLSelectElement>('#policy-category');
   const statusSelect = document.querySelector<HTMLSelectElement>('#policy-status');
   const items = [...document.querySelectorAll<HTMLElement>('[data-policy-item]')];
@@ -168,21 +185,23 @@ const statusLabel = (status: PolicyStatus) => {
 
   function applyFilters() {
     const q = (searchInput?.value ?? '').trim().toLowerCase();
+    const kind = kindSelect?.value ?? 'all';
     const cat = categorySelect?.value ?? 'all';
     const st = statusSelect?.value ?? 'all';
     let visible = 0;
 
     for (const item of items) {
+      const matchKind = kind === 'all' || item.dataset.kind === kind;
       const matchCat = cat === 'all' || item.dataset.category === cat;
       const matchStatus = st === 'all' || item.dataset.status === st;
       const matchSearch = !q || (item.dataset.search ?? '').includes(q);
-      const show = matchCat && matchStatus && matchSearch;
+      const show = matchKind && matchCat && matchStatus && matchSearch;
       item.hidden = !show;
       if (show) visible += 1;
     }
 
     if (countEl) {
-      countEl.textContent = `Showing ${visible} ${visible === 1 ? 'proposal' : 'proposals'}`;
+      countEl.textContent = `Showing ${visible} ${visible === 1 ? 'item' : 'items'}`;
     }
     if (emptyEl) {
       emptyEl.hidden = visible > 0;
@@ -190,6 +209,7 @@ const statusLabel = (status: PolicyStatus) => {
   }
 
   searchInput?.addEventListener('input', applyFilters);
+  kindSelect?.addEventListener('change', applyFilters);
   categorySelect?.addEventListener('change', applyFilters);
   statusSelect?.addEventListener('change', applyFilters);
   applyFilters();
@@ -216,7 +236,7 @@ const statusLabel = (status: PolicyStatus) => {
 
   .filter-bar {
     display: grid;
-    grid-template-columns: minmax(16rem, 1.6fr) minmax(13rem, 1fr) minmax(12rem, 0.9fr);
+    grid-template-columns: minmax(14rem, 1.4fr) repeat(3, minmax(11rem, 0.9fr));
     align-items: end;
     gap: 1rem;
     padding: 1.25rem 1.4rem;
@@ -295,7 +315,12 @@ const statusLabel = (status: PolicyStatus) => {
     color: var(--horizon-muted);
   }
 
-  @media (max-width: 860px) {
+  @media (max-width: 960px) {
+    .filter-bar {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 640px) {
     .filter-bar {
       grid-template-columns: 1fr;
     }

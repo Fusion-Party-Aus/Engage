@@ -26,12 +26,15 @@ const myVote = detail?.myVote ?? null;
 const statusLabel = (status: PolicyStatus) => {
   if (status === 'voting') return 'Voting open';
   if (status === 'open') return 'Open for discussion';
-  if (status === 'adopted') return 'Adopted policy';
+  if (status === 'adopted') return 'Adopted';
   if (status === 'draft') return 'Draft (staff only)';
   return 'Archived';
 };
 
-// Parse simple markdown paragraphs and bold headings from policy.details cleanly
+const isImageAttachment = Boolean(
+  policy?.attachmentUrl && /\.(svg|png|webp|jpg|jpeg|gif)$/i.test(policy.attachmentUrl),
+);
+
 const detailBlocks = (policy?.details ?? '')
   .split(/\n\s*\n/)
   .map((block) => block.trim())
@@ -48,23 +51,23 @@ const detailBlocks = (policy?.details ?? '')
   });
 ---
 <SiteLayout
-  title={policy ? `${policy.title} · Engage` : 'Policy not found · Engage'}
-  description={policy?.statement ?? 'Policy proposal details, member discussion, and voting.'}
+  title={policy ? `${policy.title} · Engage` : 'Proposal not found · Engage'}
+  description={policy?.statement ?? 'Proposal details, member discussion, and voting.'}
   canonical={policy ? `${Astro.url.origin}/policies/${policy.slug}/` : undefined}
 >
   <div class="page-wrap section-space policy-page">
     {!policy ? (
       <div class="callout">
-        <h1>Policy not found</h1>
+        <h1>Proposal not found</h1>
         <p>
-          That policy could not be found or is not yet published.{' '}
-          <a href="/policies/">Return to the policy library</a>.
+          That proposal could not be found or is not yet published.{' '}
+          <a href="/policies/">Return to Proposals &amp; Policies</a>.
         </p>
       </div>
     ) : (
       <>
         <nav class="breadcrumbs" aria-label="Breadcrumb">
-          <a href="/policies/">Policies</a>
+          <a href="/policies/">Proposals &amp; Policies</a>
           <span aria-hidden="true">/</span>
           <a href={`/policies/?category=${encodeURIComponent(policy.category)}`}>
             {policy.category}
@@ -90,7 +93,7 @@ const detailBlocks = (policy?.details ?? '')
                 </select>
               </label>
               <a class="button button--small button--outline" href={`/admin/?edit=${encodeURIComponent(policy.policyId)}`}>
-                Edit wording in Admin
+                Edit in Admin
               </a>
               <span id="staff-status-msg" class="tabular" role="status" aria-live="polite"></span>
             </div>
@@ -100,11 +103,34 @@ const detailBlocks = (policy?.details ?? '')
         <header class="policy-header">
           <div class="policy-meta">
             <span class={`badge badge--${policy.status}`}>{statusLabel(policy.status)}</span>
+            <span class="badge">
+              {policy.kind === 'proposal' ? 'Party proposal' : 'Policy'}
+            </span>
             <span>{policy.division} · {policy.category}</span>
             <span class="tabular">{policy.policyId}</span>
           </div>
           <h1>{policy.title}</h1>
           <p class="policy-commitment">{policy.statement}</p>
+
+          {policy.attachmentUrl && (
+            <div class="attachment-box">
+              {isImageAttachment && (
+                <img
+                  src={policy.attachmentUrl}
+                  alt={`Supporting visual for ${policy.title}`}
+                  class="attachment-preview"
+                />
+              )}
+              <a
+                class="button button--small button--outline"
+                href={policy.attachmentUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                Open supporting material ↗
+              </a>
+            </div>
+          )}
         </header>
 
         {(policy.status === 'voting' || policy.status === 'adopted' || policy.votes.total > 0) && (
@@ -119,7 +145,7 @@ const detailBlocks = (policy?.details ?? '')
               </h2>
               <p>
                 {policy.status === 'voting'
-                  ? 'Do you approve adopting this policy wording? Verified members can cast or update their vote while voting is open.'
+                  ? 'Do you approve adopting this proposal? Verified members can cast or update their vote while voting is open.'
                   : 'Voting on this proposal has concluded.'}
               </p>
 
@@ -177,7 +203,7 @@ const detailBlocks = (policy?.details ?? '')
 
         {policy.outcomes.length > 0 && (
           <section class="policy-section" aria-labelledby="outcomes-heading">
-            <h2 id="outcomes-heading">What this policy aims to achieve</h2>
+            <h2 id="outcomes-heading">What this proposal aims to achieve</h2>
             <ol class="outcomes-list">
               {policy.outcomes.map((outcome) => (
                 <li>{outcome}</li>
@@ -188,7 +214,7 @@ const detailBlocks = (policy?.details ?? '')
 
         {detailBlocks.length > 0 && (
           <section class="policy-section" aria-labelledby="rationale-heading">
-            <h2 id="rationale-heading">Background and how it works</h2>
+            <h2 id="rationale-heading">Background and detail</h2>
             <div class="prose">
               {detailBlocks.map((block) =>
                 block.type === 'heading' ? <h3>{block.text}</h3> : <p>{block.text}</p>,
@@ -293,7 +319,6 @@ const detailBlocks = (policy?.details ?? '')
 </SiteLayout>
 
 <script>
-  // Staff quick stage change
   const staffSelect = document.querySelector<HTMLSelectElement>('#staff-status-select');
   const staffMsg = document.querySelector<HTMLElement>('#staff-status-msg');
   staffSelect?.addEventListener('change', async () => {
@@ -316,7 +341,6 @@ const detailBlocks = (policy?.details ?? '')
     }
   });
 
-  // Voting buttons
   const voteContainer = document.querySelector<HTMLElement>('[data-policy-id].vote-buttons');
   const voteStatus = document.querySelector<HTMLElement>('#vote-status');
   const voteButtons = voteContainer?.querySelectorAll<HTMLButtonElement>('[data-vote-choice]') ?? [];
@@ -370,7 +394,6 @@ const detailBlocks = (policy?.details ?? '')
     });
   }
 
-  // Comment submission
   const commentForm = document.querySelector<HTMLFormElement>('#comment-form');
   const commentStatus = document.querySelector<HTMLElement>('#comment-status');
   commentForm?.addEventListener('submit', async (event) => {
@@ -403,7 +426,6 @@ const detailBlocks = (policy?.details ?? '')
     }
   });
 
-  // Comment deletion
   document.querySelectorAll<HTMLButtonElement>('[data-delete-comment]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const commentId = btn.dataset.deleteComment;
@@ -495,6 +517,22 @@ const detailBlocks = (policy?.details ?? '')
     font-weight: 500;
     color: var(--horizon-purple-deep);
     max-width: 65ch;
+  }
+  .attachment-box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1.25rem;
+  }
+  .attachment-preview {
+    max-width: 8rem;
+    max-height: 5rem;
+    object-fit: contain;
+    padding: 0.5rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.5rem;
   }
 
   .vote-panel {

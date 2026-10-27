@@ -11,52 +11,56 @@ const [db, user] = await Promise.all([
   getDatabase(env),
   getSessionUser(Astro.request, env),
 ]);
-const policies = await listPolicies(db, { includeDrafts: false });
+const proposals = await listPolicies(db, { includeDrafts: false });
 
-const votingPolicies = policies.filter((p) => p.status === 'voting');
-const featuredVoting = votingPolicies.slice(0, 5);
+const votingProposals = proposals.filter((p) => p.status === 'voting');
+const partyProposals = proposals.filter((p) => p.kind === 'proposal');
+const featuredVoting = [
+  ...partyProposals.filter((p) => p.status === 'voting'),
+  ...votingProposals.filter((p) => p.kind !== 'proposal'),
+].slice(0, 6);
 
 const categoryMap = new Map<
   string,
   { name: string; division: string; summary: string; total: number; voting: number }
 >();
 
-for (const policy of policies) {
-  const existing = categoryMap.get(policy.category) ?? {
-    name: policy.category,
-    division: policy.division,
-    summary: policy.categorySummary || '',
+for (const item of proposals) {
+  const existing = categoryMap.get(item.category) ?? {
+    name: item.category,
+    division: item.division,
+    summary: item.categorySummary || '',
     total: 0,
     voting: 0,
   };
   existing.total += 1;
-  if (policy.status === 'voting') existing.voting += 1;
-  if (!existing.summary && policy.categorySummary) existing.summary = policy.categorySummary;
-  categoryMap.set(policy.category, existing);
+  if (item.status === 'voting') existing.voting += 1;
+  if (!existing.summary && item.categorySummary) existing.summary = item.categorySummary;
+  categoryMap.set(item.category, existing);
 }
 
 const categories = [...categoryMap.values()];
 ---
 <SiteLayout
-  title="Engage · Fusion Party Australia Policy & Member Decisions"
-  description="Read Fusion Party policy proposals, suggest wording improvements, and vote on open party decisions."
+  title="Engage · Fusion Party Australia Proposals, Policies & Member Decisions"
+  description="Review Fusion Party proposals and policies, share feedback, and vote on open party decisions."
   canonical={`${Astro.url.origin}/`}
 >
   <section class="hero">
     <div class="page-wrap hero-layout">
       <div class="hero-copy">
-        <h1>Read, shape, and vote on Fusion policy.</h1>
+        <h1>Read, shape, and vote on Fusion decisions.</h1>
         <p>
-          Engage is Fusion Party Australia’s member policy platform. Browse every proposal in plain
-          English, suggest wording changes, and cast your vote on open party decisions—all in one
-          place.
+          Engage is Fusion Party Australia’s member consultation and voting platform—covering
+          party proposals, visual identity and governance decisions, and our national policy
+          library in one place.
         </p>
         <div class="hero-actions">
           <a class="button" href="/policies/">
-            Browse all {policies.length} policies
+            Browse all {proposals.length} proposals
           </a>
           <a class="button button--outline" href="/policies/?status=voting">
-            Open votes ({votingPolicies.length})
+            Open votes ({votingProposals.length})
           </a>
           {!user && (
             <a class="text-cta" href="/member/">
@@ -82,8 +86,8 @@ const categories = [...categoryMap.values()];
       <div class="guide-header">
         <h2 id="guide-heading">New to Engage? Here is how it works</h2>
         <p>
-          Anyone can read Fusion’s policy library. Verified party members can comment, propose
-          wording improvements, and vote directly on each policy page.
+          Anyone can read published proposals and policies. Verified party members can comment,
+          suggest wording changes, and vote directly on each proposal page.
         </p>
       </div>
 
@@ -100,17 +104,17 @@ const categories = [...categoryMap.values()];
         <div class="guide-step">
           <h3>Read and suggest improvements</h3>
           <p>
-            Open any proposal in the <a href="/policies/">Policy library</a> to read its core
-            commitment, intended outcomes, and background rationale. Leave feedback or suggest
-            revised wording right on the page.
+            Open any item in <a href="/policies/">Proposals &amp; Policies</a>—whether it is a
+            party decision, visual identity review, or policy commitment—and leave feedback or
+            suggested wording right on the page.
           </p>
         </div>
 
         <div class="guide-step">
           <h3>Vote on open decisions</h3>
           <p>
-            When a proposal is open for a decision, cast or update your Approve or Reject vote at
-            the top of that policy page. You can change your vote at any time while voting is open.
+            When a proposal or policy is open for voting, cast or update your Approve or Reject
+            vote at the top of that page. You can change your vote at any time while voting is open.
           </p>
         </div>
       </div>
@@ -121,43 +125,46 @@ const categories = [...categoryMap.values()];
     <div class="page-wrap">
       <div class="section-head">
         <div>
-          <h2 id="voting-heading">Proposals open for member voting</h2>
+          <h2 id="voting-heading">Open for member consultation &amp; voting</h2>
           <p>
-            Select any proposal below to read the full wording, review member comments, and cast
-            your vote.
+            Select any party proposal or policy below to read the full wording, review member
+            comments, and cast your vote.
           </p>
         </div>
         <a class="button button--outline" href="/policies/?status=voting">
-          View all {votingPolicies.length} open votes →
+          View all {votingProposals.length} open votes →
         </a>
       </div>
 
       {featuredVoting.length === 0 ? (
         <p class="callout">
-          No proposals are currently open for voting. Browse <a href="/policies/">all policies</a> to
-          read and comment on active proposals.
+          No proposals are currently open for voting. Browse{' '}
+          <a href="/policies/">all proposals &amp; policies</a> to read and comment.
         </p>
       ) : (
         <ul class="policy-rows">
-          {featuredVoting.map((policy) => (
+          {featuredVoting.map((item) => (
             <li class="policy-row">
               <div class="policy-row__main">
                 <div class="policy-row__meta">
                   <span class="badge badge--voting">Voting open</span>
-                  <span>{policy.category}</span>
-                  <span class="tabular">{policy.policyId}</span>
+                  <span class="badge">
+                    {item.kind === 'proposal' ? 'Party proposal' : 'Policy'}
+                  </span>
+                  <span>{item.category}</span>
+                  <span class="tabular">{item.policyId}</span>
                 </div>
                 <h3>
-                  <a href={`/policies/${policy.slug}/`}>{policy.title}</a>
+                  <a href={`/policies/${item.slug}/`}>{item.title}</a>
                 </h3>
-                <p>{policy.statement}</p>
+                <p>{item.statement}</p>
               </div>
               <div class="policy-row__side">
                 <span class="tabular meta-stat">
-                  {policy.votes.total} {policy.votes.total === 1 ? 'vote' : 'votes'} ·{' '}
-                  {policy.commentCount} {policy.commentCount === 1 ? 'comment' : 'comments'}
+                  {item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'} ·{' '}
+                  {item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}
                 </span>
-                <a class="button button--small" href={`/policies/${policy.slug}/`}>
+                <a class="button button--small" href={`/policies/${item.slug}/`}>
                   Read &amp; vote →
                 </a>
               </div>
@@ -172,11 +179,11 @@ const categories = [...categoryMap.values()];
     <div class="page-wrap">
       <div class="section-head">
         <div>
-          <h2 id="topics-heading">Browse by policy area</h2>
-          <p>Explore proposals grouped by topic across Economy and Future priorities.</p>
+          <h2 id="topics-heading">Browse by area</h2>
+          <p>Explore party decisions, organisational proposals, and policy areas.</p>
         </div>
         <a class="button button--outline" href="/policies/">
-          Search all policies →
+          Search all proposals →
         </a>
       </div>
 

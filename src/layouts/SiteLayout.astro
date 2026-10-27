@@ -19,7 +19,7 @@ interface Props {
 
 const {
   title,
-  description = 'Read, discuss, and vote on Fusion Party Australia policy proposals.',
+  description = 'Read, discuss, and vote on Fusion Party Australia proposals, policies, and member decisions.',
   canonical,
   noIndex = false,
   workspace = false,
@@ -61,7 +61,7 @@ const path = Astro.url.pathname;
       {workspace ? (
         <nav class="primary-nav" aria-label="Workspace navigation">
           <a href="/">Member site</a>
-          <a href="/policies/">Policies</a>
+          <a href="/policies/">All Proposals</a>
           <a class="nav-member" href="/member/">
             {user ? user.name || user.email : 'Account'}
           </a>
@@ -81,7 +81,7 @@ const path = Astro.url.pathname;
                 : undefined
             }
           >
-            Policies
+            Proposals &amp; Policies
           </a>
           <a
             href="/policies/?status=voting"
@@ -121,9 +121,9 @@ const path = Astro.url.pathname;
           <img src="/fusion_horizon_logo_light.svg" alt="" width="32" height="32" />
           <span>Engage · Fusion Party Australia</span>
         </a>
-        <p>Read proposals, suggest improvements, and vote on party decisions.</p>
+        <p>Read proposals and policies, suggest improvements, and vote on party decisions.</p>
         <div class="footer-links">
-          <a href="/policies/">All policies</a>
+          <a href="/policies/">Proposals &amp; policies</a>
           <a href="/policies/?status=voting">Open votes</a>
           <a href="/member/">Member account</a>
         </div>

@@ -13,6 +13,7 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
     search: url.searchParams.get("q") ?? "",
     category: url.searchParams.get("category") ?? "",
     status: url.searchParams.get("status") ?? "",
+    kind: url.searchParams.get("kind") ?? "",
   });
   return Response.json({ policies }, { headers: { "cache-control": "private, no-store" } });
 };
@@ -30,7 +31,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return Response.json({ policy }, { status: 201 });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "Could not save policy." },
+      { error: error instanceof Error ? error.message : "Could not save proposal." },
       { status: 400 },
     );
   }

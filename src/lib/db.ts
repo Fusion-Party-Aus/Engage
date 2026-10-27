@@ -1,6 +1,6 @@
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import baselinePolicies from "../data/policies.json" with { type: "json" };
-import type { PlatformEnv, PolicyRecord, PolicyStatus } from "./types.ts";
+import type { PlatformEnv, PolicyRecord, PolicyStatus, ProposalKind } from "./types.ts";
 
 let clientPromise: Promise<MongoClient> | undefined;
 let clientUri: string | undefined;
@@ -78,6 +78,7 @@ async function ensureSeeded(db: Db): Promise<void> {
           $setOnInsert: {
             policyId: item.policyId,
             slug: item.slug,
+            kind: ((item as { kind?: string }).kind === "proposal" ? "proposal" : "policy") as ProposalKind,
             title: item.title,
             division: item.division,
             category: item.category,
@@ -85,6 +86,9 @@ async function ensureSeeded(db: Db): Promise<void> {
             statement: item.statement,
             outcomes: item.outcomes,
             details: item.details,
+            ...((item as { attachmentUrl?: string }).attachmentUrl
+              ? { attachmentUrl: (item as { attachmentUrl?: string }).attachmentUrl }
+              : {}),
             status: (item.defaultStatus as PolicyStatus) || "open",
             createdAt: now,
             updatedAt: now,
@@ -106,7 +110,6 @@ export async function closeDatabase(): Promise<void> {
   if (pending) await (await pending).close();
 }
 
-// Lightweight in-memory MongoDB shim for local dev and unit tests without Docker
 let sharedMemoryDb: Db | undefined;
 
 export function createMemoryDb(): Db {
@@ -119,7 +122,13 @@ export function createMemoryDb(): Db {
         continue;
       }
       const val = doc[key];
-      if (cond && typeof cond === "object" && !(cond instanceof Date) && !(cond instanceof ObjectId) && ! (cond instanceof RegExp)) {
+      if (
+        cond &&
+        typeof cond === "object" &&
+        !(cond instanceof Date) &&
+        !(cond instanceof ObjectId) &&
+        !(cond instanceof RegExp)
+      ) {
         if ("$in" in cond && Array.isArray(cond.$in)) {
           if (!cond.$in.some((item: any) => String(item) === String(val))) return false;
           continue;

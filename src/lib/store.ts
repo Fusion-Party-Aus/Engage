@@ -8,6 +8,7 @@ import type {
   PolicyRecord,
   PolicyStatus,
   PolicySummaryView,
+  ProposalKind,
   SessionUser,
   UserRole,
   VoteChoice,
@@ -32,6 +33,7 @@ export async function listPolicies(
     search?: string;
     category?: string;
     status?: string;
+    kind?: string;
   } = {},
 ): Promise<PolicySummaryView[]> {
   const allPolicies = await db
@@ -62,10 +64,15 @@ export async function listPolicies(
   const query = (options.search ?? "").trim().toLowerCase();
   const catFilter = (options.category ?? "").trim();
   const statusFilter = (options.status ?? "").trim();
+  const kindFilter = (options.kind ?? "").trim();
 
   return allPolicies
     .filter((p) => {
+      const recordKind = p.kind ?? "policy";
       if (!options.includeDrafts && (p.status === "draft" || p.status === "archived")) {
+        return false;
+      }
+      if (kindFilter && kindFilter !== "all" && recordKind !== kindFilter) {
         return false;
       }
       if (catFilter && catFilter !== "all" && p.category !== catFilter) {
@@ -82,6 +89,7 @@ export async function listPolicies(
     })
     .map((p) => ({
       ...p,
+      kind: p.kind ?? "policy",
       commentCount: commentCounts.get(p.policyId) ?? 0,
       votes: voteMap.get(p.policyId) ?? { approve: 0, reject: 0, total: 0 },
     }));
@@ -130,6 +138,7 @@ export async function getPolicyDetail(
   return {
     policy: {
       ...policy,
+      kind: policy.kind ?? "policy",
       commentCount: comments.length,
       votes: tally,
     },
@@ -144,7 +153,7 @@ export async function savePolicy(
   body: Record<string, unknown>,
 ): Promise<PolicyRecord> {
   if (!user.isStaff) {
-    throw new Error("Moderator or Administrator access is required to manage policies.");
+    throw new Error("Moderator or Administrator access is required to manage proposals.");
   }
 
   const col = db.collection<PolicyRecord>("policies");
@@ -158,7 +167,7 @@ export async function savePolicy(
     typeof body.status === "string"
   ) {
     if (!VALID_STATUSES.includes(body.status as PolicyStatus)) {
-      throw new Error("Invalid policy status.");
+      throw new Error("Invalid proposal status.");
     }
     const status = body.status as PolicyStatus;
     const updatedAt = new Date();
@@ -166,12 +175,22 @@ export async function savePolicy(
     return { ...existing, status, updatedAt };
   }
 
+  const kind: ProposalKind =
+    body.kind === "proposal"
+      ? "proposal"
+      : body.kind === "policy"
+        ? "policy"
+        : existing?.kind ?? "policy";
+
   const title = typeof body.title === "string" ? body.title.trim() : existing?.title ?? "";
   if (title.length < 4 || title.length > 200) {
     throw new Error("Title must be between 4 and 200 characters.");
   }
 
-  const category = typeof body.category === "string" ? body.category.trim() : existing?.category ?? "General";
+  const category =
+    typeof body.category === "string"
+      ? body.category.trim()
+      : existing?.category ?? (kind === "proposal" ? "Platform & Branding Review" : "General");
   if (category.length < 2 || category.length > 100) {
     throw new Error("Category must be between 2 and 100 characters.");
   }
@@ -179,11 +198,11 @@ export async function savePolicy(
   const division =
     typeof body.division === "string" && body.division.trim()
       ? body.division.trim()
-      : existing?.division ?? "Reclaim Our Future";
+      : existing?.division ?? (kind === "proposal" ? "Party & Organisation" : "Reclaim Our Future");
 
   const statement = typeof body.statement === "string" ? body.statement.trim() : existing?.statement ?? "";
   if (statement.length < 10 || statement.length > 2000) {
-    throw new Error("Policy statement must be between 10 and 2,000 characters.");
+    throw new Error("Summary statement must be between 10 and 2,000 characters.");
   }
 
   let outcomes: string[] = existing?.outcomes ?? [];
@@ -197,6 +216,14 @@ export async function savePolicy(
   }
 
   const details = typeof body.details === "string" ? body.details.trim() : existing?.details ?? "";
+  const attachmentUrl =
+    typeof body.attachmentUrl === "string"
+      ? body.attachmentUrl.trim()
+      : existing?.attachmentUrl ?? "";
+  if (attachmentUrl && !/^(https?:\/\/|\/)/i.test(attachmentUrl)) {
+    throw new Error("Supporting link or image URL must start with https:// or /.");
+  }
+
   const statusInput = typeof body.status === "string" ? (body.status as PolicyStatus) : existing?.status ?? "open";
   const status: PolicyStatus = VALID_STATUSES.includes(statusInput) ? statusInput : "open";
 
@@ -205,12 +232,14 @@ export async function savePolicy(
   if (existing) {
     const updated: PolicyRecord = {
       ...existing,
+      kind,
       title,
       category,
       division,
       statement,
       outcomes,
       details,
+      attachmentUrl: attachmentUrl || undefined,
       status,
       updatedAt: now,
     };
@@ -218,12 +247,14 @@ export async function savePolicy(
       { policyId: existing.policyId },
       {
         $set: {
+          kind: updated.kind,
           title: updated.title,
           category: updated.category,
           division: updated.division,
           statement: updated.statement,
           outcomes: updated.outcomes,
           details: updated.details,
+          attachmentUrl: updated.attachmentUrl,
           status: updated.status,
           updatedAt: now,
         },
@@ -233,7 +264,9 @@ export async function savePolicy(
   }
 
   const count = await col.countDocuments();
-  const policyId = existingId || `POL-${String(count + 1).padStart(3, "0")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+  const prefix = kind === "proposal" ? "PROP" : "POL";
+  const policyId =
+    existingId || `${prefix}-${String(count + 1).padStart(3, "0")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
   const baseSlug = slugify(title) || policyId.toLowerCase();
   const slugConflict = await col.findOne({ slug: baseSlug });
   const slug = slugConflict ? `${baseSlug}-${policyId.toLowerCase()}` : baseSlug;
@@ -241,12 +274,14 @@ export async function savePolicy(
   const created: PolicyRecord = {
     policyId,
     slug,
+    kind,
     title,
     division,
     category,
     statement,
     outcomes,
     details,
+    ...(attachmentUrl ? { attachmentUrl } : {}),
     status,
     createdAt: now,
     updatedAt: now,
@@ -258,12 +293,12 @@ export async function savePolicy(
 
 export async function deletePolicy(db: Db, user: SessionUser, policyId: string): Promise<void> {
   if (!user.isAdmin) {
-    throw new Error("Administrator access is required to delete a policy.");
+    throw new Error("Administrator access is required to delete a proposal.");
   }
   const id = policyId.trim();
-  if (!id) throw new Error("Policy ID is required.");
+  if (!id) throw new Error("Proposal ID is required.");
   const deleted = await db.collection("policies").deleteOne({ policyId: id });
-  if (!deleted.deletedCount) throw new Error("Policy not found.");
+  if (!deleted.deletedCount) throw new Error("Proposal not found.");
   await Promise.all([
     db.collection("comments").deleteMany({ policyId: id }),
     db.collection("votes").deleteMany({ policyId: id }),
@@ -282,7 +317,7 @@ export async function addComment(
   const policyId = typeof body.policyId === "string" ? body.policyId.trim() : "";
   const policy = await db.collection<PolicyRecord>("policies").findOne({ policyId });
   if (!policy || policy.status === "draft" || policy.status === "archived") {
-    throw new Error("This policy is not open for discussion.");
+    throw new Error("This proposal is not open for discussion.");
   }
 
   const text = typeof body.body === "string" ? body.body.trim() : "";
@@ -328,9 +363,9 @@ export async function castVote(
 
   const policyId = typeof body.policyId === "string" ? body.policyId.trim() : "";
   const policy = await db.collection<PolicyRecord>("policies").findOne({ policyId });
-  if (!policy) throw new Error("Policy not found.");
+  if (!policy) throw new Error("Proposal not found.");
   if (policy.status !== "voting") {
-    throw new Error("Voting is not currently open on this policy.");
+    throw new Error("Voting is not currently open on this proposal.");
   }
 
   const rawChoice = typeof body.choice === "string" ? body.choice.trim() : "";

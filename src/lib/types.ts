@@ -1,4 +1,5 @@
 export type PolicyStatus = "draft" | "open" | "voting" | "adopted" | "archived";
+export type ProposalKind = "policy" | "proposal";
 export type VoteChoice = "approve" | "reject";
 export type CommentKind = "comment" | "amendment";
 export type UserRole = "member" | "moderator" | "administrator";
@@ -31,6 +32,7 @@ export interface SessionUser {
 export interface PolicyRecord {
   policyId: string;
   slug: string;
+  kind: ProposalKind;
   title: string;
   division: string;
   category: string;
@@ -38,6 +40,7 @@ export interface PolicyRecord {
   statement: string;
   outcomes: string[];
   details: string;
+  attachmentUrl?: string;
   status: PolicyStatus;
   createdAt: Date;
   updatedAt: Date;

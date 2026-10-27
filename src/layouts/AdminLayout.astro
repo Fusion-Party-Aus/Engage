@@ -16,7 +16,7 @@ const { title, description, section = 'policies', isAdmin = false } = Astro.prop
     <aside class="admin-sidebar" aria-label="Administration navigation">
       <nav class="admin-nav">
         <a href="/admin/" aria-current={section === 'policies' ? 'page' : undefined}>
-          Policies &amp; Votes
+          Proposals &amp; Votes
         </a>
         {isAdmin && (
           <a href="/admin/members/" aria-current={section === 'members' ? 'page' : undefined}>
@@ -25,7 +25,8 @@ const { title, description, section = 'policies', isAdmin = false } = Astro.prop
         )}
       </nav>
       <p class="admin-sidebar-note">
-        Manage policy proposals, open or close member voting, and verify party membership in one place.
+        Manage party proposals, policies, member voting stages, and membership verification in one
+        place.
       </p>
     </aside>
 
