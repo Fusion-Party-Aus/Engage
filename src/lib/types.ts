@@ -1,4 +1,5 @@
 export type ProposalStage = "propose" | "deliberate" | "decide" | "implement" | "archived";
+export type ProposalKind = "policy" | "resolution";
 export type VoteChoice = "approve" | "abstain" | "reject";
 export type CommentStance = "support" | "concern" | "amendment" | "comment";
 export type UserRole = "member" | "moderator" | "administrator";
@@ -62,12 +63,14 @@ export interface ProposalRecord {
   detailHtml?: string;
   provenance?: PolicyProvenance;
   attachmentUrl?: string;
+  attachmentDescription?: string;
   stage: ProposalStage;
   implementationNote?: string;
   authorId?: string;
   authorName?: string;
   createdAt: Date;
   updatedAt: Date;
+  kind?: ProposalKind | string;
 
   // Backwards compatibility aliases
   policyId?: string;
@@ -75,7 +78,6 @@ export interface ProposalRecord {
   categorySummary?: string;
   statement?: string;
   status?: string;
-  kind?: string;
   division?: string;
 }
 

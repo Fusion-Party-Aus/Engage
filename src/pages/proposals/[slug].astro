@@ -52,6 +52,10 @@ const votes = proposal?.votes ?? { approve: 0, abstain: 0, reject: 0, total: 0 }
 const approvePct = votes.total > 0 ? Math.round((votes.approve / votes.total) * 100) : 0;
 const abstainPct = votes.total > 0 ? Math.round((votes.abstain / votes.total) * 100) : 0;
 const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 100) : 0;
+
+const isResolution = proposal
+  ? proposal.kind === 'resolution' || proposal.proposalId.toUpperCase().startsWith('GOV-')
+  : false;
 ---
 <SiteLayout
   title={proposal ? `${proposal.title} · Engage` : 'Proposal not found · Engage'}
@@ -104,7 +108,12 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
             <div class="staff-bar__actions">
               <label class="staff-select-label">
                 <span>Change stage</span>
-                <select id="staff-stage-select" data-proposal-id={proposal.proposalId}>
+                <select
+                  id="staff-stage-select"
+                  data-proposal-id={proposal.proposalId}
+                  data-current-stage={proposal.stage}
+                  data-vote-count={votes.total}
+                >
                   <option value="propose" selected={proposal.stage === 'propose'}>1. Propose</option>
                   <option value="deliberate" selected={proposal.stage === 'deliberate'}>2. Deliberate</option>
                   <option value="decide" selected={proposal.stage === 'decide'}>3. Decide (Voting)</option>
@@ -129,6 +138,9 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
                 <span class:list={['stage-pill', `stage-pill--${proposal.stage}`]}>
                   {stageLabel(proposal.stage)}
                 </span>
+                <span class:list={['kind-pill', `kind-pill--${isResolution ? 'resolution' : 'policy'}`]}>
+                  {isResolution ? 'Governance Resolution' : 'Policy Proposal'}
+                </span>
                 <span class="space-pill">{proposal.space}</span>
                 <span class="id-pill tabular">{proposal.proposalId}</span>
                 {proposal.provenance && (
@@ -147,20 +159,24 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
               </div>
             </header>
 
-            <!-- Asset Showcase (if proposal includes visual asset or logo) -->
+            <!-- Asset Showcase (if proposal includes visual asset or document) -->
             {proposal.attachmentUrl && (
               <div class="asset-showcase">
                 {isImageAttachment ? (
                   <div class="asset-frame">
-                    <img src={proposal.attachmentUrl} alt={`${proposal.title} visual asset`} />
+                    <img src={proposal.attachmentUrl} alt={`${proposal.title} supporting asset`} />
                   </div>
                 ) : null}
                 <div class="asset-meta">
-                  <span class="asset-tag">Design Asset &amp; Specification</span>
-                  <h3>Official Horizon Identity Emblem</h3>
-                  <p>Standard vector emblem and palette tokens for official party communications.</p>
+                  <span class="asset-tag">{isImageAttachment ? 'Attached Asset' : 'Supporting Document'}</span>
+                  <h3>{isImageAttachment ? 'Supporting Asset & Specification' : 'Supporting Reference Document'}</h3>
+                  {proposal.attachmentDescription ? (
+                    <p>{proposal.attachmentDescription}</p>
+                  ) : (
+                    <p>Reference attachment and documentation supporting this proposal.</p>
+                  )}
                   <a class="button button--small button--outline" href={proposal.attachmentUrl} target="_blank" rel="noopener noreferrer">
-                    Download full asset ↗
+                    {isImageAttachment ? 'Download full asset ↗' : 'View attachment ↗'}
                   </a>
                 </div>
               </div>
@@ -225,13 +241,19 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
               </section>
             )}
 
-            <!-- Policy Provenance & Prior Approval -->
+            <!-- Policy Provenance or Resolution Context -->
             {proposal.provenance && (
               <section class="content-section provenance-section" aria-labelledby="provenance-heading">
                 <div class="provenance-header">
                   <div>
-                    <h2 id="provenance-heading">Policy Provenance &amp; Prior Approval</h2>
-                    <p class="provenance-lead">Lineage and scrutiny details from party archives and published platform versions.</p>
+                    <h2 id="provenance-heading">
+                      {isResolution ? 'Resolution Context & Authority' : 'Policy Provenance & Prior Approval'}
+                    </h2>
+                    <p class="provenance-lead">
+                      {isResolution
+                        ? 'Constitutional authority, organizational precedents, and scrutiny notes from party records.'
+                        : 'Lineage and scrutiny details from party archives and published platform versions.'}
+                    </p>
                   </div>
                   <span class:list={['prov-badge', `prov-badge--${proposal.provenance.category || 'unverified'}`]}>
                     {proposal.provenance.label}
@@ -248,7 +270,7 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
 
                 {proposal.provenance.lineage && proposal.provenance.lineage.length > 0 && (
                   <div class="provenance-subblock">
-                    <h3>Prior Policy Predecessors</h3>
+                    <h3>{isResolution ? 'Preceding Documents & Authorities' : 'Prior Policy Predecessors'}</h3>
                     <ul class="provenance-links">
                       {proposal.provenance.lineage.map((item) => (
                         <li>
@@ -529,6 +551,10 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
             <!-- Metadata info card -->
             <div class="sidebar-meta-card">
               <div class="meta-row">
+                <span>Classification:</span>
+                <strong>{isResolution ? 'Governance Resolution' : 'Policy Proposal'}</strong>
+              </div>
+              <div class="meta-row">
                 <span>Working Group:</span>
                 <strong>{proposal.space}</strong>
               </div>
@@ -542,7 +568,7 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
               </div>
               {proposal.provenance && (
                 <div class="meta-row">
-                  <span>Provenance:</span>
+                  <span>{isResolution ? 'Authority / Context:' : 'Provenance:'}</span>
                   <strong>{proposal.provenance.label}</strong>
                 </div>
               )}
@@ -555,13 +581,33 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
 </SiteLayout>
 
 <script>
-  // Staff stage selector
+  // Staff stage selector with ballot integrity confirmation
   const stageSelect = document.getElementById('staff-stage-select') as HTMLSelectElement | null;
   const stageMsg = document.getElementById('staff-stage-msg');
   if (stageSelect && stageMsg) {
     stageSelect.addEventListener('change', async () => {
       const proposalId = stageSelect.dataset.proposalId;
+      const currentStage = stageSelect.dataset.currentStage || stageSelect.value;
+      const voteCount = parseInt(stageSelect.dataset.voteCount || '0', 10);
       const stage = stageSelect.value;
+      if (currentStage === stage) return;
+
+      let confirmMsg = '';
+      if (stage === 'decide') {
+        confirmMsg = `Open voting (Stage 3: Decide)? Once voting begins, substantive proposal content will be locked to protect ballot integrity.`;
+      } else if (currentStage === 'decide' && voteCount > 0) {
+        confirmMsg = `This ballot currently has ${voteCount} member vote(s). Moving to "${stage}" will conclude or pause active voting. All cast votes will remain safely preserved. Proceed?`;
+      } else if (stage === 'implement') {
+        confirmMsg = `Advance this proposal to Stage 4 (Implement)?`;
+      } else if (stage === 'archived') {
+        confirmMsg = `Archive this proposal? It will no longer be visible to general members.`;
+      }
+
+      if (confirmMsg && !confirm(confirmMsg)) {
+        stageSelect.value = currentStage;
+        return;
+      }
+
       stageSelect.disabled = true;
       stageMsg.textContent = 'Updating...';
 
@@ -571,10 +617,12 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stage }),
         });
-        if (!res.ok) throw new Error('Failed to update stage');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to update stage');
         location.reload();
       } catch (err: any) {
         stageMsg.textContent = err.message || 'Error';
+        stageSelect.value = currentStage;
         stageSelect.disabled = false;
       }
     });
@@ -931,6 +979,25 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
   .stage-pill--decide { background: var(--horizon-voting-bg); color: var(--horizon-voting-ink); border: 1px solid #a3e7eb; }
   .stage-pill--implement { background: var(--horizon-success-bg); color: var(--horizon-success-ink); border: 1px solid #b7e8cb; }
   .stage-pill--archived { background: #f0f0f0; color: var(--horizon-muted); }
+
+  .kind-pill {
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.03em;
+  }
+  .kind-pill--policy {
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple-deep);
+    border: 1px solid var(--horizon-line);
+  }
+  .kind-pill--resolution {
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+  }
 
   /* Provenance Pills and Badges */
   .prov-pill,

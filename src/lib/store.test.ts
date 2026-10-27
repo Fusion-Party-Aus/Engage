@@ -6,15 +6,18 @@ import {
   castVote,
   deleteComment,
   deleteProposal,
+  getDefaultProvenanceLabel,
   getProposalDetail,
   listMembers,
   listProposals,
   listUserActivity,
+  normalizeKind,
   saveMember,
   saveProposal,
   toggleUpvoteComment,
 } from "./store.ts";
 import type { SessionUser } from "./types.ts";
+import { PATCH } from "../pages/api/proposals/[proposalId].ts";
 
 const adminUser: SessionUser = {
   memberId: "6ae04785e1b01d9c2acc646c",
@@ -243,5 +246,398 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
         ),
       /cannot remove your own administrator access/,
     );
+  });
+
+  it("preserves baseline policy provenance, general resolutions, and attachment descriptions", async () => {
+    const db = await getDatabase({ APP_MODE: "development" });
+    const all = await listProposals(db);
+
+    // Verify policy records
+    const pol1 = all.find((p) => p.proposalId === "POL-001");
+    assert.ok(pol1);
+    assert.equal(pol1.kind, "policy");
+    assert.ok(pol1.provenance);
+
+    // Verify governance resolutions
+    const gov1 = all.find((p) => p.proposalId === "GOV-001");
+    assert.ok(gov1);
+    assert.equal(gov1.kind, "resolution");
+    assert.equal(gov1.provenance?.category, "party-governance");
+
+    const gov2 = all.find((p) => p.proposalId === "GOV-002");
+    assert.ok(gov2);
+    assert.equal(gov2.kind, "resolution");
+    assert.equal(gov2.attachmentUrl, "/fusion_horizon_logo_light.svg");
+    assert.ok(
+      gov2.attachmentDescription?.includes("Official Horizon identity emblem"),
+      "GOV-002 must have its specific attachment description",
+    );
+  });
+
+  it("distinguishes policy proposals and general resolutions with appropriate labels and helpers", () => {
+    assert.equal(normalizeKind("resolution"), "resolution");
+    assert.equal(normalizeKind("policy"), "policy");
+    assert.equal(normalizeKind(undefined, "GOV-001"), "resolution");
+    assert.equal(normalizeKind(undefined, "POL-001"), "policy");
+
+    // Resolution provenance labels
+    assert.equal(
+      getDefaultProvenanceLabel("existing-repackaged", "resolution"),
+      "Preceding resolution · Equivalence unverified",
+    );
+    assert.equal(
+      getDefaultProvenanceLabel("materially-revised", "resolution"),
+      "Preceding resolution · Materially revised",
+    );
+    assert.equal(
+      getDefaultProvenanceLabel("new-proposal", "resolution"),
+      "New resolution · No prior authority identified",
+    );
+
+    // Policy provenance labels
+    assert.equal(
+      getDefaultProvenanceLabel("existing-repackaged", "policy"),
+      "Approved policy predecessor · Equivalence unverified",
+    );
+    assert.equal(
+      getDefaultProvenanceLabel("materially-revised", "policy"),
+      "Approved policy predecessor · Materially revised",
+    );
+    assert.equal(
+      getDefaultProvenanceLabel("new-proposal", "policy"),
+      "New proposal · No prior policy identified",
+    );
+  });
+
+  it("persists, modifies, and clears admin provenance metadata", async () => {
+    const db = createMemoryDb();
+    const proposal = await saveProposal(db, adminUser, {
+      title: "Integrity Commission Oversight Motion",
+      space: "Governance",
+      summary: "Motion to expand public hearings for federal inquiries.",
+      stage: "deliberate",
+    });
+
+    // Add full provenance
+    const withProv = await saveProposal(db, adminUser, {
+      proposalId: proposal.proposalId,
+      provenance: {
+        category: "materially-revised",
+        label: "Direct Predecessor · Revised",
+        summary: "Updated based on parliamentary review recommendations.",
+        uncertaintyNote: "Reporting threshold numbers are still undergoing drafting.",
+        lineage: [
+          {
+            label: "NACC Standard 2026",
+            url: "https://example.org/nacc",
+            description: "Substantive predecessor clause 4",
+          },
+        ],
+        valuesAlignment: ["Principle: Open Governance"],
+      },
+    });
+
+    assert.ok(withProv.provenance);
+    assert.equal(withProv.provenance.category, "materially-revised");
+    assert.equal(withProv.provenance.label, "Direct Predecessor · Revised");
+    assert.equal(withProv.provenance.lineage?.length, 1);
+    assert.equal(withProv.provenance.lineage[0]?.url, "https://example.org/nacc");
+    assert.equal(withProv.provenance.uncertaintyNote, "Reporting threshold numbers are still undergoing drafting.");
+
+    // Retrieve and verify
+    const fetched = await getProposalDetail(db, proposal.proposalId, adminUser);
+    assert.equal(fetched?.proposal.provenance?.label, "Direct Predecessor · Revised");
+
+    // Clear provenance
+    const cleared = await saveProposal(db, adminUser, {
+      proposalId: proposal.proposalId,
+      provenance: null,
+    });
+    assert.equal(cleared.provenance, undefined);
+  });
+
+  it("allows substantive changes before voting begins in propose and deliberate stages", async () => {
+    const db = createMemoryDb();
+    const proposal = await saveProposal(db, adminUser, {
+      title: "Draft Motion on Transit Expansion",
+      space: "Infrastructure",
+      summary: "Initial draft summary outlining high-speed rail corridors.",
+      outcomes: ["Corridor study by Q3"],
+      details: "Full background and initial route options.",
+      stage: "deliberate",
+    });
+
+    // Substantive modifications while in deliberate with 0 votes
+    const modified = await saveProposal(db, adminUser, {
+      proposalId: proposal.proposalId,
+      title: "National High-Speed Rail Corridor Investment",
+      summary: "Substantively refined summary committing Commonwealth funding.",
+      outcomes: ["Phase 1 Sydney-Melbourne corridor", "Statutory corridor protection"],
+      details: "Updated rationale incorporating state transit authority submissions.",
+      attachmentUrl: "/rail_corridor_map.svg",
+      attachmentDescription: "Map of proposed eastern seaboard high-speed alignment.",
+    });
+
+    assert.equal(modified.title, "National High-Speed Rail Corridor Investment");
+    assert.equal(modified.outcomes.length, 2);
+    assert.equal(modified.attachmentUrl, "/rail_corridor_map.svg");
+    assert.equal(modified.attachmentDescription, "Map of proposed eastern seaboard high-speed alignment.");
+  });
+
+  it("strictly locks substantive content once voting begins while permitting non-substantive administrative updates", async () => {
+    const db = createMemoryDb();
+    const ballot = await saveProposal(db, adminUser, {
+      title: "Constitutional Reform on Fixed Terms",
+      space: "Governance",
+      summary: "Proposal to establish 4-year fixed terms for the federal parliament.",
+      outcomes: ["Four-year fixed terms", "Synchronised Senate elections"],
+      details: "Comparative electoral analysis and constitutional amendment mechanism.",
+      attachmentUrl: "/referendum_wording.pdf",
+      attachmentDescription: "Draft constitutional amendment questions.",
+      stage: "deliberate",
+    });
+
+    // Advance to Decide (voting begins)
+    await saveProposal(db, adminUser, {
+      proposalId: ballot.proposalId,
+      stage: "decide",
+    });
+
+    // Attempting substantive modifications while in Decide (even before votes) must be rejected
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: ballot.proposalId,
+          title: "Subtly Altered Title For Voting",
+        }),
+      /Cannot modify substantive proposal content \(title\)/,
+    );
+
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: ballot.proposalId,
+          summary: "Materially altered proposition statement for voters.",
+        }),
+      /Cannot modify substantive proposal content \(summary\)/,
+    );
+
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: ballot.proposalId,
+          outcomes: ["Altered outcome"],
+        }),
+      /Cannot modify substantive proposal content \(outcomes\)/,
+    );
+
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: ballot.proposalId,
+          attachmentUrl: "/different_wording.pdf",
+        }),
+      /Cannot modify substantive proposal content \(attachmentUrl\)/,
+    );
+
+    // Non-substantive updates (space, provenance, implementation note) MUST succeed
+    const adminUpdate = await saveProposal(db, adminUser, {
+      proposalId: ballot.proposalId,
+      space: "Electoral Reform",
+      implementationNote: "Ballot open until Sunday midnight.",
+    });
+    assert.equal(adminUpdate.space, "Electoral Reform");
+    assert.equal(adminUpdate.implementationNote, "Ballot open until Sunday midnight.");
+
+    // Cast a member vote
+    await castVote(db, memberUser, {
+      proposalId: ballot.proposalId,
+      choice: "approve",
+      reason: "Predictability and stability in legislative cycles.",
+    });
+
+    // Now advance to Stage 4: Implement
+    await saveProposal(db, adminUser, {
+      proposalId: ballot.proposalId,
+      stage: "implement",
+      implementationNote: "Adopted by membership vote. Referral to platform committee.",
+    });
+
+    // Substantive modifications must remain locked in Stage 4 because votes exist
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: ballot.proposalId,
+          details: "Quietly rewritten details after adoption.",
+        }),
+      /Cannot modify substantive proposal content \(details\) because voting has already begun/,
+    );
+  });
+
+  it("preserves existing votes and member data across lifecycle stage transitions", async () => {
+    const db = createMemoryDb();
+    const proposal = await saveProposal(db, adminUser, {
+      title: "Renewable Energy Transition Target",
+      space: "Climate & Energy",
+      summary: "Legislate 90% renewable electricity by 2035 with national storage target.",
+      stage: "deliberate",
+    });
+
+    // Move to Decide and cast votes
+    await saveProposal(db, adminUser, { proposalId: proposal.proposalId, stage: "decide" });
+    await castVote(db, memberUser, {
+      proposalId: proposal.proposalId,
+      choice: "approve",
+      reason: "Critical for emissions trajectory.",
+    });
+
+    let detail = await getProposalDetail(db, proposal.proposalId, memberUser);
+    assert.equal(detail?.proposal.votes.total, 1);
+    assert.equal(detail?.proposal.votes.approve, 1);
+    assert.equal(detail?.myVote, "approve");
+
+    // Move to Implement
+    await saveProposal(db, adminUser, {
+      proposalId: proposal.proposalId,
+      stage: "implement",
+      implementationNote: "Formally endorsed as party policy.",
+    });
+
+    detail = await getProposalDetail(db, proposal.proposalId, memberUser);
+    assert.equal(detail?.proposal.stage, "implement");
+    assert.equal(detail?.proposal.votes.total, 1);
+    assert.equal(detail?.proposal.votes.approve, 1);
+
+    // Pause/move back to deliberate for additional review
+    await saveProposal(db, adminUser, {
+      proposalId: proposal.proposalId,
+      stage: "deliberate",
+    });
+
+    detail = await getProposalDetail(db, proposal.proposalId, memberUser);
+    assert.equal(detail?.proposal.stage, "deliberate");
+    assert.equal(detail?.proposal.votes.total, 1, "Votes must be preserved when moving back to deliberate");
+
+    // Voting is blocked while in deliberate
+    await assert.rejects(
+      () =>
+        castVote(db, memberUser, {
+          proposalId: proposal.proposalId,
+          choice: "reject",
+        }),
+      /not currently in the Decide stage/,
+    );
+
+    // Member activity reflects the preserved vote
+    const activity = await listUserActivity(db, memberUser.memberId);
+    assert.equal(activity.votes.length, 1);
+    assert.equal(activity.votes[0]?.choice, "approve");
+  });
+
+  it("validates lifecycle stages and blocks invalid stage transitions", async () => {
+    const db = createMemoryDb();
+    const proposal = await saveProposal(db, adminUser, {
+      title: "Draft Strategy on Regional Connectivity",
+      space: "Communications",
+      summary: "Draft proposal proposing universal regional fibre and low-orbit satellite backhaul.",
+      stage: "propose",
+    });
+
+    // Invalid stage name
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: proposal.proposalId,
+          stage: "banana" as any,
+        }),
+      /Invalid lifecycle stage: 'banana'/,
+    );
+
+    // Bypassing deliberation directly to decide
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: proposal.proposalId,
+          stage: "decide",
+        }),
+      /must undergo member deliberation before entering Decide/,
+    );
+
+    // Bypassing deliberation and voting directly to implement
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: proposal.proposalId,
+          stage: "implement",
+        }),
+      /must undergo member deliberation before entering Decide or Implement/,
+    );
+
+    // Advance to deliberate
+    await saveProposal(db, adminUser, {
+      proposalId: proposal.proposalId,
+      stage: "deliberate",
+    });
+
+    // Skipping decide to jump straight from deliberate to implement
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: proposal.proposalId,
+          stage: "implement",
+        }),
+      /must be voted on in the Decide stage before entering Implement/,
+    );
+  });
+
+  it("surfaces server errors through API route when ballot is locked or transition is invalid", async () => {
+    // Unauthenticated request
+    const unauthReq = new Request("http://localhost:4321/api/proposals/POL-001", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: "decide" }),
+    });
+    const unauthRes = await PATCH({
+      params: { proposalId: "POL-001" },
+      request: unauthReq,
+      locals: {},
+    } as any);
+    assert.equal(unauthRes.status, 401);
+
+    // Staff attempting invalid stage transition on POL-001 (POL-001 is in deliberate in baseline)
+    const invalidTransReq = new Request("http://localhost:4321/api/proposals/POL-001", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "engage_dev_user=administrator",
+      },
+      body: JSON.stringify({ stage: "implement" }), // Jumping straight from deliberate to implement
+    });
+    const invalidTransRes = await PATCH({
+      params: { proposalId: "POL-001" },
+      request: invalidTransReq,
+      locals: {},
+    } as any);
+    assert.equal(invalidTransRes.status, 400);
+    const errPayload = await invalidTransRes.json();
+    assert.ok(errPayload.error.includes("must be voted on in the Decide stage"));
+
+    // Staff attempting substantive change on POL-010 (POL-010 is in decide / voting stage in baseline)
+    const lockedReq = new Request("http://localhost:4321/api/proposals/POL-010", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: "engage_dev_user=administrator",
+      },
+      body: JSON.stringify({ title: "Illegitimately Modified Title After Voting" }),
+    });
+    const lockedRes = await PATCH({
+      params: { proposalId: "POL-010" },
+      request: lockedReq,
+      locals: {},
+    } as any);
+    assert.equal(lockedRes.status, 400);
+    const lockedPayload = await lockedRes.json();
+    assert.ok(lockedPayload.error.includes("Cannot modify substantive proposal content"));
   });
 });

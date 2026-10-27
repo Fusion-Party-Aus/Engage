@@ -85,6 +85,10 @@ async function ensureSeeded(db: Db): Promise<void> {
       const setFields: Record<string, any> = { updatedAt: now };
       if (raw.provenance) setFields.provenance = raw.provenance;
       if (raw.detailHtml) setFields.detailHtml = raw.detailHtml;
+      if (raw.attachmentUrl) setFields.attachmentUrl = String(raw.attachmentUrl);
+      if (raw.attachmentDescription) setFields.attachmentDescription = String(raw.attachmentDescription);
+      const kind = raw.kind || (proposalId.startsWith("GOV-") ? "resolution" : "policy");
+      setFields.kind = kind;
 
       await proposalsCol.updateOne(
         { proposalId },
@@ -99,7 +103,9 @@ async function ensureSeeded(db: Db): Promise<void> {
             outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
             details: String(raw.details || ""),
             ...(raw.attachmentUrl ? { attachmentUrl: String(raw.attachmentUrl) } : {}),
+            ...(raw.attachmentDescription ? { attachmentDescription: String(raw.attachmentDescription) } : {}),
             stage,
+            kind,
             authorName: "Fusion Working Group",
             createdAt: now,
           },

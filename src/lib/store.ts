@@ -6,6 +6,7 @@ import type {
   MemberRecord,
   MembershipStatus,
   PolicyProvenance,
+  ProposalKind,
   ProposalRecord,
   ProposalStage,
   ProposalSummaryView,
@@ -17,14 +18,21 @@ import type {
   VoteTally,
 } from "./types.ts";
 
-export function getDefaultProvenanceLabel(category: string): string {
+export function getDefaultProvenanceLabel(category: string, kind: ProposalKind = "policy"): string {
+  const isResolution = kind === "resolution";
   switch (category) {
     case "existing-repackaged":
-      return "Approved policy predecessor · Equivalence unverified";
+      return isResolution
+        ? "Preceding resolution · Equivalence unverified"
+        : "Approved policy predecessor · Equivalence unverified";
     case "materially-revised":
-      return "Approved policy predecessor · Materially revised";
+      return isResolution
+        ? "Preceding resolution · Materially revised"
+        : "Approved policy predecessor · Materially revised";
     case "new-proposal":
-      return "New proposal · No prior policy identified";
+      return isResolution
+        ? "New resolution · No prior authority identified"
+        : "New proposal · No prior policy identified";
     case "party-governance":
       return "Party Governance · Platform Review";
     case "draft-derived":
@@ -43,7 +51,18 @@ export const VALID_STAGES: ProposalStage[] = [
   "archived",
 ];
 
+export const VALID_KINDS: ProposalKind[] = ["policy", "resolution"];
+
 export const VALID_STANCES: CommentStance[] = ["support", "concern", "amendment", "comment"];
+
+export function isValidStage(value: unknown): value is ProposalStage {
+  if (typeof value !== "string") return false;
+  const raw = value.trim().toLowerCase();
+  return (
+    VALID_STAGES.includes(raw as ProposalStage) ||
+    ["draft", "open", "voting", "adopted"].includes(raw)
+  );
+}
 
 export function normalizeStage(value: unknown, fallback: ProposalStage = "deliberate"): ProposalStage {
   const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -53,6 +72,108 @@ export function normalizeStage(value: unknown, fallback: ProposalStage = "delibe
   if (raw === "implement" || raw === "adopted") return "implement";
   if (raw === "archived") return "archived";
   return fallback;
+}
+
+export function normalizeKind(value: unknown, proposalId = ""): ProposalKind {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "resolution" || raw === "governance") return "resolution";
+  if (raw === "policy") return "policy";
+  if (proposalId.toUpperCase().startsWith("GOV-")) return "resolution";
+  return "policy";
+}
+
+export function validateStageTransition(fromStage: ProposalStage, toStage: ProposalStage): void {
+  if (fromStage === toStage) return;
+  if (!VALID_STAGES.includes(toStage)) {
+    throw new Error(
+      `Invalid lifecycle stage: '${toStage}'. Must be propose, deliberate, decide, implement, or archived.`
+    );
+  }
+  if (fromStage === "propose" && (toStage === "decide" || toStage === "implement")) {
+    throw new Error(
+      "Proposals in Stage 1 (Propose) must undergo member deliberation before entering Decide or Implement."
+    );
+  }
+  if (fromStage === "deliberate" && toStage === "implement") {
+    throw new Error(
+      "Proposals in Stage 2 (Deliberate) must be voted on in the Decide stage before entering Implement."
+    );
+  }
+}
+
+export function isProposalLocked(stage: ProposalStage, voteCount: number): boolean {
+  return stage === "decide" || voteCount > 0;
+}
+
+export function parseOutcomes(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((o) => String(o).trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split("\n")
+      .map((line) => line.replace(/^[-*•\d.)\s]+/, "").trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+export function getSubstantiveChanges(
+  existing: ProposalRecord,
+  updates: {
+    title?: string;
+    summary?: string;
+    outcomes?: string[];
+    details?: string;
+    attachmentUrl?: string;
+    attachmentDescription?: string;
+    kind?: string;
+  },
+): string[] {
+  const changes: string[] = [];
+  if (updates.title !== undefined && updates.title.trim() !== existing.title.trim()) {
+    changes.push("title");
+  }
+  if (updates.summary !== undefined && updates.summary.trim() !== existing.summary.trim()) {
+    changes.push("summary");
+  }
+  if (
+    updates.details !== undefined &&
+    updates.details.trim() !== (existing.details || "").trim()
+  ) {
+    changes.push("details");
+  }
+  if (
+    updates.attachmentUrl !== undefined &&
+    (updates.attachmentUrl.trim() || undefined) !== (existing.attachmentUrl?.trim() || undefined)
+  ) {
+    changes.push("attachmentUrl");
+  }
+  if (
+    updates.attachmentDescription !== undefined &&
+    (updates.attachmentDescription.trim() || undefined) !==
+      (existing.attachmentDescription?.trim() || undefined)
+  ) {
+    changes.push("attachmentDescription");
+  }
+  if (
+    updates.kind !== undefined &&
+    normalizeKind(updates.kind, existing.proposalId) !==
+      normalizeKind(existing.kind, existing.proposalId)
+  ) {
+    changes.push("kind");
+  }
+  if (updates.outcomes !== undefined) {
+    const existingOutcomes = (existing.outcomes || []).map((o) => o.trim()).filter(Boolean);
+    const newOutcomes = updates.outcomes.map((o) => o.trim()).filter(Boolean);
+    if (
+      existingOutcomes.length !== newOutcomes.length ||
+      existingOutcomes.some((val, idx) => val !== newOutcomes[idx])
+    ) {
+      changes.push("outcomes");
+    }
+  }
+  return changes;
 }
 
 export function slugify(text: string): string {
@@ -68,6 +189,7 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
   const space = String(raw.space || raw.category || "General");
   const summary = String(raw.summary || raw.statement || "");
   const stage = normalizeStage(raw.stage || raw.status || "deliberate");
+  const kind = normalizeKind(raw.kind, proposalId);
   return {
     proposalId,
     slug: String(raw.slug || slugify(raw.title || proposalId)),
@@ -80,7 +202,11 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     detailHtml: raw.detailHtml ? String(raw.detailHtml) : undefined,
     provenance: raw.provenance || undefined,
     attachmentUrl: raw.attachmentUrl ? String(raw.attachmentUrl) : undefined,
+    attachmentDescription: raw.attachmentDescription
+      ? String(raw.attachmentDescription).trim()
+      : undefined,
     stage,
+    kind,
     implementationNote: raw.implementationNote ? String(raw.implementationNote) : undefined,
     authorId: raw.authorId ? String(raw.authorId) : undefined,
     authorName: raw.authorName ? String(raw.authorName) : undefined,
@@ -93,7 +219,6 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     categorySummary: String(raw.spaceSummary || raw.categorySummary || ""),
     statement: summary,
     status: stage,
-    kind: raw.kind || "proposal",
     division: raw.division || space,
   };
 }
@@ -272,6 +397,55 @@ export async function saveProposal(
     throw new Error("Your membership must be verified before you can submit a proposal.");
   }
 
+  if (existing) {
+    // Validate stage transition if changing stage
+    if (body.stage !== undefined || body.status !== undefined) {
+      const rawStageInput = body.stage !== undefined ? body.stage : body.status;
+      if (!isValidStage(rawStageInput)) {
+        throw new Error(
+          `Invalid lifecycle stage: '${String(rawStageInput)}'. Must be propose, deliberate, decide, implement, or archived.`
+        );
+      }
+      const targetStage = normalizeStage(rawStageInput, existing.stage);
+      validateStageTransition(existing.stage, targetStage);
+    }
+
+    // Server-enforced ballot integrity lock
+    const voteCount = await db.collection<VoteRecord>("votes").countDocuments({
+      $or: [{ proposalId: existing.proposalId }, { policyId: existing.proposalId } as any],
+    });
+    const locked = isProposalLocked(existing.stage, voteCount);
+
+    if (locked) {
+      const candidateOutcomes = body.outcomes !== undefined ? parseOutcomes(body.outcomes) : undefined;
+      const substantiveChanges = getSubstantiveChanges(existing, {
+        title: typeof body.title === "string" ? body.title : undefined,
+        summary:
+          typeof body.summary === "string"
+            ? body.summary
+            : typeof body.statement === "string"
+              ? body.statement
+              : undefined,
+        outcomes: candidateOutcomes,
+        details: typeof body.details === "string" ? body.details : undefined,
+        attachmentUrl: typeof body.attachmentUrl === "string" ? body.attachmentUrl : undefined,
+        attachmentDescription:
+          typeof body.attachmentDescription === "string" ? body.attachmentDescription : undefined,
+        kind: typeof body.kind === "string" ? body.kind : undefined,
+      });
+
+      if (substantiveChanges.length > 0) {
+        const reason =
+          voteCount > 0
+            ? `voting has already begun and ${voteCount} member vote(s) have been cast`
+            : `the proposal is active in the Decide stage`;
+        throw new Error(
+          `Cannot modify substantive proposal content (${substantiveChanges.join(", ")}) because ${reason}. Substantive text is locked to protect ballot integrity. Create a revised proposal to submit modified motion text.`
+        );
+      }
+    }
+  }
+
   // Quick stage / implementationNote update by staff
   if (
     existing &&
@@ -341,6 +515,16 @@ export async function saveProposal(
     throw new Error("Supporting link or image URL must start with https:// or /.");
   }
 
+  const attachmentDescription =
+    typeof body.attachmentDescription === "string"
+      ? body.attachmentDescription.trim()
+      : existing?.attachmentDescription ?? "";
+
+  const kind = normalizeKind(
+    body.kind ?? existing?.kind ?? "policy",
+    existing?.proposalId ?? "",
+  );
+
   const implementationNote =
     typeof body.implementationNote === "string"
       ? body.implementationNote.trim()
@@ -360,7 +544,7 @@ export async function saveProposal(
     } else if (typeof body.provenance === "object") {
       const rawProv = body.provenance as Record<string, any>;
       const category = String(rawProv.category || "unverified").trim();
-      const label = String(rawProv.label || "").trim() || getDefaultProvenanceLabel(category);
+      const label = String(rawProv.label || "").trim() || getDefaultProvenanceLabel(category, kind);
       const summary = String(rawProv.summary || "").trim();
       const uncertaintyNote = rawProv.uncertaintyNote ? String(rawProv.uncertaintyNote).trim() : undefined;
 
@@ -405,6 +589,8 @@ export async function saveProposal(
       outcomes,
       details,
       attachmentUrl: attachmentUrl || undefined,
+      attachmentDescription: attachmentDescription || undefined,
+      kind,
       implementationNote: implementationNote || undefined,
       stage,
       provenance,
@@ -417,6 +603,8 @@ export async function saveProposal(
       outcomes: updated.outcomes,
       details: updated.details,
       attachmentUrl: updated.attachmentUrl,
+      attachmentDescription: updated.attachmentDescription,
+      kind: updated.kind,
       implementationNote: updated.implementationNote,
       stage: updated.stage,
       updatedAt: now,
@@ -442,6 +630,8 @@ export async function saveProposal(
   const slugConflict = await col.findOne({ slug: baseSlug });
   const slug = slugConflict ? `${baseSlug}-${proposalId.toLowerCase()}` : baseSlug;
 
+  const createdKind = normalizeKind(body.kind, proposalId);
+
   const created: ProposalRecord = {
     proposalId,
     slug,
@@ -451,6 +641,8 @@ export async function saveProposal(
     outcomes,
     details,
     ...(attachmentUrl ? { attachmentUrl } : {}),
+    ...(attachmentDescription ? { attachmentDescription } : {}),
+    kind: createdKind,
     ...(implementationNote ? { implementationNote } : {}),
     stage,
     provenance,

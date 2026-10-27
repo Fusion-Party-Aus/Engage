@@ -22,6 +22,7 @@ const db = await getDatabase(env);
 const query = (Astro.url.searchParams.get('q') ?? '').trim();
 const stageFilter = (Astro.url.searchParams.get('stage') ?? 'all').trim();
 const editId = (Astro.url.searchParams.get('edit') ?? '').trim();
+const reviseId = (Astro.url.searchParams.get('revise') ?? '').trim();
 
 const allProposals = user.isStaff
   ? await listProposals(db, {
@@ -32,6 +33,61 @@ const allProposals = user.isStaff
   : [];
 
 const editingProposal = editId ? allProposals.find((p) => p.proposalId === editId) : null;
+const revisingProposal = reviseId ? allProposals.find((p) => p.proposalId === reviseId) : null;
+const isRevision = Boolean(revisingProposal && !editingProposal);
+
+const isLocked = editingProposal
+  ? editingProposal.stage === 'decide' || editingProposal.votes.total > 0
+  : false;
+const voteCount = editingProposal?.votes.total ?? 0;
+const currentKind = editingProposal
+  ? (editingProposal.kind ?? (editingProposal.proposalId.startsWith('GOV-') ? 'resolution' : 'policy'))
+  : (revisingProposal ? (revisingProposal.kind ?? 'policy') : 'policy');
+const isResolution = currentKind === 'resolution';
+
+const initialTitle = editingProposal
+  ? editingProposal.title
+  : (revisingProposal ? `${revisingProposal.title} (Revised)` : '');
+const initialSpace = editingProposal
+  ? editingProposal.space
+  : (revisingProposal ? revisingProposal.space : 'General');
+const initialSummary = editingProposal
+  ? editingProposal.summary
+  : (revisingProposal ? revisingProposal.summary : '');
+const initialOutcomes = editingProposal
+  ? editingProposal.outcomes
+  : (revisingProposal ? revisingProposal.outcomes : []);
+const initialDetails = editingProposal
+  ? editingProposal.details
+  : (revisingProposal ? revisingProposal.details : '');
+const initialAttachmentUrl = editingProposal
+  ? (editingProposal.attachmentUrl ?? '')
+  : (revisingProposal ? (revisingProposal.attachmentUrl ?? '') : '');
+const initialAttachmentDescription = editingProposal
+  ? (editingProposal.attachmentDescription ?? '')
+  : (revisingProposal ? (revisingProposal.attachmentDescription ?? '') : '');
+const initialImplementationNote = editingProposal ? (editingProposal.implementationNote ?? '') : '';
+
+const initialProvenance = editingProposal
+  ? editingProposal.provenance
+  : (revisingProposal
+      ? {
+          category: 'materially-revised',
+          label: `${revisingProposal.kind === 'resolution' ? 'Preceding resolution' : 'Approved policy predecessor'} · Materially revised`,
+          summary: `Substantive revision of ${revisingProposal.proposalId} (${revisingProposal.title}) following member deliberation and voting.`,
+          uncertaintyNote: revisingProposal.provenance?.uncertaintyNote,
+          lineage: [
+            {
+              label: revisingProposal.title,
+              url: `/proposals/${revisingProposal.slug}/`,
+              description: `Preceding ballot: ${revisingProposal.proposalId}`,
+            },
+            ...(revisingProposal.provenance?.lineage ?? []),
+          ],
+          valuesAlignment: revisingProposal.provenance?.valuesAlignment ?? [],
+        }
+      : null);
+
 const spaces = [...new Set(allProposals.map((p) => p.space))].sort();
 
 const stageOptions: Array<[ProposalStage, string]> = [
@@ -59,17 +115,48 @@ const stageOptions: Array<[ProposalStage, string]> = [
           <h2 id="editor-heading">
             {editingProposal
               ? `Edit ${editingProposal.proposalId}: ${editingProposal.title}`
-              : 'Create a new proposal or resolution'}
+              : isRevision
+                ? `Branch Revision of ${revisingProposal?.proposalId}`
+                : 'Create a new proposal or resolution'}
           </h2>
-          {editingProposal && (
+          {(editingProposal || isRevision) && (
             <a class="button button--outline" href="/admin/">
-              Cancel editing
+              Cancel
             </a>
           )}
         </div>
 
+        {isRevision && (
+          <div class="revision-notice-banner">
+            <strong>🌿 Substantive Revision Mode</strong>
+            <p>
+              Creating a revised motion based on <strong>{revisingProposal?.proposalId}</strong> ({revisingProposal?.title}).
+              The original proposal and its {revisingProposal?.votes.total} vote(s) remain untouched in the archives.
+            </p>
+          </div>
+        )}
+
+        {isLocked && (
+          <div class="ballot-locked-alert">
+            <div class="ballot-locked-alert__icon">🔒</div>
+            <div class="ballot-locked-alert__body">
+              <strong>Substantive Motion Text Locked</strong>
+              <p>
+                This proposal is {editingProposal?.stage === 'decide' ? 'currently active in the Decide (voting) stage' : `in the ${editingProposal?.stage} stage`} with <strong>{voteCount} member vote{voteCount === 1 ? '' : 's'}</strong> cast.
+                To protect ballot integrity, the title, summary, commitments, rationale, classification, and attachments cannot be altered.
+                Lifecycle stage, topic space, provenance metadata, and implementation notes remain editable.
+              </p>
+              <div class="ballot-locked-alert__actions">
+                <a class="button button--small button--outline" href={`/admin/?revise=${encodeURIComponent(editingProposal!.proposalId)}#create-policy`}>
+                  Branch / Revise as New Proposal ↗
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
         <form id="proposal-editor-form" data-editing-id={editingProposal?.proposalId ?? ''}>
-          <div class="admin-grid">
+          <div class="admin-grid admin-grid--3">
             <label class="field">
               <span>Lifecycle Stage</span>
               <select name="stage">
@@ -79,13 +166,24 @@ const stageOptions: Array<[ProposalStage, string]> = [
                     selected={
                       editingProposal
                         ? editingProposal.stage === val
-                        : val === 'deliberate'
+                        : isRevision
+                          ? val === 'deliberate'
+                          : val === 'deliberate'
                     }
                   >
                     {label}
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label class="field">
+              <span>Classification</span>
+              <select name="kind" id="proposal-kind-select" disabled={isLocked}>
+                <option value="policy" selected={!isResolution}>Policy Proposal</option>
+                <option value="resolution" selected={isResolution}>Governance Resolution</option>
+              </select>
+              {isLocked && <input type="hidden" name="kind" value={isResolution ? 'resolution' : 'policy'} />}
             </label>
 
             <label class="field">
@@ -96,7 +194,7 @@ const stageOptions: Array<[ProposalStage, string]> = [
                 required
                 minlength="2"
                 maxlength="100"
-                value={editingProposal?.space ?? 'General'}
+                value={initialSpace}
                 placeholder="e.g. Governance, Economy, Climate, Digital Rights"
               />
               <datalist id="space-options">
@@ -108,51 +206,80 @@ const stageOptions: Array<[ProposalStage, string]> = [
           </div>
 
           <label class="field">
-            <span>Title</span>
+            <span>
+              Title {isLocked && <span class="locked-hint">🔒 locked</span>}
+            </span>
             <input
               name="title"
               required
               minlength="4"
               maxlength="200"
-              value={editingProposal?.title ?? ''}
+              value={initialTitle}
+              readonly={isLocked}
+              class:list={[{ 'is-locked': isLocked }]}
               placeholder="e.g. Adopt Horizon visual identity, or Universal Dental in Medicare"
             />
           </label>
 
           <label class="field">
-            <span>Core Statement / Summary</span>
+            <span>
+              Core Statement / Summary {isLocked && <span class="locked-hint">🔒 locked</span>}
+            </span>
             <textarea
               name="summary"
               required
               minlength="10"
               maxlength="2000"
               rows="3"
-            >{editingProposal?.summary ?? ''}</textarea>
+              readonly={isLocked}
+              class:list={[{ 'is-locked': isLocked }]}
+            >{initialSummary}</textarea>
           </label>
 
           <label class="field">
-            <span>Key Commitments / Outcomes (one per line)</span>
+            <span>
+              Key Commitments / Outcomes (one per line) {isLocked && <span class="locked-hint">🔒 locked</span>}
+            </span>
             <textarea
               name="outcomes"
               rows="3"
-            >{(editingProposal?.outcomes ?? []).join('\n')}</textarea>
+              readonly={isLocked}
+              class:list={[{ 'is-locked': isLocked }]}
+            >{initialOutcomes.join('\n')}</textarea>
           </label>
 
           <label class="field">
-            <span>Detailed Background, Rationale &amp; Text</span>
+            <span>
+              Detailed Background, Rationale &amp; Text {isLocked && <span class="locked-hint">🔒 locked</span>}
+            </span>
             <textarea
               name="details"
               rows="6"
-            >{editingProposal?.details ?? ''}</textarea>
+              readonly={isLocked}
+              class:list={[{ 'is-locked': isLocked }]}
+            >{initialDetails}</textarea>
           </label>
 
-          <div class="admin-grid">
+          <div class="admin-grid admin-grid--3">
             <label class="field">
-              <span>Attachment / Image URL (optional)</span>
+              <span>Supporting Attachment URL (optional) {isLocked && <span class="locked-hint">🔒 locked</span>}</span>
               <input
                 name="attachmentUrl"
-                value={editingProposal?.attachmentUrl ?? ''}
+                value={initialAttachmentUrl}
+                readonly={isLocked}
+                class:list={[{ 'is-locked': isLocked }]}
                 placeholder="e.g. /fusion_horizon_logo_light.svg or https://..."
+              />
+            </label>
+
+            <label class="field">
+              <span>Attachment Description (optional) {isLocked && <span class="locked-hint">🔒 locked</span>}</span>
+              <input
+                name="attachmentDescription"
+                value={initialAttachmentDescription}
+                readonly={isLocked}
+                class:list={[{ 'is-locked': isLocked }]}
+                placeholder="e.g. Official Horizon identity emblem: vector marks and palette tokens"
               />
             </label>
 
@@ -160,18 +287,18 @@ const stageOptions: Array<[ProposalStage, string]> = [
               <span>Implementation Note (for Stage 4)</span>
               <input
                 name="implementationNote"
-                value={editingProposal?.implementationNote ?? ''}
+                value={initialImplementationNote}
                 placeholder="e.g. Adopted at 2026 AGM; logo files released in brand pack."
               />
             </label>
           </div>
 
-          <!-- Policy Provenance & Prior Approval -->
-          <details class="admin-details" open={Boolean(editingProposal?.provenance)}>
+          <!-- Policy Provenance or Resolution Context -->
+          <details class="admin-details" open={Boolean(initialProvenance)}>
             <summary class="admin-details__summary">
-              <strong>Policy Provenance &amp; Prior Approval</strong>
+              <strong>{isResolution ? 'Resolution Context & Authority' : 'Policy Provenance & Prior Approval'}</strong>
               <span class="admin-details__hint">
-                {editingProposal?.provenance?.label || 'Configure predecessor links, review notes, and values alignment'}
+                {initialProvenance?.label || 'Configure predecessor links, review notes, and values alignment'}
               </span>
             </summary>
 
@@ -180,23 +307,23 @@ const stageOptions: Array<[ProposalStage, string]> = [
                 <label class="field">
                   <span>Provenance Classification</span>
                   <select name="provCategory" id="prov-category-select">
-                    <option value="none" selected={!editingProposal?.provenance}>None (Clear Provenance)</option>
-                    <option value="existing-repackaged" selected={editingProposal?.provenance?.category === 'existing-repackaged'}>
-                      Approved policy predecessor · Equivalence unverified
+                    <option value="none" selected={!initialProvenance}>None (Clear Provenance)</option>
+                    <option value="existing-repackaged" selected={initialProvenance?.category === 'existing-repackaged'}>
+                      {isResolution ? 'Preceding resolution · Equivalence unverified' : 'Approved policy predecessor · Equivalence unverified'}
                     </option>
-                    <option value="materially-revised" selected={editingProposal?.provenance?.category === 'materially-revised'}>
-                      Approved policy predecessor · Materially revised
+                    <option value="materially-revised" selected={initialProvenance?.category === 'materially-revised'}>
+                      {isResolution ? 'Preceding resolution · Materially revised' : 'Approved policy predecessor · Materially revised'}
                     </option>
-                    <option value="new-proposal" selected={editingProposal?.provenance?.category === 'new-proposal'}>
-                      New proposal · No prior policy identified
+                    <option value="new-proposal" selected={initialProvenance?.category === 'new-proposal'}>
+                      {isResolution ? 'New resolution · No prior authority identified' : 'New proposal · No prior policy identified'}
                     </option>
-                    <option value="party-governance" selected={editingProposal?.provenance?.category === 'party-governance'}>
+                    <option value="party-governance" selected={initialProvenance?.category === 'party-governance'}>
                       Party Governance · Internal platform review
                     </option>
-                    <option value="draft-derived" selected={editingProposal?.provenance?.category === 'draft-derived'}>
+                    <option value="draft-derived" selected={initialProvenance?.category === 'draft-derived'}>
                       Draft branch predecessor · Unapproved
                     </option>
-                    <option value="unverified" selected={editingProposal?.provenance?.category === 'unverified'}>
+                    <option value="unverified" selected={initialProvenance?.category === 'unverified'}>
                       Mapping unverified
                     </option>
                   </select>
@@ -207,37 +334,37 @@ const stageOptions: Array<[ProposalStage, string]> = [
                   <input
                     name="provLabel"
                     id="prov-label-input"
-                    value={editingProposal?.provenance?.label ?? ''}
+                    value={initialProvenance?.label ?? ''}
                     placeholder="Defaults based on classification"
                   />
                 </label>
               </div>
 
               <label class="field">
-                <span>Provenance Summary</span>
+                <span>{isResolution ? 'Resolution Context Summary' : 'Provenance Summary'}</span>
                 <textarea
                   name="provSummary"
                   rows="2"
-                  placeholder="e.g. Cites a direct predecessor on a published Fusion policy page..."
-                >{editingProposal?.provenance?.summary ?? ''}</textarea>
+                  placeholder={isResolution ? "e.g. Internal governance motion to adopt..." : "e.g. Cites a direct predecessor on a published Fusion policy page..."}
+                >{initialProvenance?.summary ?? ''}</textarea>
               </label>
 
               <label class="field">
                 <span>What is Still Uncertain / Scrutiny Notes</span>
                 <input
                   name="provUncertainty"
-                  value={editingProposal?.provenance?.uncertaintyNote ?? ''}
-                  placeholder="e.g. Links only to a top-level published policy page URL without a clause-level text comparison."
+                  value={initialProvenance?.uncertaintyNote ?? ''}
+                  placeholder="e.g. Specific clause or operational wording comparison notes."
                 />
               </label>
 
               <label class="field">
-                <span>Prior Policy Predecessors (format: Title | URL | Description)</span>
+                <span>{isResolution ? 'Preceding Documents & Authorities (format: Title | URL | Description)' : 'Prior Policy Predecessors (format: Title | URL | Description)'}</span>
                 <textarea
                   name="provLineage"
                   rows="3"
                   placeholder="Fair + Inclusive Society | https://www.fusionparty.org.au/fair_inclusive_society | Direct predecessor: replacing stamp duty with land tax"
-                >{(editingProposal?.provenance?.lineage ?? []).map((l) => [l.label, l.url, l.description].filter(Boolean).join(' | ')).join('\n')}</textarea>
+                >{(initialProvenance?.lineage ?? []).map((l) => [l.label, l.url, l.description].filter(Boolean).join(' | ')).join('\n')}</textarea>
               </label>
 
               <label class="field">
@@ -246,14 +373,14 @@ const stageOptions: Array<[ProposalStage, string]> = [
                   name="provValues"
                   rows="2"
                   placeholder="Principle: Sustainable Urban Prosperity — Replacing transaction taxes with land-value taxation..."
-                >{(editingProposal?.provenance?.valuesAlignment ?? []).join('\n')}</textarea>
+                >{(initialProvenance?.valuesAlignment ?? []).join('\n')}</textarea>
               </label>
             </div>
           </details>
 
           <div class="editor-actions">
             <button class="button" type="submit">
-              {editingProposal ? 'Save changes' : 'Create proposal'}
+              {editingProposal ? 'Save changes' : isRevision ? 'Create revised proposal' : 'Create proposal'}
             </button>
             {editingProposal && user.isAdmin && (
               <button
@@ -261,6 +388,7 @@ const stageOptions: Array<[ProposalStage, string]> = [
                 class="button button--danger"
                 type="button"
                 data-delete-id={editingProposal.proposalId}
+                data-vote-count={voteCount}
               >
                 Delete proposal
               </button>
@@ -311,14 +439,14 @@ const stageOptions: Array<[ProposalStage, string]> = [
                   <a href={`/proposals/${item.slug}/`}>{item.title}</a>
                 </h3>
                 <p class="tabular">
-                  <strong>{item.proposalId}</strong> · {item.space}
+                  <strong>{item.proposalId}</strong> · {item.space} · <span class="kind-tag">{item.kind === 'resolution' || item.proposalId.startsWith('GOV-') ? 'Resolution' : 'Policy'}</span>
                   {item.provenance && (
                     <> · <span class="prov-tag">{item.provenance.label}</span></>
                   )} ·{' '}
                   <span class="tabular">
                     {item.votes.approve} approve / {item.votes.abstain} abstain / {item.votes.reject} reject
                   </span>{' '}
-                  · {item.commentCount} stances
+                  {item.votes.total > 0 && <span class="vote-count-badge">{item.votes.total} vote{item.votes.total === 1 ? '' : 's'}</span>} · {item.commentCount} stances
                 </p>
               </div>
 
@@ -327,6 +455,9 @@ const stageOptions: Array<[ProposalStage, string]> = [
                   class="inline-stage-select"
                   aria-label={`Stage for ${item.title}`}
                   data-quick-proposal-id={item.proposalId}
+                  data-current-stage={item.stage}
+                  data-vote-count={item.votes.total}
+                  data-title={item.title}
                 >
                   {stageOptions.map(([val, label]) => (
                     <option value={val} selected={item.stage === val}>
@@ -410,10 +541,12 @@ const stageOptions: Array<[ProposalStage, string]> = [
         title: formData.get('title'),
         space: formData.get('space'),
         stage: formData.get('stage'),
+        kind: formData.get('kind') || undefined,
         summary: formData.get('summary'),
         details: formData.get('details'),
         outcomes,
         attachmentUrl: formData.get('attachmentUrl') || undefined,
+        attachmentDescription: formData.get('attachmentDescription') || undefined,
         implementationNote: formData.get('implementationNote') || undefined,
         provenance,
       };
@@ -440,16 +573,26 @@ const stageOptions: Array<[ProposalStage, string]> = [
   document.querySelector<HTMLButtonElement>('#delete-proposal-btn')?.addEventListener('click', async (event) => {
     const btn = event.currentTarget as HTMLButtonElement;
     const proposalId = btn.dataset.deleteId;
-    if (!proposalId || !confirm(`Delete ${proposalId}? This cannot be undone.`)) return;
+    const voteCount = parseInt(btn.dataset.voteCount || '0', 10);
+    if (!proposalId) return;
+
+    let confirmMsg = `Delete ${proposalId}? This cannot be undone.`;
+    if (voteCount > 0) {
+      confirmMsg = `WARNING: This proposal has ${voteCount} member vote(s) recorded! Deleting it will permanently delete the voting record. Consider archiving instead.\n\nAre you sure you want to delete ${proposalId}?`;
+    }
+
+    if (!confirm(confirmMsg)) return;
     btn.disabled = true;
     try {
       const res = await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
         method: 'DELETE',
         credentials: 'same-origin',
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not delete proposal.');
       location.href = '/admin/';
-    } catch {
+    } catch (err: any) {
+      alert(err.message || 'Could not delete proposal.');
       btn.disabled = false;
     }
   });
@@ -457,15 +600,45 @@ const stageOptions: Array<[ProposalStage, string]> = [
   document.querySelectorAll<HTMLSelectElement>('[data-quick-proposal-id]').forEach((select) => {
     select.addEventListener('change', async () => {
       const proposalId = select.dataset.quickProposalId;
-      if (!proposalId) return;
+      const title = select.dataset.title || proposalId;
+      const currentStage = select.dataset.currentStage || select.value;
+      const voteCount = parseInt(select.dataset.voteCount || '0', 10);
+      const newStage = select.value;
+      if (!proposalId || currentStage === newStage) return;
+
+      let confirmMsg = '';
+      if (newStage === 'decide') {
+        confirmMsg = `Open ballot for "${title}" (Stage 3: Decide)? Once voting begins, substantive content will be locked to protect ballot integrity.`;
+      } else if (currentStage === 'decide' && voteCount > 0) {
+        confirmMsg = `This proposal currently has ${voteCount} member vote(s). Moving it to "${newStage}" will conclude or pause active voting. All cast votes will remain safely preserved. Proceed?`;
+      } else if (newStage === 'implement') {
+        confirmMsg = `Mark "${title}" as Adopted / Stage 4 Implementation?`;
+      } else if (newStage === 'archived') {
+        confirmMsg = `Archive "${title}"? It will no longer be visible to general members.`;
+      }
+
+      if (confirmMsg && !confirm(confirmMsg)) {
+        select.value = currentStage;
+        return;
+      }
+
       select.disabled = true;
       try {
-        await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
+        const res = await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
           method: 'PATCH',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ stage: select.value }),
+          body: JSON.stringify({ stage: newStage }),
         });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to update stage');
+        }
+        select.dataset.currentStage = newStage;
+        location.reload();
+      } catch (err: any) {
+        alert(err.message || 'Failed to update stage');
+        select.value = currentStage;
       } finally {
         select.disabled = false;
       }
@@ -501,6 +674,85 @@ const stageOptions: Array<[ProposalStage, string]> = [
     border-radius: 0.45rem;
     background: var(--horizon-white);
     font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .admin-grid--3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 1rem;
+  }
+
+  .ballot-locked-alert {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    padding: 1rem 1.25rem;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 0.65rem;
+    margin-bottom: 1.25rem;
+    color: #92400e;
+  }
+
+  .ballot-locked-alert__icon {
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
+  .ballot-locked-alert__body p {
+    margin: 0.35rem 0 0.75rem 0;
+    font-size: 0.88rem;
+    line-height: 1.45;
+  }
+
+  .revision-notice-banner {
+    padding: 0.85rem 1.25rem;
+    background: var(--horizon-lavender);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    margin-bottom: 1.25rem;
+    color: var(--horizon-purple-deep);
+  }
+
+  .revision-notice-banner p {
+    margin: 0.25rem 0 0 0;
+    font-size: 0.88rem;
+  }
+
+  .locked-hint {
+    font-size: 0.75rem;
+    color: #b45309;
+    font-weight: 600;
+    margin-left: 0.35rem;
+  }
+
+  input.is-locked, textarea.is-locked {
+    background: #fdfaf3 !important;
+    border-color: #e5dccb !important;
+    color: #4b4334 !important;
+    cursor: not-allowed;
+  }
+
+  .vote-count-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    background: var(--horizon-voting-bg);
+    color: var(--horizon-voting-ink);
+    border: 1px solid #a3e7eb;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .kind-tag {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+    border-radius: 999px;
+    font-size: 0.72rem;
+    color: var(--horizon-purple-muted);
     font-weight: 600;
   }
 
