@@ -12,11 +12,7 @@
     "start": "node ./dist/server/entry.mjs",
     "preview": "astro preview",
     "check": "astro check",
-    "test:node": "node --experimental-strip-types --test src/**/*.test.ts",
-    "test": "pnpm run test:node && python3 scripts/test-policy-migration.py && python3 scripts/test-backup-safety.py",
-    "test:governance": "node --experimental-strip-types --test src/lib/platform/governance.test.ts",
-    "test:auth": "node --experimental-strip-types --test scripts/tests/auth-membership.test.ts",
-    "test:cutoff": "node --experimental-strip-types --test scripts/tests/ballot-cutoff.test.ts"
+    "test": "node --experimental-strip-types --test src/**/*.test.ts"
   },
   "dependencies": {
     "@astrojs/node": "11.1.9",

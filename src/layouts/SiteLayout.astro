@@ -6,16 +6,34 @@ import '@fontsource/outfit/latin-500.css';
 import '@fontsource/outfit/latin-600.css';
 import '@fontsource/outfit/latin-700.css';
 import '../styles/global.css';
+import { getSessionUser } from '../lib/auth.ts';
+import { runtimeEnv } from '../lib/db.ts';
 
 interface Props {
   title: string;
   description?: string;
   canonical?: string;
   noIndex?: boolean;
+  workspace?: boolean;
 }
-const { title, description = 'Fusion’s policy library and member consultation platform.', canonical, noIndex = false } = Astro.props;
-const privateHost = import.meta.env.DEV || process.env.APP_MODE === 'preview' || Astro.url.hostname === 'localhost' || Astro.url.hostname === '127.0.0.1';
+
+const {
+  title,
+  description = 'Read, discuss, and vote on Fusion Party Australia policy proposals.',
+  canonical,
+  noIndex = false,
+  workspace = false,
+} = Astro.props;
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+const privateHost =
+  import.meta.env.DEV ||
+  env.APP_MODE !== 'production' ||
+  Astro.url.hostname === 'localhost' ||
+  Astro.url.hostname === '127.0.0.1';
 const preventIndexing = noIndex || privateHost;
+const path = Astro.url.pathname;
 ---
 <!doctype html>
 <html lang="en-AU">
@@ -29,29 +47,114 @@ const preventIndexing = noIndex || privateHost;
     <link rel="icon" href="/fusion_horizon_logo_light.svg" type="image/svg+xml" />
     <title>{title}</title>
   </head>
-  <body>
+  <body class:list={{ 'admin-body': workspace }}>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
       <a class="brand" href="/" aria-label="Engage home">
-        <img src="/fusion_horizon_logo_light.svg" alt="" width="42" height="42" />
-        <span class="brand__word">Engage</span>
+        <img src="/fusion_horizon_logo_light.svg" alt="" width="40" height="40" />
+        <span class="brand__word">
+          Engage
+          <span class="brand__sub">Fusion Party Australia</span>
+        </span>
       </a>
-      <nav class="primary-nav" aria-label="Primary navigation">
-        <a href="/policies/">Policies</a>
-        <a href="/consultations/">Consultations</a>
-        <a href="/ballots/">Ballots</a>
-        <a class="nav-member" href="/member/">Member sign in</a>
-      </nav>
+
+      {workspace ? (
+        <nav class="primary-nav" aria-label="Workspace navigation">
+          <a href="/">Member site</a>
+          <a href="/policies/">Policies</a>
+          <a class="nav-member" href="/member/">
+            {user ? user.name || user.email : 'Account'}
+          </a>
+          {user && (
+            <button class="nav-signout" type="button" data-signout>
+              Sign out
+            </button>
+          )}
+        </nav>
+      ) : (
+        <nav class="primary-nav" aria-label="Primary navigation">
+          <a
+            href="/policies/"
+            aria-current={
+              path.startsWith('/policies') && Astro.url.searchParams.get('status') !== 'voting'
+                ? 'page'
+                : undefined
+            }
+          >
+            Policies
+          </a>
+          <a
+            href="/policies/?status=voting"
+            aria-current={Astro.url.searchParams.get('status') === 'voting' ? 'page' : undefined}
+          >
+            Open Votes
+          </a>
+          <a href="/#how-it-works">How It Works</a>
+          {user?.isStaff && (
+            <a href="/admin/" aria-current={path.startsWith('/admin') ? 'page' : undefined}>
+              Admin
+            </a>
+          )}
+          <a
+            class="nav-member"
+            href="/member/"
+            aria-current={path.startsWith('/member') ? 'page' : undefined}
+          >
+            {user ? `Account (${user.name.split(' ')[0] || 'Member'})` : 'Member Sign In'}
+          </a>
+          {user && (
+            <button class="nav-signout" type="button" data-signout>
+              Sign out
+            </button>
+          )}
+        </nav>
+      )}
     </header>
-    <slot name="notice" />
-    <main id="main-content"><slot /></main>
-    <footer class="site-footer">
-      <a class="footer-brand" href="/">
-        <img src="/fusion_horizon_logo_light.svg" alt="" width="34" height="34" />
-        <span>Engage</span>
-      </a>
-      <p>Read policies · share feedback · track decisions</p>
-      <a href="/governance/">How member decisions work</a>
-    </footer>
+
+    <main id="main-content">
+      <slot />
+    </main>
+
+    {!workspace && (
+      <footer class="site-footer">
+        <a class="footer-brand" href="/">
+          <img src="/fusion_horizon_logo_light.svg" alt="" width="32" height="32" />
+          <span>Engage · Fusion Party Australia</span>
+        </a>
+        <p>Read proposals, suggest improvements, and vote on party decisions.</p>
+        <div class="footer-links">
+          <a href="/policies/">All policies</a>
+          <a href="/policies/?status=voting">Open votes</a>
+          <a href="/member/">Member account</a>
+        </div>
+      </footer>
+    )}
   </body>
 </html>
+<script>
+  document.querySelectorAll<HTMLButtonElement>('[data-signout]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' });
+        location.href = '/';
+      } catch {
+        btn.disabled = false;
+      }
+    });
+  });
+</script>
+<style>
+  .nav-signout {
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+    border: 0;
+    background: none;
+    padding: 0.35rem 0.5rem;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+</style>

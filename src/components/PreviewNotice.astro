@@ -1,9 +1,0 @@
----
-import { platformEnv } from '../lib/platform/http.ts';
-const preview = platformEnv(Astro.locals).APP_MODE === 'preview';
----
-{preview && (<div class="preview-notice" role="status">
-  <span class="preview-notice__mark" aria-hidden="true">i</span>
-  <p><strong>Preview only</strong> · Activity shown here does not represent Fusion member views or decisions.</p>
-</div>
-)}

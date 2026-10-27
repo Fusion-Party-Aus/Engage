@@ -1,56 +1,354 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
-import { adminPageContext } from '../../lib/platform/admin-access';
-import { platformEnv } from '../../lib/platform/http';
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { listPolicies } from '../../lib/store.ts';
+import type { PolicyStatus } from '../../lib/types.ts';
+
 export const prerender = false;
-const context = await adminPageContext(Astro.request, platformEnv(Astro.locals));
-if (context instanceof Response) return context;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+
+if (!user) {
+  return Astro.redirect('/member/', 302);
+}
+if (!user.isStaff) {
+  Astro.response.status = 403;
+}
+
+const db = await getDatabase(env);
+const query = (Astro.url.searchParams.get('q') ?? '').trim();
+const statusFilter = (Astro.url.searchParams.get('status') ?? 'all').trim();
+const editId = (Astro.url.searchParams.get('edit') ?? '').trim();
+
+const allPolicies = user.isStaff
+  ? await listPolicies(db, { includeDrafts: true, search: query, status: statusFilter })
+  : [];
+
+const editingPolicy = editId ? allPolicies.find((p) => p.policyId === editId) : null;
+const categories = [...new Set(allPolicies.map((p) => p.category))].sort();
 ---
-<AdminLayout title="Work requiring attention" description="Review contributions, prepare decisions and follow up incomplete outcomes. This queue reflects existing records; viewing it does not change them." area="Work" administrator={context.administrator}>
-  <p id="work-status" role="status" aria-live="polite">Loading work items…</p>
-  <button class="button button--outline" id="retry-work" hidden>Retry loading work</button>
-  <div id="work-items" class="admin-grid" aria-busy="true"></div>
-  {context.administrator && <p class="admin-empty">Membership verification, operational health and audit are in <a href="/admin/administration/">Administration</a>.</p>}
+<AdminLayout
+  title="Policies & Votes"
+  description="Create, edit, or change the voting stage of any policy proposal."
+  section="policies"
+  isAdmin={user.isAdmin}
+>
+  {!user.isStaff ? (
+    <div class="admin-surface">
+      <p>Moderator or Administrator access is required to view this workspace.</p>
+    </div>
+  ) : (
+    <>
+      <section id="create-policy" class="admin-surface" aria-labelledby="editor-heading">
+        <div class="editor-head">
+          <h2 id="editor-heading">
+            {editingPolicy ? `Edit ${editingPolicy.policyId}: ${editingPolicy.title}` : 'Create a new policy proposal'}
+          </h2>
+          {editingPolicy && (
+            <a class="button button--outline" href="/admin/">
+              Cancel editing
+            </a>
+          )}
+        </div>
+
+        <form id="policy-editor-form" data-editing-id={editingPolicy?.policyId ?? ''}>
+          <div class="admin-grid">
+            <label class="field">
+              <span>Proposal title</span>
+              <input
+                name="title"
+                required
+                minlength="4"
+                maxlength="200"
+                value={editingPolicy?.title ?? ''}
+                placeholder="e.g. Universal Dental and Mental Health in Medicare"
+              />
+            </label>
+
+            <label class="field">
+              <span>Policy area (topic)</span>
+              <input
+                name="category"
+                list="category-options"
+                required
+                minlength="2"
+                maxlength="100"
+                value={editingPolicy?.category ?? 'Restore the Fair Go'}
+              />
+              <datalist id="category-options">
+                {categories.map((c) => (
+                  <option value={c} />
+                ))}
+              </datalist>
+            </label>
+          </div>
+
+          <div class="admin-grid">
+            <label class="field">
+              <span>Division</span>
+              <select name="division">
+                <option
+                  value="Reclaim Our Economy"
+                  selected={editingPolicy?.division === 'Reclaim Our Economy'}
+                >
+                  Reclaim Our Economy
+                </option>
+                <option
+                  value="Reclaim Our Future"
+                  selected={!editingPolicy || editingPolicy.division === 'Reclaim Our Future'}
+                >
+                  Reclaim Our Future
+                </option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Stage</span>
+              <select name="status">
+                <option value="open" selected={!editingPolicy || editingPolicy.status === 'open'}>
+                  Open for discussion
+                </option>
+                <option value="voting" selected={editingPolicy?.status === 'voting'}>
+                  Open for voting
+                </option>
+                <option value="adopted" selected={editingPolicy?.status === 'adopted'}>
+                  Adopted policy
+                </option>
+                <option value="draft" selected={editingPolicy?.status === 'draft'}>
+                  Draft (staff only)
+                </option>
+                <option value="archived" selected={editingPolicy?.status === 'archived'}>
+                  Archived
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Core policy commitment (1–2 sentences)</span>
+            <textarea
+              name="statement"
+              required
+              minlength="10"
+              maxlength="2000"
+              style="min-height: 5rem"
+            >{editingPolicy?.statement ?? ''}</textarea>
+          </label>
+
+          <label class="field">
+            <span>Intended outcomes (one outcome per line)</span>
+            <textarea
+              name="outcomes"
+              style="min-height: 6.5rem"
+            >{(editingPolicy?.outcomes ?? []).join('\n')}</textarea>
+          </label>
+
+          <label class="field">
+            <span>Detailed background &amp; implementation</span>
+            <textarea
+              name="details"
+              style="min-height: 9rem"
+            >{editingPolicy?.details ?? ''}</textarea>
+          </label>
+
+          <div class="editor-actions">
+            <button class="button" type="submit">
+              {editingPolicy ? 'Save policy changes' : 'Create policy'}
+            </button>
+            {editingPolicy && user.isAdmin && (
+              <button
+                id="delete-policy-btn"
+                class="button button--danger"
+                type="button"
+                data-delete-id={editingPolicy.policyId}
+              >
+                Delete policy
+              </button>
+            )}
+            <p id="editor-status" class="form-status" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+
+      <form method="get" action="/admin/" class="admin-toolbar">
+        <label class="field">
+          <span>Search policies</span>
+          <input
+            type="search"
+            name="q"
+            value={query}
+            placeholder="Search by title, ID, or policy area"
+          />
+        </label>
+
+        <label class="field" style="max-width: 15rem">
+          <span>Filter by stage</span>
+          <select name="status">
+            <option value="all" selected={statusFilter === 'all'}>
+              All stages ({allPolicies.length})
+            </option>
+            <option value="voting" selected={statusFilter === 'voting'}>Open for voting</option>
+            <option value="open" selected={statusFilter === 'open'}>Open for discussion</option>
+            <option value="adopted" selected={statusFilter === 'adopted'}>Adopted</option>
+            <option value="draft" selected={statusFilter === 'draft'}>Draft</option>
+            <option value="archived" selected={statusFilter === 'archived'}>Archived</option>
+          </select>
+        </label>
+
+        <button class="button button--outline" type="submit">Filter</button>
+      </form>
+
+      <section class="admin-register" aria-label="Policies">
+        {allPolicies.length === 0 ? (
+          <p style="padding: 1.25rem 0; margin: 0">No policies match this filter.</p>
+        ) : (
+          allPolicies.map((policy) => (
+            <article class="admin-row">
+              <div>
+                <h3>
+                  <a href={`/policies/${policy.slug}/`}>{policy.title}</a>
+                </h3>
+                <p class="tabular">
+                  <strong>{policy.policyId}</strong> · {policy.category} · {policy.votes.approve}{' '}
+                  approve / {policy.votes.reject} reject · {policy.commentCount} comments
+                </p>
+              </div>
+
+              <div class="admin-row-actions">
+                <select
+                  class="inline-stage-select"
+                  aria-label={`Stage for ${policy.title}`}
+                  data-quick-policy-id={policy.policyId}
+                >
+                  {(
+                    [
+                      ['open', 'Open for discussion'],
+                      ['voting', 'Open for voting'],
+                      ['adopted', 'Adopted'],
+                      ['draft', 'Draft'],
+                      ['archived', 'Archived'],
+                    ] as Array<[PolicyStatus, string]>
+                  ).map(([val, label]) => (
+                    <option value={val} selected={policy.status === val}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <a class="button button--outline" href={`/admin/?edit=${encodeURIComponent(policy.policyId)}#create-policy`}>
+                  Edit
+                </a>
+                <a class="button button--outline" href={`/policies/${policy.slug}/`}>
+                  View
+                </a>
+              </div>
+            </article>
+          ))
+        )}
+      </section>
+    </>
+  )}
 </AdminLayout>
+
 <script>
-  const container = document.querySelector<HTMLElement>('#work-items')!;
-  const status = document.querySelector<HTMLElement>('#work-status')!;
-  const retry = document.querySelector<HTMLButtonElement>('#retry-work')!;
-  async function loadWork() {
-    retry.hidden = true; container.setAttribute('aria-busy', 'true'); status.textContent = 'Loading work items…';
+  const editorForm = document.querySelector<HTMLFormElement>('#policy-editor-form');
+  const editorStatus = document.querySelector<HTMLElement>('#editor-status');
+
+  editorForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!editorForm.reportValidity()) return;
+    const editingId = editorForm.dataset.editingId;
+    const submitBtn = editorForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    submitBtn.disabled = true;
+    if (editorStatus) editorStatus.textContent = 'Saving…';
+
     try {
-      const response = await fetch('/api/admin/work');
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Work is unavailable.');
-      container.replaceChildren();
-      for (const [key, title, description] of [
-        ['pending', 'Contributions awaiting moderation', 'Keep the policy context visible while reviewing member feedback.'],
-        ['incomplete', 'Outcomes requiring follow-up', 'Closure has not finished. Inspect the decision before retrying finalisation.'],
-        ['expired', 'Voting windows elapsed', 'Admission has ended. Inspect the decision and record its outcome.'],
-        ['drafts', 'Decisions in preparation', 'Drafts need settled wording, a voting window and appropriate authorisation.'],
-      ]) {
-        const section = document.createElement('section'); section.className = 'admin-card';
-        const heading = document.createElement('h2'); heading.textContent = title;
-        const detail = document.createElement('p'); detail.textContent = description;
-        const list = document.createElement('ul'); list.className = 'admin-list';
-        const page = data[key];
-        for (const item of page.items) {
-          const row = document.createElement('li'); const link = document.createElement('a');
-          link.href = key === 'pending' ? `/admin/policies/${encodeURIComponent(item.policyId)}/#feedback` : `/admin/decisions/#${encodeURIComponent(item.ballotId)}`;
-          link.textContent = item.title || 'Member feedback awaiting review'; row.append(link); list.append(row);
-        }
-        section.append(heading, detail, list);
-        const note = document.createElement('p'); note.className = 'admin-meta';
-        note.textContent = !page.items.length ? 'Nothing requiring attention here.' : page.hasMore ? 'Showing the first 20 items. Open the relevant area for the full list.' : `${page.items.length} item${page.items.length === 1 ? '' : 's'}.`;
-        section.append(note); container.append(section);
+      const data = Object.fromEntries(new FormData(editorForm).entries());
+      const url = editingId ? `/api/policies/${encodeURIComponent(editingId)}` : '/api/policies';
+      const method = editingId ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Could not save policy.');
+      location.href = `/policies/${payload.policy.slug}/`;
+    } catch (err) {
+      if (editorStatus) {
+        editorStatus.textContent = err instanceof Error ? err.message : 'Could not save policy.';
       }
-      status.textContent = 'Work items loaded.';
-    } catch (error) { status.textContent = error instanceof Error ? error.message : 'Could not load work. Please retry.'; retry.hidden = false; }
-    finally { container.setAttribute('aria-busy', 'false'); }
-  }
-  retry.addEventListener('click', loadWork); await loadWork();
-  // Deliberately preserve links into the former single-page dashboard.
-  const legacy: Record<string, string> = { '#settle-revision-form': '/admin/policies/', '#new-policy-form': '/admin/policies/#new-policy-form', '#round-schedule': '/admin/consultations/', '#draft-ballot-list': '/admin/decisions/', '#audit-list': '/admin/administration/#audit-list', '#operations-panel': '/admin/administration/', '#review-queue': '/admin/consultations/#feedback' };
-  if (legacy[location.hash]) location.replace(legacy[location.hash]);
+      submitBtn.disabled = false;
+    }
+  });
+
+  document.querySelector<HTMLButtonElement>('#delete-policy-btn')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget as HTMLButtonElement;
+    const policyId = btn.dataset.deleteId;
+    if (!policyId || !confirm(`Delete policy ${policyId}? This cannot be undone.`)) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/policies/${encodeURIComponent(policyId)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!res.ok) throw new Error();
+      location.href = '/admin/';
+    } catch {
+      btn.disabled = false;
+    }
+  });
+
+  document.querySelectorAll<HTMLSelectElement>('[data-quick-policy-id]').forEach((select) => {
+    select.addEventListener('change', async () => {
+      const policyId = select.dataset.quickPolicyId;
+      if (!policyId) return;
+      select.disabled = true;
+      try {
+        await fetch(`/api/policies/${encodeURIComponent(policyId)}`, {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ status: select.value }),
+        });
+      } finally {
+        select.disabled = false;
+      }
+    });
+  });
 </script>
+
+<style>
+  .editor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .editor-head h2 {
+    margin: 0;
+    font-family: Outfit, sans-serif;
+    font-size: 1.3rem;
+  }
+  .editor-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  .inline-stage-select {
+    min-height: 2.65rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid #8a7b99;
+    border-radius: 0.45rem;
+    background: var(--horizon-white);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+</style>

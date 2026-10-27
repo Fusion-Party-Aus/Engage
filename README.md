@@ -1,64 +1,41 @@
 # Engage
 
-Fusion Party Australia’s ongoing policy development, consultation and member decision platform. Engage is the product; Reclaim is its initial policy review programme for the 2026 AGM. The public Reclaim static export remains in the repository as the migration source until the replacement is accepted.
+Fusion Party Australia’s member policy library, discussion, and decision platform (`https://engage.fusionparty.org.au/`).
 
-Canonical repository: **Fusion-Party-Aus/Engage**. The application was transferred with its history from `Fusion-Party-Aus/reclaim-platform`, branch `codex/horizon-policy-platform` (`d98b409`). The source repository is retained as a historical reference; continue application development in Engage only. Reclaim policy content and the separate Reclaim platform and Horizon branding decisions are preserved.
+## Overview
 
-See [M1/M2 delivery tracking](docs/mvp-roadmap.md) and [ADR 0003](docs/adr/0003-reclaim-mvp-node-mongodb.md) for scope and the superseding architecture decision.
+Engage is a streamlined CRUD application built with **Astro (Node standalone SSR)**, **MongoDB**, and **Better Auth**:
+- **Policies (`/policies/` & `/policies/[slug]/`)**: Browse all 76 baseline policies by topic or stage (`Open for discussion`, `Open for voting`, `Adopted`), read the commitment and outcomes in plain English, post comments or wording amendments, and cast `Approve` / `Reject` votes directly on each policy page.
+- **Member Account (`/member/`)**: Passwordless email sign-in link (via Resend) and Google OAuth, displaying membership verification status and a personal log of votes and comments.
+- **Admin Workspace (`/admin/` & `/admin/members/`)**: Create, edit, delete, or change the stage of any policy proposal, and verify member accounts or assign moderator/administrator roles.
 
-## Local development
-
-Requirements: Docker with Compose for the full app and MongoDB stack. For app-only development, Node.js 24 (or 22.23.4 or newer) and pnpm 10.28.0.
+## Local Development
 
 ```sh
-cp .env.example .env
-# Replace all example secrets; use `openssl rand -hex 32` for each password/secret.
-docker compose up -d mongo
-set -a
-. ./.env
-set +a
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The preview uses synthetic identities with environment safeguards (`APP_MODE=preview`, `FORMAL_BALLOTS_ENABLED=false`) while exercising the unified consultation, revision, and ballot workflows. `.env` is ignored by Git and configures a local MongoDB container (when running app-only in preview mode without MongoDB reachable, an in-memory seeded preview database is used automatically). For the complete containerized stack, run `docker compose up -d --build`; the app binds to localhost by default and MongoDB is not exposed beyond localhost. Put an HTTPS reverse proxy in front before allowing remote access. Do not use this preview for genuine member identities, consultation data, or binding votes.
+When `MONGODB_URI` is not set in local development (`APP_MODE !== 'production'`), Engage automatically runs against an in-memory database seeded with the 76 baseline policies from `src/data/policies.json` and enables one-click local development sign-in on `/member/`.
 
-Seed the local MongoDB preview once to load the 76 baseline policy revisions, settled revision `POL-010:v2-settled`, the 36 AGM Round 1 policy ballots (4 open in preview for immediate voting), the 2 separate platform/Horizon identity adoption ballots, and the follow-on `POL-077` proposal in `continuous-policy-round-2027-q1`:
-
-```sh
-docker compose run --rm app node /app/scripts/seed-preview.mjs --dry-run
-docker compose run --rm app node /app/scripts/seed-preview.mjs --confirm-preview
-```
-
-It creates no member accounts or votes.
-
-## Checks
+## Checks & Tests
 
 ```sh
 pnpm check
 pnpm test
 pnpm build
-python3 scripts/test-policy-migration.py
 ```
 
-## Self-hosted deployment
-
-The Docker Compose stack runs Astro’s standalone Node server and a single-node MongoDB replica set on the same host. It persists MongoDB in a named Docker volume, creates a database-scoped application user, keeps synthetic preview mode on, and defaults formal ballots off. See [operations](docs/operations.md) for deployment, connectivity checks, backup/restore, and rollback.
-
-Production uses Better Auth with Google OAuth and manual membership verification. Configure the production auth environment and a separate MongoDB database, then bootstrap an administrator using `node scripts/grant-engage-admin.mjs <existing-Better-Auth-user-ID>`. Accounts await verification before comments, amendments or voting. Underground is a future integration, independent of current login and eligibility. See [release gates](docs/release-gates.md).
-
-## Authentication acceptance checks
-
-Use Node 24 (`nvm use`) and run `pnpm check`, `pnpm test` and `pnpm build`. For the MongoDB-backed authentication/API tests, start and initialise an isolated MongoDB 8 replica set (standalone MongoDB cannot admit votes; see [operations](docs/operations.md)) and run:
+## Production Deployment (Docker Compose)
 
 ```sh
-GOVERNANCE_TEST_MONGODB_URI="mongodb://127.0.0.1:27029/?directConnection=true" pnpm test:governance
-GOVERNANCE_TEST_MONGODB_URI="mongodb://127.0.0.1:27029/?directConnection=true" pnpm test:cutoff
-AUTH_TEST_MONGODB_URI="mongodb://127.0.0.1:27029/?directConnection=true" pnpm test:auth
+cp .env.example .env
+# Populate production secrets in .env
+docker compose -p engage --env-file /opt/engage/.env -f docker-compose.yml -f compose.nuc.yml up -d --no-build --wait
 ```
 
-The test creates and drops a unique test database. It uses Better Auth's supported controlled Google provider options; it does not claim live Google authentication. It checks account creation/returning identity, PKCE authorisation initiation, session restoration/logout, manual verification, API access, revotes, revocation, email-linking rejection and ballot safeguards. To also verify the actual Docker application and a container restart, build `docker build -t engage-auth-verified:test .`, then add `AUTH_TEST_DOCKER_IMAGE=engage-auth-verified:test` to that test command (requires a working Docker runtime such as Docker Desktop or Colima, the test MongoDB port 27029 and free app port 4329). The test removes its app container.
+To grant administrator permissions to an existing signed-in user in production:
 
-Migration details, validation evidence and remaining release blockers are recorded in [the migration notes](docs/engage-migration.md).
-
-Local Docker bootstrap, upgrade, persistence and preview recovery evidence is recorded in [deployment verification](docs/deployment-verification.md).
+```sh
+docker compose -p engage --env-file /opt/engage/.env -f docker-compose.yml -f compose.nuc.yml exec app node scripts/grant-engage-admin.mjs <userId>
+```

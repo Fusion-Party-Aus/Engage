@@ -1,19 +1,40 @@
 ---
 import SiteLayout from './SiteLayout.astro';
-import PreviewNotice from '../components/PreviewNotice.astro';
 import '../styles/admin.css';
-interface Props { title: string; description: string; area: string; administrator?: boolean; participation?: boolean }
-const { title, description, area, administrator = false, participation = true } = Astro.props;
-const areas = [ ['Work', '/admin/'], ['Policies', '/admin/policies/'], ['Consultations', '/admin/consultations/'], ['Decisions', '/admin/decisions/'], ['Administration', '/admin/administration/'] ];
+
+interface Props {
+  title: string;
+  description: string;
+  section?: 'policies' | 'members';
+  isAdmin?: boolean;
+}
+
+const { title, description, section = 'policies', isAdmin = false } = Astro.props;
 ---
-<SiteLayout title={`${title} · Engage administration`} description={description} noIndex>
-  <PreviewNotice slot="notice" />
-  <div class="page-wrap admin-shell">
-    <nav class="admin-nav" aria-label="Administration navigation">
-      {areas.filter(([label]) => label === 'Administration' ? administrator : participation).map(([label, href]) => <a href={href} aria-current={area === label ? 'page' : undefined}>{label}</a>)}
-    </nav>
-    <header class="admin-intro"><p class="eyebrow">Engage · {area}</p><h1>{title}</h1><p>{description}</p></header>
-    <noscript><p class="admin-empty">Enable JavaScript to load work and feedback queues and save administrative forms. Policy wording and saved records remain readable.</p></noscript>
-    <slot />
+<SiteLayout title={`${title} · Engage Admin`} description={description} noIndex workspace>
+  <div class="admin-shell">
+    <aside class="admin-sidebar" aria-label="Administration navigation">
+      <nav class="admin-nav">
+        <a href="/admin/" aria-current={section === 'policies' ? 'page' : undefined}>
+          Policies &amp; Votes
+        </a>
+        {isAdmin && (
+          <a href="/admin/members/" aria-current={section === 'members' ? 'page' : undefined}>
+            Members &amp; Access
+          </a>
+        )}
+      </nav>
+      <p class="admin-sidebar-note">
+        Manage policy proposals, open or close member voting, and verify party membership in one place.
+      </p>
+    </aside>
+
+    <div class="admin-content">
+      <header class="admin-intro">
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </header>
+      <slot />
+    </div>
   </div>
 </SiteLayout>

@@ -1,0 +1,650 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { getPolicyDetail } from '../../lib/store.ts';
+import type { PolicyStatus } from '../../lib/types.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([
+  getDatabase(env),
+  getSessionUser(Astro.request, env),
+]);
+
+const detail = await getPolicyDetail(db, Astro.params.slug ?? '', user);
+if (!detail) {
+  Astro.response.status = 404;
+}
+
+const policy = detail?.policy;
+const comments = detail?.comments ?? [];
+const myVote = detail?.myVote ?? null;
+
+const statusLabel = (status: PolicyStatus) => {
+  if (status === 'voting') return 'Voting open';
+  if (status === 'open') return 'Open for discussion';
+  if (status === 'adopted') return 'Adopted policy';
+  if (status === 'draft') return 'Draft (staff only)';
+  return 'Archived';
+};
+
+// Parse simple markdown paragraphs and bold headings from policy.details cleanly
+const detailBlocks = (policy?.details ?? '')
+  .split(/\n\s*\n/)
+  .map((block) => block.trim())
+  .filter(Boolean)
+  .map((block) => {
+    const headingMatch = block.match(/^\*\*(.+?)\*\*$/);
+    if (headingMatch) {
+      return { type: 'heading' as const, text: headingMatch[1]! };
+    }
+    return {
+      type: 'paragraph' as const,
+      text: block.replace(/\*\*(.+?)\*\*/g, '$1'),
+    };
+  });
+---
+<SiteLayout
+  title={policy ? `${policy.title} · Engage` : 'Policy not found · Engage'}
+  description={policy?.statement ?? 'Policy proposal details, member discussion, and voting.'}
+  canonical={policy ? `${Astro.url.origin}/policies/${policy.slug}/` : undefined}
+>
+  <div class="page-wrap section-space policy-page">
+    {!policy ? (
+      <div class="callout">
+        <h1>Policy not found</h1>
+        <p>
+          That policy could not be found or is not yet published.{' '}
+          <a href="/policies/">Return to the policy library</a>.
+        </p>
+      </div>
+    ) : (
+      <>
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+          <a href="/policies/">Policies</a>
+          <span aria-hidden="true">/</span>
+          <a href={`/policies/?category=${encodeURIComponent(policy.category)}`}>
+            {policy.category}
+          </a>
+          <span aria-hidden="true">/</span>
+          <span class="tabular" aria-current="page">{policy.policyId}</span>
+        </nav>
+
+        {user?.isStaff && (
+          <div class="staff-bar">
+            <span>
+              <strong>Staff controls:</strong> Current stage is <em>{statusLabel(policy.status)}</em>
+            </span>
+            <div class="staff-bar__actions">
+              <label class="staff-select-label">
+                <span>Change stage</span>
+                <select id="staff-status-select" data-policy-id={policy.policyId}>
+                  <option value="draft" selected={policy.status === 'draft'}>Draft</option>
+                  <option value="open" selected={policy.status === 'open'}>Open for discussion</option>
+                  <option value="voting" selected={policy.status === 'voting'}>Open for voting</option>
+                  <option value="adopted" selected={policy.status === 'adopted'}>Adopted</option>
+                  <option value="archived" selected={policy.status === 'archived'}>Archived</option>
+                </select>
+              </label>
+              <a class="button button--small button--outline" href={`/admin/?edit=${encodeURIComponent(policy.policyId)}`}>
+                Edit wording in Admin
+              </a>
+              <span id="staff-status-msg" class="tabular" role="status" aria-live="polite"></span>
+            </div>
+          </div>
+        )}
+
+        <header class="policy-header">
+          <div class="policy-meta">
+            <span class={`badge badge--${policy.status}`}>{statusLabel(policy.status)}</span>
+            <span>{policy.division} · {policy.category}</span>
+            <span class="tabular">{policy.policyId}</span>
+          </div>
+          <h1>{policy.title}</h1>
+          <p class="policy-commitment">{policy.statement}</p>
+        </header>
+
+        {(policy.status === 'voting' || policy.status === 'adopted' || policy.votes.total > 0) && (
+          <section class="vote-panel" aria-labelledby="vote-heading">
+            <div class="vote-panel__info">
+              <h2 id="vote-heading">
+                {policy.status === 'voting'
+                  ? 'Member vote on this proposal'
+                  : policy.status === 'adopted'
+                    ? 'Adopted by member vote'
+                    : 'Recorded member votes'}
+              </h2>
+              <p>
+                {policy.status === 'voting'
+                  ? 'Do you approve adopting this policy wording? Verified members can cast or update their vote while voting is open.'
+                  : 'Voting on this proposal has concluded.'}
+              </p>
+
+              <div class="vote-tally tabular" id="vote-tally">
+                <span>
+                  <strong id="tally-approve">{policy.votes.approve}</strong> Approve
+                </span>
+                <span>
+                  <strong id="tally-reject">{policy.votes.reject}</strong> Reject
+                </span>
+                <span>
+                  <strong id="tally-total">{policy.votes.total}</strong> Total votes
+                </span>
+              </div>
+            </div>
+
+            {policy.status === 'voting' && (
+              <div class="vote-panel__controls">
+                {!user ? (
+                  <a class="button" href="/member/">
+                    Sign in to vote →
+                  </a>
+                ) : !user.canParticipate ? (
+                  <p class="vote-pending-note">
+                    Your account is awaiting membership verification. Once an administrator confirms
+                    your Fusion membership, you can vote here.
+                  </p>
+                ) : (
+                  <div class="vote-buttons" data-policy-id={policy.policyId}>
+                    <button
+                      type="button"
+                      class={`button ${myVote === 'approve' ? 'button--purple' : 'button--outline'}`}
+                      data-vote-choice="approve"
+                    >
+                      {myVote === 'approve' ? '✓ Approved (your vote)' : 'Approve proposal'}
+                    </button>
+                    <button
+                      type="button"
+                      class={`button ${myVote === 'reject' ? 'button--purple' : 'button--outline'}`}
+                      data-vote-choice="reject"
+                    >
+                      {myVote === 'reject' ? '✓ Rejected (your vote)' : 'Reject proposal'}
+                    </button>
+                    <p id="vote-status" class="form-status" role="status" aria-live="polite">
+                      {myVote
+                        ? `Your recorded vote: ${myVote === 'approve' ? 'Approve' : 'Reject'}.`
+                        : 'Select Approve or Reject to record your vote.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {policy.outcomes.length > 0 && (
+          <section class="policy-section" aria-labelledby="outcomes-heading">
+            <h2 id="outcomes-heading">What this policy aims to achieve</h2>
+            <ol class="outcomes-list">
+              {policy.outcomes.map((outcome) => (
+                <li>{outcome}</li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {detailBlocks.length > 0 && (
+          <section class="policy-section" aria-labelledby="rationale-heading">
+            <h2 id="rationale-heading">Background and how it works</h2>
+            <div class="prose">
+              {detailBlocks.map((block) =>
+                block.type === 'heading' ? <h3>{block.text}</h3> : <p>{block.text}</p>,
+              )}
+            </div>
+          </section>
+        )}
+
+        <section id="discussion" class="policy-section discussion-section" aria-labelledby="discussion-heading">
+          <div class="discussion-head">
+            <h2 id="discussion-heading">Member feedback &amp; suggested wording</h2>
+            <span class="badge tabular">
+              {comments.length} {comments.length === 1 ? 'contribution' : 'contributions'}
+            </span>
+          </div>
+
+          {!user ? (
+            <div class="callout">
+              <p>
+                Have feedback or a wording improvement?{' '}
+                <a href="/member/">Sign in to your member account</a> to join the discussion.
+              </p>
+            </div>
+          ) : !user.canParticipate ? (
+            <div class="callout">
+              <p>
+                Signed in as <strong>{user.name || user.email}</strong>. Your party membership is
+                awaiting administrator verification before you can post comments.
+              </p>
+            </div>
+          ) : (
+            <form id="comment-form" class="comment-form">
+              <input type="hidden" name="policyId" value={policy.policyId} />
+              <div class="comment-form__row">
+                <label class="field">
+                  <span>Contribution type</span>
+                  <select name="kind">
+                    <option value="comment">General comment or feedback</option>
+                    <option value="amendment">Suggested wording amendment</option>
+                  </select>
+                </label>
+              </div>
+              <label class="field">
+                <span>Your comment or proposed wording</span>
+                <textarea
+                  name="body"
+                  minlength="5"
+                  maxlength="5000"
+                  required
+                  placeholder="Share what works, what should change, or paste the exact wording you suggest..."
+                ></textarea>
+              </label>
+              <div class="comment-form__footer">
+                <button class="button" type="submit">Post contribution</button>
+                <p id="comment-status" class="form-status" role="status" aria-live="polite"></p>
+              </div>
+            </form>
+          )}
+
+          {comments.length === 0 ? (
+            <p class="empty-comments">
+              No comments have been posted on this proposal yet.
+            </p>
+          ) : (
+            <ul class="comment-list" id="comment-list">
+              {comments.map((c) => {
+                const canDelete = Boolean(user && (user.memberId === c.memberId || user.isStaff));
+                return (
+                  <li class="comment-item" data-comment-id={c.commentId}>
+                    <div class="comment-item__head">
+                      <div class="comment-item__meta">
+                        <strong>{c.authorName}</strong>
+                        <span class="badge">
+                          {c.kind === 'amendment' ? 'Suggested wording' : 'Comment'}
+                        </span>
+                        <time datetime={new Date(c.createdAt).toISOString()}>
+                          {new Date(c.createdAt).toLocaleDateString('en-AU', {
+                            dateStyle: 'medium',
+                          })}
+                        </time>
+                      </div>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          class="delete-comment-btn"
+                          data-delete-comment={c.commentId}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                    <p class="comment-item__body">{c.body}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </>
+    )}
+  </div>
+</SiteLayout>
+
+<script>
+  // Staff quick stage change
+  const staffSelect = document.querySelector<HTMLSelectElement>('#staff-status-select');
+  const staffMsg = document.querySelector<HTMLElement>('#staff-status-msg');
+  staffSelect?.addEventListener('change', async () => {
+    const policyId = staffSelect.dataset.policyId;
+    if (!policyId) return;
+    staffSelect.disabled = true;
+    if (staffMsg) staffMsg.textContent = 'Saving…';
+    try {
+      const res = await fetch(`/api/policies/${encodeURIComponent(policyId)}`, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: staffSelect.value }),
+      });
+      if (!res.ok) throw new Error();
+      location.reload();
+    } catch {
+      if (staffMsg) staffMsg.textContent = 'Could not update stage.';
+      staffSelect.disabled = false;
+    }
+  });
+
+  // Voting buttons
+  const voteContainer = document.querySelector<HTMLElement>('[data-policy-id].vote-buttons');
+  const voteStatus = document.querySelector<HTMLElement>('#vote-status');
+  const voteButtons = voteContainer?.querySelectorAll<HTMLButtonElement>('[data-vote-choice]') ?? [];
+
+  for (const btn of voteButtons) {
+    btn.addEventListener('click', async () => {
+      const policyId = voteContainer?.dataset.policyId;
+      const choice = btn.dataset.voteChoice;
+      if (!policyId || !choice) return;
+
+      for (const b of voteButtons) b.disabled = true;
+      if (voteStatus) voteStatus.textContent = 'Recording your vote…';
+
+      try {
+        const res = await fetch('/api/votes', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ policyId, choice }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not record vote.');
+
+        document.querySelector('#tally-approve')!.textContent = String(data.votes.approve);
+        document.querySelector('#tally-reject')!.textContent = String(data.votes.reject);
+        document.querySelector('#tally-total')!.textContent = String(data.votes.total);
+
+        for (const b of voteButtons) {
+          const isSelected = b.dataset.voteChoice === choice;
+          b.classList.toggle('button--purple', isSelected);
+          b.classList.toggle('button--outline', !isSelected);
+          b.textContent =
+            b.dataset.voteChoice === 'approve'
+              ? isSelected
+                ? '✓ Approved (your vote)'
+                : 'Approve proposal'
+              : isSelected
+                ? '✓ Rejected (your vote)'
+                : 'Reject proposal';
+        }
+        if (voteStatus) {
+          voteStatus.textContent = `Vote saved (${choice === 'approve' ? 'Approve' : 'Reject'}).`;
+        }
+      } catch (err) {
+        if (voteStatus) {
+          voteStatus.textContent = err instanceof Error ? err.message : 'Could not record vote.';
+        }
+      } finally {
+        for (const b of voteButtons) b.disabled = false;
+      }
+    });
+  }
+
+  // Comment submission
+  const commentForm = document.querySelector<HTMLFormElement>('#comment-form');
+  const commentStatus = document.querySelector<HTMLElement>('#comment-status');
+  commentForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!commentForm.reportValidity()) return;
+    const submitBtn = commentForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    submitBtn.disabled = true;
+    if (commentStatus) commentStatus.textContent = 'Posting…';
+
+    try {
+      const formData = new FormData(commentForm);
+      const res = await fetch('/api/comments', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          policyId: formData.get('policyId'),
+          kind: formData.get('kind'),
+          body: formData.get('body'),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not post comment.');
+      location.reload();
+    } catch (err) {
+      if (commentStatus) {
+        commentStatus.textContent = err instanceof Error ? err.message : 'Could not post comment.';
+      }
+      submitBtn.disabled = false;
+    }
+  });
+
+  // Comment deletion
+  document.querySelectorAll<HTMLButtonElement>('[data-delete-comment]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const commentId = btn.dataset.deleteComment;
+      if (!commentId) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/comments?commentId=${encodeURIComponent(commentId)}`, {
+          method: 'DELETE',
+          credentials: 'same-origin',
+        });
+        if (!res.ok) throw new Error();
+        btn.closest('[data-comment-id]')?.remove();
+      } catch {
+        btn.disabled = false;
+      }
+    });
+  });
+</script>
+
+<style>
+  .policy-page {
+    max-width: 58rem;
+  }
+  .breadcrumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+    color: var(--horizon-muted);
+    font-weight: 500;
+  }
+
+  .staff-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1.15rem;
+    margin-bottom: 1.75rem;
+    background: var(--horizon-lavender);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    font-size: 0.9rem;
+  }
+  .staff-bar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .staff-select-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+  }
+  .staff-select-label select {
+    padding: 0.35rem 0.65rem;
+    border: 1px solid #8a7b99;
+    border-radius: 0.4rem;
+    background: var(--horizon-white);
+  }
+
+  .policy-header {
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+  .policy-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 0.95rem;
+    margin-bottom: 0.85rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+  .policy-header h1 {
+    margin: 0 0 1.1rem;
+    font-size: clamp(2.1rem, 4.2vw, 3.25rem);
+  }
+  .policy-commitment {
+    margin: 0;
+    font-size: clamp(1.15rem, 1.8vw, 1.35rem);
+    line-height: 1.55;
+    font-weight: 500;
+    color: var(--horizon-purple-deep);
+    max-width: 65ch;
+  }
+
+  .vote-panel {
+    margin-top: 2rem;
+    padding: 1.5rem 1.75rem;
+    background: var(--horizon-lavender);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.85rem;
+    display: grid;
+    gap: 1.25rem;
+  }
+  .vote-panel h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1.55rem;
+  }
+  .vote-panel p {
+    margin: 0;
+    color: var(--horizon-muted);
+    max-width: 62ch;
+  }
+  .vote-tally {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.75rem;
+    margin-top: 0.85rem;
+    font-size: 0.95rem;
+    color: var(--horizon-purple-deep);
+  }
+  .vote-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .vote-buttons .form-status {
+    width: 100%;
+    margin-top: 0.25rem;
+  }
+  .vote-pending-note {
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+  }
+
+  .policy-section {
+    margin-top: 2.75rem;
+    padding-top: 2.25rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+  .policy-section h2 {
+    margin: 0 0 1rem;
+    font-size: clamp(1.6rem, 2.6vw, 2.1rem);
+  }
+  .outcomes-list {
+    margin: 0;
+    padding-left: 1.35rem;
+    display: grid;
+    gap: 0.65rem;
+    max-width: 68ch;
+    font-size: 1.04rem;
+    line-height: 1.6;
+  }
+  .prose {
+    max-width: 68ch;
+  }
+  .prose h3 {
+    margin: 1.75rem 0 0.45rem;
+    font-size: 1.15rem;
+    color: var(--horizon-purple-deep);
+  }
+  .prose p {
+    margin: 0 0 1rem;
+    color: var(--horizon-purple-deep);
+    line-height: 1.7;
+  }
+
+  .discussion-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  .discussion-head h2 {
+    margin: 0;
+  }
+  .comment-form {
+    padding: 1.35rem 1.5rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    margin-bottom: 2rem;
+  }
+  .comment-form__row {
+    max-width: 22rem;
+  }
+  .comment-form__footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.5rem;
+  }
+  .empty-comments {
+    color: var(--horizon-muted);
+    margin: 1rem 0 0;
+  }
+  .comment-list {
+    list-style: none;
+    padding: 0;
+    margin: 1.5rem 0 0;
+    border-top: 1px solid var(--horizon-line);
+  }
+  .comment-item {
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+  .comment-item__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.45rem;
+  }
+  .comment-item__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    font-size: 0.88rem;
+    color: var(--horizon-muted);
+  }
+  .comment-item__meta strong {
+    color: var(--horizon-purple-deep);
+    font-size: 0.95rem;
+  }
+  .comment-item__body {
+    margin: 0;
+    max-width: 68ch;
+    white-space: pre-wrap;
+    line-height: 1.65;
+  }
+  .delete-comment-btn {
+    border: 0;
+    background: none;
+    color: var(--horizon-danger-ink);
+    font-size: 0.84rem;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+  }
+</style>

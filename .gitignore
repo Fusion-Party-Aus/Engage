@@ -9,3 +9,6 @@ dist/
 backups/
 coverage/
 playwright-report/
+.DS_Store
+
+.impeccable/

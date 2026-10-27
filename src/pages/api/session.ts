@@ -1,21 +1,60 @@
-import { resolveIdentity } from "../../lib/platform/auth.ts";
-import { getDatabase } from "../../lib/platform/database.ts";
-import { membershipStatus } from "../../lib/platform/membership.ts";
-import { getAuth, loginConfigured } from "../../lib/platform/better-auth.ts";
-import { json, platformEnv, requireSameOrigin } from "../../lib/platform/http.ts";
-import type { RuntimeLocals } from "../../lib/platform/types.ts";
-import { DELETE as previewLogout } from "./preview/session.ts";
+import type { APIRoute } from "astro";
+import {
+  clearDevSessionCookie,
+  createDevSessionCookie,
+  getAuth,
+  getSessionUser,
+  isProduction,
+  loginConfigured,
+} from "../../lib/auth.ts";
+import { getDatabase, runtimeEnv } from "../../lib/db.ts";
+import { listUserActivity } from "../../lib/store.ts";
+
 export const prerender = false;
-export async function GET({ request, locals }: { request: Request; locals: RuntimeLocals }) {
-  const env = platformEnv(locals);
-  try {
-    const { identity } = await resolveIdentity(request, env);
-    return json({ identity, syntheticOnly: env.APP_MODE === "preview", loginAvailable: loginConfigured(env), membershipStatus: identity ? identity.source === "synthetic" ? "preview" : await membershipStatus(await getDatabase(env), identity.memberId) : null });
-  } catch { return json({ error: "Your session is temporarily unavailable." }, 503); }
-}
-export async function DELETE(context: { request: Request; locals: RuntimeLocals }) {
-  const error = requireSameOrigin(context.request); if (error) return error;
-  const env = platformEnv(context.locals);
-  if (env.APP_MODE === "preview") return previewLogout(context);
-  return (await getAuth(env)).api.signOut({ headers: context.request.headers, asResponse: true });
-}
+
+export const GET: APIRoute = async ({ request, locals }) => {
+  const env = runtimeEnv(locals);
+  const user = await getSessionUser(request, env);
+  const activity = user ? await listUserActivity(await getDatabase(env), user.memberId) : null;
+  return Response.json(
+    {
+      identity: user,
+      membershipStatus: user?.status ?? null,
+      loginAvailable: loginConfigured(env) || !isProduction(env),
+      activity,
+    },
+    { headers: { "cache-control": "private, no-store" } },
+  );
+};
+
+export const POST: APIRoute = async ({ request, locals }) => {
+  const env = runtimeEnv(locals);
+  if (isProduction(env)) {
+    return Response.json({ error: "Development sign-in is disabled in production." }, { status: 403 });
+  }
+  const body = await request.json().catch(() => ({}));
+  const role = body?.role === "administrator" ? "administrator" : "member";
+  return Response.json(
+    { ok: true, role },
+    { headers: { "set-cookie": createDevSessionCookie(role), "cache-control": "private, no-store" } },
+  );
+};
+
+export const DELETE: APIRoute = async ({ request, locals }) => {
+  const env = runtimeEnv(locals);
+  const headers = new Headers({
+    "cache-control": "private, no-store",
+    "set-cookie": clearDevSessionCookie(),
+  });
+  if (loginConfigured(env)) {
+    try {
+      const auth = await getAuth(env);
+      const response = await auth.api.signOut({ headers: request.headers, asResponse: true });
+      const setCookie = response.headers.get("set-cookie");
+      if (setCookie) headers.append("set-cookie", setCookie);
+    } catch {
+      // Ignore if session already expired
+    }
+  }
+  return Response.json({ ok: true }, { headers });
+};

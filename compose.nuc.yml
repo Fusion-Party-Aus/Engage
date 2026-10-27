@@ -1,0 +1,16 @@
+services:
+  mongo:
+    command: ["--wiredTigerCacheSizeGB", "0.25"]
+    mem_limit: 512m
+    memswap_limit: 1g
+    cpus: 0.75
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  app:
+    mem_limit: 256m
+    memswap_limit: 512m
+    cpus: 0.75
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

@@ -1,68 +1,166 @@
 ---
 import SiteLayout from '../layouts/SiteLayout.astro';
-import PreviewNotice from '../components/PreviewNotice.astro';
-import HeroSplit from '../components/HeroSplit.astro';
-import copy from '../data/site-copy.json';
-import { loadPublicPolicyCatalogue } from '../lib/platform/catalogue';
-import { platformEnv } from '../lib/platform/http';
-import { getDatabase } from '../lib/platform/database';
-import { listBallots } from '../lib/platform/ballots';
+import { getSessionUser } from '../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../lib/db.ts';
+import { listPolicies } from '../lib/store.ts';
 
 export const prerender = false;
 
-const env = platformEnv(Astro.locals);
-const [catalogue, allBallots] = await Promise.all([loadPublicPolicyCatalogue(env), getDatabase(env).then(listBallots)]);
-const openConsultations = catalogue.filter((policy) => !policy.syntheticFixture && policy.consultationRounds.some((round) => round.status === 'open'));
-const highlightedConsultationIds = ['POL-010', 'POL-039', 'POL-025'];
-const highlightedConsultations = [
-  ...highlightedConsultationIds.map((id) => openConsultations.find((p) => p.policyId === id)).filter((p): p is NonNullable<typeof p> => Boolean(p)),
-  ...openConsultations.filter((p) => !highlightedConsultationIds.includes(p.policyId)),
-].slice(0, 3);
-const featured = catalogue.filter((policy) => !policy.syntheticFixture).slice(0, 3);
-const memberDecisions = allBallots.filter((ballot) => !ballot.syntheticFixture && (ballot.status === 'open' || ['adoption-reclaim-platform', 'adoption-horizon-identity', 'ballot-adopt-reclaim-platform-2026', 'ballot-adopt-horizon-identity-2026'].includes(ballot.ballotId)));
----
-<SiteLayout title={copy.home.title} description={copy.home.description} canonical={`${Astro.url.origin}/`}>
-  <PreviewNotice slot="notice" />
-  <HeroSplit
-    title={copy.home.hero.title}
-    copy={copy.home.hero.copy}
-    image={copy.home.hero.image}
-    imageAlt={copy.home.hero.imageAlt}
-    primaryHref={copy.home.hero.primaryAction.href}
-    primaryLabel={copy.home.hero.primaryAction.label}
-    secondaryHref={copy.home.hero.secondaryAction.href}
-    secondaryLabel={copy.home.hero.secondaryAction.label}
-  />
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([
+  getDatabase(env),
+  getSessionUser(Astro.request, env),
+]);
+const policies = await listPolicies(db, { includeDrafts: false });
 
-  <section class="now-section" aria-labelledby="now-title">
-    <div class="page-wrap now-layout">
-      <div class="now-intro">
-        <p class="eyebrow">Your voice shapes what comes next</p>
-        <h2 id="now-title">{openConsultations.length ? 'Open for your input' : 'Start with the issues that matter to you'}</h2>
-        <p>{openConsultations.length ? 'Read a proposal, tell us what works and what needs to change.' : 'Explore the commitments and proposals behind Reclaim.'}</p>
-        <a class="text-link" href={openConsultations.length ? '/consultations/' : '/policies/'}>
-          {openConsultations.length ? 'Join the discussion' : 'Browse the policy library'} <span aria-hidden="true">→</span>
+const votingPolicies = policies.filter((p) => p.status === 'voting');
+const featuredVoting = votingPolicies.slice(0, 5);
+
+const categoryMap = new Map<
+  string,
+  { name: string; division: string; summary: string; total: number; voting: number }
+>();
+
+for (const policy of policies) {
+  const existing = categoryMap.get(policy.category) ?? {
+    name: policy.category,
+    division: policy.division,
+    summary: policy.categorySummary || '',
+    total: 0,
+    voting: 0,
+  };
+  existing.total += 1;
+  if (policy.status === 'voting') existing.voting += 1;
+  if (!existing.summary && policy.categorySummary) existing.summary = policy.categorySummary;
+  categoryMap.set(policy.category, existing);
+}
+
+const categories = [...categoryMap.values()];
+---
+<SiteLayout
+  title="Engage · Fusion Party Australia Policy & Member Decisions"
+  description="Read Fusion Party policy proposals, suggest wording improvements, and vote on open party decisions."
+  canonical={`${Astro.url.origin}/`}
+>
+  <section class="hero">
+    <div class="page-wrap hero-layout">
+      <div class="hero-copy">
+        <h1>Read, shape, and vote on Fusion policy.</h1>
+        <p>
+          Engage is Fusion Party Australia’s member policy platform. Browse every proposal in plain
+          English, suggest wording changes, and cast your vote on open party decisions—all in one
+          place.
+        </p>
+        <div class="hero-actions">
+          <a class="button" href="/policies/">
+            Browse all {policies.length} policies
+          </a>
+          <a class="button button--outline" href="/policies/?status=voting">
+            Open votes ({votingPolicies.length})
+          </a>
+          {!user && (
+            <a class="text-cta" href="/member/">
+              Sign in as a member →
+            </a>
+          )}
+        </div>
+      </div>
+
+      <figure class="hero-media">
+        <img
+          src="/melbourne-station.webp"
+          alt="Commuters moving through a sunlit Melbourne train station"
+          width="640"
+          height="460"
+        />
+      </figure>
+    </div>
+  </section>
+
+  <section id="how-it-works" class="guide-section" aria-labelledby="guide-heading">
+    <div class="page-wrap">
+      <div class="guide-header">
+        <h2 id="guide-heading">New to Engage? Here is how it works</h2>
+        <p>
+          Anyone can read Fusion’s policy library. Verified party members can comment, propose
+          wording improvements, and vote directly on each policy page.
+        </p>
+      </div>
+
+      <div class="guide-steps">
+        <div class="guide-step">
+          <h3>Sign in and confirm membership</h3>
+          <p>
+            Sign in with a one-click email link or Google on the <a href="/member/">Member page</a>.
+            An administrator checks your name against party membership records to unlock commenting
+            and voting.
+          </p>
+        </div>
+
+        <div class="guide-step">
+          <h3>Read and suggest improvements</h3>
+          <p>
+            Open any proposal in the <a href="/policies/">Policy library</a> to read its core
+            commitment, intended outcomes, and background rationale. Leave feedback or suggest
+            revised wording right on the page.
+          </p>
+        </div>
+
+        <div class="guide-step">
+          <h3>Vote on open decisions</h3>
+          <p>
+            When a proposal is open for a decision, cast or update your Approve or Reject vote at
+            the top of that policy page. You can change your vote at any time while voting is open.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="voting-section section-space" aria-labelledby="voting-heading">
+    <div class="page-wrap">
+      <div class="section-head">
+        <div>
+          <h2 id="voting-heading">Proposals open for member voting</h2>
+          <p>
+            Select any proposal below to read the full wording, review member comments, and cast
+            your vote.
+          </p>
+        </div>
+        <a class="button button--outline" href="/policies/?status=voting">
+          View all {votingPolicies.length} open votes →
         </a>
       </div>
-      {highlightedConsultations.length ? (
-        <ul class="now-list">
-          {highlightedConsultations.map((policy) => (
-            <li>
-              <span class="now-label">Open for comment · {policy.domain ?? "Unclassified subject"}</span>
-              <a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a>
-              <span>{policy.statement}</span>
-              <a class="inline-action" href={`/consultations/?policyId=${encodeURIComponent(policy.policyId)}`}>Comment or suggest a change <span aria-hidden="true">↗</span></a>
-            </li>
-          ))}
-        </ul>
+
+      {featuredVoting.length === 0 ? (
+        <p class="callout">
+          No proposals are currently open for voting. Browse <a href="/policies/">all policies</a> to
+          read and comment on active proposals.
+        </p>
       ) : (
-        <ul class="now-list">
-          {featured.map((policy) => (
-            <li>
-              <span class="now-label">{policy.domain ?? "Unclassified subject"}</span>
-              <a href={`${policy.sectionPath}#${policy.slug}`}>{policy.title}</a>
-              <span>{policy.statement}</span>
-              <a class="inline-action" href={policy.url}>Read the proposal <span aria-hidden="true">↗</span></a>
+        <ul class="policy-rows">
+          {featuredVoting.map((policy) => (
+            <li class="policy-row">
+              <div class="policy-row__main">
+                <div class="policy-row__meta">
+                  <span class="badge badge--voting">Voting open</span>
+                  <span>{policy.category}</span>
+                  <span class="tabular">{policy.policyId}</span>
+                </div>
+                <h3>
+                  <a href={`/policies/${policy.slug}/`}>{policy.title}</a>
+                </h3>
+                <p>{policy.statement}</p>
+              </div>
+              <div class="policy-row__side">
+                <span class="tabular meta-stat">
+                  {policy.votes.total} {policy.votes.total === 1 ? 'vote' : 'votes'} ·{' '}
+                  {policy.commentCount} {policy.commentCount === 1 ? 'comment' : 'comments'}
+                </span>
+                <a class="button button--small" href={`/policies/${policy.slug}/`}>
+                  Read &amp; vote →
+                </a>
+              </div>
             </li>
           ))}
         </ul>
@@ -70,50 +168,222 @@ const memberDecisions = allBallots.filter((ballot) => !ballot.syntheticFixture &
     </div>
   </section>
 
-  {memberDecisions.length > 0 && (
-    <section class="decisions" aria-labelledby="decisions-title">
-      <div class="page-wrap decisions-layout">
-        <div><p class="eyebrow">Member decisions</p><h2 id="decisions-title">Questions before members</h2></div>
-        <ul>
-          {memberDecisions.slice(0, 3).map((ballot) => (
-            <li><span>{ballot.status === 'open' ? 'Open for voting' : 'In preparation'}</span><a href={`/ballots/#${ballot.ballotId}`}>{ballot.title}</a><p>{ballot.summary}</p></li>
-          ))}
-        </ul>
+  <section class="topics-section section-space" aria-labelledby="topics-heading">
+    <div class="page-wrap">
+      <div class="section-head">
+        <div>
+          <h2 id="topics-heading">Browse by policy area</h2>
+          <p>Explore proposals grouped by topic across Economy and Future priorities.</p>
+        </div>
+        <a class="button button--outline" href="/policies/">
+          Search all policies →
+        </a>
       </div>
-    </section>
-  )}
 
-  <section class="areas" aria-labelledby="areas-title">
-    <div class="page-wrap section-space">
-      <p class="eyebrow">Find your place in the conversation</p>
-      <h2 id="areas-title">What would you like to change?</h2>
-      <div class="area-grid">
-        <a class="area-link" href="/reclaim-our-economy/">
-          <span>Reclaim our economy</span>
-          <h3>A fair go, shared prosperity</h3>
-          <p>Explore policy areas including housing, work, tax, energy and transport.</p>
-          <b aria-hidden="true">↗</b>
-        </a>
-        <a class="area-link" href="/reclaim-our-future/">
-          <span>Reclaim our future</span>
-          <h3>A future we shape together</h3>
-          <p>Explore policy areas including climate, democracy, health and education.</p>
-          <b aria-hidden="true">↗</b>
-        </a>
-      </div>
-      <div class="area-footer">
-        <a class="text-link" href="/policies/">Browse all policy areas <span aria-hidden="true">→</span></a>
-        <a class="text-link" href="/ballots/">See decisions open to members <span aria-hidden="true">→</span></a>
-      </div>
+      <ul class="topic-list">
+        {categories.map((cat) => (
+          <li class="topic-row">
+            <div class="topic-row__info">
+              <h3>
+                <a href={`/policies/?category=${encodeURIComponent(cat.name)}`}>{cat.name}</a>
+              </h3>
+              <p>{cat.summary || `Proposals under ${cat.division}.`}</p>
+            </div>
+            <div class="topic-row__counts tabular">
+              <span class="badge">{cat.total} proposals</span>
+              {cat.voting > 0 && <span class="badge badge--voting">{cat.voting} voting</span>}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   </section>
 </SiteLayout>
+
 <style>
-  .now-section{background:#fff;border-block:1px solid #ded6e7}.now-layout{display:grid;grid-template-columns:minmax(16rem,.75fr) minmax(0,1.4fr);gap:clamp(2rem,6vw,6rem);padding-block:clamp(3.5rem,7vw,6rem)}
-  .now-intro{align-self:start;position:sticky;top:2rem}.now-intro h2{margin:.1rem 0 .8rem;font-size:clamp(2rem,3.6vw,3.1rem)}.now-intro p:not(.eyebrow){max-width:34ch;color:#54465f;line-height:1.6}.now-intro .text-link{margin-top:.5rem}
-  .now-list{list-style:none;padding:0;margin:0}.now-list li{display:grid;grid-template-columns:1fr auto;gap:.35rem 1rem;padding:1.25rem 0;border-top:1px solid #ded6e7}.now-list li:last-child{border-bottom:1px solid #ded6e7}.now-label{grid-column:1/-1;color:#625171;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.now-list li>a:not(.inline-action){font:600 clamp(1.35rem,2vw,1.8rem)/1.2 Newsreader,Georgia,serif;text-decoration:none}.now-list li>span:nth-last-child(2){grid-column:1;color:#54465f;font-size:.9rem;line-height:1.5}.inline-action{grid-column:2;grid-row:3;align-self:end;color:#32105a;font-size:.88rem;font-weight:700}
-  .areas{background:#f4f0fa}.areas h2{margin:.1rem 0 2rem}.area-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.area-link{position:relative;display:flex;min-height:17rem;flex-direction:column;align-items:flex-start;padding:clamp(1.4rem,3.5vw,2.7rem);background:#fff;color:#32105a;text-decoration:none;border-radius:.8rem;transition:transform .2s ease,background .2s ease}.area-link:hover{transform:translateY(-3px);background:#e4f9fa}.area-link>span{font-size:.8rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#54465f}.area-link h3{margin:auto 0 .55rem;font-size:clamp(1.8rem,3vw,2.7rem)}.area-link p{max-width:36ch;margin:0;color:#54465f;line-height:1.55}.area-link b{position:absolute;right:1.5rem;bottom:1.15rem;font-size:1.4rem}.area-footer{display:flex;flex-wrap:wrap;gap:1.5rem;margin-top:1.7rem}
-  .decisions{background:#fff;border-bottom:1px solid #ded6e7}.decisions-layout{display:grid;grid-template-columns:minmax(16rem,.75fr) minmax(0,1.4fr);gap:clamp(2rem,6vw,6rem);padding-block:clamp(3.5rem,7vw,6rem)}.decisions h2{margin:.1rem 0;font-size:clamp(2rem,3.6vw,3.1rem)}.decisions ul{list-style:none;padding:0;margin:0}.decisions li{padding:1rem 0;border-top:1px solid #ded6e7}.decisions li:last-child{border-bottom:1px solid #ded6e7}.decisions li>span{display:block;color:#625171;font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}.decisions li>a{display:block;margin:.35rem 0;font:600 1.5rem/1.2 Newsreader,Georgia,serif;text-decoration:none}.decisions li>p{margin:0;color:#54465f;line-height:1.5}
-  @media(max-width:760px){.now-layout,.decisions-layout{grid-template-columns:1fr;gap:1.5rem}.now-intro{position:static}.now-list li{grid-template-columns:1fr}.inline-action{grid-column:1;grid-row:auto}.now-list li>span:nth-last-child(2){grid-column:1}.area-grid{grid-template-columns:1fr}.area-link{min-height:14rem}}
-  @media(prefers-reduced-motion:no-preference){.hero__copy{animation:arrive .65s cubic-bezier(.16,1,.3,1) both}@keyframes arrive{from{opacity:.5;transform:translateY(1.2rem);filter:blur(5px)}to{opacity:1;transform:none;filter:blur(0)}}}
+  .hero {
+    padding-block: clamp(2.5rem, 6vw, 4.75rem);
+    border-bottom: 1px solid var(--horizon-line);
+    background: var(--horizon-white);
+  }
+  .hero-layout {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    align-items: center;
+    gap: clamp(2rem, 5vw, 4.5rem);
+  }
+  .hero-copy h1 {
+    margin: 0 0 1.1rem;
+  }
+  .hero-copy p {
+    margin: 0 0 1.75rem;
+    max-width: 56ch;
+    color: var(--horizon-muted);
+    font-size: 1.125rem;
+    line-height: 1.65;
+  }
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.85rem 1.15rem;
+  }
+  .text-cta {
+    font-weight: 700;
+    color: var(--horizon-purple);
+  }
+  .hero-media {
+    margin: 0;
+  }
+  .hero-media img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 25rem;
+    object-fit: cover;
+    border-radius: 0.85rem;
+    border: 1px solid var(--horizon-line);
+  }
+
+  .guide-section {
+    padding-block: clamp(2.75rem, 5vw, 4.25rem);
+    background: var(--horizon-lavender);
+    border-bottom: 1px solid var(--horizon-line);
+  }
+  .guide-header {
+    max-width: 54rem;
+    margin-bottom: 2rem;
+  }
+  .guide-header h2 {
+    margin: 0 0 0.6rem;
+  }
+  .guide-header p {
+    margin: 0;
+    color: var(--horizon-muted);
+    font-size: 1.05rem;
+  }
+  .guide-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+  .guide-step h3 {
+    margin: 0 0 0.45rem;
+    color: var(--horizon-purple-deep);
+  }
+  .guide-step p {
+    margin: 0;
+    color: var(--horizon-muted);
+    font-size: 0.96rem;
+    line-height: 1.6;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem 2rem;
+    margin-bottom: 1.75rem;
+  }
+  .section-head h2 {
+    margin: 0 0 0.45rem;
+  }
+  .section-head p {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--horizon-muted);
+  }
+
+  .policy-rows,
+  .topic-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border-top: 1px solid var(--horizon-line);
+  }
+  .policy-row,
+  .topic-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem 2rem;
+    padding: 1.35rem 0;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+  .policy-row__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.85rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.85rem;
+    color: var(--horizon-muted);
+    font-weight: 600;
+  }
+  .policy-row h3,
+  .topic-row h3 {
+    margin: 0 0 0.35rem;
+    font-family: Newsreader, Georgia, serif;
+    font-size: clamp(1.35rem, 2vw, 1.65rem);
+  }
+  .policy-row h3 a,
+  .topic-row h3 a {
+    text-decoration: none;
+  }
+  .policy-row h3 a:hover,
+  .topic-row h3 a:hover {
+    text-decoration: underline;
+  }
+  .policy-row p,
+  .topic-row p {
+    margin: 0;
+    max-width: 68ch;
+    color: var(--horizon-muted);
+    font-size: 0.96rem;
+  }
+  .policy-row__side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.55rem;
+  }
+  .meta-stat {
+    font-size: 0.85rem;
+    color: var(--horizon-muted);
+    font-weight: 600;
+  }
+
+  .topics-section {
+    background: var(--horizon-lavender-soft);
+    border-top: 1px solid var(--horizon-line);
+  }
+  .topic-row__counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  @media (max-width: 860px) {
+    .hero-layout {
+      grid-template-columns: 1fr;
+    }
+    .guide-steps {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+    .policy-row,
+    .topic-row {
+      grid-template-columns: 1fr;
+      align-items: flex-start;
+    }
+    .policy-row__side {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+  }
 </style>

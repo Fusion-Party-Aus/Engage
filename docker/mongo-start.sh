@@ -8,4 +8,4 @@ if [[ ! -s "$key" ]]; then
 fi
 chmod 400 "$key"
 chown mongodb:mongodb "$key"
-exec /usr/local/bin/docker-entrypoint.sh mongod --replSet engage --keyFile "$key" --bind_ip_all
+exec /usr/local/bin/docker-entrypoint.sh mongod --replSet engage --keyFile "$key" --bind_ip_all "$@"

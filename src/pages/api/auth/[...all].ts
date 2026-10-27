@@ -1,8 +1,14 @@
 import type { APIRoute } from "astro";
-import { getAuth } from "../../../lib/platform/better-auth.ts";
-import { platformEnv, json } from "../../../lib/platform/http.ts";
+import { getAuth, loginConfigured } from "../../../lib/auth.ts";
+import { runtimeEnv } from "../../../lib/db.ts";
+
 export const prerender = false;
+
 export const ALL: APIRoute = async ({ request, locals }) => {
-  try { return await (await getAuth(platformEnv(locals))).handler(request); }
-  catch { return json({ error: "Sign-in is temporarily unavailable." }, 503); }
+  const env = runtimeEnv(locals);
+  if (!loginConfigured(env)) {
+    return Response.json({ error: "Member sign-in is not configured." }, { status: 503 });
+  }
+  const auth = await getAuth(env);
+  return auth.handler(request);
 };

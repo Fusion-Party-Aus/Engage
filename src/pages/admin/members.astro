@@ -1,55 +1,239 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
-import { resolveIdentity } from '../../lib/platform/auth';
-import { canReadDiscussion } from '../../lib/platform/discussion-access';
-import { getDatabase } from '../../lib/platform/database';
-import { adminPageDenial } from '../../lib/platform/admin-access';
-import { platformEnv } from '../../lib/platform/http';
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { listMembers } from '../../lib/store.ts';
+
 export const prerender = false;
-const env = platformEnv(Astro.locals);
-const denial = await adminPageDenial(Astro.request, env, true);
-if (denial) return denial;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
-const { identity } = await resolveIdentity(Astro.request, env);
-const participation = await canReadDiscussion(await getDatabase(env), identity, env);
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+
+if (!user) {
+  return Astro.redirect('/member/', 302);
+}
+if (!user.isAdmin) {
+  Astro.response.status = 403;
+}
+
+const db = await getDatabase(env);
+const query = (Astro.url.searchParams.get('q') ?? '').trim();
+const members = user.isAdmin ? await listMembers(db, query) : [];
 ---
-<AdminLayout title="Membership verification" description="Review eligibility against authoritative party records." area="Administration" administrator participation={participation}>
-  <div>
-    <a href="/admin/administration/">← Administration</a>
-    <p>Check eligibility against the authoritative party membership records before confirming membership. Do not copy membership records or sensitive notes into Engage.</p>
-    {identity?.source === 'synthetic' ? <p class="admin-empty">Membership verification requires an Engage administrator session. Synthetic preview accounts cannot read or change membership records.</p> : <><p id="status" role="status" aria-live="polite">Loading accounts…</p><div id="accounts"></div>
-    <button class="button button--outline" id="more" hidden>Load more accounts</button></>}
-  </div>
+<AdminLayout
+  title="Members & Access"
+  description="Verify party membership and manage administrator or moderator permissions."
+  section="members"
+  isAdmin={user.isAdmin}
+>
+  {!user.isAdmin ? (
+    <div class="admin-surface">
+      <p>Administrator access is required to manage member accounts.</p>
+    </div>
+  ) : (
+    <>
+      <section class="admin-surface" aria-labelledby="add-member-heading">
+        <h2 id="add-member-heading" style="font-family: Outfit, sans-serif; font-size: 1.3rem; margin-bottom: 0.75rem">
+          Add or pre-verify a member
+        </h2>
+        <form id="create-member-form">
+          <div class="admin-grid">
+            <label class="field">
+              <span>Full name</span>
+              <input name="name" required minlength="2" maxlength="100" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Email address</span>
+              <input name="email" type="email" required maxlength="254" autocomplete="off" />
+            </label>
+          </div>
+          <div class="admin-grid">
+            <label class="field">
+              <span>Party membership status</span>
+              <select name="status">
+                <option value="verified">Verified member</option>
+                <option value="pending">Pending verification</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Platform role</span>
+              <select name="role">
+                <option value="member">Member</option>
+                <option value="moderator">Moderator</option>
+                <option value="administrator">Administrator</option>
+              </select>
+            </label>
+          </div>
+          <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.75rem">
+            <button class="button" type="submit">Add member account</button>
+            <p id="create-member-status" class="form-status" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+
+      <form method="get" action="/admin/members/" class="admin-toolbar">
+        <label class="field">
+          <span>Find member by name or email</span>
+          <input type="search" name="q" value={query} placeholder="Name or email address" />
+        </label>
+        <button class="button button--outline" type="submit">Search</button>
+      </form>
+
+      <section class="admin-register" aria-label="Member accounts">
+        {members.length === 0 ? (
+          <p style="padding: 1.25rem 0; margin: 0">No member accounts match this search.</p>
+        ) : (
+          members.map((m) => {
+            const isSelf = m.memberId === user.memberId;
+            return (
+              <form class="admin-row member-update-form" data-member-id={m.memberId}>
+                <div>
+                  <h3>
+                    {m.name || 'Name needed'}{' '}
+                    {isSelf && <span class="badge">You</span>}
+                  </h3>
+                  <p>
+                    {m.email} · {m.emailVerified ? 'Email confirmed' : 'Email not yet used'}
+                  </p>
+                </div>
+
+                <div class="admin-row-actions">
+                  <select
+                    name="status"
+                    class="member-select"
+                    aria-label={`Membership status for ${m.name || m.email}`}
+                    disabled={isSelf}
+                  >
+                    <option value="pending" selected={m.status === 'pending'}>
+                      Pending verification
+                    </option>
+                    <option value="verified" selected={m.status === 'verified'}>
+                      Verified member
+                    </option>
+                    <option value="suspended" selected={m.status === 'suspended'}>
+                      Suspended
+                    </option>
+                  </select>
+
+                  <select
+                    name="role"
+                    class="member-select"
+                    aria-label={`Role for ${m.name || m.email}`}
+                    disabled={isSelf}
+                  >
+                    <option value="member" selected={m.role === 'member'}>Member</option>
+                    <option value="moderator" selected={m.role === 'moderator'}>Moderator</option>
+                    <option value="administrator" selected={m.role === 'administrator'}>
+                      Administrator
+                    </option>
+                  </select>
+
+                  <select
+                    name="disabled"
+                    class="member-select"
+                    aria-label={`Access state for ${m.name || m.email}`}
+                    disabled={isSelf}
+                  >
+                    <option value="false" selected={!m.disabled}>Active</option>
+                    <option value="true" selected={m.disabled}>Disabled</option>
+                  </select>
+
+                  {!isSelf && (
+                    <button class="button button--outline" type="submit">
+                      Save
+                    </button>
+                  )}
+                  <span class="member-save-msg tabular" role="status" aria-live="polite"></span>
+                </div>
+              </form>
+            );
+          })
+        )}
+      </section>
+    </>
+  )}
 </AdminLayout>
+
 <script>
-  const status = document.querySelector<HTMLElement>('#status')!;
-  const accounts = document.querySelector<HTMLElement>('#accounts')!;
-  const more = document.querySelector<HTMLButtonElement>('#more')!;
-  let next: string | null = null;
-  async function load() {
-    const response = await fetch('/api/admin/members' + (next ? '?after=' + encodeURIComponent(next) : ''));
-    const data = await response.json();
-    if (!response.ok) { status.textContent = data.error; return; }
-    status.textContent = data.accounts.length ? 'Accounts loaded.' : next ? 'No further accounts.' : 'No accounts to review.';
-    for (const account of data.accounts) {
-      const row = document.createElement('article'); row.className = 'admin-card';
-      const label = document.createElement('p'); label.textContent = `${account.name} · ${account.email} · ${account.status}`;
-      const select = document.createElement('select'); select.setAttribute('aria-label', `Verification for ${account.name}`);
-      for (const state of ['pending', 'verified', 'suspended']) { const option = new Option(state, state); option.selected = state === account.status; select.add(option); }
-      const save = document.createElement('button'); save.className = 'button'; save.textContent = 'Save verification';
-      save.addEventListener('click', async () => {
-        save.disabled = true;
-        try {
-          const response = await fetch('/api/admin/members', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ memberId: account.memberId, status: select.value }) });
-          const result = await response.json(); status.textContent = response.ok ? 'Verification saved.' : result.error;
-          if (response.ok) label.textContent = `${account.name} · ${account.email} · ${select.value}`;
-        } catch { status.textContent = 'Verification could not be saved. Please retry.'; }
-        save.disabled = false;
+  const createForm = document.querySelector<HTMLFormElement>('#create-member-form');
+  const createStatus = document.querySelector<HTMLElement>('#create-member-status');
+
+  createForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!createForm.reportValidity()) return;
+    const btn = createForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    btn.disabled = true;
+    if (createStatus) createStatus.textContent = 'Creating…';
+
+    try {
+      const data = Object.fromEntries(new FormData(createForm).entries());
+      const res = await fetch('/api/admin/members', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(data),
       });
-      row.append(label, select, save); accounts.append(row);
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Could not create account.');
+      location.reload();
+    } catch (err) {
+      if (createStatus) {
+        createStatus.textContent = err instanceof Error ? err.message : 'Could not create account.';
+      }
+      btn.disabled = false;
     }
-    next = data.next; more.hidden = !next;
-  }
-  async function safeLoad() { more.disabled = true; try { await load(); } catch { status.textContent = 'Accounts could not be loaded. Reload to retry.'; } finally { more.disabled = false; } }
-  more?.addEventListener('click', safeLoad); if (accounts) await safeLoad();
+  });
+
+  document.querySelectorAll<HTMLFormElement>('.member-update-form').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const memberId = form.dataset.memberId;
+      const msg = form.querySelector<HTMLElement>('.member-save-msg')!;
+      const btn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (!memberId) return;
+      if (btn) btn.disabled = true;
+      msg.textContent = 'Saving…';
+
+      try {
+        const fd = new FormData(form);
+        const res = await fetch('/api/admin/members', {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            memberId,
+            status: fd.get('status'),
+            role: fd.get('role'),
+            disabled: fd.get('disabled') === 'true',
+          }),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.error || 'Failed');
+        msg.textContent = 'Saved';
+      } catch (err) {
+        msg.textContent = err instanceof Error ? err.message : 'Error';
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+  });
 </script>
+
+<style>
+  .member-select {
+    min-height: 2.65rem;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid #8a7b99;
+    border-radius: 0.45rem;
+    background: var(--horizon-white);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+  .member-save-msg {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+  }
+</style>

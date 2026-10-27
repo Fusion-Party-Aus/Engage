@@ -13,7 +13,6 @@ WORKDIR /app
 COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
-COPY --from=build --chown=node:node /app/scripts/seed-preview.mjs ./scripts/seed-preview.mjs
 COPY --from=build --chown=node:node /app/scripts/grant-engage-admin.mjs ./scripts/grant-engage-admin.mjs
 COPY --from=build --chown=node:node /app/src/data ./src/data
 
