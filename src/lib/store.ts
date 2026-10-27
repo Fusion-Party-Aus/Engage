@@ -57,6 +57,8 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     summary,
     outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
     details: String(raw.details || ""),
+    detailHtml: raw.detailHtml ? String(raw.detailHtml) : undefined,
+    provenance: raw.provenance || undefined,
     attachmentUrl: raw.attachmentUrl ? String(raw.attachmentUrl) : undefined,
     stage,
     implementationNote: raw.implementationNote ? String(raw.implementationNote) : undefined,

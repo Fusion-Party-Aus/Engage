@@ -28,6 +28,28 @@ export interface SessionUser {
   isAdmin: boolean;
 }
 
+export interface ProvenanceLink {
+  label: string;
+  url: string | null;
+  description: string;
+}
+
+export interface PolicyProvenance {
+  category: "existing-repackaged" | "materially-revised" | "new-proposal" | "draft-derived" | "unverified" | "party-governance" | string;
+  classification?: string;
+  priorHeuristicCategory?: string;
+  label: string;
+  summary: string;
+  evidenceBasis?: string;
+  sourceTypes?: string[];
+  flaggedNewInStaticExport?: boolean;
+  lineageVerified?: boolean;
+  materialEquivalenceVerified?: boolean;
+  uncertaintyNote?: string;
+  lineage?: ProvenanceLink[];
+  valuesAlignment?: string[];
+}
+
 export interface ProposalRecord {
   proposalId: string;
   slug: string;
@@ -37,6 +59,8 @@ export interface ProposalRecord {
   summary: string;
   outcomes: string[];
   details: string;
+  detailHtml?: string;
+  provenance?: PolicyProvenance;
   attachmentUrl?: string;
   stage: ProposalStage;
   implementationNote?: string;

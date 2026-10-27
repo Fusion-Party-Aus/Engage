@@ -1,5 +1,6 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import PortableText from '../../components/PortableText.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { getProposalDetail } from '../../lib/store.ts';
@@ -35,21 +36,6 @@ const stageLabel = (stage: ProposalStage) => {
 const isImageAttachment = Boolean(
   proposal?.attachmentUrl && /\.(svg|png|webp|jpg|jpeg|gif)$/i.test(proposal.attachmentUrl),
 );
-
-const detailBlocks = (proposal?.details ?? '')
-  .split(/\n\s*\n/)
-  .map((block) => block.trim())
-  .filter(Boolean)
-  .map((block) => {
-    const headingMatch = block.match(/^\*\*(.+?)\*\*$/);
-    if (headingMatch) {
-      return { type: 'heading' as const, text: headingMatch[1]! };
-    }
-    return {
-      type: 'paragraph' as const,
-      text: block.replace(/\*\*(.+?)\*\*/g, '$1'),
-    };
-  });
 
 const stages: ProposalStage[] = ['propose', 'deliberate', 'decide', 'implement'];
 const currentStageIndex = proposal ? stages.indexOf(proposal.stage) : -1;
@@ -145,6 +131,11 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
                 </span>
                 <span class="space-pill">{proposal.space}</span>
                 <span class="id-pill tabular">{proposal.proposalId}</span>
+                {proposal.provenance && (
+                  <span class:list={['prov-pill', `prov-pill--${proposal.provenance.category || 'unverified'}`]}>
+                    {proposal.provenance.label}
+                  </span>
+                )}
               </div>
 
               <h1 class="detail-title">{proposal.title}</h1>
@@ -225,14 +216,66 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
             )}
 
             <!-- Detailed Rationale -->
-            {detailBlocks.length > 0 && (
+            {(proposal.details || proposal.detailHtml) && (
               <section class="content-section" aria-labelledby="details-heading">
                 <h2 id="details-heading">Rationale &amp; Context</h2>
                 <div class="details-body">
-                  {detailBlocks.map((block) =>
-                    block.type === 'heading' ? <h3>{block.text}</h3> : <p>{block.text}</p>,
-                  )}
+                  <PortableText value={proposal.details} html={proposal.detailHtml} />
                 </div>
+              </section>
+            )}
+
+            <!-- Policy Provenance & Prior Approval -->
+            {proposal.provenance && (
+              <section class="content-section provenance-section" aria-labelledby="provenance-heading">
+                <div class="provenance-header">
+                  <div>
+                    <h2 id="provenance-heading">Policy Provenance &amp; Prior Approval</h2>
+                    <p class="provenance-lead">Lineage and scrutiny details from party archives and published platform versions.</p>
+                  </div>
+                  <span class:list={['prov-badge', `prov-badge--${proposal.provenance.category || 'unverified'}`]}>
+                    {proposal.provenance.label}
+                  </span>
+                </div>
+
+                <p class="provenance-summary">{proposal.provenance.summary}</p>
+
+                {proposal.provenance.uncertaintyNote && (
+                  <div class="provenance-callout">
+                    <strong>What is still uncertain:</strong> {proposal.provenance.uncertaintyNote}
+                  </div>
+                )}
+
+                {proposal.provenance.lineage && proposal.provenance.lineage.length > 0 && (
+                  <div class="provenance-subblock">
+                    <h3>Prior Policy Predecessors</h3>
+                    <ul class="provenance-links">
+                      {proposal.provenance.lineage.map((item) => (
+                        <li>
+                          {item.url ? (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer" class="lineage-link">
+                              {item.label} ↗
+                            </a>
+                          ) : (
+                            <span class="lineage-label">{item.label}</span>
+                          )}
+                          {item.description && <span class="lineage-desc"> — {item.description}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {proposal.provenance.valuesAlignment && proposal.provenance.valuesAlignment.length > 0 && (
+                  <div class="provenance-subblock">
+                    <h3>Values &amp; Principles Alignment</h3>
+                    <ul class="provenance-values">
+                      {proposal.provenance.valuesAlignment.map((val) => (
+                        <li>{val}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </section>
             )}
 
@@ -497,6 +540,12 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
                 <span>Lifecycle Stage:</span>
                 <strong>{stageLabel(proposal.stage)}</strong>
               </div>
+              {proposal.provenance && (
+                <div class="meta-row">
+                  <span>Provenance:</span>
+                  <strong>{proposal.provenance.label}</strong>
+                </div>
+              )}
             </div>
           </aside>
         </div>
@@ -883,6 +932,60 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
   .stage-pill--implement { background: var(--horizon-success-bg); color: var(--horizon-success-ink); border: 1px solid #b7e8cb; }
   .stage-pill--archived { background: #f0f0f0; color: var(--horizon-muted); }
 
+  /* Provenance Pills and Badges */
+  .prov-pill,
+  .prov-badge {
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .prov-pill--existing-repackaged,
+  .prov-badge--existing-repackaged {
+    background: #eafaf1;
+    color: #165a36;
+    border: 1px solid #c2eecf;
+  }
+
+  .prov-pill--materially-revised,
+  .prov-badge--materially-revised {
+    background: #fef9eb;
+    color: #8a5a00;
+    border: 1px solid #fae1a0;
+  }
+
+  .prov-pill--new-proposal,
+  .prov-badge--new-proposal {
+    background: #e6f9fa;
+    color: #006770;
+    border: 1px solid #b7edf0;
+  }
+
+  .prov-pill--party-governance,
+  .prov-badge--party-governance {
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple-deep);
+    border: 1px solid var(--horizon-line);
+  }
+
+  .prov-pill--draft-derived,
+  .prov-badge--draft-derived {
+    background: #fef2f2;
+    color: #9b1c1c;
+    border: 1px solid #fed7d7;
+  }
+
+  .prov-pill--unverified,
+  .prov-badge--unverified {
+    background: var(--horizon-lavender-soft);
+    color: var(--horizon-purple-muted);
+    border: 1px solid var(--horizon-line);
+  }
+
   .space-pill {
     color: var(--horizon-muted);
     font-weight: 500;
@@ -1014,6 +1117,102 @@ const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 10
     font-size: 1.25rem;
     margin-top: 1rem;
     color: var(--horizon-purple-deep);
+  }
+
+  /* Provenance Section */
+  .provenance-section {
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .provenance-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .provenance-header h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    color: var(--horizon-purple-deep);
+  }
+
+  .provenance-lead {
+    margin: 0.2rem 0 0 0;
+    font-size: 0.88rem;
+    color: var(--horizon-muted);
+  }
+
+  .provenance-summary {
+    margin: 0.5rem 0 1rem 0;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--horizon-purple-deep);
+    font-weight: 500;
+  }
+
+  .provenance-callout {
+    background: var(--horizon-warn-bg);
+    border: 1px solid #ebd49f;
+    border-radius: 0.5rem;
+    padding: 0.85rem 1rem;
+    margin-bottom: 1.25rem;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--horizon-warn-ink);
+  }
+
+  .provenance-subblock {
+    margin-top: 1rem;
+    padding-top: 0.85rem;
+    border-top: 1px dashed var(--horizon-line);
+  }
+
+  .provenance-subblock h3 {
+    font-size: 0.92rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--horizon-purple);
+    margin: 0 0 0.5rem 0;
+  }
+
+  .provenance-links,
+  .provenance-values {
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--horizon-purple);
+  }
+
+  .lineage-link {
+    color: var(--horizon-purple-deep);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: var(--horizon-cyan);
+  }
+
+  .lineage-link:hover {
+    color: var(--horizon-cyan);
+  }
+
+  .lineage-label {
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+  }
+
+  .lineage-desc {
+    color: var(--horizon-muted);
   }
 
   /* Implementation Box */

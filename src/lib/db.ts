@@ -82,6 +82,10 @@ async function ensureSeeded(db: Db): Promise<void> {
       const raw = item as Record<string, any>;
       const proposalId = String(raw.proposalId || raw.policyId);
       const stage = mapBaselineStage(raw.stage || raw.defaultStatus);
+      const setFields: Record<string, any> = { updatedAt: now };
+      if (raw.provenance) setFields.provenance = raw.provenance;
+      if (raw.detailHtml) setFields.detailHtml = raw.detailHtml;
+
       await proposalsCol.updateOne(
         { proposalId },
         {
@@ -94,12 +98,14 @@ async function ensureSeeded(db: Db): Promise<void> {
             summary: String(raw.summary || raw.statement || ""),
             outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
             details: String(raw.details || ""),
+            ...(raw.detailHtml ? { detailHtml: String(raw.detailHtml) } : {}),
+            ...(raw.provenance ? { provenance: raw.provenance } : {}),
             ...(raw.attachmentUrl ? { attachmentUrl: String(raw.attachmentUrl) } : {}),
             stage,
             authorName: "Fusion Working Group",
             createdAt: now,
-            updatedAt: now,
           },
+          $set: setFields,
         },
         { upsert: true },
       );

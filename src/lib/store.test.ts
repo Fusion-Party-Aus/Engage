@@ -60,6 +60,17 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
 
     const decide = await listProposals(db, { stage: "decide" });
     assert.equal(decide.length, 38);
+
+    // Verify policy provenance was restored
+    const pol1 = all.find((p) => p.proposalId === "POL-001");
+    assert.ok(pol1?.provenance, "POL-001 must have provenance");
+    assert.equal(pol1.provenance.category, "unverified");
+
+    const pol10 = all.find((p) => p.proposalId === "POL-010");
+    assert.ok(pol10?.provenance, "POL-010 must have provenance");
+    assert.equal(pol10.provenance.category, "existing-repackaged");
+    assert.ok(pol10.provenance.lineage && pol10.provenance.lineage.length > 0);
+    assert.ok(pol10.provenance.valuesAlignment && pol10.provenance.valuesAlignment.length > 0);
   });
 
   it("supports verified members proposing ideas into Stage 1, while pending members are blocked", async () => {

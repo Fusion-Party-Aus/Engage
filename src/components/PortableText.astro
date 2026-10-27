@@ -1,0 +1,117 @@
+---
+import { renderPortableText } from '../lib/portable-text.ts';
+
+interface Props {
+  value?: string;
+  html?: string;
+  class?: string;
+}
+
+const { value = '', html = '', class: className = '' } = Astro.props;
+
+const renderedContent = html.trim() ? html : renderPortableText(value);
+---
+
+{renderedContent && (
+  <div class:list={['portable-text', className]} set:html={renderedContent} />
+)}
+
+<style is:global>
+  .portable-text {
+    font-family: var(--font-body, system-ui, sans-serif);
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: var(--horizon-purple);
+  }
+
+  .portable-text h2,
+  .portable-text h3,
+  .portable-text h4 {
+    font-family: var(--font-display, Georgia, serif);
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+    line-height: 1.25;
+    margin-top: 1.75rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .portable-text h2 {
+    font-size: 1.45rem;
+  }
+
+  .portable-text h3 {
+    font-size: 1.25rem;
+  }
+
+  .portable-text h4 {
+    font-size: 1.1rem;
+  }
+
+  .portable-text p {
+    margin: 0 0 1.15rem 0;
+  }
+
+  .portable-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .portable-text strong {
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+  }
+
+  .portable-text em {
+    font-style: italic;
+  }
+
+  .portable-text a {
+    color: var(--horizon-purple-deep);
+    text-decoration: underline;
+    text-decoration-color: var(--horizon-cyan);
+    text-underline-offset: 3px;
+    transition: color 0.15s ease;
+  }
+
+  .portable-text a:hover {
+    color: var(--horizon-cyan);
+  }
+
+  .portable-text ul,
+  .portable-text ol {
+    margin: 0.75rem 0 1.35rem 0;
+    padding-left: 1.5rem;
+  }
+
+  .portable-text li {
+    margin-bottom: 0.45rem;
+    line-height: 1.65;
+  }
+
+  .portable-text li::marker {
+    color: var(--horizon-purple-muted);
+  }
+
+  .portable-text blockquote {
+    margin: 1.35rem 0;
+    padding: 0.75rem 1.25rem;
+    border-left: 3px solid var(--horizon-cyan);
+    background: var(--horizon-lavender-soft);
+    border-radius: 0 0.5rem 0.5rem 0;
+    color: var(--horizon-purple-deep);
+    font-style: italic;
+  }
+
+  .portable-text blockquote p {
+    margin: 0;
+  }
+
+  .portable-text code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.9em;
+    padding: 0.15rem 0.4rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.25rem;
+    color: var(--horizon-purple-deep);
+  }
+</style>

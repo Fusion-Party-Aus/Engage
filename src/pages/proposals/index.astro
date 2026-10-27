@@ -167,6 +167,11 @@ const stageLabel = (s: ProposalStage) => {
               </span>
               <span class="space-pill">{item.space}</span>
               <span class="id-pill tabular">{item.proposalId}</span>
+              {item.provenance && (
+                <span class:list={['prov-pill', `prov-pill--${item.provenance.category || 'unverified'}`]}>
+                  {item.provenance.label}
+                </span>
+              )}
             </div>
 
             <h2 class="proposal-card__title">
@@ -519,6 +524,53 @@ const stageLabel = (s: ProposalStage) => {
   .stage-pill--archived {
     background: #f0f0f0;
     color: var(--horizon-muted);
+  }
+
+  .prov-pill {
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    max-width: 240px;
+  }
+
+  .prov-pill--existing-repackaged {
+    background: #eafaf1;
+    color: #165a36;
+    border: 1px solid #c2eecf;
+  }
+
+  .prov-pill--materially-revised {
+    background: #fef9eb;
+    color: #8a5a00;
+    border: 1px solid #fae1a0;
+  }
+
+  .prov-pill--new-proposal {
+    background: #e6f9fa;
+    color: #006770;
+    border: 1px solid #b7edf0;
+  }
+
+  .prov-pill--party-governance {
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple-deep);
+    border: 1px solid var(--horizon-line);
+  }
+
+  .prov-pill--draft-derived {
+    background: #fef2f2;
+    color: #9b1c1c;
+    border: 1px solid #fed7d7;
+  }
+
+  .prov-pill--unverified {
+    background: var(--horizon-lavender-soft);
+    color: var(--horizon-purple-muted);
+    border: 1px solid var(--horizon-line);
   }
 
   .space-pill {
