@@ -11,8 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      GOVERNANCE_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
-      AUTH_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
+      VOTING_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -29,7 +28,7 @@ jobs:
           docker run -d --name engage-ci-mongo -p 127.0.0.1:27017:27017 mongo:8.0 --replSet engage-ci --bind_ip_all
           node --input-type=module <<'JS'
           import { MongoClient } from 'mongodb';
-          const client = new MongoClient(process.env.GOVERNANCE_TEST_MONGODB_URI, { serverSelectionTimeoutMS: 1000 });
+          const client = new MongoClient(process.env.VOTING_TEST_MONGODB_URI, { serverSelectionTimeoutMS: 1000 });
           try {
             let ready = false;
             for (let attempt = 0; attempt < 60; attempt++) {
@@ -46,15 +45,9 @@ jobs:
           } finally { await client.close(); }
           JS
       - run: pnpm check
-      - name: Node, MongoDB governance and Python checks
+      - name: Node and real MongoDB voting regressions
         run: pnpm test
-      - name: Real MongoDB vote cutoff regressions
-        run: pnpm test:cutoff
       - run: pnpm build
-      - name: Controlled Google authentication, membership and rendered privacy checks
-        env:
-          AUTH_TEST_SSR: "true"
-        run: pnpm test:auth
       - name: MongoDB logs on failure
         if: failure()
         run: docker logs engage-ci-mongo

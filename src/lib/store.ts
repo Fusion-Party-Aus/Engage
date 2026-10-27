@@ -1,3 +1,4 @@
+import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 import { ObjectId, type Db } from "mongodb";
 import { validPersonName } from "./auth.ts";
 import type {
@@ -122,7 +123,7 @@ export async function listProposals(
 
   const [allComments, allVotes] = await Promise.all([
     db.collection<CommentRecord>("comments").find({}).toArray(),
-    db.collection<VoteRecord>("votes").find({}).toArray(),
+    db.collection<VoteRecord>(PROPOSAL_VOTES).find({}).toArray(),
   ]);
 
   const commentCounts = new Map<string, number>();
@@ -209,7 +210,7 @@ export async function getProposalDetail(
       .sort({ createdAt: 1 })
       .toArray(),
     db
-      .collection<VoteRecord>("votes")
+      .collection<VoteRecord>(PROPOSAL_VOTES)
       .find({ $or: [{ proposalId: proposal.proposalId }, { policyId: proposal.proposalId } as any] })
       .sort({ updatedAt: -1 })
       .toArray(),
@@ -477,10 +478,8 @@ export async function deleteProposal(db: Db, user: SessionUser, proposalId: stri
   }
 
   await col.deleteOne({ proposalId: id });
-  await Promise.all([
-    db.collection("comments").deleteMany({ proposalId: id }),
-    db.collection("votes").deleteMany({ proposalId: id }),
-  ]);
+  await db.collection("comments").deleteMany({ proposalId: id });
+  // Keep decision records when a proposal is deleted; history is not disposable.
 }
 
 export async function addComment(
@@ -597,11 +596,12 @@ export async function castVote(
     rawChoice === "approve" ? "approve" : rawChoice === "abstain" ? "abstain" : "reject";
   const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
 
-  const votesCol = db.collection<VoteRecord>("votes");
+  const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
   await votesCol.updateOne(
-    { proposalId: proposal.proposalId, memberId: user.memberId },
+    { ballotId: proposalBallotId(proposal.proposalId), memberId: user.memberId },
     {
       $set: {
+        ballotId: proposalBallotId(proposal.proposalId),
         proposalId: proposal.proposalId,
         memberId: user.memberId,
         authorName: user.name || "Verified Member",
@@ -636,7 +636,7 @@ export async function listUserActivity(
   const [proposals, comments, votes] = await Promise.all([
     db.collection<ProposalRecord>("proposals").find({}).toArray(),
     db.collection<CommentRecord>("comments").find({ memberId }).sort({ createdAt: -1 }).toArray(),
-    db.collection<VoteRecord>("votes").find({ memberId }).sort({ updatedAt: -1 }).toArray(),
+    db.collection<VoteRecord>(PROPOSAL_VOTES).find({ memberId }).sort({ updatedAt: -1 }).toArray(),
   ]);
 
   const proposalMap = new Map(proposals.map((p) => [p.proposalId, p]));

@@ -1,10 +1,11 @@
+import { ensureVoteStorage } from "./vote-storage.ts";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import baselineItems from "../data/policies.json" with { type: "json" };
 import type { PlatformEnv, ProposalRecord, ProposalStage } from "./types.ts";
 
 let clientPromise: Promise<MongoClient> | undefined;
 let clientUri: string | undefined;
-const seededDbs = new WeakSet<object>();
+const seededDbs = new WeakMap<object, Promise<void>>();
 
 export function runtimeEnv(locals?: unknown): PlatformEnv {
   const runtime = (locals as { runtime?: { env?: PlatformEnv }; env?: PlatformEnv } | undefined);
@@ -61,17 +62,27 @@ function mapBaselineStage(defaultStatus?: string): ProposalStage {
 }
 
 async function ensureSeeded(db: Db): Promise<void> {
-  if (seededDbs.has(db)) return;
-  seededDbs.add(db);
+  let pending = seededDbs.get(db);
+  if (!pending) {
+    pending = initializeDatabase(db).catch(error => {
+      seededDbs.delete(db);
+      throw error;
+    });
+    seededDbs.set(db, pending);
+  }
+  await pending;
+}
+
+async function initializeDatabase(db: Db): Promise<void> {
 
   try {
+    await ensureVoteStorage(db);
     await Promise.all([
       db.collection("proposals").createIndex({ proposalId: 1 }, { unique: true }).catch(() => {}),
       db.collection("proposals").createIndex({ slug: 1 }, { unique: true }).catch(() => {}),
       db.collection("proposals").createIndex({ stage: 1, space: 1 }).catch(() => {}),
       db.collection("comments").createIndex({ commentId: 1 }, { unique: true }).catch(() => {}),
       db.collection("comments").createIndex({ proposalId: 1, createdAt: 1 }).catch(() => {}),
-      db.collection("votes").createIndex({ proposalId: 1, memberId: 1 }, { unique: true }).catch(() => {}),
       db.collection("memberships").createIndex({ memberId: 1 }, { unique: true, name: "membership_member_unique" }).catch(() => {}),
       db.collection("application_roles").createIndex({ memberId: 1, role: 1 }, { unique: true, name: "member_role_unique" }).catch(() => {}),
     ]);
