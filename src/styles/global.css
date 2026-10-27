@@ -17,6 +17,11 @@
   --horizon-warn-ink: #593b06;
   --horizon-danger-bg: #fae1e1;
   --horizon-danger-ink: #631717;
+  --horizon-voting-bg: #d3f5f7;
+  --horizon-voting-ink: #09474c;
+  --horizon-surface: #ffffff;
+  --horizon-rule: #ded6e7;
+  --horizon-cyan: #00c9d2;
   --content-width: 74rem;
   font-family: Outfit, sans-serif;
   color: var(--horizon-purple);
