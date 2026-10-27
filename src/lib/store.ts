@@ -1,14 +1,13 @@
 import { ObjectId, type Db } from "mongodb";
 import { validPersonName } from "./auth.ts";
 import type {
-  CommentKind,
   CommentRecord,
+  CommentStance,
   MemberRecord,
   MembershipStatus,
-  PolicyRecord,
-  PolicyStatus,
-  PolicySummaryView,
-  ProposalKind,
+  ProposalRecord,
+  ProposalStage,
+  ProposalSummaryView,
   SessionUser,
   UserRole,
   VoteChoice,
@@ -16,7 +15,25 @@ import type {
   VoteTally,
 } from "./types.ts";
 
-const VALID_STATUSES: PolicyStatus[] = ["draft", "open", "voting", "adopted", "archived"];
+export const VALID_STAGES: ProposalStage[] = [
+  "propose",
+  "deliberate",
+  "decide",
+  "implement",
+  "archived",
+];
+
+export const VALID_STANCES: CommentStance[] = ["support", "concern", "amendment", "comment"];
+
+export function normalizeStage(value: unknown, fallback: ProposalStage = "deliberate"): ProposalStage {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "propose" || raw === "draft") return "propose";
+  if (raw === "deliberate" || raw === "open") return "deliberate";
+  if (raw === "decide" || raw === "voting") return "decide";
+  if (raw === "implement" || raw === "adopted") return "implement";
+  if (raw === "archived") return "archived";
+  return fallback;
+}
 
 export function slugify(text: string): string {
   return text
@@ -26,21 +43,60 @@ export function slugify(text: string): string {
     .slice(0, 80);
 }
 
-export async function listPolicies(
+export function normalizeProposalDoc(raw: any): ProposalRecord {
+  const proposalId = String(raw.proposalId || raw.policyId || "");
+  const space = String(raw.space || raw.category || "General");
+  const summary = String(raw.summary || raw.statement || "");
+  const stage = normalizeStage(raw.stage || raw.status || "deliberate");
+  return {
+    proposalId,
+    slug: String(raw.slug || slugify(raw.title || proposalId)),
+    title: String(raw.title || ""),
+    space,
+    spaceSummary: String(raw.spaceSummary || raw.categorySummary || ""),
+    summary,
+    outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
+    details: String(raw.details || ""),
+    attachmentUrl: raw.attachmentUrl ? String(raw.attachmentUrl) : undefined,
+    stage,
+    implementationNote: raw.implementationNote ? String(raw.implementationNote) : undefined,
+    authorId: raw.authorId ? String(raw.authorId) : undefined,
+    authorName: raw.authorName ? String(raw.authorName) : undefined,
+    createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
+    updatedAt: raw.updatedAt ? new Date(raw.updatedAt) : new Date(),
+
+    // Backwards compatibility aliases
+    policyId: proposalId,
+    category: space,
+    categorySummary: String(raw.spaceSummary || raw.categorySummary || ""),
+    statement: summary,
+    status: stage,
+    kind: raw.kind || "proposal",
+    division: raw.division || space,
+  };
+}
+
+export async function listProposals(
   db: Db,
   options: {
-    includeDrafts?: boolean;
+    includeArchived?: boolean;
     search?: string;
+    space?: string;
+    stage?: string;
+    // Backwards compatibility filter options
     category?: string;
     status?: string;
     kind?: string;
+    includeDrafts?: boolean;
   } = {},
-): Promise<PolicySummaryView[]> {
-  const allPolicies = await db
-    .collection<PolicyRecord>("policies")
+): Promise<ProposalSummaryView[]> {
+  const rawProposals = await db
+    .collection<ProposalRecord>("proposals")
     .find({})
-    .sort({ policyId: 1 })
+    .sort({ proposalId: 1 })
     .toArray();
+
+  const allProposals = rawProposals.map(normalizeProposalDoc);
 
   const [allComments, allVotes] = await Promise.all([
     db.collection<CommentRecord>("comments").find({}).toArray(),
@@ -49,160 +105,199 @@ export async function listPolicies(
 
   const commentCounts = new Map<string, number>();
   for (const c of allComments) {
-    commentCounts.set(c.policyId, (commentCounts.get(c.policyId) ?? 0) + 1);
+    const id = c.proposalId || (c as any).policyId;
+    if (id) commentCounts.set(id, (commentCounts.get(id) ?? 0) + 1);
   }
 
   const voteMap = new Map<string, VoteTally>();
   for (const v of allVotes) {
-    const current = voteMap.get(v.policyId) ?? { approve: 0, reject: 0, total: 0 };
+    const id = v.proposalId || (v as any).policyId;
+    if (!id) continue;
+    const current = voteMap.get(id) ?? { approve: 0, abstain: 0, reject: 0, total: 0 };
     if (v.choice === "approve") current.approve += 1;
+    else if (v.choice === "abstain") current.abstain += 1;
     else current.reject += 1;
     current.total += 1;
-    voteMap.set(v.policyId, current);
+    voteMap.set(id, current);
   }
 
   const query = (options.search ?? "").trim().toLowerCase();
-  const catFilter = (options.category ?? "").trim();
-  const statusFilter = (options.status ?? "").trim();
-  const kindFilter = (options.kind ?? "").trim();
+  const spaceFilter = (options.space ?? options.category ?? "").trim();
+  const stageFilter =
+    (options.stage && options.stage !== "all") || (options.status && options.status !== "all")
+      ? normalizeStage(options.stage ?? options.status)
+      : "";
+  const allowArchived = options.includeArchived ?? options.includeDrafts ?? false;
 
-  return allPolicies
+  return allProposals
     .filter((p) => {
-      const recordKind = p.kind ?? "policy";
-      if (!options.includeDrafts && (p.status === "draft" || p.status === "archived")) {
+      if (!allowArchived && p.stage === "archived") {
         return false;
       }
-      if (kindFilter && kindFilter !== "all" && recordKind !== kindFilter) {
+      if (spaceFilter && spaceFilter !== "all" && p.space !== spaceFilter) {
         return false;
       }
-      if (catFilter && catFilter !== "all" && p.category !== catFilter) {
-        return false;
-      }
-      if (statusFilter && statusFilter !== "all" && p.status !== statusFilter) {
+      if (stageFilter && p.stage !== stageFilter) {
         return false;
       }
       if (query) {
-        const haystack = `${p.policyId} ${p.title} ${p.category} ${p.division} ${p.statement}`.toLowerCase();
+        const haystack = `${p.proposalId} ${p.title} ${p.space} ${p.summary} ${p.details}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
       return true;
     })
     .map((p) => ({
       ...p,
-      kind: p.kind ?? "policy",
-      commentCount: commentCounts.get(p.policyId) ?? 0,
-      votes: voteMap.get(p.policyId) ?? { approve: 0, reject: 0, total: 0 },
+      commentCount: commentCounts.get(p.proposalId) ?? 0,
+      votes: voteMap.get(p.proposalId) ?? { approve: 0, abstain: 0, reject: 0, total: 0 },
     }));
 }
 
-export async function getPolicyDetail(
+export async function getProposalDetail(
   db: Db,
   idOrSlug: string,
   user: SessionUser | null,
 ): Promise<{
-  policy: PolicySummaryView;
+  proposal: ProposalSummaryView;
   comments: CommentRecord[];
+  votesList: VoteRecord[];
   myVote: VoteChoice | null;
+  myReason: string;
 } | null> {
   const key = idOrSlug.trim();
   if (!key) return null;
 
-  const col = db.collection<PolicyRecord>("policies");
-  const policy = (await col.findOne({ slug: key })) ?? (await col.findOne({ policyId: key }));
-  if (!policy) return null;
+  const col = db.collection<ProposalRecord>("proposals");
+  const rawProposal =
+    (await col.findOne({ slug: key })) ??
+    (await col.findOne({ proposalId: key })) ??
+    (await col.findOne({ policyId: key } as any));
+  if (!rawProposal) return null;
 
-  if ((policy.status === "draft" || policy.status === "archived") && !user?.isStaff) {
+  const proposal = normalizeProposalDoc(rawProposal);
+
+  if (proposal.stage === "archived" && !user?.isStaff) {
     return null;
   }
 
-  const [comments, votes] = await Promise.all([
+  const [rawComments, votes] = await Promise.all([
     db
       .collection<CommentRecord>("comments")
-      .find({ policyId: policy.policyId })
+      .find({ $or: [{ proposalId: proposal.proposalId }, { policyId: proposal.proposalId } as any] })
       .sort({ createdAt: 1 })
       .toArray(),
-    db.collection<VoteRecord>("votes").find({ policyId: policy.policyId }).toArray(),
+    db
+      .collection<VoteRecord>("votes")
+      .find({ $or: [{ proposalId: proposal.proposalId }, { policyId: proposal.proposalId } as any] })
+      .sort({ updatedAt: -1 })
+      .toArray(),
   ]);
 
-  const tally: VoteTally = { approve: 0, reject: 0, total: 0 };
+  const comments = rawComments.map((c) => ({
+    ...c,
+    stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
+    upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
+  }));
+
+  const tally: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
   let myVote: VoteChoice | null = null;
+  let myReason = "";
+
   for (const v of votes) {
     if (v.choice === "approve") tally.approve += 1;
+    else if (v.choice === "abstain") tally.abstain += 1;
     else tally.reject += 1;
     tally.total += 1;
     if (user && v.memberId === user.memberId) {
-      myVote = v.choice === "approve" ? "approve" : "reject";
+      myVote = v.choice;
+      myReason = v.reason ?? "";
     }
   }
 
   return {
-    policy: {
-      ...policy,
-      kind: policy.kind ?? "policy",
+    proposal: {
+      ...proposal,
       commentCount: comments.length,
       votes: tally,
     },
     comments,
+    votesList: votes,
     myVote,
+    myReason,
   };
 }
 
-export async function savePolicy(
+export async function saveProposal(
   db: Db,
   user: SessionUser,
   body: Record<string, unknown>,
-): Promise<PolicyRecord> {
-  if (!user.isStaff) {
-    throw new Error("Moderator or Administrator access is required to manage proposals.");
+): Promise<ProposalRecord> {
+  const col = db.collection<ProposalRecord>("proposals");
+  const existingId =
+    typeof body.proposalId === "string"
+      ? body.proposalId.trim()
+      : typeof body.policyId === "string"
+        ? body.policyId.trim()
+        : "";
+  const existing = existingId ? await col.findOne({ proposalId: existingId }) : null;
+
+  if (existing) {
+    const isAuthorInPropose = existing.authorId === user.memberId && existing.stage === "propose";
+    if (!user.isStaff && !isAuthorInPropose) {
+      throw new Error("Moderator or Administrator access is required to edit this proposal.");
+    }
+  } else if (!user.canParticipate && !user.isStaff) {
+    throw new Error("Your membership must be verified before you can submit a proposal.");
   }
 
-  const col = db.collection<PolicyRecord>("policies");
-  const existingId = typeof body.policyId === "string" ? body.policyId.trim() : "";
-  const existing = existingId ? await col.findOne({ policyId: existingId }) : null;
-
-  // Allow quick status-only update
+  // Quick stage / implementationNote update by staff
   if (
     existing &&
-    Object.keys(body).every((k) => k === "policyId" || k === "status") &&
-    typeof body.status === "string"
+    user.isStaff &&
+    Object.keys(body).every((k) =>
+      ["proposalId", "policyId", "stage", "status", "implementationNote"].includes(k),
+    ) &&
+    (body.stage !== undefined || body.status !== undefined || body.implementationNote !== undefined)
   ) {
-    if (!VALID_STATUSES.includes(body.status as PolicyStatus)) {
-      throw new Error("Invalid proposal status.");
-    }
-    const status = body.status as PolicyStatus;
+    const stage =
+      body.stage !== undefined || body.status !== undefined
+        ? normalizeStage(body.stage ?? body.status, existing.stage)
+        : existing.stage;
+    const implementationNote =
+      typeof body.implementationNote === "string"
+        ? body.implementationNote.trim()
+        : existing.implementationNote;
     const updatedAt = new Date();
-    await col.updateOne({ policyId: existing.policyId }, { $set: { status, updatedAt } });
-    return { ...existing, status, updatedAt };
+    await col.updateOne(
+      { proposalId: existing.proposalId },
+      { $set: { stage, implementationNote, updatedAt } },
+    );
+    return { ...existing, stage, implementationNote, updatedAt };
   }
-
-  const kind: ProposalKind =
-    body.kind === "proposal"
-      ? "proposal"
-      : body.kind === "policy"
-        ? "policy"
-        : existing?.kind ?? "policy";
 
   const title = typeof body.title === "string" ? body.title.trim() : existing?.title ?? "";
   if (title.length < 4 || title.length > 200) {
     throw new Error("Title must be between 4 and 200 characters.");
   }
 
-  const category =
-    typeof body.category === "string"
-      ? body.category.trim()
-      : existing?.category ?? (kind === "proposal" ? "Platform & Branding Review" : "General");
-  if (category.length < 2 || category.length > 100) {
-    throw new Error("Category must be between 2 and 100 characters.");
+  const space =
+    typeof body.space === "string" && body.space.trim()
+      ? body.space.trim()
+      : typeof body.category === "string" && body.category.trim()
+        ? body.category.trim()
+        : existing?.space ?? "General";
+  if (space.length < 2 || space.length > 100) {
+    throw new Error("Space / topic must be between 2 and 100 characters.");
   }
 
-  const division =
-    typeof body.division === "string" && body.division.trim()
-      ? body.division.trim()
-      : existing?.division ?? (kind === "proposal" ? "Party & Organisation" : "Reclaim Our Future");
-
-  const statement = typeof body.statement === "string" ? body.statement.trim() : existing?.statement ?? "";
-  if (statement.length < 10 || statement.length > 2000) {
-    throw new Error("Summary statement must be between 10 and 2,000 characters.");
+  const rawSummary =
+    typeof body.summary === "string"
+      ? body.summary.trim()
+      : typeof body.statement === "string"
+        ? body.statement.trim()
+        : existing?.summary ?? "";
+  if (rawSummary.length < 10 || rawSummary.length > 2000) {
+    throw new Error("Proposal summary must be between 10 and 2,000 characters.");
   }
 
   let outcomes: string[] = existing?.outcomes ?? [];
@@ -224,38 +319,43 @@ export async function savePolicy(
     throw new Error("Supporting link or image URL must start with https:// or /.");
   }
 
-  const statusInput = typeof body.status === "string" ? (body.status as PolicyStatus) : existing?.status ?? "open";
-  const status: PolicyStatus = VALID_STATUSES.includes(statusInput) ? statusInput : "open";
+  const implementationNote =
+    typeof body.implementationNote === "string"
+      ? body.implementationNote.trim()
+      : existing?.implementationNote ?? "";
+
+  // Non-staff member submissions always start in "propose" stage
+  const stage: ProposalStage = user.isStaff
+    ? normalizeStage(body.stage ?? body.status, existing?.stage ?? "propose")
+    : existing?.stage ?? "propose";
 
   const now = new Date();
 
   if (existing) {
-    const updated: PolicyRecord = {
+    const updated: ProposalRecord = {
       ...existing,
-      kind,
       title,
-      category,
-      division,
-      statement,
+      space,
+      summary: rawSummary,
       outcomes,
       details,
       attachmentUrl: attachmentUrl || undefined,
-      status,
+      implementationNote: implementationNote || undefined,
+      stage,
       updatedAt: now,
     };
     await col.updateOne(
-      { policyId: existing.policyId },
+      { proposalId: existing.proposalId },
       {
         $set: {
-          kind: updated.kind,
           title: updated.title,
-          category: updated.category,
-          division: updated.division,
-          statement: updated.statement,
+          space: updated.space,
+          summary: updated.summary,
           outcomes: updated.outcomes,
           details: updated.details,
           attachmentUrl: updated.attachmentUrl,
-          status: updated.status,
+          implementationNote: updated.implementationNote,
+          stage: updated.stage,
           updatedAt: now,
         },
       },
@@ -264,25 +364,25 @@ export async function savePolicy(
   }
 
   const count = await col.countDocuments();
-  const prefix = kind === "proposal" ? "PROP" : "POL";
-  const policyId =
-    existingId || `${prefix}-${String(count + 1).padStart(3, "0")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
-  const baseSlug = slugify(title) || policyId.toLowerCase();
+  const proposalId =
+    existingId || `PROP-${String(count + 1).padStart(3, "0")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+  const baseSlug = slugify(title) || proposalId.toLowerCase();
   const slugConflict = await col.findOne({ slug: baseSlug });
-  const slug = slugConflict ? `${baseSlug}-${policyId.toLowerCase()}` : baseSlug;
+  const slug = slugConflict ? `${baseSlug}-${proposalId.toLowerCase()}` : baseSlug;
 
-  const created: PolicyRecord = {
-    policyId,
+  const created: ProposalRecord = {
+    proposalId,
     slug,
-    kind,
     title,
-    division,
-    category,
-    statement,
+    space,
+    summary: rawSummary,
     outcomes,
     details,
     ...(attachmentUrl ? { attachmentUrl } : {}),
-    status,
+    ...(implementationNote ? { implementationNote } : {}),
+    stage,
+    authorId: user.memberId,
+    authorName: user.name || "Verified Member",
     createdAt: now,
     updatedAt: now,
   };
@@ -291,17 +391,22 @@ export async function savePolicy(
   return created;
 }
 
-export async function deletePolicy(db: Db, user: SessionUser, policyId: string): Promise<void> {
-  if (!user.isAdmin) {
-    throw new Error("Administrator access is required to delete a proposal.");
-  }
-  const id = policyId.trim();
+export async function deleteProposal(db: Db, user: SessionUser, proposalId: string): Promise<void> {
+  const id = proposalId.trim();
   if (!id) throw new Error("Proposal ID is required.");
-  const deleted = await db.collection("policies").deleteOne({ policyId: id });
-  if (!deleted.deletedCount) throw new Error("Proposal not found.");
+  const col = db.collection<ProposalRecord>("proposals");
+  const existing = await col.findOne({ proposalId: id });
+  if (!existing) throw new Error("Proposal not found.");
+
+  const isAuthorInPropose = existing.authorId === user.memberId && existing.stage === "propose";
+  if (!user.isAdmin && !isAuthorInPropose) {
+    throw new Error("Administrator access is required to delete this proposal.");
+  }
+
+  await col.deleteOne({ proposalId: id });
   await Promise.all([
-    db.collection("comments").deleteMany({ policyId: id }),
-    db.collection("votes").deleteMany({ policyId: id }),
+    db.collection("comments").deleteMany({ proposalId: id }),
+    db.collection("votes").deleteMany({ proposalId: id }),
   ]);
 }
 
@@ -311,33 +416,71 @@ export async function addComment(
   body: Record<string, unknown>,
 ): Promise<CommentRecord> {
   if (!user.canParticipate) {
-    throw new Error("Your party membership must be verified before you can post comments.");
+    throw new Error("Your membership must be verified before you can contribute to deliberation.");
   }
 
-  const policyId = typeof body.policyId === "string" ? body.policyId.trim() : "";
-  const policy = await db.collection<PolicyRecord>("policies").findOne({ policyId });
-  if (!policy || policy.status === "draft" || policy.status === "archived") {
-    throw new Error("This proposal is not open for discussion.");
+  const proposalId =
+    typeof body.proposalId === "string"
+      ? body.proposalId.trim()
+      : typeof body.policyId === "string"
+        ? body.policyId.trim()
+        : "";
+  const proposal = await db.collection<ProposalRecord>("proposals").findOne({ proposalId });
+  if (!proposal || proposal.stage === "archived") {
+    throw new Error("This proposal is not open for deliberation.");
   }
 
   const text = typeof body.body === "string" ? body.body.trim() : "";
   if (text.length < 5 || text.length > 5000) {
-    throw new Error("Comment must be between 5 and 5,000 characters.");
+    throw new Error("Contribution must be between 5 and 5,000 characters.");
   }
 
-  const kind: CommentKind = body.kind === "amendment" ? "amendment" : "comment";
+  const rawStance = String(body.stance || body.kind || "comment");
+  const stance: CommentStance = VALID_STANCES.includes(rawStance as CommentStance)
+    ? (rawStance as CommentStance)
+    : "comment";
+
   const record: CommentRecord = {
     commentId: `cmt-${crypto.randomUUID()}`,
-    policyId: policy.policyId,
+    proposalId: proposal.proposalId,
     memberId: user.memberId,
     authorName: user.name || "Verified Member",
-    kind,
+    stance,
     body: text,
+    upvotes: [],
     createdAt: new Date(),
   };
 
   await db.collection<CommentRecord>("comments").insertOne(record);
   return record;
+}
+
+export async function toggleUpvoteComment(
+  db: Db,
+  user: SessionUser,
+  commentId: string,
+): Promise<{ upvotes: string[]; count: number; endorsed: boolean; hasUpvoted: boolean }> {
+  if (!user.canParticipate) {
+    throw new Error("Your membership must be verified to endorse deliberation points.");
+  }
+  const id = commentId.trim();
+  const col = db.collection<CommentRecord>("comments");
+  const existing = await col.findOne({ commentId: id });
+  if (!existing) throw new Error("Comment not found.");
+
+  const current = Array.isArray(existing.upvotes) ? existing.upvotes : [];
+  const hasEndorsed = current.includes(user.memberId);
+  const updated = hasEndorsed
+    ? current.filter((m) => m !== user.memberId)
+    : [...current, user.memberId];
+
+  await col.updateOne({ commentId: id }, { $set: { upvotes: updated } });
+  return {
+    upvotes: updated,
+    count: updated.length,
+    endorsed: !hasEndorsed,
+    hasUpvoted: !hasEndorsed,
+  };
 }
 
 export async function deleteComment(db: Db, user: SessionUser, commentId: string): Promise<void> {
@@ -347,7 +490,7 @@ export async function deleteComment(db: Db, user: SessionUser, commentId: string
   const existing = await col.findOne({ commentId: id });
   if (!existing) throw new Error("Comment not found.");
   if (existing.memberId !== user.memberId && !user.isStaff) {
-    throw new Error("You can only delete your own comments.");
+    throw new Error("You can only delete your own contributions.");
   }
   await col.deleteOne({ commentId: id });
 }
@@ -358,40 +501,50 @@ export async function castVote(
   body: Record<string, unknown>,
 ): Promise<{ choice: VoteChoice; votes: VoteTally }> {
   if (!user.canParticipate) {
-    throw new Error("Your party membership must be verified before you can vote.");
+    throw new Error("Your membership must be verified before you can participate in decisions.");
   }
 
-  const policyId = typeof body.policyId === "string" ? body.policyId.trim() : "";
-  const policy = await db.collection<PolicyRecord>("policies").findOne({ policyId });
-  if (!policy) throw new Error("Proposal not found.");
-  if (policy.status !== "voting") {
-    throw new Error("Voting is not currently open on this proposal.");
+  const proposalId =
+    typeof body.proposalId === "string"
+      ? body.proposalId.trim()
+      : typeof body.policyId === "string"
+        ? body.policyId.trim()
+        : "";
+  const proposal = await db.collection<ProposalRecord>("proposals").findOne({ proposalId });
+  if (!proposal) throw new Error("Proposal not found.");
+  if (proposal.stage !== "decide") {
+    throw new Error("This proposal is not currently in the Decide stage.");
   }
 
-  const rawChoice = typeof body.choice === "string" ? body.choice.trim() : "";
-  if (rawChoice !== "approve" && rawChoice !== "reject" && rawChoice !== "do-not-approve") {
-    throw new Error("Choose Approve or Reject.");
+  const rawChoice = typeof body.choice === "string" ? body.choice.trim().toLowerCase() : "";
+  if (!["approve", "abstain", "reject", "do-not-approve"].includes(rawChoice)) {
+    throw new Error("Choose Approve, Abstain, or Reject.");
   }
-  const choice: VoteChoice = rawChoice === "approve" ? "approve" : "reject";
+  const choice: VoteChoice =
+    rawChoice === "approve" ? "approve" : rawChoice === "abstain" ? "abstain" : "reject";
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
 
   const votesCol = db.collection<VoteRecord>("votes");
   await votesCol.updateOne(
-    { policyId: policy.policyId, memberId: user.memberId },
+    { proposalId: proposal.proposalId, memberId: user.memberId },
     {
       $set: {
-        policyId: policy.policyId,
+        proposalId: proposal.proposalId,
         memberId: user.memberId,
+        authorName: user.name || "Verified Member",
         choice,
+        ...(reason ? { reason } : { reason: "" }),
         updatedAt: new Date(),
       },
     },
     { upsert: true },
   );
 
-  const allVotes = await votesCol.find({ policyId: policy.policyId }).toArray();
-  const votes: VoteTally = { approve: 0, reject: 0, total: 0 };
+  const allVotes = await votesCol.find({ proposalId: proposal.proposalId }).toArray();
+  const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
   for (const v of allVotes) {
     if (v.choice === "approve") votes.approve += 1;
+    else if (v.choice === "abstain") votes.abstain += 1;
     else votes.reject += 1;
     votes.total += 1;
   }
@@ -403,34 +556,35 @@ export async function listUserActivity(
   db: Db,
   memberId: string,
 ): Promise<{
-  comments: Array<CommentRecord & { policyTitle: string; policySlug: string }>;
-  votes: Array<VoteRecord & { policyTitle: string; policySlug: string; policyStatus: PolicyStatus }>;
+  proposals: ProposalRecord[];
+  comments: Array<CommentRecord & { proposalTitle: string; proposalSlug: string }>;
+  votes: Array<VoteRecord & { proposalTitle: string; proposalSlug: string; proposalStage: ProposalStage }>;
 }> {
-  const [policies, comments, votes] = await Promise.all([
-    db.collection<PolicyRecord>("policies").find({}).toArray(),
+  const [proposals, comments, votes] = await Promise.all([
+    db.collection<ProposalRecord>("proposals").find({}).toArray(),
     db.collection<CommentRecord>("comments").find({ memberId }).sort({ createdAt: -1 }).toArray(),
     db.collection<VoteRecord>("votes").find({ memberId }).sort({ updatedAt: -1 }).toArray(),
   ]);
 
-  const policyMap = new Map(policies.map((p) => [p.policyId, p]));
+  const proposalMap = new Map(proposals.map((p) => [p.proposalId, p]));
 
   return {
+    proposals: proposals.filter((p) => p.authorId === memberId),
     comments: comments.map((c) => {
-      const p = policyMap.get(c.policyId);
+      const p = proposalMap.get(c.proposalId);
       return {
         ...c,
-        policyTitle: p?.title ?? c.policyId,
-        policySlug: p?.slug ?? c.policyId,
+        proposalTitle: p?.title ?? c.proposalId,
+        proposalSlug: p?.slug ?? c.proposalId,
       };
     }),
     votes: votes.map((v) => {
-      const p = policyMap.get(v.policyId);
+      const p = proposalMap.get(v.proposalId);
       return {
         ...v,
-        choice: v.choice === "approve" ? "approve" : "reject",
-        policyTitle: p?.title ?? v.policyId,
-        policySlug: p?.slug ?? v.policyId,
-        policyStatus: p?.status ?? "open",
+        proposalTitle: p?.title ?? v.proposalId,
+        proposalSlug: p?.slug ?? v.proposalId,
+        proposalStage: p?.stage ?? "deliberate",
       };
     }),
   };
@@ -576,3 +730,9 @@ export async function saveMember(
 
   return { memberId };
 }
+
+// Keep aliases for any callers
+export const listPolicies = listProposals;
+export const getPolicyDetail = getProposalDetail;
+export const savePolicy = saveProposal;
+export const deletePolicy = deleteProposal;

@@ -1,6 +1,6 @@
 import { MongoClient, ObjectId, type Db } from "mongodb";
-import baselinePolicies from "../data/policies.json" with { type: "json" };
-import type { PlatformEnv, PolicyRecord, PolicyStatus, ProposalKind } from "./types.ts";
+import baselineItems from "../data/policies.json" with { type: "json" };
+import type { PlatformEnv, ProposalRecord, ProposalStage } from "./types.ts";
 
 let clientPromise: Promise<MongoClient> | undefined;
 let clientUri: string | undefined;
@@ -53,43 +53,50 @@ export async function getDatabase(env: PlatformEnv = runtimeEnv()): Promise<Db> 
   }
 }
 
+function mapBaselineStage(defaultStatus?: string): ProposalStage {
+  if (defaultStatus === "voting" || defaultStatus === "decide") return "decide";
+  if (defaultStatus === "adopted" || defaultStatus === "implement") return "implement";
+  if (defaultStatus === "draft" || defaultStatus === "propose") return "propose";
+  return "deliberate";
+}
+
 async function ensureSeeded(db: Db): Promise<void> {
   if (seededDbs.has(db)) return;
   seededDbs.add(db);
 
   try {
     await Promise.all([
-      db.collection("policies").createIndex({ policyId: 1 }, { unique: true }),
-      db.collection("policies").createIndex({ slug: 1 }, { unique: true }),
-      db.collection("policies").createIndex({ status: 1, category: 1 }),
-      db.collection("comments").createIndex({ commentId: 1 }, { unique: true }),
-      db.collection("comments").createIndex({ policyId: 1, createdAt: 1 }),
-      db.collection("votes").createIndex({ policyId: 1, memberId: 1 }, { unique: true }),
-      db.collection("memberships").createIndex({ memberId: 1 }, { unique: true }),
-      db.collection("application_roles").createIndex({ memberId: 1, role: 1 }, { unique: true }),
+      db.collection("proposals").createIndex({ proposalId: 1 }, { unique: true }).catch(() => {}),
+      db.collection("proposals").createIndex({ slug: 1 }, { unique: true }).catch(() => {}),
+      db.collection("proposals").createIndex({ stage: 1, space: 1 }).catch(() => {}),
+      db.collection("comments").createIndex({ commentId: 1 }, { unique: true }).catch(() => {}),
+      db.collection("comments").createIndex({ proposalId: 1, createdAt: 1 }).catch(() => {}),
+      db.collection("votes").createIndex({ proposalId: 1, memberId: 1 }, { unique: true }).catch(() => {}),
+      db.collection("memberships").createIndex({ memberId: 1 }, { unique: true, name: "membership_member_unique" }).catch(() => {}),
+      db.collection("application_roles").createIndex({ memberId: 1, role: 1 }, { unique: true, name: "member_role_unique" }).catch(() => {}),
     ]);
 
     const now = new Date();
-    const policiesCol = db.collection<PolicyRecord>("policies");
-    for (const item of baselinePolicies) {
-      await policiesCol.updateOne(
-        { policyId: item.policyId },
+    const proposalsCol = db.collection<ProposalRecord>("proposals");
+    for (const item of baselineItems) {
+      const raw = item as Record<string, any>;
+      const proposalId = String(raw.proposalId || raw.policyId);
+      const stage = mapBaselineStage(raw.stage || raw.defaultStatus);
+      await proposalsCol.updateOne(
+        { proposalId },
         {
           $setOnInsert: {
-            policyId: item.policyId,
-            slug: item.slug,
-            kind: ((item as { kind?: string }).kind === "proposal" ? "proposal" : "policy") as ProposalKind,
-            title: item.title,
-            division: item.division,
-            category: item.category,
-            categorySummary: item.categorySummary,
-            statement: item.statement,
-            outcomes: item.outcomes,
-            details: item.details,
-            ...((item as { attachmentUrl?: string }).attachmentUrl
-              ? { attachmentUrl: (item as { attachmentUrl?: string }).attachmentUrl }
-              : {}),
-            status: (item.defaultStatus as PolicyStatus) || "open",
+            proposalId,
+            slug: String(raw.slug),
+            title: String(raw.title),
+            space: String(raw.space || raw.category || "General"),
+            spaceSummary: String(raw.spaceSummary || raw.categorySummary || ""),
+            summary: String(raw.summary || raw.statement || ""),
+            outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
+            details: String(raw.details || ""),
+            ...(raw.attachmentUrl ? { attachmentUrl: String(raw.attachmentUrl) } : {}),
+            stage,
+            authorName: "Fusion Working Group",
             createdAt: now,
             updatedAt: now,
           },
@@ -140,7 +147,13 @@ export function createMemoryDb(): Db {
       }
       if (cond instanceof RegExp) {
         if (!cond.test(String(val ?? ""))) return false;
-      } else if (cond instanceof ObjectId || val instanceof ObjectId) {
+      } else if (
+        key === "_id" ||
+        cond instanceof ObjectId ||
+        val instanceof ObjectId ||
+        cond?._bsontype === "ObjectId" ||
+        val?._bsontype === "ObjectId"
+      ) {
         if (String(val) !== String(cond)) return false;
       } else if (val !== cond) {
         return false;

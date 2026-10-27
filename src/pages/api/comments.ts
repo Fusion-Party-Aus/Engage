@@ -1,14 +1,14 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
-import { addComment, deleteComment } from "../../lib/store.ts";
+import { addComment, deleteComment, toggleUpvoteComment } from "../../lib/store.ts";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user) return Response.json({ error: "Please sign in to comment." }, { status: 401 });
+  if (!user) return Response.json({ error: "Please sign in to participate." }, { status: 401 });
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -17,7 +17,26 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return Response.json({ comment }, { status: 201 });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "Could not submit comment." },
+      { error: error instanceof Error ? error.message : "Could not submit contribution." },
+      { status: 400 },
+    );
+  }
+};
+
+export const PATCH: APIRoute = async ({ request, locals }) => {
+  const env = runtimeEnv(locals);
+  const user = await getSessionUser(request, env);
+  if (!user) return Response.json({ error: "Please sign in to endorse points." }, { status: 401 });
+
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    const commentId = String(body.commentId ?? "");
+    const db = await getDatabase(env);
+    const result = await toggleUpvoteComment(db, user, commentId);
+    return Response.json(result);
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Could not endorse comment." },
       { status: 400 },
     );
   }

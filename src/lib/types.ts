@@ -1,7 +1,6 @@
-export type PolicyStatus = "draft" | "open" | "voting" | "adopted" | "archived";
-export type ProposalKind = "policy" | "proposal";
-export type VoteChoice = "approve" | "reject";
-export type CommentKind = "comment" | "amendment";
+export type ProposalStage = "propose" | "deliberate" | "decide" | "implement" | "archived";
+export type VoteChoice = "approve" | "abstain" | "reject";
+export type CommentStance = "support" | "concern" | "amendment" | "comment";
 export type UserRole = "member" | "moderator" | "administrator";
 export type MembershipStatus = "pending" | "verified" | "suspended";
 
@@ -29,48 +28,62 @@ export interface SessionUser {
   isAdmin: boolean;
 }
 
-export interface PolicyRecord {
-  policyId: string;
+export interface ProposalRecord {
+  proposalId: string;
   slug: string;
-  kind: ProposalKind;
   title: string;
-  division: string;
-  category: string;
-  categorySummary?: string;
-  statement: string;
+  space: string;
+  spaceSummary?: string;
+  summary: string;
   outcomes: string[];
   details: string;
   attachmentUrl?: string;
-  status: PolicyStatus;
+  stage: ProposalStage;
+  implementationNote?: string;
+  authorId?: string;
+  authorName?: string;
   createdAt: Date;
   updatedAt: Date;
+
+  // Backwards compatibility aliases
+  policyId?: string;
+  category?: string;
+  categorySummary?: string;
+  statement?: string;
+  status?: string;
+  kind?: string;
+  division?: string;
 }
 
 export interface VoteTally {
   approve: number;
+  abstain: number;
   reject: number;
   total: number;
 }
 
-export interface PolicySummaryView extends PolicyRecord {
+export interface ProposalSummaryView extends ProposalRecord {
   commentCount: number;
   votes: VoteTally;
 }
 
 export interface CommentRecord {
   commentId: string;
-  policyId: string;
+  proposalId: string;
   memberId: string;
   authorName: string;
-  kind: CommentKind;
+  stance: CommentStance;
   body: string;
+  upvotes: string[];
   createdAt: Date;
 }
 
 export interface VoteRecord {
-  policyId: string;
+  proposalId: string;
   memberId: string;
+  authorName?: string;
   choice: VoteChoice;
+  reason?: string;
   updatedAt: Date;
 }
 

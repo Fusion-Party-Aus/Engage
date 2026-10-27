@@ -2,8 +2,8 @@
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { listPolicies } from '../../lib/store.ts';
-import type { PolicyStatus } from '../../lib/types.ts';
+import { listProposals } from '../../lib/store.ts';
+import type { ProposalStage } from '../../lib/types.ts';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -20,25 +20,31 @@ if (!user.isStaff) {
 
 const db = await getDatabase(env);
 const query = (Astro.url.searchParams.get('q') ?? '').trim();
-const kindFilter = (Astro.url.searchParams.get('kind') ?? 'all').trim();
-const statusFilter = (Astro.url.searchParams.get('status') ?? 'all').trim();
+const stageFilter = (Astro.url.searchParams.get('stage') ?? 'all').trim();
 const editId = (Astro.url.searchParams.get('edit') ?? '').trim();
 
 const allProposals = user.isStaff
-  ? await listPolicies(db, {
-      includeDrafts: true,
+  ? await listProposals(db, {
+      includeArchived: true,
       search: query,
-      kind: kindFilter,
-      status: statusFilter,
+      stage: stageFilter,
     })
   : [];
 
-const editingPolicy = editId ? allProposals.find((p) => p.policyId === editId) : null;
-const categories = [...new Set(allProposals.map((p) => p.category))].sort();
+const editingProposal = editId ? allProposals.find((p) => p.proposalId === editId) : null;
+const spaces = [...new Set(allProposals.map((p) => p.space))].sort();
+
+const stageOptions: Array<[ProposalStage, string]> = [
+  ['propose', '1. Propose (Intake)'],
+  ['deliberate', '2. Deliberate (Discussion)'],
+  ['decide', '3. Decide (Voting)'],
+  ['implement', '4. Implement (Adoption)'],
+  ['archived', 'Archived'],
+];
 ---
 <AdminLayout
-  title="Proposals, Policies & Votes"
-  description="Create, edit, or change the consultation and voting stage of any party proposal or policy."
+  title="Proposals & Decision Management"
+  description="Manage party proposals, lifecycle stages, deliberation moderation, and implementation notes."
   section="policies"
   isAdmin={user.isAdmin}
 >
@@ -51,156 +57,125 @@ const categories = [...new Set(allProposals.map((p) => p.category))].sort();
       <section id="create-policy" class="admin-surface" aria-labelledby="editor-heading">
         <div class="editor-head">
           <h2 id="editor-heading">
-            {editingPolicy
-              ? `Edit ${editingPolicy.policyId}: ${editingPolicy.title}`
-              : 'Create a new proposal or policy'}
+            {editingProposal
+              ? `Edit ${editingProposal.proposalId}: ${editingProposal.title}`
+              : 'Create a new proposal or resolution'}
           </h2>
-          {editingPolicy && (
+          {editingProposal && (
             <a class="button button--outline" href="/admin/">
               Cancel editing
             </a>
           )}
         </div>
 
-        <form id="policy-editor-form" data-editing-id={editingPolicy?.policyId ?? ''}>
+        <form id="proposal-editor-form" data-editing-id={editingProposal?.proposalId ?? ''}>
           <div class="admin-grid">
             <label class="field">
-              <span>Proposal type</span>
-              <select name="kind">
-                <option value="policy" selected={!editingPolicy || editingPolicy.kind === 'policy'}>
-                  Policy proposal
-                </option>
-                <option value="proposal" selected={editingPolicy?.kind === 'proposal'}>
-                  Party / general proposal (identity, governance, motion, etc.)
-                </option>
+              <span>Lifecycle Stage</span>
+              <select name="stage">
+                {stageOptions.map(([val, label]) => (
+                  <option
+                    value={val}
+                    selected={
+                      editingProposal
+                        ? editingProposal.stage === val
+                        : val === 'deliberate'
+                    }
+                  >
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
 
             <label class="field">
-              <span>Stage</span>
-              <select name="status">
-                <option value="open" selected={!editingPolicy || editingPolicy.status === 'open'}>
-                  Open for discussion
-                </option>
-                <option value="voting" selected={editingPolicy?.status === 'voting'}>
-                  Open for voting
-                </option>
-                <option value="adopted" selected={editingPolicy?.status === 'adopted'}>
-                  Adopted
-                </option>
-                <option value="draft" selected={editingPolicy?.status === 'draft'}>
-                  Draft (staff only)
-                </option>
-                <option value="archived" selected={editingPolicy?.status === 'archived'}>
-                  Archived
-                </option>
-              </select>
-            </label>
-          </div>
-
-          <div class="admin-grid">
-            <label class="field">
-              <span>Title</span>
+              <span>Space / Topic</span>
               <input
-                name="title"
-                required
-                minlength="4"
-                maxlength="200"
-                value={editingPolicy?.title ?? ''}
-                placeholder="e.g. Adopt the Horizon visual identity, or Universal Dental in Medicare"
-              />
-            </label>
-
-            <label class="field">
-              <span>Area / topic</span>
-              <input
-                name="category"
-                list="category-options"
+                name="space"
+                list="space-options"
                 required
                 minlength="2"
                 maxlength="100"
-                value={editingPolicy?.category ?? 'Platform & Branding Review'}
+                value={editingProposal?.space ?? 'General'}
+                placeholder="e.g. Governance, Economy, Climate, Digital Rights"
               />
-              <datalist id="category-options">
-                {categories.map((c) => (
-                  <option value={c} />
+              <datalist id="space-options">
+                {spaces.map((sp) => (
+                  <option value={sp} />
                 ))}
               </datalist>
             </label>
           </div>
 
+          <label class="field">
+            <span>Title</span>
+            <input
+              name="title"
+              required
+              minlength="4"
+              maxlength="200"
+              value={editingProposal?.title ?? ''}
+              placeholder="e.g. Adopt Horizon visual identity, or Universal Dental in Medicare"
+            />
+          </label>
+
+          <label class="field">
+            <span>Core Statement / Summary</span>
+            <textarea
+              name="summary"
+              required
+              minlength="10"
+              maxlength="2000"
+              rows="3"
+            >{editingProposal?.summary ?? ''}</textarea>
+          </label>
+
+          <label class="field">
+            <span>Key Commitments / Outcomes (one per line)</span>
+            <textarea
+              name="outcomes"
+              rows="3"
+            >{(editingProposal?.outcomes ?? []).join('\n')}</textarea>
+          </label>
+
+          <label class="field">
+            <span>Detailed Background, Rationale &amp; Text</span>
+            <textarea
+              name="details"
+              rows="6"
+            >{editingProposal?.details ?? ''}</textarea>
+          </label>
+
           <div class="admin-grid">
             <label class="field">
-              <span>Division / section</span>
-              <select name="division">
-                <option
-                  value="Party & Organisation"
-                  selected={editingPolicy?.division === 'Party & Organisation'}
-                >
-                  Party &amp; Organisation
-                </option>
-                <option
-                  value="Reclaim Our Economy"
-                  selected={editingPolicy?.division === 'Reclaim Our Economy'}
-                >
-                  Reclaim Our Economy
-                </option>
-                <option
-                  value="Reclaim Our Future"
-                  selected={!editingPolicy || editingPolicy.division === 'Reclaim Our Future'}
-                >
-                  Reclaim Our Future
-                </option>
-              </select>
+              <span>Attachment / Image URL (optional)</span>
+              <input
+                name="attachmentUrl"
+                value={editingProposal?.attachmentUrl ?? ''}
+                placeholder="e.g. /fusion_horizon_logo_light.svg or https://..."
+              />
             </label>
 
             <label class="field">
-              <span>Supporting link or image URL (optional)</span>
+              <span>Implementation Note (for Stage 4)</span>
               <input
-                name="attachmentUrl"
-                value={editingPolicy?.attachmentUrl ?? ''}
-                placeholder="e.g. /fusion_horizon_logo_light.svg or https://..."
+                name="implementationNote"
+                value={editingProposal?.implementationNote ?? ''}
+                placeholder="e.g. Adopted at 2026 AGM; logo files released in brand pack."
               />
             </label>
           </div>
 
-          <label class="field">
-            <span>Core summary / commitment (1–2 sentences)</span>
-            <textarea
-              name="statement"
-              required
-              minlength="10"
-              maxlength="2000"
-              style="min-height: 5rem"
-            >{editingPolicy?.statement ?? ''}</textarea>
-          </label>
-
-          <label class="field">
-            <span>Key outcomes (optional, one per line)</span>
-            <textarea
-              name="outcomes"
-              style="min-height: 6rem"
-            >{(editingPolicy?.outcomes ?? []).join('\n')}</textarea>
-          </label>
-
-          <label class="field">
-            <span>Detailed background &amp; proposal material</span>
-            <textarea
-              name="details"
-              style="min-height: 8.5rem"
-            >{editingPolicy?.details ?? ''}</textarea>
-          </label>
-
           <div class="editor-actions">
             <button class="button" type="submit">
-              {editingPolicy ? 'Save changes' : 'Create proposal'}
+              {editingProposal ? 'Save changes' : 'Create proposal'}
             </button>
-            {editingPolicy && user.isAdmin && (
+            {editingProposal && user.isAdmin && (
               <button
-                id="delete-policy-btn"
+                id="delete-proposal-btn"
                 class="button button--danger"
                 type="button"
-                data-delete-id={editingPolicy.policyId}
+                data-delete-id={editingProposal.proposalId}
               >
                 Delete proposal
               </button>
@@ -210,44 +185,37 @@ const categories = [...new Set(allProposals.map((p) => p.category))].sort();
         </form>
       </section>
 
+      <!-- Filter Toolbar -->
       <form method="get" action="/admin/" class="admin-toolbar">
         <label class="field">
-          <span>Search proposals &amp; policies</span>
+          <span>Search proposals</span>
           <input
             type="search"
             name="q"
             value={query}
-            placeholder="Search by title, ID, or area"
+            placeholder="Search by title, ID, or space"
           />
         </label>
 
-        <label class="field" style="max-width: 14rem">
-          <span>Type</span>
-          <select name="kind">
-            <option value="all" selected={kindFilter === 'all'}>All types</option>
-            <option value="proposal" selected={kindFilter === 'proposal'}>Party proposals</option>
-            <option value="policy" selected={kindFilter === 'policy'}>Policies</option>
-          </select>
-        </label>
-
-        <label class="field" style="max-width: 14rem">
+        <label class="field" style="max-width: 16rem">
           <span>Stage</span>
-          <select name="status">
-            <option value="all" selected={statusFilter === 'all'}>
+          <select name="stage">
+            <option value="all" selected={stageFilter === 'all'}>
               All stages ({allProposals.length})
             </option>
-            <option value="voting" selected={statusFilter === 'voting'}>Open for voting</option>
-            <option value="open" selected={statusFilter === 'open'}>Open for discussion</option>
-            <option value="adopted" selected={statusFilter === 'adopted'}>Adopted</option>
-            <option value="draft" selected={statusFilter === 'draft'}>Draft</option>
-            <option value="archived" selected={statusFilter === 'archived'}>Archived</option>
+            {stageOptions.map(([val, label]) => (
+              <option value={val} selected={stageFilter === val}>
+                {label}
+              </option>
+            ))}
           </select>
         </label>
 
         <button class="button button--outline" type="submit">Filter</button>
       </form>
 
-      <section class="admin-register" aria-label="Proposals and policies">
+      <!-- Proposals List -->
+      <section class="admin-register" aria-label="Proposals register">
         {allProposals.length === 0 ? (
           <p style="padding: 1.25rem 0; margin: 0">No items match this filter.</p>
         ) : (
@@ -255,13 +223,14 @@ const categories = [...new Set(allProposals.map((p) => p.category))].sort();
             <article class="admin-row">
               <div>
                 <h3>
-                  <a href={`/policies/${item.slug}/`}>{item.title}</a>
+                  <a href={`/proposals/${item.slug}/`}>{item.title}</a>
                 </h3>
                 <p class="tabular">
-                  <strong>{item.policyId}</strong> ·{' '}
-                  {item.kind === 'proposal' ? 'Party proposal' : 'Policy'} · {item.category} ·{' '}
-                  {item.votes.approve} approve / {item.votes.reject} reject · {item.commentCount}{' '}
-                  comments
+                  <strong>{item.proposalId}</strong> · {item.space} ·{' '}
+                  <span class="tabular">
+                    {item.votes.approve} approve / {item.votes.abstain} abstain / {item.votes.reject} reject
+                  </span>{' '}
+                  · {item.commentCount} stances
                 </p>
               </div>
 
@@ -269,26 +238,18 @@ const categories = [...new Set(allProposals.map((p) => p.category))].sort();
                 <select
                   class="inline-stage-select"
                   aria-label={`Stage for ${item.title}`}
-                  data-quick-policy-id={item.policyId}
+                  data-quick-proposal-id={item.proposalId}
                 >
-                  {(
-                    [
-                      ['open', 'Open for discussion'],
-                      ['voting', 'Open for voting'],
-                      ['adopted', 'Adopted'],
-                      ['draft', 'Draft'],
-                      ['archived', 'Archived'],
-                    ] as Array<[PolicyStatus, string]>
-                  ).map(([val, label]) => (
-                    <option value={val} selected={item.status === val}>
+                  {stageOptions.map(([val, label]) => (
+                    <option value={val} selected={item.stage === val}>
                       {label}
                     </option>
                   ))}
                 </select>
-                <a class="button button--outline" href={`/admin/?edit=${encodeURIComponent(item.policyId)}#create-policy`}>
+                <a class="button button--outline" href={`/admin/?edit=${encodeURIComponent(item.proposalId)}#create-policy`}>
                   Edit
                 </a>
-                <a class="button button--outline" href={`/policies/${item.slug}/`}>
+                <a class="button button--outline" href={`/proposals/${item.slug}/`}>
                   View
                 </a>
               </div>
@@ -301,7 +262,7 @@ const categories = [...new Set(allProposals.map((p) => p.category))].sort();
 </AdminLayout>
 
 <script>
-  const editorForm = document.querySelector<HTMLFormElement>('#policy-editor-form');
+  const editorForm = document.querySelector<HTMLFormElement>('#proposal-editor-form');
   const editorStatus = document.querySelector<HTMLElement>('#editor-status');
 
   editorForm?.addEventListener('submit', async (event) => {
@@ -313,8 +274,26 @@ const categories = [...new Set(allProposals.map((p) => p.category))].sort();
     if (editorStatus) editorStatus.textContent = 'Saving…';
 
     try {
-      const data = Object.fromEntries(new FormData(editorForm).entries());
-      const url = editingId ? `/api/policies/${encodeURIComponent(editingId)}` : '/api/policies';
+      const formData = new FormData(editorForm);
+      const outcomesRaw = String(formData.get('outcomes') ?? '');
+      const outcomes = outcomesRaw
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      const data = {
+        proposalId: editingId || undefined,
+        title: formData.get('title'),
+        space: formData.get('space'),
+        stage: formData.get('stage'),
+        summary: formData.get('summary'),
+        details: formData.get('details'),
+        outcomes,
+        attachmentUrl: formData.get('attachmentUrl') || undefined,
+        implementationNote: formData.get('implementationNote') || undefined,
+      };
+
+      const url = editingId ? `/api/proposals/${encodeURIComponent(editingId)}` : '/api/proposals';
       const method = editingId ? 'PATCH' : 'POST';
       const res = await fetch(url, {
         method,
@@ -324,7 +303,7 @@ const categories = [...new Set(allProposals.map((p) => p.category))].sort();
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || 'Could not save proposal.');
-      location.href = `/policies/${payload.policy.slug}/`;
+      location.href = `/proposals/${payload.proposal.slug}/`;
     } catch (err) {
       if (editorStatus) {
         editorStatus.textContent = err instanceof Error ? err.message : 'Could not save proposal.';
@@ -333,13 +312,13 @@ const categories = [...new Set(allProposals.map((p) => p.category))].sort();
     }
   });
 
-  document.querySelector<HTMLButtonElement>('#delete-policy-btn')?.addEventListener('click', async (event) => {
+  document.querySelector<HTMLButtonElement>('#delete-proposal-btn')?.addEventListener('click', async (event) => {
     const btn = event.currentTarget as HTMLButtonElement;
-    const policyId = btn.dataset.deleteId;
-    if (!policyId || !confirm(`Delete ${policyId}? This cannot be undone.`)) return;
+    const proposalId = btn.dataset.deleteId;
+    if (!proposalId || !confirm(`Delete ${proposalId}? This cannot be undone.`)) return;
     btn.disabled = true;
     try {
-      const res = await fetch(`/api/policies/${encodeURIComponent(policyId)}`, {
+      const res = await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
         method: 'DELETE',
         credentials: 'same-origin',
       });
@@ -350,17 +329,17 @@ const categories = [...new Set(allProposals.map((p) => p.category))].sort();
     }
   });
 
-  document.querySelectorAll<HTMLSelectElement>('[data-quick-policy-id]').forEach((select) => {
+  document.querySelectorAll<HTMLSelectElement>('[data-quick-proposal-id]').forEach((select) => {
     select.addEventListener('change', async () => {
-      const policyId = select.dataset.quickPolicyId;
-      if (!policyId) return;
+      const proposalId = select.dataset.quickProposalId;
+      if (!proposalId) return;
       select.disabled = true;
       try {
-        await fetch(`/api/policies/${encodeURIComponent(policyId)}`, {
+        await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
           method: 'PATCH',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ status: select.value }),
+          body: JSON.stringify({ stage: select.value }),
         });
       } finally {
         select.disabled = false;

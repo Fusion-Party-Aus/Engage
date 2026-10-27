@@ -2,7 +2,7 @@
 import SiteLayout from '../layouts/SiteLayout.astro';
 import { getSessionUser } from '../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../lib/db.ts';
-import { listPolicies } from '../lib/store.ts';
+import { listProposals } from '../lib/store.ts';
 
 export const prerender = false;
 
@@ -11,60 +11,60 @@ const [db, user] = await Promise.all([
   getDatabase(env),
   getSessionUser(Astro.request, env),
 ]);
-const proposals = await listPolicies(db, { includeDrafts: false });
+const proposals = await listProposals(db, { includeArchived: false });
 
-const votingProposals = proposals.filter((p) => p.status === 'voting');
-const partyProposals = proposals.filter((p) => p.kind === 'proposal');
-const featuredVoting = [
-  ...partyProposals.filter((p) => p.status === 'voting'),
-  ...votingProposals.filter((p) => p.kind !== 'proposal'),
-].slice(0, 6);
+const proposeList = proposals.filter((p) => p.stage === 'propose');
+const deliberateList = proposals.filter((p) => p.stage === 'deliberate');
+const decideList = proposals.filter((p) => p.stage === 'decide');
+const implementList = proposals.filter((p) => p.stage === 'implement');
 
-const categoryMap = new Map<
-  string,
-  { name: string; division: string; summary: string; total: number; voting: number }
->();
+// Featured items
+const featuredDecide = decideList.slice(0, 4);
+const featuredDeliberate = deliberateList.slice(0, 4);
 
+// Spaces
+const spaceMap = new Map<string, { name: string; summary: string; total: number }>();
 for (const item of proposals) {
-  const existing = categoryMap.get(item.category) ?? {
-    name: item.category,
-    division: item.division,
-    summary: item.categorySummary || '',
+  const existing = spaceMap.get(item.space) ?? {
+    name: item.space,
+    summary: item.spaceSummary || '',
     total: 0,
-    voting: 0,
   };
   existing.total += 1;
-  if (item.status === 'voting') existing.voting += 1;
-  if (!existing.summary && item.categorySummary) existing.summary = item.categorySummary;
-  categoryMap.set(item.category, existing);
+  if (!existing.summary && item.spaceSummary) existing.summary = item.spaceSummary;
+  spaceMap.set(item.space, existing);
 }
-
-const categories = [...categoryMap.values()];
+const spaces = [...spaceMap.values()].sort((a, b) => b.total - a.total);
 ---
 <SiteLayout
-  title="Engage · Fusion Party Australia Proposals, Policies & Member Decisions"
-  description="Review Fusion Party proposals and policies, share feedback, and vote on open party decisions."
+  title="Engage · Fusion Party Australia Participatory Platform"
+  description="Participatory democracy: propose ideas, deliberate with stances, vote on decisions, and track implementation."
   canonical={`${Astro.url.origin}/`}
 >
+  <!-- Hero Section -->
   <section class="hero">
     <div class="page-wrap hero-layout">
       <div class="hero-copy">
-        <h1>Read, shape, and vote on Fusion decisions.</h1>
+        <h1>Participatory democracy for Fusion Party Australia.</h1>
         <p>
-          Engage is Fusion Party Australia’s member consultation and voting platform—covering
-          party proposals, visual identity and governance decisions, and our national policy
-          library in one place.
+          Engage empowers members to shape the party directly. Propose new ideas, deliberate
+          with structured stances and amendments, vote on key decisions, and hold leadership
+          accountable through implementation tracking.
         </p>
         <div class="hero-actions">
-          <a class="button" href="/policies/">
-            Browse all {proposals.length} proposals
+          <a class="button button--primary" href="/proposals/?stage=decide">
+            Active decisions ({decideList.length})
           </a>
-          <a class="button button--outline" href="/policies/?status=voting">
-            Open votes ({votingProposals.length})
+          <a class="button button--outline" href="/proposals/?stage=deliberate">
+            Join deliberation ({deliberateList.length})
           </a>
-          {!user && (
+          {user?.canParticipate ? (
+            <a class="text-cta" href="/proposals/#submit-proposal">
+              + Submit a proposal →
+            </a>
+          ) : (
             <a class="text-cta" href="/member/">
-              Sign in as a member →
+              Member sign in →
             </a>
           )}
         </div>
@@ -81,316 +81,610 @@ const categories = [...categoryMap.values()];
     </div>
   </section>
 
-  <section id="how-it-works" class="guide-section" aria-labelledby="guide-heading">
+  <!-- 4-Stage Lifecycle Pipeline Banner -->
+  <section class="lifecycle-section" aria-labelledby="lifecycle-heading">
+    <div class="page-wrap">
+      <div class="lifecycle-header">
+        <h2 id="lifecycle-heading">The Participatory Lifecycle</h2>
+        <p>Every policy, governance reform, and party motion moves through four transparent stages.</p>
+      </div>
+
+      <div class="lifecycle-grid">
+        <a class="lifecycle-card lifecycle-card--propose" href="/proposals/?stage=propose">
+          <div class="lifecycle-card__stage">
+            <span class="stage-num">1</span>
+            <h3>Propose</h3>
+          </div>
+          <p>Verified members submit ideas, party motions, and draft policies to gauge community interest.</p>
+          <div class="lifecycle-card__stat">
+            <strong class="tabular">{proposeList.length}</strong> {proposeList.length === 1 ? 'proposal' : 'proposals'} in intake
+          </div>
+        </a>
+
+        <a class="lifecycle-card lifecycle-card--deliberate" href="/proposals/?stage=deliberate">
+          <div class="lifecycle-card__stage">
+            <span class="stage-num">2</span>
+            <h3>Deliberate</h3>
+          </div>
+          <p>Collaborative debate. Members contribute using explicit stances: Support, Concern, Amendment, or Comment.</p>
+          <div class="lifecycle-card__stat">
+            <strong class="tabular">{deliberateList.length}</strong> active {deliberateList.length === 1 ? 'deliberation' : 'deliberations'}
+          </div>
+        </a>
+
+        <a class="lifecycle-card lifecycle-card--decide" href="/proposals/?stage=decide">
+          <div class="lifecycle-card__stage">
+            <span class="stage-num">3</span>
+            <h3>Decide</h3>
+          </div>
+          <p>Voting is live. Verified members cast Approve, Abstain, or Reject votes to reach collective party decisions.</p>
+          <div class="lifecycle-card__stat">
+            <strong class="tabular">{decideList.length}</strong> open {decideList.length === 1 ? 'ballot' : 'ballots'}
+          </div>
+        </a>
+
+        <a class="lifecycle-card lifecycle-card--implement" href="/proposals/?stage=implement">
+          <div class="lifecycle-card__stage">
+            <span class="stage-num">4</span>
+            <h3>Implement</h3>
+          </div>
+          <p>Adopted policies and resolutions are publicly tracked with officer progress updates and delivery milestones.</p>
+          <div class="lifecycle-card__stat">
+            <strong class="tabular">{implementList.length}</strong> adopted {implementList.length === 1 ? 'decision' : 'decisions'}
+          </div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Active Decisions (Votes) -->
+  <section class="section-space decisions-section" aria-labelledby="decisions-heading">
+    <div class="page-wrap">
+      <div class="section-head">
+        <div>
+          <h2 id="decisions-heading">Stage 3 · Active Decisions &amp; Voting</h2>
+          <p>Open ballots where verified members decide the party's official direction.</p>
+        </div>
+        <a class="button button--outline" href="/proposals/?stage=decide">
+          View all decisions ({decideList.length}) →
+        </a>
+      </div>
+
+      {featuredDecide.length === 0 ? (
+        <div class="empty-callout">
+          <p>No ballots are currently in the voting stage. Browse active deliberations to help shape the next round of decisions.</p>
+          <a class="button button--small button--primary" href="/proposals/?stage=deliberate">Explore Deliberations</a>
+        </div>
+      ) : (
+        <div class="cards-grid">
+          {featuredDecide.map((p) => {
+            const approvePct = p.votes.total > 0 ? Math.round((p.votes.approve / p.votes.total) * 100) : 0;
+            return (
+              <article class="decision-card">
+                <div class="card-meta">
+                  <span class="stage-badge stage-badge--decide">Stage 3: Decide</span>
+                  <span class="space-badge">{p.space}</span>
+                  <span class="id-badge tabular">{p.proposalId}</span>
+                </div>
+                <h3>
+                  <a href={`/proposals/${p.slug}/`}>{p.title}</a>
+                </h3>
+                <p class="card-summary">{p.summary}</p>
+                <div class="card-footer">
+                  <div class="vote-tally-bar" title={`Approve: ${approvePct}%`}>
+                    <div class="vote-tally-bar__fill" style={`width: ${approvePct}%`}></div>
+                  </div>
+                  <div class="card-actions">
+                    <span class="tabular vote-summary-text">
+                      <strong>{p.votes.total}</strong> {p.votes.total === 1 ? 'vote' : 'votes'} · {approvePct}% Approve
+                    </span>
+                    <a class="card-cta" href={`/proposals/${p.slug}/`}>Cast vote →</a>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  </section>
+
+  <!-- Active Deliberations -->
+  <section class="section-space deliberations-section" aria-labelledby="deliberate-heading">
+    <div class="page-wrap">
+      <div class="section-head">
+        <div>
+          <h2 id="deliberate-heading">Stage 2 · Deliberation &amp; Amendments</h2>
+          <p>Review proposals, suggest specific wording amendments, and share Support or Concern stances.</p>
+        </div>
+        <a class="button button--outline" href="/proposals/?stage=deliberate">
+          All deliberations ({deliberateList.length}) →
+        </a>
+      </div>
+
+      <div class="cards-grid">
+        {featuredDeliberate.map((p) => (
+          <article class="deliberate-card">
+            <div class="card-meta">
+              <span class="stage-badge stage-badge--deliberate">Stage 2: Deliberate</span>
+              <span class="space-badge">{p.space}</span>
+              <span class="id-badge tabular">{p.proposalId}</span>
+            </div>
+            <h3>
+              <a href={`/proposals/${p.slug}/`}>{p.title}</a>
+            </h3>
+            <p class="card-summary">{p.summary}</p>
+            <div class="card-footer">
+              <span class="tabular stance-stat">
+                💬 <strong>{p.commentCount}</strong> {p.commentCount === 1 ? 'stance' : 'stances'}
+              </span>
+              <a class="card-cta" href={`/proposals/${p.slug}/`}>Join discussion →</a>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- Participatory Spaces -->
+  <section class="section-space spaces-section" aria-labelledby="spaces-heading">
+    <div class="page-wrap">
+      <div class="section-head">
+        <div>
+          <h2 id="spaces-heading">Participatory Spaces</h2>
+          <p>Explore proposals, deliberations, and policies organised by topic and policy working group.</p>
+        </div>
+      </div>
+
+      <div class="spaces-grid">
+        {spaces.map((sp) => (
+          <a class="space-card" href={`/proposals/?space=${encodeURIComponent(sp.name)}`}>
+            <h3>{sp.name}</h3>
+            <p>{sp.summary || 'Proposals and policy commitments.'}</p>
+            <span class="tabular space-count">{sp.total} {sp.total === 1 ? 'proposal' : 'proposals'} →</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section id="how-it-works" class="guide-section section-space" aria-labelledby="guide-heading">
     <div class="page-wrap">
       <div class="guide-header">
-        <h2 id="guide-heading">New to Engage? Here is how it works</h2>
+        <h2 id="guide-heading">How Participatory Democracy Works on Engage</h2>
         <p>
-          Anyone can read published proposals and policies. Verified party members can comment,
-          suggest wording changes, and vote directly on each proposal page.
+          Engage gives every verified Fusion member a voice in policy formation, governance motions,
+          and party decisions.
         </p>
       </div>
 
       <div class="guide-steps">
         <div class="guide-step">
-          <h3>Sign in and confirm membership</h3>
+          <span class="step-num">1</span>
+          <h3>1. Sign in &amp; Verify</h3>
           <p>
-            Sign in with a one-click email link or Google on the <a href="/member/">Member page</a>.
-            An administrator checks your name against party membership records to unlock commenting
-            and voting.
+            Sign in with an email link on the <a href="/member/">Member page</a>.
+            Party officers verify your membership so you can contribute and vote.
           </p>
         </div>
 
         <div class="guide-step">
-          <h3>Read and suggest improvements</h3>
+          <span class="step-num">2</span>
+          <h3>2. Propose &amp; Deliberate</h3>
           <p>
-            Open any item in <a href="/policies/">Proposals &amp; Policies</a>—whether it is a
-            party decision, visual identity review, or policy commitment—and leave feedback or
-            suggested wording right on the page.
+            Introduce ideas or review open proposals. Post explicit stances—<strong>Support</strong>,
+            <strong>Concern</strong>, or suggest a specific <strong>Amendment</strong>.
           </p>
         </div>
 
         <div class="guide-step">
-          <h3>Vote on open decisions</h3>
+          <span class="step-num">3</span>
+          <h3>3. Decide by Vote</h3>
           <p>
-            When a proposal or policy is open for voting, cast or update your Approve or Reject
-            vote at the top of that page. You can change your vote at any time while voting is open.
+            When proposals advance to voting, cast your <strong>Approve</strong>, <strong>Abstain</strong>,
+            or <strong>Reject</strong> ballot with an optional reason.
+          </p>
+        </div>
+
+        <div class="guide-step">
+          <span class="step-num">4</span>
+          <h3>4. Track Implementation</h3>
+          <p>
+            Adopted decisions enter implementation with transparent status updates and tracking
+            reports from party officers.
           </p>
         </div>
       </div>
-    </div>
-  </section>
-
-  <section class="voting-section section-space" aria-labelledby="voting-heading">
-    <div class="page-wrap">
-      <div class="section-head">
-        <div>
-          <h2 id="voting-heading">Open for member consultation &amp; voting</h2>
-          <p>
-            Select any party proposal or policy below to read the full wording, review member
-            comments, and cast your vote.
-          </p>
-        </div>
-        <a class="button button--outline" href="/policies/?status=voting">
-          View all {votingProposals.length} open votes →
-        </a>
-      </div>
-
-      {featuredVoting.length === 0 ? (
-        <p class="callout">
-          No proposals are currently open for voting. Browse{' '}
-          <a href="/policies/">all proposals &amp; policies</a> to read and comment.
-        </p>
-      ) : (
-        <ul class="policy-rows">
-          {featuredVoting.map((item) => (
-            <li class="policy-row">
-              <div class="policy-row__main">
-                <div class="policy-row__meta">
-                  <span class="badge badge--voting">Voting open</span>
-                  <span class="badge">
-                    {item.kind === 'proposal' ? 'Party proposal' : 'Policy'}
-                  </span>
-                  <span>{item.category}</span>
-                  <span class="tabular">{item.policyId}</span>
-                </div>
-                <h3>
-                  <a href={`/policies/${item.slug}/`}>{item.title}</a>
-                </h3>
-                <p>{item.statement}</p>
-              </div>
-              <div class="policy-row__side">
-                <span class="tabular meta-stat">
-                  {item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'} ·{' '}
-                  {item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}
-                </span>
-                <a class="button button--small" href={`/policies/${item.slug}/`}>
-                  Read &amp; vote →
-                </a>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  </section>
-
-  <section class="topics-section section-space" aria-labelledby="topics-heading">
-    <div class="page-wrap">
-      <div class="section-head">
-        <div>
-          <h2 id="topics-heading">Browse by area</h2>
-          <p>Explore party decisions, organisational proposals, and policy areas.</p>
-        </div>
-        <a class="button button--outline" href="/policies/">
-          Search all proposals →
-        </a>
-      </div>
-
-      <ul class="topic-list">
-        {categories.map((cat) => (
-          <li class="topic-row">
-            <div class="topic-row__info">
-              <h3>
-                <a href={`/policies/?category=${encodeURIComponent(cat.name)}`}>{cat.name}</a>
-              </h3>
-              <p>{cat.summary || `Proposals under ${cat.division}.`}</p>
-            </div>
-            <div class="topic-row__counts tabular">
-              <span class="badge">{cat.total} proposals</span>
-              {cat.voting > 0 && <span class="badge badge--voting">{cat.voting} voting</span>}
-            </div>
-          </li>
-        ))}
-      </ul>
     </div>
   </section>
 </SiteLayout>
 
 <style>
-  .hero {
-    padding-block: clamp(2.5rem, 6vw, 4.75rem);
-    border-bottom: 1px solid var(--horizon-line);
-    background: var(--horizon-white);
-  }
   .hero-layout {
     display: grid;
-    grid-template-columns: 1.15fr 0.85fr;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 3rem;
     align-items: center;
-    gap: clamp(2rem, 5vw, 4.5rem);
-  }
-  .hero-copy h1 {
-    margin: 0 0 1.1rem;
-  }
-  .hero-copy p {
-    margin: 0 0 1.75rem;
-    max-width: 56ch;
-    color: var(--horizon-muted);
-    font-size: 1.125rem;
-    line-height: 1.65;
-  }
-  .hero-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.85rem 1.15rem;
-  }
-  .text-cta {
-    font-weight: 700;
-    color: var(--horizon-purple);
-  }
-  .hero-media {
-    margin: 0;
-  }
-  .hero-media img {
-    display: block;
-    width: 100%;
-    height: auto;
-    max-height: 25rem;
-    object-fit: cover;
-    border-radius: 0.85rem;
-    border: 1px solid var(--horizon-line);
-  }
-
-  .guide-section {
-    padding-block: clamp(2.75rem, 5vw, 4.25rem);
-    background: var(--horizon-lavender);
-    border-bottom: 1px solid var(--horizon-line);
-  }
-  .guide-header {
-    max-width: 54rem;
-    margin-bottom: 2rem;
-  }
-  .guide-header h2 {
-    margin: 0 0 0.6rem;
-  }
-  .guide-header p {
-    margin: 0;
-    color: var(--horizon-muted);
-    font-size: 1.05rem;
-  }
-  .guide-steps {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 2rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--horizon-line);
-  }
-  .guide-step h3 {
-    margin: 0 0 0.45rem;
-    color: var(--horizon-purple-deep);
-  }
-  .guide-step p {
-    margin: 0;
-    color: var(--horizon-muted);
-    font-size: 0.96rem;
-    line-height: 1.6;
-  }
-
-  .section-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-    margin-bottom: 1.75rem;
-  }
-  .section-head h2 {
-    margin: 0 0 0.45rem;
-  }
-  .section-head p {
-    margin: 0;
-    max-width: 60ch;
-    color: var(--horizon-muted);
-  }
-
-  .policy-rows,
-  .topic-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    border-top: 1px solid var(--horizon-line);
-  }
-  .policy-row,
-  .topic-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 1rem 2rem;
-    padding: 1.35rem 0;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-  .policy-row__meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.85rem;
-    margin-bottom: 0.4rem;
-    font-size: 0.85rem;
-    color: var(--horizon-muted);
-    font-weight: 600;
-  }
-  .policy-row h3,
-  .topic-row h3 {
-    margin: 0 0 0.35rem;
-    font-family: Newsreader, Georgia, serif;
-    font-size: clamp(1.35rem, 2vw, 1.65rem);
-  }
-  .policy-row h3 a,
-  .topic-row h3 a {
-    text-decoration: none;
-  }
-  .policy-row h3 a:hover,
-  .topic-row h3 a:hover {
-    text-decoration: underline;
-  }
-  .policy-row p,
-  .topic-row p {
-    margin: 0;
-    max-width: 68ch;
-    color: var(--horizon-muted);
-    font-size: 0.96rem;
-  }
-  .policy-row__side {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.55rem;
-  }
-  .meta-stat {
-    font-size: 0.85rem;
-    color: var(--horizon-muted);
-    font-weight: 600;
-  }
-
-  .topics-section {
-    background: var(--horizon-lavender-soft);
-    border-top: 1px solid var(--horizon-line);
-  }
-  .topic-row__counts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+    padding: 3rem 0;
   }
 
   @media (max-width: 860px) {
     .hero-layout {
       grid-template-columns: 1fr;
+      gap: 2rem;
     }
-    .guide-steps {
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
-    }
-    .policy-row,
-    .topic-row {
-      grid-template-columns: 1fr;
-      align-items: flex-start;
-    }
-    .policy-row__side {
-      flex-direction: row;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-    }
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(2.2rem, 4vw, 3.25rem);
+    line-height: 1.15;
+    margin-bottom: 1rem;
+  }
+
+  .hero-copy p {
+    font-size: 1.15rem;
+    line-height: 1.6;
+    color: var(--horizon-muted);
+    max-width: 60ch;
+    margin-bottom: 1.5rem;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .text-cta {
+    color: var(--horizon-cyan);
+    font-weight: 600;
+    text-decoration: none;
+    margin-left: 0.5rem;
+  }
+
+  .text-cta:hover {
+    text-decoration: underline;
+  }
+
+  .hero-media img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid var(--horizon-rule);
+    display: block;
+  }
+
+  /* Lifecycle Pipeline */
+  .lifecycle-section {
+    background: rgba(50, 16, 90, 0.35);
+    border-top: 1px solid var(--horizon-rule);
+    border-bottom: 1px solid var(--horizon-rule);
+    padding: 3rem 0;
+  }
+
+  .lifecycle-header {
+    text-align: center;
+    max-width: 65ch;
+    margin: 0 auto 2.5rem auto;
+  }
+
+  .lifecycle-header h2 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .lifecycle-header p {
+    color: var(--horizon-muted);
+    font-size: 1.05rem;
+  }
+
+  .lifecycle-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .lifecycle-card {
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-rule);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+
+  .lifecycle-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--horizon-cyan);
+  }
+
+  .lifecycle-card__stage {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .stage-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--horizon-cyan);
+  }
+
+  .lifecycle-card h3 {
+    font-size: 1.25rem;
+    margin: 0;
+    color: #fff;
+  }
+
+  .lifecycle-card p {
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--horizon-muted);
+    flex-grow: 1;
+    margin: 0 0 1rem 0;
+  }
+
+  .lifecycle-card__stat {
+    font-size: 0.85rem;
+    color: var(--horizon-cyan);
+    font-weight: 500;
+    border-top: 1px solid var(--horizon-rule);
+    padding-top: 0.75rem;
+  }
+
+  /* Section Head */
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .section-head h2 {
+    font-size: 1.75rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .section-head p {
+    color: var(--horizon-muted);
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .decision-card, .deliberate-card {
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-rule);
+    border-radius: 8px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .decision-card {
+    border-color: rgba(255, 120, 50, 0.3);
+  }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .stage-badge {
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .stage-badge--decide { background: rgba(255, 120, 50, 0.2); color: #ff9d66; }
+  .stage-badge--deliberate { background: rgba(0, 201, 210, 0.15); color: #00c9d2; }
+
+  .space-badge {
+    color: var(--horizon-muted);
+  }
+
+  .id-badge {
+    margin-left: auto;
+    color: var(--horizon-muted);
+    opacity: 0.7;
+  }
+
+  .decision-card h3, .deliberate-card h3 {
+    font-size: 1.15rem;
+    line-height: 1.3;
+    margin: 0;
+  }
+
+  .decision-card h3 a, .deliberate-card h3 a {
+    color: #fff;
+    text-decoration: none;
+  }
+
+  .decision-card h3 a:hover, .deliberate-card h3 a:hover {
+    color: var(--horizon-cyan);
+  }
+
+  .card-summary {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--horizon-muted);
+    margin: 0;
+    flex-grow: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border-top: 1px solid var(--horizon-rule);
+    padding-top: 0.75rem;
+  }
+
+  .vote-tally-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+
+  .vote-tally-bar__fill {
+    height: 100%;
+    background: #55ee77;
+  }
+
+  .card-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+  }
+
+  .card-cta {
+    color: var(--horizon-cyan);
+    font-weight: 600;
+    text-decoration: none;
+    margin-left: auto;
+  }
+
+  .card-cta:hover {
+    text-decoration: underline;
+  }
+
+  /* Spaces */
+  .spaces-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+
+  .space-card {
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-rule);
+    border-radius: 8px;
+    padding: 1.25rem;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.15s ease;
+  }
+
+  .space-card:hover {
+    border-color: var(--horizon-cyan);
+    transform: translateY(-2px);
+  }
+
+  .space-card h3 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem 0;
+    color: #fff;
+  }
+
+  .space-card p {
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: var(--horizon-muted);
+    flex-grow: 1;
+    margin: 0 0 0.75rem 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .space-count {
+    font-size: 0.85rem;
+    color: var(--horizon-cyan);
+    font-weight: 600;
+  }
+
+  /* How It Works Guide */
+  .guide-header {
+    text-align: center;
+    max-width: 65ch;
+    margin: 0 auto 2.5rem auto;
+  }
+
+  .guide-header h2 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .guide-header p {
+    color: var(--horizon-muted);
+    font-size: 1.05rem;
+  }
+
+  .guide-steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .guide-step {
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-rule);
+    border-radius: 8px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .step-num {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--horizon-cyan);
+    opacity: 0.5;
+  }
+
+  .guide-step h3 {
+    font-size: 1.15rem;
+    margin: 0;
+    color: #fff;
+  }
+
+  .guide-step p {
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--horizon-muted);
+    margin: 0;
+  }
+
+  .empty-callout {
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-rule);
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
   }
 </style>

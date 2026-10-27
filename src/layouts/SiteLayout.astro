@@ -61,7 +61,7 @@ const path = Astro.url.pathname;
       {workspace ? (
         <nav class="primary-nav" aria-label="Workspace navigation">
           <a href="/">Member site</a>
-          <a href="/policies/">All Proposals</a>
+          <a href="/proposals/">All Proposals</a>
           <a class="nav-member" href="/member/">
             {user ? user.name || user.email : 'Account'}
           </a>
@@ -74,20 +74,20 @@ const path = Astro.url.pathname;
       ) : (
         <nav class="primary-nav" aria-label="Primary navigation">
           <a
-            href="/policies/"
+            href="/proposals/"
             aria-current={
-              path.startsWith('/policies') && Astro.url.searchParams.get('status') !== 'voting'
+              path.startsWith('/proposals') && Astro.url.searchParams.get('stage') !== 'decide'
                 ? 'page'
                 : undefined
             }
           >
-            Proposals &amp; Policies
+            Proposals
           </a>
           <a
-            href="/policies/?status=voting"
-            aria-current={Astro.url.searchParams.get('status') === 'voting' ? 'page' : undefined}
+            href="/proposals/?stage=decide"
+            aria-current={Astro.url.searchParams.get('stage') === 'decide' ? 'page' : undefined}
           >
-            Open Votes
+            Decisions
           </a>
           <a href="/#how-it-works">How It Works</a>
           {user?.isStaff && (
@@ -121,10 +121,11 @@ const path = Astro.url.pathname;
           <img src="/fusion_horizon_logo_light.svg" alt="" width="32" height="32" />
           <span>Engage · Fusion Party Australia</span>
         </a>
-        <p>Read proposals and policies, suggest improvements, and vote on party decisions.</p>
+        <p>Participatory democracy: propose ideas, deliberate together, vote on decisions, and track implementation.</p>
         <div class="footer-links">
-          <a href="/policies/">Proposals &amp; policies</a>
-          <a href="/policies/?status=voting">Open votes</a>
+          <a href="/proposals/">Proposals</a>
+          <a href="/proposals/?stage=decide">Decisions</a>
+          <a href="/proposals/?stage=implement">Implemented</a>
           <a href="/member/">Member account</a>
         </div>
       </footer>

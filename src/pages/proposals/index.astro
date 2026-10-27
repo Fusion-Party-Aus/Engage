@@ -1,0 +1,683 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { listProposals, normalizeStage } from '../../lib/store.ts';
+import type { ProposalStage } from '../../lib/types.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([
+  getDatabase(env),
+  getSessionUser(Astro.request, env),
+]);
+
+const initialQuery = (Astro.url.searchParams.get('q') ?? '').trim();
+const initialSpace = (Astro.url.searchParams.get('space') ?? Astro.url.searchParams.get('category') ?? 'all').trim();
+const rawStage = (Astro.url.searchParams.get('stage') ?? Astro.url.searchParams.get('status') ?? 'all').trim();
+const initialStage = rawStage === 'all' ? 'all' : normalizeStage(rawStage);
+
+const allProposals = await listProposals(db, {
+  includeArchived: Boolean(user?.isStaff),
+  search: initialQuery,
+  space: initialSpace,
+  stage: initialStage,
+});
+
+// All spaces for filter dropdown
+const baseProposals = await listProposals(db, { includeArchived: false });
+const spaces = [...new Set(baseProposals.map((p) => p.space))].sort();
+
+// Counts per stage
+const stageCounts = {
+  all: baseProposals.length,
+  propose: baseProposals.filter((p) => p.stage === 'propose').length,
+  deliberate: baseProposals.filter((p) => p.stage === 'deliberate').length,
+  decide: baseProposals.filter((p) => p.stage === 'decide').length,
+  implement: baseProposals.filter((p) => p.stage === 'implement').length,
+};
+
+const stageLabel = (s: ProposalStage) => {
+  if (s === 'propose') return '1. Propose';
+  if (s === 'deliberate') return '2. Deliberate';
+  if (s === 'decide') return '3. Decide';
+  if (s === 'implement') return '4. Implement';
+  return 'Archived';
+};
+---
+<SiteLayout
+  title="Proposals & Participatory Decisions · Engage"
+  description="Explore proposals across all stages: propose ideas, deliberate with amendments, vote on decisions, and track implementation."
+  canonical={`${Astro.url.origin}/proposals/`}
+>
+  <div class="page-wrap section-space proposals-page">
+    <header class="proposals-header">
+      <div>
+        <h1>Proposals &amp; Decisions</h1>
+        <p>
+          Engage follows a 4-stage participatory lifecycle. Any verified member can propose an idea,
+          deliberate with structured stances, vote on open decisions, and follow delivery through implementation.
+        </p>
+      </div>
+      {user?.canParticipate ? (
+        <a class="button button--primary" href="#submit-proposal">
+          + Submit proposal
+        </a>
+      ) : user ? (
+        <a class="button button--outline" href="/member/">
+          Verify account to propose
+        </a>
+      ) : (
+        <a class="button button--outline" href="/member/">
+          Member sign in
+        </a>
+      )}
+    </header>
+
+    <!-- Lifecycle Tabs -->
+    <nav class="stage-tabs" aria-label="Proposal lifecycle stages">
+      <a
+        href={initialSpace !== 'all' ? `/proposals/?space=${encodeURIComponent(initialSpace)}` : '/proposals/'}
+        class:list={['stage-tab', { 'is-active': initialStage === 'all' }]}
+      >
+        <span>All</span>
+        <span class="badge tabular">{stageCounts.all}</span>
+      </a>
+      <a
+        href={`/proposals/?stage=propose${initialSpace !== 'all' ? `&space=${encodeURIComponent(initialSpace)}` : ''}`}
+        class:list={['stage-tab', { 'is-active': initialStage === 'propose' }]}
+      >
+        <span>1. Propose</span>
+        <span class="badge tabular">{stageCounts.propose}</span>
+      </a>
+      <a
+        href={`/proposals/?stage=deliberate${initialSpace !== 'all' ? `&space=${encodeURIComponent(initialSpace)}` : ''}`}
+        class:list={['stage-tab', { 'is-active': initialStage === 'deliberate' }]}
+      >
+        <span>2. Deliberate</span>
+        <span class="badge tabular">{stageCounts.deliberate}</span>
+      </a>
+      <a
+        href={`/proposals/?stage=decide${initialSpace !== 'all' ? `&space=${encodeURIComponent(initialSpace)}` : ''}`}
+        class:list={['stage-tab', { 'is-active': initialStage === 'decide' }]}
+      >
+        <span>3. Decide (Voting)</span>
+        <span class="badge tabular">{stageCounts.decide}</span>
+      </a>
+      <a
+        href={`/proposals/?stage=implement${initialSpace !== 'all' ? `&space=${encodeURIComponent(initialSpace)}` : ''}`}
+        class:list={['stage-tab', { 'is-active': initialStage === 'implement' }]}
+      >
+        <span>4. Implement</span>
+        <span class="badge tabular">{stageCounts.implement}</span>
+      </a>
+    </nav>
+
+    <!-- Filter Bar -->
+    <form class="filter-bar" role="search" method="get" action="/proposals/">
+      {initialStage !== 'all' && <input type="hidden" name="stage" value={initialStage} />}
+
+      <label class="field">
+        <span>Search</span>
+        <input
+          id="proposal-search"
+          name="q"
+          type="search"
+          value={initialQuery}
+          placeholder="Search by title, keyword, ID (e.g. Horizon, housing, voting)"
+          autocomplete="off"
+        />
+      </label>
+
+      <label class="field">
+        <span>Space / Topic</span>
+        <select id="proposal-space" name="space">
+          <option value="all" selected={initialSpace === 'all'}>All spaces ({spaces.length})</option>
+          {spaces.map((sp) => (
+            <option value={sp} selected={initialSpace === sp}>
+              {sp}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div class="filter-bar__actions">
+        <button class="button" type="submit">Filter</button>
+        {(initialQuery || initialSpace !== 'all' || initialStage !== 'all') && (
+          <a class="button button--outline" href="/proposals/">
+            Reset
+          </a>
+        )}
+      </div>
+    </form>
+
+    <!-- Stage explainer message -->
+    <div class="stage-explainer">
+      {initialStage === 'all' && (
+        <p>Showing all proposals across all stages: <strong>Propose</strong> (ideas gathering initial review), <strong>Deliberate</strong> (open debate and amendments), <strong>Decide</strong> (active voting), and <strong>Implement</strong> (tracked delivery).</p>
+      )}
+      {initialStage === 'propose' && (
+        <p><strong>Stage 1 · Propose:</strong> New ideas and motions submitted by members or working groups, gathering initial input before advancing to formal deliberation.</p>
+      )}
+      {initialStage === 'deliberate' && (
+        <p><strong>Stage 2 · Deliberate:</strong> Structured discussion. Read full details, evaluate commitments, and contribute with explicit stances (Support, Concern, Amendment, Comment).</p>
+      )}
+      {initialStage === 'decide' && (
+        <p><strong>Stage 3 · Decide:</strong> Voting is active! Verified party members can cast or revise an Approve, Abstain, or Reject vote on each open proposal.</p>
+      )}
+      {initialStage === 'implement' && (
+        <p><strong>Stage 4 · Implement:</strong> Adopted policies, party decisions, and visual identity updates with active implementation tracking and officer notes.</p>
+      )}
+    </div>
+
+    <!-- Proposals List -->
+    {allProposals.length === 0 ? (
+      <div class="empty-state">
+        <h2>No proposals found</h2>
+        <p>No proposals match your current filter criteria.</p>
+        <a class="button button--outline" href="/proposals/">View all proposals</a>
+      </div>
+    ) : (
+      <div class="proposals-grid">
+        {allProposals.map((item) => (
+          <article class="proposal-card" data-stage={item.stage}>
+            <div class="proposal-card__meta">
+              <span class:list={['stage-pill', `stage-pill--${item.stage}`]}>
+                {stageLabel(item.stage)}
+              </span>
+              <span class="space-pill">{item.space}</span>
+              <span class="id-pill tabular">{item.proposalId}</span>
+            </div>
+
+            <h2 class="proposal-card__title">
+              <a href={`/proposals/${item.slug}/`}>{item.title}</a>
+            </h2>
+
+            <p class="proposal-card__summary">{item.summary}</p>
+
+            <div class="proposal-card__footer">
+              <div class="proposal-card__stats">
+                <span class="stat-badge" title="Deliberation contributions">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                  <strong class="tabular">{item.commentCount}</strong> {item.commentCount === 1 ? 'stance' : 'stances'}
+                </span>
+
+                {item.stage === 'decide' && (
+                  <span class="vote-badge vote-badge--active">
+                    <strong class="tabular">{item.votes.total}</strong> {item.votes.total === 1 ? 'vote' : 'votes'}
+                  </span>
+                )}
+                {item.stage === 'implement' && (
+                  <span class="vote-badge vote-badge--adopted">
+                    Adopted ({item.votes.approve} / {item.votes.total})
+                  </span>
+                )}
+              </div>
+
+              <a class="proposal-card__link" href={`/proposals/${item.slug}/`}>
+                {item.stage === 'decide' ? 'Cast your vote →' : item.stage === 'deliberate' ? 'Deliberate →' : item.stage === 'implement' ? 'View delivery →' : 'Read proposal →'}
+              </a>
+            </div>
+          </article>
+        ))}
+      </div>
+    )}
+
+    <!-- Submit proposal section for verified members -->
+    {user?.canParticipate && (
+      <section id="submit-proposal" class="submit-section" aria-labelledby="submit-heading">
+        <h2 id="submit-heading">Submit a new proposal</h2>
+        <p>
+          Start a new participatory proposal. Once submitted, it enters <strong>Stage 1: Propose</strong> where
+          members can review and provide feedback before moderators advance it to formal deliberation and voting.
+        </p>
+
+        <form id="new-proposal-form" class="submit-form">
+          <div class="form-grid">
+            <label class="field">
+              <span>Proposal Title *</span>
+              <input
+                type="text"
+                name="title"
+                required
+                minlength="4"
+                maxlength="200"
+                placeholder="e.g. Modernising Party Delegate Elections"
+              />
+            </label>
+
+            <label class="field">
+              <span>Space / Topic *</span>
+              <input
+                type="text"
+                name="space"
+                required
+                minlength="2"
+                maxlength="100"
+                placeholder="e.g. Governance, Climate, Digital Rights, Economy"
+                list="space-suggestions"
+              />
+              <datalist id="space-suggestions">
+                {spaces.map((sp) => (
+                  <option value={sp} />
+                ))}
+              </datalist>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Core Statement / Summary *</span>
+            <textarea
+              name="summary"
+              required
+              minlength="10"
+              maxlength="2000"
+              rows="3"
+              placeholder="A concise 1-3 sentence summary of what this proposal establishes or changes."
+            ></textarea>
+          </label>
+
+          <label class="field">
+            <span>Key Outcomes (one per line)</span>
+            <textarea
+              name="outcomes"
+              rows="3"
+              placeholder="Direct member participation in delegate ballots&#10;Transparency in internal executive votes"
+            ></textarea>
+          </label>
+
+          <label class="field">
+            <span>Detailed Rationale &amp; Background</span>
+            <textarea
+              name="details"
+              rows="6"
+              placeholder="Provide background context, problems solved, and operational details..."
+            ></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button class="button button--primary" type="submit" id="submit-btn">
+              Submit proposal
+            </button>
+            <span id="submit-status" class="form-status" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+      </section>
+    )}
+  </div>
+</SiteLayout>
+
+<script>
+  const form = document.getElementById('new-proposal-form') as HTMLFormElement | null;
+  const statusEl = document.getElementById('submit-status');
+  const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
+
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!submitBtn || !statusEl) return;
+
+      submitBtn.disabled = true;
+      statusEl.textContent = 'Submitting proposal...';
+
+      const formData = new FormData(form);
+      const outcomesRaw = String(formData.get('outcomes') ?? '');
+      const outcomes = outcomesRaw
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      const payload = {
+        title: formData.get('title'),
+        space: formData.get('space'),
+        summary: formData.get('summary'),
+        details: formData.get('details'),
+        outcomes,
+        stage: 'propose',
+      };
+
+      try {
+        const res = await fetch('/api/proposals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to submit proposal.');
+        }
+
+        statusEl.textContent = 'Proposal submitted! Redirecting...';
+        location.href = `/proposals/${data.proposal.slug}/`;
+      } catch (err: any) {
+        statusEl.textContent = err.message || 'Error submitting proposal.';
+        submitBtn.disabled = false;
+      }
+    });
+  }
+</script>
+
+<style>
+  .proposals-page {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .proposals-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .proposals-header h1 {
+    font-size: clamp(2rem, 3.5vw, 2.75rem);
+    line-height: 1.15;
+    margin-bottom: 0.5rem;
+  }
+
+  .proposals-header p {
+    color: var(--horizon-muted);
+    font-size: 1.1rem;
+    max-width: 65ch;
+  }
+
+  .stage-tabs {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--horizon-rule);
+  }
+
+  .stage-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+    text-decoration: none;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .stage-tab:hover {
+    color: var(--horizon-ink);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .stage-tab.is-active {
+    color: #fff;
+    background: var(--horizon-violet);
+  }
+
+  .stage-tab .badge {
+    background: rgba(255, 255, 255, 0.15);
+    padding: 0.15rem 0.45rem;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+  }
+
+  .stage-tab.is-active .badge {
+    background: rgba(0, 201, 210, 0.3);
+    color: #fff;
+  }
+
+  .filter-bar {
+    display: grid;
+    grid-template-columns: 2fr 1fr auto;
+    gap: 1rem;
+    align-items: end;
+    background: var(--horizon-surface);
+    padding: 1.25rem;
+    border-radius: 8px;
+    border: 1px solid var(--horizon-rule);
+  }
+
+  @media (max-width: 768px) {
+    .filter-bar {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .filter-bar__actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .stage-explainer {
+    background: rgba(50, 16, 90, 0.25);
+    border: 1px solid var(--horizon-rule);
+    border-radius: 6px;
+    padding: 0.85rem 1.25rem;
+    font-size: 0.95rem;
+    color: var(--horizon-muted);
+  }
+
+  .stage-explainer strong {
+    color: var(--horizon-cyan);
+  }
+
+  .proposals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .proposal-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-rule);
+    border-radius: 8px;
+    padding: 1.25rem;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .proposal-card:hover {
+    border-color: rgba(0, 201, 210, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .proposal-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .stage-pill {
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.72rem;
+  }
+
+  .stage-pill--propose {
+    background: rgba(250, 255, 0, 0.15);
+    color: #faff00;
+  }
+
+  .stage-pill--deliberate {
+    background: rgba(0, 201, 210, 0.15);
+    color: #00c9d2;
+  }
+
+  .stage-pill--decide {
+    background: rgba(255, 120, 50, 0.2);
+    color: #ff9d66;
+  }
+
+  .stage-pill--implement {
+    background: rgba(50, 205, 50, 0.2);
+    color: #55ee77;
+  }
+
+  .stage-pill--archived {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--horizon-muted);
+  }
+
+  .space-pill {
+    color: var(--horizon-muted);
+    font-weight: 500;
+  }
+
+  .id-pill {
+    margin-left: auto;
+    color: var(--horizon-muted);
+    opacity: 0.7;
+    font-size: 0.75rem;
+  }
+
+  .proposal-card__title {
+    font-size: 1.25rem;
+    line-height: 1.3;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .proposal-card__title a {
+    color: #fff;
+    text-decoration: none;
+  }
+
+  .proposal-card__title a:hover {
+    color: var(--horizon-cyan);
+  }
+
+  .proposal-card__summary {
+    color: var(--horizon-muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin: 0 0 1.25rem 0;
+    flex-grow: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .proposal-card__footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    border-top: 1px solid var(--horizon-rule);
+    padding-top: 0.85rem;
+    font-size: 0.85rem;
+  }
+
+  .proposal-card__stats {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--horizon-muted);
+  }
+
+  .vote-badge--active {
+    background: rgba(255, 120, 50, 0.2);
+    color: #ff9d66;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .vote-badge--adopted {
+    background: rgba(50, 205, 50, 0.15);
+    color: #55ee77;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+  }
+
+  .proposal-card__link {
+    color: var(--horizon-cyan);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .proposal-card__link:hover {
+    text-decoration: underline;
+  }
+
+  .submit-section {
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-rule);
+    border-radius: 8px;
+    padding: 2rem;
+    margin-top: 2rem;
+  }
+
+  .submit-section h2 {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .submit-section p {
+    color: var(--horizon-muted);
+    margin-bottom: 1.5rem;
+    max-width: 65ch;
+  }
+
+  .submit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+  }
+
+  @media (max-width: 640px) {
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .form-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 4rem 1rem;
+    background: var(--horizon-surface);
+    border-radius: 8px;
+    border: 1px solid var(--horizon-rule);
+  }
+
+  .empty-state h2 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-state p {
+    color: var(--horizon-muted);
+    margin-bottom: 1.5rem;
+  }
+</style>

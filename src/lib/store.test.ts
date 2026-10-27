@@ -5,13 +5,14 @@ import {
   addComment,
   castVote,
   deleteComment,
-  deletePolicy,
-  getPolicyDetail,
+  deleteProposal,
+  getProposalDetail,
   listMembers,
-  listPolicies,
+  listProposals,
   listUserActivity,
   saveMember,
-  savePolicy,
+  saveProposal,
+  toggleUpvoteComment,
 } from "./store.ts";
 import type { SessionUser } from "./types.ts";
 
@@ -48,151 +49,174 @@ const pendingUser: SessionUser = {
   isAdmin: false,
 };
 
-describe("Engage CRUD store", () => {
-  it("automatically seeds the 78 baseline proposals (76 policies + 2 party proposals) and filters them", async () => {
+describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
+  it("automatically seeds baseline proposals and filters across the 4 lifecycle stages", async () => {
     const db = await getDatabase({ APP_MODE: "development" });
-    const all = await listPolicies(db);
+    const all = await listProposals(db);
     assert.equal(all.length, 78);
 
-    const onlyPolicies = await listPolicies(db, { kind: "policy" });
-    assert.equal(onlyPolicies.length, 76);
+    const deliberate = await listProposals(db, { stage: "deliberate" });
+    assert.equal(deliberate.length, 40);
 
-    const generalProposals = await listPolicies(db, { kind: "proposal" });
-    assert.equal(generalProposals.length, 2);
-
-    const voting = await listPolicies(db, { status: "voting" });
-    assert.equal(voting.length, 38);
+    const decide = await listProposals(db, { stage: "decide" });
+    assert.equal(decide.length, 38);
   });
 
-  it("supports creating, updating, and deleting both policy and non-policy proposals", async () => {
+  it("supports verified members proposing ideas into Stage 1, while pending members are blocked", async () => {
     const db = createMemoryDb();
-    await assert.rejects(() =>
-      savePolicy(db, memberUser, {
-        title: "Unauthorized Proposal",
-        category: "General",
-        statement: "Should not be allowed by a non-staff member.",
-      }),
+
+    // Block pending members
+    await assert.rejects(
+      () =>
+        saveProposal(db, pendingUser, {
+          title: "Unauthorized Proposal",
+          space: "General",
+          summary: "Should not be allowed by a pending member.",
+        }),
+      /verified before you can submit/,
     );
 
-    const created = await savePolicy(db, adminUser, {
-      kind: "proposal",
-      title: "2026 AGM Constitutional Standing Orders",
-      category: "Party Governance",
-      division: "Party & Organisation",
-      statement: "Adopt the procedural standing orders for the 2026 Annual General Meeting.",
-      outcomes: "Clear speaking times\nTransparent online ballot procedure",
-      details: "**Overview**\n\nSets out the rules for motions and debate.",
-      attachmentUrl: "https://fusionparty.org.au/standing-orders.pdf",
-      status: "open",
+    // Allow verified members to submit
+    const memberProposal = await saveProposal(db, memberUser, {
+      title: "Direct Democracy Working Group Charter",
+      space: "Party Governance",
+      summary: "Charter to establish participatory decision making across all working groups.",
+      outcomes: ["Open deliberation on motions", "Monthly voting rounds"],
+      details: "Full details on delegate responsibilities and platform standards.",
     });
 
-    assert.equal(created.kind, "proposal");
-    assert.ok(created.policyId.startsWith("PROP-"));
-    assert.equal(created.attachmentUrl, "https://fusionparty.org.au/standing-orders.pdf");
-    assert.equal(created.outcomes.length, 2);
+    assert.equal(memberProposal.stage, "propose");
+    assert.equal(memberProposal.authorId, memberUser.memberId);
+    assert.ok(memberProposal.proposalId.startsWith("PROP-"));
 
-    const updated = await savePolicy(db, adminUser, {
-      policyId: created.policyId,
-      status: "voting",
+    // Staff can advance it to Deliberate or Decide
+    const advanced = await saveProposal(db, adminUser, {
+      proposalId: memberProposal.proposalId,
+      stage: "deliberate",
     });
-    assert.equal(updated.status, "voting");
+    assert.equal(advanced.stage, "deliberate");
+  });
 
-    await deletePolicy(db, adminUser, created.policyId);
-    const detail = await getPolicyDetail(db, created.policyId, adminUser);
+  it("supports structured deliberation stances (support, concern, amendment, comment) and endorsements", async () => {
+    const db = createMemoryDb();
+    const proposal = await saveProposal(db, adminUser, {
+      title: "Universal Dental Care in Medicare",
+      space: "Healthcare",
+      summary: "Incorporate essential preventive and emergency dental procedures into Medicare.",
+      stage: "deliberate",
+    });
+
+    // Deliberation stances
+    const contribution1 = await addComment(db, memberUser, {
+      proposalId: proposal.proposalId,
+      stance: "amendment",
+      body: "Specify a phased rollout beginning with concession card holders and young Australians.",
+    });
+    assert.equal(contribution1.stance, "amendment");
+
+    const contribution2 = await addComment(db, adminUser, {
+      proposalId: proposal.proposalId,
+      stance: "support",
+      body: "Fully funded under the Parliamentary Budget Office costing.",
+    });
+    assert.equal(contribution2.stance, "support");
+
+    // Endorsements (+1 upvotes)
+    const endorseResult = await toggleUpvoteComment(db, memberUser, contribution2.commentId);
+    assert.equal(endorseResult.hasUpvoted, true);
+    assert.equal(endorseResult.upvotes.length, 1);
+
+    // Detail check
+    const detail = await getProposalDetail(db, proposal.slug, memberUser);
+    assert.ok(detail);
+    assert.equal(detail.comments.length, 2);
+
+    // Deleting a comment
+    await deleteComment(db, memberUser, contribution1.commentId);
+    const detailAfterDelete = await getProposalDetail(db, proposal.slug, memberUser);
+    assert.equal(detailAfterDelete?.comments.length, 1);
+  });
+
+  it("supports decision voting (approve, abstain, reject) with reasons and tracks implementation", async () => {
+    const db = createMemoryDb();
+    const decision = await saveProposal(db, adminUser, {
+      title: "Adopt Horizon Visual Identity",
+      space: "Branding & Platform",
+      summary: "Adopt the modern Horizon design tokens and colourway across all official digital assets.",
+      stage: "decide",
+    });
+
+    // Cast vote with reason
+    const voteResult = await castVote(db, memberUser, {
+      proposalId: decision.proposalId,
+      choice: "approve",
+      reason: "High contrast and legible on modern displays.",
+    });
+    assert.equal(voteResult.choice, "approve");
+    assert.equal(voteResult.votes.approve, 1);
+    assert.equal(voteResult.votes.abstain, 0);
+    assert.equal(voteResult.votes.reject, 0);
+
+    // Member activity reflects vote and reason
+    const activity = await listUserActivity(db, memberUser.memberId);
+    assert.equal(activity.votes.length, 1);
+    assert.equal(activity.votes[0]?.choice, "approve");
+    assert.equal(activity.votes[0]?.reason, "High contrast and legible on modern displays.");
+
+    // Advance to Stage 4: Implement with officer tracking note
+    const implemented = await saveProposal(db, adminUser, {
+      proposalId: decision.proposalId,
+      stage: "implement",
+      implementationNote: "Design pack exported to /public assets and merged to production repository.",
+    });
+    assert.equal(implemented.stage, "implement");
+    assert.ok(implemented.implementationNote?.includes("Design pack"));
+
+    // Cleanup test
+    await deleteProposal(db, adminUser, decision.proposalId);
+    const detail = await getProposalDetail(db, decision.proposalId, adminUser);
     assert.equal(detail, null);
   });
 
-  it("supports comments, amendments, and voting on a proposal", async () => {
+  it("supports member administration, role assignment, and self-lockout protection", async () => {
     const db = createMemoryDb();
-    const policy = await savePolicy(db, adminUser, {
-      title: "National Citizen Dividend",
-      category: "Restore the Fair Go",
-      statement: "Provide a universal basic income floor for every Australian citizen.",
-      status: "voting",
+    const { ObjectId } = await import("mongodb");
+    await db.collection("user").insertOne({
+      _id: new ObjectId(adminUser.memberId),
+      name: adminUser.name,
+      email: adminUser.email,
     });
 
-    await assert.rejects(() =>
-      addComment(db, pendingUser, {
-        policyId: policy.policyId,
-        kind: "comment",
-        body: "Can I comment while pending?",
-      }),
-    );
-    await assert.rejects(() =>
-      castVote(db, pendingUser, {
-        policyId: policy.policyId,
-        choice: "approve",
-      }),
-    );
-
-    const comment = await addComment(db, memberUser, {
-      policyId: policy.policyId,
-      kind: "amendment",
-      body: "Clarify that supplementary disability supports remain intact above the dividend.",
-    });
-    assert.equal(comment.kind, "amendment");
-
-    const vote1 = await castVote(db, memberUser, {
-      policyId: policy.policyId,
-      choice: "approve",
-    });
-    assert.equal(vote1.votes.approve, 1);
-    assert.equal(vote1.votes.reject, 0);
-
-    const vote2 = await castVote(db, memberUser, {
-      policyId: policy.policyId,
-      choice: "reject",
-    });
-    assert.equal(vote2.votes.approve, 0);
-    assert.equal(vote2.votes.reject, 1);
-    assert.equal(vote2.votes.total, 1);
-
-    const detail = await getPolicyDetail(db, policy.slug, memberUser);
-    assert.ok(detail);
-    assert.equal(detail.myVote, "reject");
-    assert.equal(detail.comments.length, 1);
-
-    const activity = await listUserActivity(db, memberUser.memberId);
-    assert.equal(activity.votes.length, 1);
-    assert.equal(activity.comments.length, 1);
-
-    await deleteComment(db, memberUser, comment.commentId);
-    const afterDelete = await getPolicyDetail(db, policy.slug, memberUser);
-    assert.equal(afterDelete?.comments.length, 0);
-  });
-
-  it("supports member creation, verification, and self-lockout protection", async () => {
-    const db = createMemoryDb();
-    const { memberId } = await saveMember(
+    const { memberId: _memberId } = await saveMember(
       db,
       adminUser,
       {
-        name: "Alex Taylor",
-        email: "alex@example.org",
+        name: "Jordan Lee",
+        email: "jordan@example.org",
         role: "moderator",
         status: "verified",
       },
       true,
     );
 
-    const members = await listMembers(db, "alex");
+    const members = await listMembers(db, "jordan");
     assert.equal(members.length, 1);
     assert.equal(members[0]?.role, "moderator");
     assert.equal(members[0]?.status, "verified");
 
-    await saveMember(
-      db,
-      adminUser,
-      {
-        memberId,
-        role: "member",
-        status: "suspended",
-      },
-      false,
+    // Self-lockout protection
+    await assert.rejects(
+      () =>
+        saveMember(
+          db,
+          adminUser,
+          {
+            memberId: adminUser.memberId,
+            role: "member",
+          },
+          false,
+        ),
+      /cannot remove your own administrator access/,
     );
-
-    const updated = await listMembers(db, "alex");
-    assert.equal(updated[0]?.role, "member");
-    assert.equal(updated[0]?.status, "suspended");
   });
 });

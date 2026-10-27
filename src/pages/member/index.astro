@@ -131,8 +131,7 @@ const devLoginAvailable = !isProduction(env);
           <p>
             {user.status === 'verified' ? (
               <>
-                <strong>Membership verified.</strong> You can post comments, suggest wording
-                amendments, and vote on open policy proposals.
+                <strong>Membership verified.</strong> You can propose new motions, deliberate with structured stances, and vote on open party decisions.
               </>
             ) : user.status === 'suspended' ? (
               <>
@@ -141,7 +140,7 @@ const devLoginAvailable = !isProduction(env);
               </>
             ) : (
               <>
-                <strong>Membership verification pending.</strong> You can browse all policies while
+                <strong>Membership verification pending.</strong> You can browse all proposals and decisions while
                 an administrator confirms your Fusion Party membership. Make sure your full name
                 below matches your party membership record.
               </>
@@ -169,28 +168,52 @@ const devLoginAvailable = !isProduction(env);
           </form>
         </section>
 
+        {activity?.proposals && activity.proposals.length > 0 && (
+          <section class="account-section" aria-labelledby="proposals-heading">
+            <h2 id="proposals-heading">Proposals you authored ({activity.proposals.length})</h2>
+            <ul class="activity-list">
+              {activity.proposals.map((p) => (
+                <li class="activity-row">
+                  <div>
+                    <a class="activity-title" href={`/proposals/${p.slug}/`}>
+                      {p.title}
+                    </a>
+                    <span class="activity-sub">
+                      Stage: {p.stage} · {p.space}
+                    </span>
+                  </div>
+                  <a class="button button--small button--outline" href={`/proposals/${p.slug}/`}>
+                    View
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         <section class="account-section" aria-labelledby="votes-heading">
           <h2 id="votes-heading">Your recorded votes ({activity?.votes.length ?? 0})</h2>
           {!activity?.votes.length ? (
             <p class="muted-note">
-              You have not voted on any proposals yet. Visit{' '}
-              <a href="/policies/?status=voting">Open Votes</a> to participate.
+              You have not voted on any decisions yet. Visit{' '}
+              <a href="/proposals/?stage=decide">Decisions (Open Votes)</a> to participate.
             </p>
           ) : (
             <ul class="activity-list">
               {activity.votes.map((v) => (
                 <li class="activity-row">
                   <div>
-                    <a class="activity-title" href={`/policies/${v.policySlug}/`}>
-                      {v.policyTitle}
+                    <a class="activity-title" href={`/proposals/${v.proposalSlug}/`}>
+                      {v.proposalTitle}
                     </a>
                     <span class="activity-sub">
                       Updated{' '}
                       {new Date(v.updatedAt).toLocaleDateString('en-AU', { dateStyle: 'medium' })}
+                      {v.reason ? ` · Reason: "${v.reason}"` : ''}
                     </span>
                   </div>
-                  <span class={`badge ${v.choice === 'approve' ? 'badge--adopted' : 'badge--draft'}`}>
-                    Voted: {v.choice === 'approve' ? 'Approve' : 'Reject'}
+                  <span class={`badge ${v.choice === 'approve' ? 'badge--adopted' : v.choice === 'abstain' ? 'badge--open' : 'badge--draft'}`}>
+                    Voted: {v.choice.toUpperCase()}
                   </span>
                 </li>
               ))}
@@ -199,24 +222,24 @@ const devLoginAvailable = !isProduction(env);
         </section>
 
         <section class="account-section" aria-labelledby="comments-heading">
-          <h2 id="comments-heading">Your comments &amp; amendments ({activity?.comments.length ?? 0})</h2>
+          <h2 id="comments-heading">Your deliberation stances ({activity?.comments.length ?? 0})</h2>
           {!activity?.comments.length ? (
             <p class="muted-note">
-              You have not posted any comments yet. Open any proposal in the{' '}
-              <a href="/policies/">Policy library</a> to share your feedback.
+              You have not posted any deliberation stances yet. Open any item in{' '}
+              <a href="/proposals/">Proposals</a> to share your feedback or suggested amendments.
             </p>
           ) : (
             <ul class="activity-list">
               {activity.comments.map((c) => (
                 <li class="activity-row">
                   <div>
-                    <a class="activity-title" href={`/policies/${c.policySlug}/#discussion`}>
-                      {c.policyTitle}
+                    <a class="activity-title" href={`/proposals/${c.proposalSlug}/#deliberation`}>
+                      {c.proposalTitle}
                     </a>
                     <p class="activity-body">{c.body}</p>
                   </div>
                   <span class="badge">
-                    {c.kind === 'amendment' ? 'Suggested wording' : 'Comment'}
+                    Stance: {c.stance}
                   </span>
                 </li>
               ))}
