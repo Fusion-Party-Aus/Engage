@@ -56,10 +56,7 @@ const stageLabel = (s: ProposalStage) => {
     <header class="proposals-header">
       <div>
         <h1>Proposals &amp; Decisions</h1>
-        <p>
-          Engage follows a 4-stage participatory lifecycle. Any verified member can propose an idea,
-          deliberate with structured stances, vote on open decisions, and follow delivery through implementation.
-        </p>
+        <p>Browse party proposals, contribute to deliberations, and vote on active ballots.</p>
       </div>
       {user?.canParticipate ? (
         <a class="button button--primary" href="#submit-proposal">
@@ -153,25 +150,6 @@ const stageLabel = (s: ProposalStage) => {
       </div>
     </form>
 
-    <!-- Stage explainer message -->
-    <div class="stage-explainer">
-      {initialStage === 'all' && (
-        <p>Showing all proposals across all stages: <strong>Propose</strong> (ideas gathering initial review), <strong>Deliberate</strong> (open debate and amendments), <strong>Decide</strong> (active voting), and <strong>Implement</strong> (tracked delivery).</p>
-      )}
-      {initialStage === 'propose' && (
-        <p><strong>Stage 1 · Propose:</strong> New ideas and motions submitted by members or working groups, gathering initial input before advancing to formal deliberation.</p>
-      )}
-      {initialStage === 'deliberate' && (
-        <p><strong>Stage 2 · Deliberate:</strong> Structured discussion. Read full details, evaluate commitments, and contribute with explicit stances (Support, Concern, Amendment, Comment).</p>
-      )}
-      {initialStage === 'decide' && (
-        <p><strong>Stage 3 · Decide:</strong> Voting is active! Verified party members can cast or revise an Approve, Abstain, or Reject vote on each open proposal.</p>
-      )}
-      {initialStage === 'implement' && (
-        <p><strong>Stage 4 · Implement:</strong> Adopted policies, party decisions, and visual identity updates with active implementation tracking and officer notes.</p>
-      )}
-    </div>
-
     <!-- Proposals List -->
     {allProposals.length === 0 ? (
       <div class="empty-state">
@@ -230,11 +208,8 @@ const stageLabel = (s: ProposalStage) => {
     <!-- Submit proposal section for verified members -->
     {user?.canParticipate && (
       <section id="submit-proposal" class="submit-section" aria-labelledby="submit-heading">
-        <h2 id="submit-heading">Submit a new proposal</h2>
-        <p>
-          Start a new participatory proposal. Once submitted, it enters <strong>Stage 1: Propose</strong> where
-          members can review and provide feedback before moderators advance it to formal deliberation and voting.
-        </p>
+        <h2 id="submit-heading">Submit a proposal</h2>
+        <p>Introduce a new proposal or motion for community review.</p>
 
         <form id="new-proposal-form" class="submit-form">
           <div class="form-grid">
