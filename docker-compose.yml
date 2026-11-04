@@ -26,9 +26,12 @@ services:
       - no-new-privileges:true
 
   app:
-    image: fusion-engage:${APP_IMAGE_TAG:-local}
+    image: ${APP_IMAGE:-fusion-engage:${APP_IMAGE_TAG:-local}}
     build: .
     restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
     depends_on:
       mongo:
         condition: service_healthy

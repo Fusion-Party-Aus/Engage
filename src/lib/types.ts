@@ -105,6 +105,7 @@ export interface CommentRecord {
 }
 
 export interface VoteRecord {
+  ballotId: string;
   proposalId: string;
   memberId: string;
   authorName?: string;

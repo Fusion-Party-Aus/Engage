@@ -259,9 +259,23 @@ const devLoginAvailable = !isProduction(env);
 
   const emailForm = document.querySelector<HTMLFormElement>('#email-signin-form');
   const emailStatus = document.querySelector<HTMLElement>('#email-status');
-  if (emailStatus && new URLSearchParams(location.search).has('error')) {
-    emailStatus.textContent =
-      'That sign-in link has expired or was already used. Request a new link below.';
+  const googleStatus = document.querySelector<HTMLElement>('#google-status');
+  const errorCode = new URLSearchParams(location.search).get('error');
+  if (errorCode) {
+    if (errorCode === 'link') {
+      if (emailStatus) {
+        emailStatus.textContent =
+          'That sign-in link has expired or was already used. Request a new link below.';
+      }
+    } else if (errorCode === 'google' || errorCode === 'invalid_code') {
+      if (googleStatus) {
+        googleStatus.textContent =
+          'Google sign-in could not be completed. Please try again or use email sign-in.';
+      }
+    } else if (emailStatus) {
+      emailStatus.textContent =
+        'Sign-in could not be completed. Please try again.';
+    }
   }
 
   emailForm?.addEventListener('submit', async (event) => {
@@ -308,6 +322,7 @@ const devLoginAvailable = !isProduction(env);
       const result = await authClient.signIn.social({
         provider: 'google',
         callbackURL: '/member/',
+        errorCallbackURL: '/member/?error=google',
       });
       if (result.error) {
         status.textContent = 'Google sign-in is unavailable right now.';

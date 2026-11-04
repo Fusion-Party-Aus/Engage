@@ -6,6 +6,11 @@ import { listProposals } from '../lib/store.ts';
 
 export const prerender = false;
 
+const authError = Astro.url.searchParams.get('error');
+if (authError) {
+  return Astro.redirect(`/member/?error=${encodeURIComponent(authError)}`);
+}
+
 const env = runtimeEnv(Astro.locals);
 const [db, user] = await Promise.all([
   getDatabase(env),
