@@ -7,6 +7,7 @@ import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, Shiel
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { listProposals } from '../../../lib/store.ts';
+import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import type { ProposalStage } from '../../../lib/types.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
@@ -467,7 +468,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                               <Field label="Wording revision" htmlFor={`bind-revision-${item.proposalId}`}>
                                 <NativeSelect defaultValue="" id={`bind-revision-${item.proposalId}`} name="revisionId" required>
                                   <option value="">Choose the reviewed revision</option>
-                                  {unboundBallotRevisions.get(item.proposalId)!.map((revision: any) => <option value={revision.revisionId}>{String(revision.revisionId).slice(0, 12)} · {new Date(revision.createdAt).toLocaleString('en-AU')} · {String(revision.contentHash ?? '').slice(0, 10)}</option>)}
+                                  {unboundBallotRevisions.get(item.proposalId)!.map((revision: any) => <option value={revision.revisionId}>{revisionDisplayLabel({ revisionId: String(revision.revisionId), createdAt: revision.createdAt })} · ref {String(revision.revisionId).slice(0, 12)} · hash {String(revision.contentHash ?? '').slice(0, 10)}</option>)}
                                 </NativeSelect>
                               </Field>
                               <Field label="Review decision event reference" htmlFor={`bind-event-${item.proposalId}`}>
@@ -491,7 +492,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                         <summary><Gavel className="size-4" aria-hidden="true" />Record ballot outcome</summary>
                         <div class="admin-disclosure__body">
                           <p class="admin-inline-note">Apply the organisation&apos;s authorised rules. Engage does not calculate a passing threshold. A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
-                          <p class="m-0 text-sm"><strong>Frozen revision:</strong> {item.ballotRevisionId ?? 'Needs administrator review'}</p>
+                          <p class="m-0 text-sm"><strong>Frozen revision:</strong> {item.ballotRevisionId ? <code>{item.ballotRevisionId}</code> : 'Needs administrator review'}</p>
                           <form class="ballot-result-form grid gap-3" data-proposal-id={item.proposalId}>
                             <div class="admin-form-grid">
                               <Field label="Outcome" htmlFor={`ballot-result-${item.proposalId}`}>
