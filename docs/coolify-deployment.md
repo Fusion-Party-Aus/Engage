@@ -3,6 +3,9 @@
 Status as of 2026-11-08:
 
 - **Staging is deployed by Coolify and verified healthy.**
+- **The full trigger was exercised end to end:** a push to `main` was detected
+  by the poller, Coolify queued deployment `ukwx3w1uoucblvt0orve5lpf`, and the
+  replacement staging containers became healthy.
 - **Production is configured in Coolify but intentionally not started.** The
   existing production stack is still running untouched. Cutover requires the
   explicit approval described in [the cutover checklist](coolify-cutover-checklist.md).
@@ -195,7 +198,9 @@ Compose file needs.
 
 ## 6. Staging verification evidence
 
-Deployment `bm7ro3vyqdvczyr1pa9xzfeg` finished successfully. On the NUC:
+Deployment `bm7ro3vyqdvczyr1pa9xzfeg` finished successfully, and the
+end-to-end poller test produced deployment `ukwx3w1uoucblvt0orve5lpf` at commit
+`ef8e9a8`, also finished and healthy. On the NUC:
 
 ```text
 app-sgo3uctmylpzyyszoj8drskb-...    fusion-engage:coolify-staging    Up (healthy)   127.0.0.1:4400->4321
@@ -219,6 +224,13 @@ collections memberships,votes,proposals,comments,application_roles
 
 The staging stack has its own Mongo container, replica set, database, volume,
 network, and loopback ports. It cannot reach or modify `engage_production`.
+
+To inspect staging from a workstation without exposing it on the LAN:
+
+```sh
+ssh -N -L 4400:127.0.0.1:4400 alpine
+# then open http://127.0.0.1:4400
+```
 
 ## 7. Health checks, logs, and observability
 
@@ -269,6 +281,11 @@ On each run it:
 
 The poller uses a `read` + `deploy` token. It runs no tests and builds nothing
 itself; Coolify performs the build and deployment on the NUC.
+
+Because the SHA is recorded when the deployment is **queued**, a failed
+deployment is not retried automatically. Inspect the Coolify deployment log,
+fix the cause, then either trigger a deploy manually or remove
+`state/<app-uuid>.sha` to let the poller queue the same commit again.
 
 Verify it:
 
@@ -507,6 +524,7 @@ curl -s -X POST "$COOLIFY_URL/api/v1/applications/$APP_UUID/start" \
 | Production URI hash vs running container | exact match |
 | Production runtime env hashes | all exact matches |
 | Staging deployment | finished, both containers healthy |
+| Poller end-to-end deployment | `ukwx3w1uoucblvt0orve5lpf` finished at `ef8e9a8` |
 | Staging health | `{"ok":true,"status":"healthy"}` |
 | Staging DB | ping `1`, collections present |
 | Pre-cutover backup | 180 KiB, gzip OK, mode 0600 |
