@@ -1,6 +1,15 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import ProposalBallot from '../../components/ui/ProposalBallot';
 import PortableText from '../../components/PortableText.astro';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Field } from '../../components/ui/field';
+import { Input } from '../../components/ui/input';
+import { Textarea } from '../../components/ui/textarea';
+import { NativeSelect } from '../../components/ui/native-select';
+import { Alert, AlertDescription } from '../../components/ui/alert';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { getProposalDetail } from '../../lib/store.ts';
@@ -21,6 +30,22 @@ if (!detail) {
 }
 
 const proposal = detail?.proposal;
+const revisions = proposal ? await db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray() : [];
+const policyRecord = proposal ? await db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }) : null;
+const branchEligibility = proposal?.jurisdictionBranchId && user?.canParticipate
+  ? await db.collection('branch_memberships').findOne({ memberId: user.memberId, branchId: proposal.jurisdictionBranchId, status: 'active' })
+  : null;
+const branchElectorate = proposal?.jurisdictionBranchId
+  ? await db.collection('branches').findOne({ branchId: proposal.jurisdictionBranchId, recognised: true })
+  : null;
+const canVoteOnProposal = Boolean(user?.canParticipate && (!proposal?.jurisdictionBranchId || (branchEligibility && branchElectorate)));
+const amendmentRows = proposal ? await db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray() : [];
+for (const amendment of amendmentRows) {
+  const history = await db.collection('amendment_revisions').find({ amendmentId: amendment.amendmentId }).sort({ createdAt: 1 }).toArray();
+  amendment.revisionHistory = history;
+  const current = history.find((row: any) => row.revisionId === amendment.currentRevisionId);
+  if (current) amendment.changes = current.snapshot;
+}
 const comments = detail?.comments ?? [];
 const myVote = detail?.myVote ?? null;
 const myReason = detail?.myReason ?? '';
@@ -31,6 +56,14 @@ const stageLabel = (stage: ProposalStage) => {
   if (stage === 'decide') return '3. Decide';
   if (stage === 'implement') return '4. Implement';
   return 'Archived';
+};
+
+const stageBadgeVariant = (stage: ProposalStage) => {
+  if (stage === 'propose') return 'warning' as const;
+  if (stage === 'deliberate') return 'secondary' as const;
+  if (stage === 'decide') return 'info' as const;
+  if (stage === 'implement') return 'success' as const;
+  return 'muted' as const;
 };
 
 const isImageAttachment = Boolean(
@@ -64,11 +97,13 @@ const isResolution = proposal
 >
   <div class="page-wrap section-space proposal-detail-page">
     {!proposal ? (
-      <div class="not-found-box">
-        <h1>Proposal not found</h1>
-        <p>That proposal could not be found or has been archived.</p>
-        <a class="button button--primary" href="/proposals/">Return to Proposals</a>
-      </div>
+      <Card className="not-found-box">
+        <CardContent className="grid justify-items-start gap-3 py-10">
+          <h1>Proposal not found</h1>
+          <p>That proposal could not be found or has been archived.</p>
+          <Button href="/proposals/">Return to Proposals</Button>
+        </CardContent>
+      </Card>
     ) : (
       <>
         <!-- Top Nav & Meta Bar -->
@@ -83,8 +118,57 @@ const isResolution = proposal
             <span class="tabular" aria-current="page">{proposal.proposalId}</span>
           </nav>
 
-          <!-- Compact Lifecycle Stepper -->
-          <nav class="lifecycle-stepper" aria-label="Proposal lifecycle progress">
+
+        </div>
+
+        {user?.isStaff && (
+          <details class="staff-controls"><summary>Admin controls for this proposal</summary><div class="staff-bar">
+            <span>
+              <strong>Staff controls:</strong> Stage is <em>{stageLabel(proposal.stage)}</em>
+            </span>
+            <div class="staff-bar__actions">
+              <Field label="Change stage" htmlFor="staff-stage-select" className="staff-select-label">
+                <NativeSelect
+                  id="staff-stage-select"
+                  name="stage"
+                  defaultValue={proposal.stage}
+                  data-proposal-id={proposal.proposalId}
+                  data-current-stage={proposal.stage}
+                  data-vote-count={votes.total}
+                >
+                  <option value="propose">1. Propose</option>
+                  <option value="deliberate">2. Deliberate</option>
+                  <option value="decide">3. Decide (Voting)</option>
+                  <option value="implement">4. Implement</option>
+                  <option value="archived">Archived</option>
+                </NativeSelect>
+              </Field>
+              <Button href={`/admin/proposals/?edit=${encodeURIComponent(proposal.proposalId)}`} variant="outline" size="sm">
+                Edit in Admin
+              </Button>
+              <span id="staff-stage-msg" class="tabular" role="status" aria-live="polite"></span>
+            </div>
+          </div></details>
+        )}
+
+        <!-- Main Layout: 2 Columns on Desktop -->
+        <div class="proposal-layout">
+          <!-- Left Column: Content & Deliberation -->
+          <div class="proposal-main">
+            <header class="detail-header">
+              <div class="detail-header__meta">
+                <Badge variant={stageBadgeVariant(proposal.stage)}>
+                  {stageLabel(proposal.stage)}
+                </Badge>
+                <Badge variant="outline">
+                  {isResolution ? 'Governance Resolution' : 'Policy Proposal'}
+                </Badge>
+                <span class="space-pill">{proposal.space}</span>
+              </div>
+
+              <h1 class="detail-title">{proposal.title}</h1>
+              <p class="proposal-reading-guide">{proposal.stage === 'decide' ? 'Voting is open. Read the exact wording and any separate amendment ballot before deciding.' : proposal.stage === 'deliberate' ? 'This idea is open for discussion. Read it, share a concern, or suggest a wording change.' : proposal.stage === 'implement' ? 'The vote has concluded. This stage records decision processing, including authorisation and publication where they apply. Check official policy for adopted wording.' : 'This is an idea for members to consider. Its wording may change before any vote.'}</p>
+          <details class="proposal-process"><summary>Where this stands in the process</summary><nav class="lifecycle-stepper" aria-label="Proposal lifecycle progress">
             {stages.map((stg, idx) => {
               const isPast = currentStageIndex > idx;
               const isCurrent = proposal.stage === stg;
@@ -93,64 +177,12 @@ const isResolution = proposal
                   <span class="stepper-marker">
                     {isPast ? '✓' : idx + 1}
                   </span>
-                  <span class="stepper-label">{stg}</span>
+                  <span class="stepper-label">{stg === 'propose' ? 'Idea' : stg === 'deliberate' ? 'Discuss' : stg === 'decide' ? 'Vote' : 'Implement'}</span>
                 </div>
               );
             })}
-          </nav>
-        </div>
-
-        {user?.isStaff && (
-          <div class="staff-bar">
-            <span>
-              <strong>Staff controls:</strong> Stage is <em>{stageLabel(proposal.stage)}</em>
-            </span>
-            <div class="staff-bar__actions">
-              <label class="staff-select-label">
-                <span>Change stage</span>
-                <select
-                  id="staff-stage-select"
-                  data-proposal-id={proposal.proposalId}
-                  data-current-stage={proposal.stage}
-                  data-vote-count={votes.total}
-                >
-                  <option value="propose" selected={proposal.stage === 'propose'}>1. Propose</option>
-                  <option value="deliberate" selected={proposal.stage === 'deliberate'}>2. Deliberate</option>
-                  <option value="decide" selected={proposal.stage === 'decide'}>3. Decide (Voting)</option>
-                  <option value="implement" selected={proposal.stage === 'implement'}>4. Implement</option>
-                  <option value="archived" selected={proposal.stage === 'archived'}>Archived</option>
-                </select>
-              </label>
-              <a class="button button--small button--outline" href={`/admin/?edit=${encodeURIComponent(proposal.proposalId)}`}>
-                Edit in Admin
-              </a>
-              <span id="staff-stage-msg" class="tabular" role="status" aria-live="polite"></span>
-            </div>
-          </div>
-        )}
-
-        <!-- Main Layout: 2 Columns on Desktop -->
-        <div class="proposal-layout">
-          <!-- Left Column: Content & Deliberation -->
-          <main class="proposal-main">
-            <header class="detail-header">
-              <div class="detail-header__meta">
-                <span class:list={['stage-pill', `stage-pill--${proposal.stage}`]}>
-                  {stageLabel(proposal.stage)}
-                </span>
-                <span class:list={['kind-pill', `kind-pill--${isResolution ? 'resolution' : 'policy'}`]}>
-                  {isResolution ? 'Governance Resolution' : 'Policy Proposal'}
-                </span>
-                <span class="space-pill">{proposal.space}</span>
-                <span class="id-pill tabular">{proposal.proposalId}</span>
-                {proposal.provenance && (
-                  <span class:list={['prov-pill', `prov-pill--${proposal.provenance.category || 'unverified'}`]}>
-                    {proposal.provenance.label}
-                  </span>
-                )}
-              </div>
-
-              <h1 class="detail-title">{proposal.title}</h1>
+          </nav></details>
+              <nav class="reading-nav" aria-label="On this page"><a href="#outcomes-heading">The idea</a><a href="#deliberation">Discussion</a><a href="#amendments-heading">Wording changes</a><a href="#revision-history-heading">Earlier wording</a>{proposal.stage === 'decide' && <a href="#proposal-vote">Vote</a>}</nav>
 
               <div class="author-line">
                 <span>Authored by <strong>{proposal.authorName || 'Fusion Working Group'}</strong></span>
@@ -175,9 +207,9 @@ const isResolution = proposal
                   ) : (
                     <p>Reference attachment and documentation supporting this proposal.</p>
                   )}
-                  <a class="button button--small button--outline" href={proposal.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                  <Button href={proposal.attachmentUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
                     {isImageAttachment ? 'Download full asset ↗' : 'View attachment ↗'}
-                  </a>
+                  </Button>
                 </div>
               </div>
             )}
@@ -191,26 +223,29 @@ const isResolution = proposal
             {(proposal.stage === 'implement' || proposal.implementationNote) && (
               <section class="implementation-box" aria-labelledby="impl-heading">
                 <div class="implementation-box__head">
-                  <span class="badge-stage4">Stage 4 · Implementation Tracking</span>
-                  <h2 id="impl-heading">Adoption Status &amp; Officer Notes</h2>
+                  <Badge variant="info">Stage 4 · Implement</Badge>
+                  <h2 id="impl-heading">Decision processing and adoption status</h2>
                 </div>
                 <div class="implementation-content">
                   <p>
-                    {proposal.implementationNote ||
-                      'This proposal has been adopted by the membership and is currently in active implementation.'}
+                    {proposal.implementationNote || (policyRecord
+                      ? `This wording was formally adopted by ${policyRecord.ratification?.authorityBranchId ?? 'an authority not recorded'} and is recorded in the official policy library.`
+                      : 'The decision is being processed. Required authorisation and publication steps have not been recorded, so this wording is not official policy.')}
                   </p>
                 </div>
                 {user?.isStaff && (
                   <details class="impl-edit-details">
-                    <summary>Update implementation note</summary>
+                    <summary>Update decision-processing note</summary>
                     <form id="impl-note-form" data-proposal-id={proposal.proposalId}>
-                      <textarea
+                      <Textarea
                         id="impl-note-text"
-                        rows="2"
-                        placeholder="Progress update on bill references or rollout milestones..."
-                      >{proposal.implementationNote || ''}</textarea>
+                        name="implementationNote"
+                        rows={2}
+                        defaultValue={proposal.implementationNote || ''}
+                        placeholder="Record authorisation, publication or rollout progress..."
+                      />
                       <div class="impl-note-actions">
-                        <button class="button button--small" type="submit" id="impl-note-btn">Save Note</button>
+                        <Button type="submit" size="sm" id="impl-note-btn">Save Note</Button>
                         <span id="impl-note-status" class="form-status" role="status"></span>
                       </div>
                     </form>
@@ -241,6 +276,223 @@ const isResolution = proposal
               </section>
             )}
 
+            <!-- Deliberation (Discussion) Section -->
+            <section id="deliberation" class="deliberation-section" aria-labelledby="deliberate-heading">
+              <div class="deliberation-header">
+                <div>
+                  <h2 id="deliberate-heading">Discussion</h2>
+                  <p>Read what others think, then share your view.</p>
+                </div>
+                <Badge variant="muted" className="tabular">{comments.length}</Badge>
+              </div>
+
+              <!-- Stance Filter Tabs -->
+              <div class="stance-filters" role="group" aria-label="Filter contributions by stance">
+                <Button type="button" variant="outline" size="sm" className="stance-filter-btn is-active" data-stance="all" aria-pressed="true">
+                  All ({stanceCounts.all})
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="stance-filter-btn" data-stance="support" aria-pressed="false">
+                  Support ({stanceCounts.support})
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="stance-filter-btn" data-stance="concern" aria-pressed="false">
+                  Concern ({stanceCounts.concern})
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="stance-filter-btn" data-stance="amendment" aria-pressed="false">
+                  Wording suggestions ({stanceCounts.amendment})
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="stance-filter-btn" data-stance="comment" aria-pressed="false">
+                  Comment ({stanceCounts.comment})
+                </Button>
+              </div>
+
+              <!-- Contribution Input Form -->
+              {user?.canParticipate ? (
+                <form id="comment-form" class="comment-form" data-proposal-id={proposal.proposalId}>
+                  <div class="stance-radio-group">
+                    <label class="stance-label stance-label--support">
+                      <input type="radio" name="stance" value="support" class="size-4 accent-primary" />
+                      <span>✓ Support</span>
+                    </label>
+                    <label class="stance-label stance-label--concern">
+                      <input type="radio" name="stance" value="concern" class="size-4 accent-primary" />
+                      <span>! Concern</span>
+                    </label>
+                    <label class="stance-label stance-label--amendment">
+                      <input type="radio" name="stance" value="amendment" class="size-4 accent-primary" />
+                      <span>✎ Wording suggestion</span>
+                    </label>
+                    <label class="stance-label stance-label--comment">
+                      <input type="radio" name="stance" value="comment" class="size-4 accent-primary" checked />
+                      <span>💬 Comment</span>
+                    </label>
+                  </div>
+
+                  <Field label="Your contribution" htmlFor="comment-body-input">
+                    <Textarea
+                      id="comment-body-input"
+                      name="body"
+                      required
+                      minLength={3}
+                      maxLength={4000}
+                      rows={3}
+                      placeholder="Share constructive feedback, identify concerns, or suggest a wording change..."
+                    />
+                  </Field>
+
+                  <div class="comment-form__actions">
+                    <Button type="submit" id="comment-submit-btn">
+                      Post contribution
+                    </Button>
+                    <span id="comment-status-msg" class="tabular form-status" role="status" aria-live="polite"></span>
+                  </div>
+                </form>
+              ) : user ? (
+                <Alert className="signin-nudge" variant="warning">
+                  <AlertDescription>
+                    <p>Awaiting administrator verification before posting.</p>
+                    <Button href="/member/" variant="outline" size="sm">Account status</Button>
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Alert className="signin-nudge">
+                  <AlertDescription>
+                    <p>Sign in as a verified member to contribute to deliberations.</p>
+                    <Button href="/member/" size="sm">Sign In</Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <!-- Contributions Feed -->
+              <div id="comments-list" class="comments-feed">
+                {comments.length === 0 ? (
+                  <p class="empty-feed">No contributions yet. Be the first to share your stance.</p>
+                ) : (
+                  comments.map((c) => {
+                    const isAuthor = user && c.memberId === user.memberId;
+                    const canDelete = isAuthor || user?.isStaff;
+                    const hasEndorsed = user && c.upvotes.includes(user.memberId);
+                    return (
+                      <Card className="comment-card" data-stance={c.stance} data-comment-id={c.commentId}>
+                        <div class="comment-card__head">
+                          <div class="comment-author">
+                            <span class="author-name">{c.authorName}</span>
+                            <Badge variant={c.stance === 'support' ? 'success' : c.stance === 'concern' ? 'destructive' : c.stance === 'amendment' ? 'warning' : 'muted'}>
+                              {c.stance}
+                            </Badge>
+                          </div>
+                          <time class="tabular" datetime={new Date(c.createdAt).toISOString()}>
+                            {new Date(c.createdAt).toLocaleDateString('en-AU', {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </time>
+                        </div>
+
+                        <div class="comment-card__body">
+                          <p>{c.body}</p>
+                        </div>
+
+                        <div class="comment-card__actions">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className={`endorse-btn ${hasEndorsed ? 'is-endorsed' : ''}`}
+                            data-endorse-id={c.commentId}
+                            disabled={!user?.canParticipate}
+                            title={user?.canParticipate ? '+1 Endorse' : 'Sign in to endorse'}
+                          >
+                            <span class="endorse-icon">▲</span>
+                            <span class="endorse-text">Endorse</span>
+                            <span class="endorse-count tabular">{c.upvotes.length}</span>
+                          </Button>
+
+                          {canDelete && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="delete-btn"
+                              data-delete-comment={c.commentId}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+            <section class="content-section amendments-section" aria-labelledby="amendments-heading">
+              <h2 id="amendments-heading">Wording suggestions and formal amendments</h2>
+              <p>A wording suggestion is informal and needs no seconder. A formal amendment records a substantive change to the wording and, once seconding is implemented, will require one independent eligible seconder before its formal decision process. An amendment ballot is a separate decision; it does not approve the proposal or adopt the amendment.</p>
+              {amendmentRows.length ? <div class="amendment-list">{amendmentRows.map((amendment: any) => {
+                const base = revisions.find((revision: any) => revision.revisionId === amendment.baseRevisionId);
+                return <Card className="amendment-card">
+                  <div class="amendment-card__head"><strong>{amendment.changes?.title ?? 'Wording change'}</strong><Badge variant="outline">{amendment.status}</Badge></div>
+                  <p>Based on proposal revision <code>{String(amendment.baseRevisionId).slice(0, 8)}</code> · formal amendment revision <code>{String(amendment.currentRevisionId ?? 'legacy').slice(0,8)}</code>{amendment.rebasedFromRevisionId ? ` · rebased from ${String(amendment.rebasedFromRevisionId).slice(0,8)}` : ''}</p>
+                  {amendment.revisionHistory?.length > 1 && <details><summary>Formal amendment wording history ({amendment.revisionHistory.length} revisions)</summary><ol>{amendment.revisionHistory.map((row: any) => <li><code>{String(row.revisionId).slice(0,8)}</code> · {row.authorId === user?.memberId ? 'You' : 'Contributor'} · {new Date(row.createdAt).toLocaleDateString()}</li>)}</ol></details>}
+                  {Object.entries(amendment.changes ?? {}).map(([field, value]: [string, any]) => <details><summary>Compare {field}</summary><div class="amendment-diff"><div><strong>Current at base</strong><pre>{Array.isArray(base?.snapshot?.[field]) ? base.snapshot[field].join('\n') : String(base?.snapshot?.[field] ?? '')}</pre></div><div><strong>Suggested wording</strong><pre>{Array.isArray(value) ? value.join('\n') : String(value ?? '')}</pre></div></div></details>)}
+                  {amendment.conflicts?.length > 0 && <p role="status">This amendment overlaps with wording changed since its base revision. An administrator must resolve the conflict explicitly.</p>}
+                  {amendment.status === 'voting' && canVoteOnProposal && <form class="amendment-vote-form" data-amendment-id={amendment.amendmentId} data-proposal-id={proposal.proposalId}><strong>Separate amendment ballot</strong><p>These votes record endorsement of the recorded amendment revision. They do not approve the proposal or adopt policy.</p><div class="amendment-vote-buttons">{['approve','abstain','reject'].map((choice) => <Button type="button" variant="outline" data-choice={choice}>{choice[0]!.toUpperCase() + choice.slice(1)}</Button>)}</div><span role="status" aria-live="polite"></span></form>}
+                </Card>;
+              })}</div> : <p>No formal amendments have been recorded yet.</p>}
+              {user?.canParticipate && ['propose','deliberate'].includes(proposal.stage) && (
+                <details class="amendment-compose">
+                  <summary>Propose a formal amendment</summary>
+                  <p>This records a formal amendment against the latest saved revision, currently <code>{revisions[0]?.revisionId ?? 'not yet versioned'}</code>. Seconding is not yet operational; once implemented, one independent eligible seconder will be required before it can progress.</p>
+                  <form id="amendment-form" class="grid gap-4" data-proposal-id={proposal.proposalId} data-revision-id={revisions[0]?.revisionId ?? ''}>
+                    <Field label="Proposed title (optional)" htmlFor="amendment-title">
+                      <Input id="amendment-title" name="title" maxLength={200} placeholder="New title wording" />
+                    </Field>
+                    <Field label="Proposed summary" hint="At least 10 characters" htmlFor="amendment-summary">
+                      <Textarea id="amendment-summary" name="summary" rows={4} minLength={10} maxLength={2000} placeholder="Write the replacement summary" required />
+                    </Field>
+                    <div class="form-actions">
+                      <Button type="submit">Submit formal amendment</Button>
+                      <span class="amendment-compose-status" role="status" aria-live="polite"></span>
+                    </div>
+                  </form>
+                </details>
+              )}
+            </section>
+
+            {revisions.length > 0 && (
+              <section class="content-section revision-history" aria-labelledby="revision-history-heading">
+                <h2 id="revision-history-heading">Revision history</h2>
+                <p>Each entry is a saved wording snapshot. A proposal or amendment ballot is tied to the revision current when voting begins.</p>
+                <ol>
+                  {revisions.map((revision, index) => {
+                    const parent = revisions[index + 1];
+                    const changed = parent ? Object.keys(revision.snapshot).flatMap((field) => {
+                      const before = parent.snapshot[field]; const after = revision.snapshot[field];
+                      return JSON.stringify(before) === JSON.stringify(after) ? [] : [{ field, before, after }];
+                    }) : [];
+                    return (
+                      <li>
+                        <strong>{new Date(revision.createdAt).toLocaleString('en-AU')}</strong>
+                        <span>Revision {revision.revisionId.slice(0, 8)} · {changed.length ? `${changed.length} changed ${changed.length === 1 ? 'field' : 'fields'}` : parent ? 'No wording changes' : 'Initial wording'}</span>
+                        {changed.length > 0 && (
+                          <details>
+                            <summary>View wording changes</summary>
+                            {changed.map((change) => (
+                              <div class="revision-change">
+                                <h3>{change.field}</h3>
+                                <div><strong>Before</strong><pre>{Array.isArray(change.before) ? change.before.join('\n') : String(change.before ?? '')}</pre></div>
+                                <div><strong>After</strong><pre>{Array.isArray(change.after) ? change.after.join('\n') : String(change.after ?? '')}</pre></div>
+                              </div>
+                            ))}
+                          </details>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+            )}
+
             <!-- Policy Provenance or Resolution Context -->
             {proposal.provenance && (
               <section class="content-section provenance-section" aria-labelledby="provenance-heading">
@@ -255,9 +507,9 @@ const isResolution = proposal
                         : 'Lineage and scrutiny details from party archives and published platform versions.'}
                     </p>
                   </div>
-                  <span class:list={['prov-badge', `prov-badge--${proposal.provenance.category || 'unverified'}`]}>
+                  <Badge variant="outline" className={`prov-badge prov-badge--${proposal.provenance.category || 'unverified'}`}>
                     {proposal.provenance.label}
-                  </span>
+                  </Badge>
                 </div>
 
                 <p class="provenance-summary">{proposal.provenance.summary}</p>
@@ -301,152 +553,11 @@ const isResolution = proposal
               </section>
             )}
 
-            <!-- Deliberation (Discussion) Section -->
-            <section id="deliberation" class="deliberation-section" aria-labelledby="deliberate-heading">
-              <div class="deliberation-header">
-                <div>
-                  <h2 id="deliberate-heading">Deliberation</h2>
-                  <p>Structured member stances: Support, Concern, Amendment, or Comment.</p>
-                </div>
-                <span class="badge tabular">{comments.length}</span>
-              </div>
-
-              <!-- Stance Filter Tabs -->
-              <div class="stance-filters" role="tablist" aria-label="Filter contributions by stance">
-                <button type="button" class="stance-filter-btn is-active" data-stance="all">
-                  All ({stanceCounts.all})
-                </button>
-                <button type="button" class="stance-filter-btn stance-filter-btn--support" data-stance="support">
-                  Support ({stanceCounts.support})
-                </button>
-                <button type="button" class="stance-filter-btn stance-filter-btn--concern" data-stance="concern">
-                  Concern ({stanceCounts.concern})
-                </button>
-                <button type="button" class="stance-filter-btn stance-filter-btn--amendment" data-stance="amendment">
-                  Amendment ({stanceCounts.amendment})
-                </button>
-                <button type="button" class="stance-filter-btn stance-filter-btn--comment" data-stance="comment">
-                  Comment ({stanceCounts.comment})
-                </button>
-              </div>
-
-              <!-- Contribution Input Form -->
-              {user?.canParticipate ? (
-                <form id="comment-form" class="comment-form" data-proposal-id={proposal.proposalId}>
-                  <div class="stance-radio-group">
-                    <label class="stance-label stance-label--support">
-                      <input type="radio" name="stance" value="support" />
-                      <span>✓ Support</span>
-                    </label>
-                    <label class="stance-label stance-label--concern">
-                      <input type="radio" name="stance" value="concern" />
-                      <span>! Concern</span>
-                    </label>
-                    <label class="stance-label stance-label--amendment">
-                      <input type="radio" name="stance" value="amendment" />
-                      <span>✎ Amendment</span>
-                    </label>
-                    <label class="stance-label stance-label--comment">
-                      <input type="radio" name="stance" value="comment" checked />
-                      <span>💬 Comment</span>
-                    </label>
-                  </div>
-
-                  <label class="field" style="margin: 0">
-                    <textarea
-                      id="comment-body-input"
-                      name="body"
-                      required
-                      minlength="3"
-                      maxlength="4000"
-                      rows="3"
-                      placeholder="Share constructive feedback, identify concerns, or propose an amendment..."
-                    ></textarea>
-                  </label>
-
-                  <div class="comment-form__actions">
-                    <button class="button button--primary" type="submit" id="comment-submit-btn">
-                      Post contribution
-                    </button>
-                    <span id="comment-status-msg" class="tabular form-status" role="status" aria-live="polite"></span>
-                  </div>
-                </form>
-              ) : user ? (
-                <div class="signin-nudge">
-                  <p>Awaiting administrator verification before posting.</p>
-                  <a class="button button--small button--outline" href="/member/">Account status</a>
-                </div>
-              ) : (
-                <div class="signin-nudge">
-                  <p>Sign in as a verified member to contribute to deliberations.</p>
-                  <a class="button button--small button--primary" href="/member/">Sign In</a>
-                </div>
-              )}
-
-              <!-- Contributions Feed -->
-              <div id="comments-list" class="comments-feed">
-                {comments.length === 0 ? (
-                  <p class="empty-feed">No contributions yet. Be the first to share your stance.</p>
-                ) : (
-                  comments.map((c) => {
-                    const isAuthor = user && c.memberId === user.memberId;
-                    const canDelete = isAuthor || user?.isStaff;
-                    const hasEndorsed = user && c.upvotes.includes(user.memberId);
-                    return (
-                      <article class="comment-card" data-stance={c.stance} data-comment-id={c.commentId}>
-                        <div class="comment-card__head">
-                          <div class="comment-author">
-                            <span class="author-name">{c.authorName}</span>
-                            <span class:list={['stance-tag', `stance-tag--${c.stance}`]}>
-                              {c.stance}
-                            </span>
-                          </div>
-                          <time class="tabular" datetime={new Date(c.createdAt).toISOString()}>
-                            {new Date(c.createdAt).toLocaleDateString('en-AU', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </time>
-                        </div>
-
-                        <div class="comment-card__body">
-                          <p>{c.body}</p>
-                        </div>
-
-                        <div class="comment-card__actions">
-                          <button
-                            type="button"
-                            class:list={['endorse-btn', { 'is-endorsed': hasEndorsed }]}
-                            data-endorse-id={c.commentId}
-                            disabled={!user?.canParticipate}
-                            title={user?.canParticipate ? '+1 Endorse' : 'Sign in to endorse'}
-                          >
-                            <span class="endorse-icon">▲</span>
-                            <span class="endorse-text">Endorse</span>
-                            <span class="endorse-count tabular">{c.upvotes.length}</span>
-                          </button>
-
-                          {canDelete && (
-                            <button
-                              type="button"
-                              class="delete-btn"
-                              data-delete-comment={c.commentId}
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })
-                )}
-              </div>
-            </section>
-          </main>
+          </div>
 
           <!-- Right Column: Decision / Voting Action Sidebar -->
           <aside class="proposal-sidebar">
-            <section class="sidebar-box decision-sidebar-card">
+            <section id="proposal-vote" class="sidebar-box decision-sidebar-card rounded-lg border border-border bg-card text-card-foreground">
               <div class="decision-card-head">
                 <div>
                   <span class="decision-sub">
@@ -455,20 +566,20 @@ const isResolution = proposal
                   <h3>Member Ballot</h3>
                 </div>
                 {proposal.stage === 'decide' ? (
-                  <span class="badge badge--voting">Active</span>
+                  <Badge variant="info">Active</Badge>
                 ) : (
-                  <span class:list={['badge', proposal.stage === 'implement' ? 'badge--adopted' : 'badge--open']}>
+                  <Badge variant={proposal.stage === 'implement' ? 'success' : 'outline'}>
                     {proposal.stage}
-                  </span>
+                  </Badge>
                 )}
               </div>
 
               <!-- Tally bar -->
               <div class="tally-box">
-                <div class="tally-bar" role="progressbar" aria-label="Vote results breakdown">
-                  <div class="tally-bar__approve" style={`width: ${approvePct}%`} title={`Approve: ${approvePct}%`}></div>
-                  <div class="tally-bar__abstain" style={`width: ${abstainPct}%`} title={`Abstain: ${abstainPct}%`}></div>
-                  <div class="tally-bar__reject" style={`width: ${rejectPct}%`} title={`Reject: ${rejectPct}%`}></div>
+                <div class="tally-bar" aria-hidden="true">
+                  <div class="tally-bar__approve" style={{ width: `${approvePct}%` }} title={`Approve: ${approvePct}%`}></div>
+                  <div class="tally-bar__abstain" style={{ width: `${abstainPct}%` }} title={`Abstain: ${abstainPct}%`}></div>
+                  <div class="tally-bar__reject" style={{ width: `${rejectPct}%` }} title={`Reject: ${rejectPct}%`}></div>
                 </div>
 
                 <div class="tally-legend">
@@ -490,66 +601,31 @@ const isResolution = proposal
               <!-- Voting buttons -->
               {proposal.stage === 'decide' && (
                 <div class="sidebar-vote-wrapper">
-                  {user?.canParticipate ? (
-                    <form id="vote-form" data-proposal-id={proposal.proposalId}>
-                      <div class="your-vote-line">
-                        <span>Your vote:</span>
-                        <strong id="current-vote-label">{myVote ? myVote.toUpperCase() : 'Not voted'}</strong>
-                      </div>
-
-                      <div class="vote-buttons" role="radiogroup" aria-label="Cast vote">
-                        <button
-                          type="button"
-                          class:list={['vote-btn', 'vote-btn--approve', { 'is-selected': myVote === 'approve' }]}
-                          data-choice="approve"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          class:list={['vote-btn', 'vote-btn--abstain', { 'is-selected': myVote === 'abstain' }]}
-                          data-choice="abstain"
-                        >
-                          Abstain
-                        </button>
-                        <button
-                          type="button"
-                          class:list={['vote-btn', 'vote-btn--reject', { 'is-selected': myVote === 'reject' }]}
-                          data-choice="reject"
-                        >
-                          Reject
-                        </button>
-                      </div>
-
-                      <input
-                        id="vote-reason-input"
-                        type="text"
-                        name="reason"
-                        maxlength="500"
-                        value={myReason}
-                        placeholder="Reason or statement (optional)"
-                        class="vote-reason-sidebar"
-                      />
-
-                      <p id="vote-status-msg" class="tabular form-status" role="status" aria-live="polite"></p>
-                    </form>
+                  {canVoteOnProposal ? (
+                    <ProposalBallot client:load proposalId={proposal.proposalId} revision={proposal.ballotRevisionId ? String(proposal.ballotRevisionId).slice(0, 8) : 'being prepared'} initialChoice={myVote} initialReason={myReason} initialTally={votes} />
+                  ) : user?.canParticipate && proposal.jurisdictionBranchId ? (
+                    <Alert className="sidebar-nudge"><AlertDescription><p>{branchElectorate ? 'This decision is for an authorised branch electorate. Current branch eligibility is not on file for your account.' : 'This branch electorate is not currently recognised or available for voting.'}</p></AlertDescription></Alert>
                   ) : user ? (
-                    <div class="sidebar-nudge">
-                      <p>Your membership is pending verification before voting.</p>
-                      <a class="button button--small button--outline" href="/member/">Account</a>
-                    </div>
+                    <Alert className="sidebar-nudge">
+                      <AlertDescription>
+                        <p>Your account is not currently eligible for this ballot. Check your membership status.</p>
+                        <Button href="/member/" variant="outline" size="sm">Account</Button>
+                      </AlertDescription>
+                    </Alert>
                   ) : (
-                    <div class="sidebar-nudge">
-                      <p>Verified party members vote on active decisions.</p>
-                      <a class="button button--small button--primary" href="/member/">Sign in to vote</a>
-                    </div>
+                    <Alert className="sidebar-nudge">
+                      <AlertDescription>
+                        <p>Verified party members vote on active decisions.</p>
+                        <Button href="/member/" size="sm">Sign in to vote</Button>
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </div>
               )}
             </section>
 
             <!-- Metadata info card -->
-            <div class="sidebar-meta-card">
+            <Card className="sidebar-meta-card">
               <div class="meta-row">
                 <span>Classification:</span>
                 <strong>{isResolution ? 'Governance Resolution' : 'Policy Proposal'}</strong>
@@ -572,7 +648,7 @@ const isResolution = proposal
                   <strong>{proposal.provenance.label}</strong>
                 </div>
               )}
-            </div>
+            </Card>
           </aside>
         </div>
       </>
@@ -657,56 +733,50 @@ const isResolution = proposal
     });
   }
 
-  // Voting interaction
-  const voteForm = document.getElementById('vote-form') as HTMLFormElement | null;
-  const voteBtns = document.querySelectorAll<HTMLButtonElement>('.vote-btn');
-  const voteStatusMsg = document.getElementById('vote-status-msg');
-  const currentVoteLabel = document.getElementById('current-vote-label');
-  const reasonInput = document.getElementById('vote-reason-input') as HTMLInputElement | null;
 
-  voteBtns.forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (!voteForm || !voteStatusMsg) return;
-      const proposalId = voteForm.dataset.proposalId;
-      const choice = btn.dataset.choice;
-      const reason = reasonInput?.value ?? '';
-
-      voteBtns.forEach((b) => (b.disabled = true));
-      voteStatusMsg.textContent = 'Recording…';
-
-      try {
-        const res = await fetch('/api/votes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ proposalId, choice, reason }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to submit vote');
-
-        voteBtns.forEach((b) => {
-          b.classList.toggle('is-selected', b.dataset.choice === choice);
-          b.disabled = false;
-        });
-
-        if (currentVoteLabel) currentVoteLabel.textContent = (choice || '').toUpperCase();
-        voteStatusMsg.textContent = 'Recorded!';
-
-        // Update bar widths
-        const { votes } = data;
-        const barApprove = document.querySelector<HTMLElement>('.tally-bar__approve');
-        const barAbstain = document.querySelector<HTMLElement>('.tally-bar__abstain');
-        const barReject = document.querySelector<HTMLElement>('.tally-bar__reject');
-        if (votes.total > 0) {
-          if (barApprove) barApprove.style.width = `${Math.round((votes.approve / votes.total) * 100)}%`;
-          if (barAbstain) barAbstain.style.width = `${Math.round((votes.abstain / votes.total) * 100)}%`;
-          if (barReject) barReject.style.width = `${Math.round((votes.reject / votes.total) * 100)}%`;
-        }
-      } catch (err: any) {
-        voteStatusMsg.textContent = err.message || 'Error';
-        voteBtns.forEach((b) => (b.disabled = false));
+  const amendmentForm = document.getElementById('amendment-form') as HTMLFormElement | null;
+  amendmentForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!amendmentForm.reportValidity()) return;
+    const status = amendmentForm.querySelector<HTMLElement>('.amendment-compose-status');
+    const button = amendmentForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (button) button.disabled = true;
+    try {
+      const fd = new FormData(amendmentForm);
+      const changes: Record<string, string> = {};
+      for (const field of ['title', 'summary']) {
+        const value = String(fd.get(field) ?? '').trim();
+        if (value) changes[field] = value;
       }
-    });
+      const response = await fetch('/api/amendments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proposalId: amendmentForm.dataset.proposalId, baseRevisionId: amendmentForm.dataset.revisionId, changes }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Could not submit the amendment.');
+      if (status) status.textContent = 'Amendment submitted. Reloading its status…';
+      location.reload();
+    } catch (error) {
+      if (status) status.textContent = error instanceof Error ? error.message : 'Could not submit the amendment.';
+      if (button) button.disabled = false;
+    }
   });
+
+  document.querySelectorAll<HTMLFormElement>('.amendment-vote-form').forEach((form) => {
+    const status = form.querySelector<HTMLElement>('[role="status"]');
+    form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) => button.addEventListener('click', async () => {
+      if (status) status.textContent = 'Recording your endorsement…';
+      form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((item) => item.disabled = true);
+      try {
+        const response = await fetch('/api/votes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proposalId: form.dataset.proposalId, amendmentId: form.dataset.amendmentId, choice: button.dataset.choice }) });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Could not record endorsement.');
+        if (status) status.textContent = 'Your endorsement vote was recorded.';
+      } catch (error) {
+        if (status) status.textContent = error instanceof Error ? error.message : 'Could not record endorsement.';
+        form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((item) => item.disabled = false);
+      }
+    }));
+  });
+
+
 
   // Stance tab filter
   const filterBtns = document.querySelectorAll<HTMLButtonElement>('.stance-filter-btn');
@@ -717,6 +787,7 @@ const isResolution = proposal
       const stance = btn.dataset.stance;
       filterBtns.forEach((b) => b.classList.remove('is-active'));
       btn.classList.add('is-active');
+      filterBtns.forEach((item) => item.setAttribute('aria-pressed', String(item === btn)));
 
       commentCards.forEach((card) => {
         if (stance === 'all' || card.dataset.stance === stance) {
@@ -810,10 +881,22 @@ const isResolution = proposal
 </script>
 
 <style>
+  .reading-nav { display:flex; flex-wrap:wrap; gap:.35rem 1.2rem; padding:.85rem 0; margin:1rem 0; border-top:1px solid var(--horizon-line); border-bottom:1px solid var(--horizon-line); font-family:Outfit,sans-serif; font-weight:600; }
+  .reading-nav a { white-space:nowrap; text-underline-offset:.2em; }
+  .proposal-reading-guide { max-width:65ch; font-size:1.1rem; line-height:1.55; }
+  .proposal-process { margin:.6rem 0; }
+  .proposal-process summary { cursor:pointer; color:var(--horizon-muted); font-size:.9rem; }
   .proposal-detail-page {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+  }
+  @media (max-width: 600px) {
+    .proposal-detail-page { padding-top: 1.5rem; gap: 1rem; }
+    .top-bar { border-bottom: 0; }
+    .breadcrumbs > :not(:first-child) { display: none; }
+    .detail-header__meta .kind-pill, .detail-header__meta .space-pill { display: none; }
+    .proposal-reading-guide { font-size: 1rem; }
   }
 
   .top-bar {
@@ -830,8 +913,11 @@ const isResolution = proposal
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    flex-wrap: wrap;
+    min-width: 0;
     font-size: 0.88rem;
     color: var(--horizon-muted);
+    overflow-wrap: anywhere;
   }
 
   .breadcrumbs a {
@@ -845,6 +931,7 @@ const isResolution = proposal
 
   .lifecycle-stepper {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.75rem;
     align-items: center;
   }
@@ -946,9 +1033,15 @@ const isResolution = proposal
   }
 
   .proposal-main {
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 2rem;
+  }
+
+  .proposal-layout > *,
+  .detail-header {
+    min-width: 0;
   }
 
   /* Header */
@@ -960,6 +1053,7 @@ const isResolution = proposal
 
   .detail-header__meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
     font-size: 0.82rem;
@@ -1062,20 +1156,25 @@ const isResolution = proposal
     margin-left: auto;
     color: var(--horizon-muted);
     font-weight: 600;
+    overflow-wrap: anywhere;
   }
 
   .detail-title {
-    font-size: clamp(2.2rem, 3.8vw, 3.25rem);
+    font-size: clamp(1.9rem, 8.5vw, 3.25rem);
     line-height: 1.1;
     margin: 0;
     color: var(--horizon-purple-deep);
+    overflow-wrap: anywhere;
   }
 
   .author-line {
     display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
     gap: 0.5rem;
     color: var(--horizon-muted);
     font-size: 0.92rem;
+    overflow-wrap: anywhere;
   }
 
   /* Editorial Lead */
@@ -1175,16 +1274,16 @@ const isResolution = proposal
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    font-size: 1.05rem;
-    line-height: 1.7;
-    color: var(--horizon-purple);
   }
 
-  .details-body h3 {
-    font-size: 1.25rem;
-    margin-top: 1rem;
-    color: var(--horizon-purple-deep);
-  }
+  .revision-history ol { display: grid; gap: 0.75rem; padding-left: 1.25rem; }
+  .revision-history li { padding-left: 0.25rem; }
+  .revision-history li > span { display: block; color: var(--horizon-muted); font-size: 0.9rem; }
+  .revision-history details { margin-top: 0.45rem; }
+  .revision-history summary { min-height: 2.75rem; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+  .revision-change { padding: 0.75rem; margin: 0.5rem 0; min-width: 0; background: var(--horizon-lavender-soft); border-radius: 0.5rem; }
+  .revision-change h3 { margin: 0 0 0.4rem; font-size: 1rem; text-transform: capitalize; }
+  .revision-change pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; background: var(--horizon-lavender-soft); padding: 0.65rem; border-radius: 0.35rem; margin: 0.25rem 0 0.5rem; }
 
   /* Provenance Section */
   .provenance-section {
@@ -1544,7 +1643,8 @@ const isResolution = proposal
   }
 
   .stance-filter-btn {
-    padding: 0.35rem 0.75rem;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.85rem;
     border-radius: 999px;
     border: 1px solid var(--horizon-line);
     background: var(--horizon-white);
@@ -1560,6 +1660,8 @@ const isResolution = proposal
     color: var(--horizon-white);
     border-color: var(--horizon-purple);
   }
+
+  .stance-filter-btn:focus-visible { outline:3px solid var(--horizon-focus); outline-offset:2px; }
 
   .comment-form {
     background: var(--horizon-lavender-soft);
@@ -1581,7 +1683,8 @@ const isResolution = proposal
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.35rem 0.65rem;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.75rem;
     border: 1px solid var(--horizon-line);
     border-radius: 0.35rem;
     cursor: pointer;
@@ -1665,11 +1768,36 @@ const isResolution = proposal
     padding-top: 0.5rem;
   }
 
+  .comment-form textarea,
+  .comment-card__body,
+  .details-body {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 600px) {
+    .lifecycle-stepper {
+      gap: 0.5rem;
+    }
+    .id-pill {
+      margin-left: 0;
+    }
+    .comment-form { padding: 0.85rem; }
+    .comment-form__actions { align-items: stretch; flex-direction: column; }
+    .comment-form__actions [data-slot="button"] { width: 100%; min-height: 2.75rem; }
+    .comment-card { padding: 0.85rem; }
+    .comment-card__head { align-items: flex-start; gap: 0.5rem; }
+    .comment-author { align-items: flex-start; flex-wrap: wrap; }
+    .comment-card__actions { flex-wrap: wrap; }
+    .stance-filter-btn { flex: 0 0 auto; }
+  }
+
   .endorse-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.25rem 0.6rem;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.75rem;
     border-radius: 0.35rem;
     font-size: 0.78rem;
     font-weight: 600;
@@ -1717,4 +1845,24 @@ const isResolution = proposal
     text-align: center;
     padding: 4rem 1rem;
   }
+
+  .proposal-detail-page { max-width:84rem; gap:1rem; }
+  .top-bar { border:0; padding:0; }
+  .proposal-layout { grid-template-columns:minmax(0,1fr) 20rem; gap:2rem; }
+  .detail-header { background:#fff; border:1px solid var(--horizon-line); border-radius:.7rem; padding:1.5rem 1.7rem; }
+  .detail-title { font:700 clamp(2rem,3.2vw,3.3rem)/1.08 Outfit,sans-serif; letter-spacing:-.03em; }
+  .proposal-reading-guide { font-size:1rem; }
+  .reading-nav { gap:1.2rem; margin:1rem 0 0; padding:.8rem 0 0; border-bottom:0; }
+  .reading-nav a { text-decoration:none; font-size:.9rem; }
+  .reading-nav a:hover { text-decoration:underline; }
+  .proposal-main { min-width:0; }
+  .content-section,.deliberation-section,.revision-history,.amendment-section { background:#fff; border:1px solid var(--horizon-line); border-radius:.7rem; padding:1.5rem; margin-bottom:1rem; }
+  .content-section h2,.deliberation-header h2 { font:700 1.4rem/1.2 Outfit,sans-serif; }
+  .sidebar-box,.sidebar-meta-card { border:1px solid var(--horizon-line); border-radius:.7rem; background:#fff; box-shadow:0 3px 12px #20104a0d; }
+  .decision-card-head h3 { font:700 1.2rem/1.2 Outfit,sans-serif; }
+  .staff-controls { background:#fff; border:1px solid var(--horizon-line); border-radius:.6rem; }
+  .staff-controls>summary { cursor:pointer; padding:.7rem 1rem; font-weight:700; }
+  .staff-controls .staff-bar { border:0; border-top:1px solid var(--horizon-line); border-radius:0; }
+  @media(max-width:960px){.proposal-layout{grid-template-columns:1fr}.proposal-sidebar .sidebar-meta-card{display:none}}
+  @media(max-width:600px){.detail-header,.content-section,.deliberation-section,.revision-history,.amendment-section{padding:1rem}.proposal-sidebar{position:static}}
 </style>

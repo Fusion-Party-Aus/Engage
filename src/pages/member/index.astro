@@ -1,13 +1,20 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import { Card } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Badge } from '../../components/ui/badge';
+import { Field } from '../../components/ui/field';
+import { Input } from '../../components/ui/input';
+import { NativeSelect } from '../../components/ui/native-select';
 import {
+  devLoginEnabled,
   emailLoginConfigured,
   getSessionUser,
   googleLoginConfigured,
-  isProduction,
 } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { listUserActivity } from '../../lib/store.ts';
+import { listOutstandingDecisions, listProposals, listUserActivity } from '../../lib/store.ts';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -19,16 +26,31 @@ const [db, user] = await Promise.all([
 ]);
 
 const activity = user ? await listUserActivity(db, user.memberId) : null;
+const awaitingDecision = user?.canParticipate ? await listOutstandingDecisions(db, user.memberId, user) : [];
+const memberBranches = user?.activeBranchIds?.length
+  ? await db.collection('branches').find({ branchId: { $in: user.activeBranchIds }, recognised: true }).sort({ name: 1 }).toArray()
+  : [];
+const branchProposals = memberBranches.length ? await listProposals(db, { user }) : [];
+const branchPriority = { decide: 0, deliberate: 1, propose: 2, implement: 3, archived: 4 };
+const branchActivity = memberBranches.map((branch: any) => ({
+  branch,
+  proposals: branchProposals
+    .filter((proposal) => [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branch.branchId))
+    .sort((a, b) => branchPriority[a.stage] - branchPriority[b.stage] || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 3),
+}));
 const emailAvailable = emailLoginConfigured(env);
 const googleAvailable = googleLoginConfigured(env);
-const devLoginAvailable = !isProduction(env);
+const devLoginAvailable = devLoginEnabled(env);
+const requestedView = Astro.url.searchParams.get('view');
+const memberView = requestedView === 'activity' || requestedView === 'account' ? requestedView : 'overview';
 ---
 <SiteLayout
-  title="Member Account · Engage"
-  description="Sign in to comment on Fusion policy proposals and vote on open decisions."
+  title="My Engage · Fusion Party Australia"
+  description="Your votes, ideas, contributions and member account."
   noIndex
 >
-  <div class="page-wrap section-space member-page">
+  <div class="page-wrap section-space member-page" data-view={memberView}>
     {!user ? (
       <>
         <header class="page-intro">
@@ -44,30 +66,30 @@ const devLoginAvailable = !isProduction(env);
             <section class="signin-box" aria-labelledby="email-signin-heading">
               <h2 id="email-signin-heading">Sign in with an email link</h2>
               <p>We’ll email you a one-click sign-in link—no password required.</p>
-              <form id="email-signin-form">
-                <label class="field" for="signin-email">
-                  <span>Email address</span>
-                  <input
+              <form id="email-signin-form" class="grid gap-4">
+                <Field label="Email address" htmlFor="signin-email">
+                  <Input
                     id="signin-email"
                     name="email"
                     type="email"
-                    autocomplete="email"
-                    maxlength="254"
+                    autoComplete="email"
+                    maxLength={254}
                     required
                   />
-                </label>
-                <label class="field" for="signin-name">
-                  <span>Full name (required for first sign-in)</span>
-                  <input
+                </Field>
+                <Field label="Full name (required for first sign-in)" htmlFor="signin-name">
+                  <Input
                     id="signin-name"
                     name="name"
-                    autocomplete="name"
-                    minlength="2"
-                    maxlength="100"
+                    autoComplete="name"
+                    minLength={2}
+                    maxLength={100}
                   />
-                </label>
-                <button class="button" type="submit">Email me a sign-in link</button>
-                <p id="email-status" class="form-status" role="status" aria-live="polite"></p>
+                </Field>
+                <div>
+                  <Button type="submit">Email me a sign-in link</Button>
+                  <p id="email-status" class="form-status" role="status" aria-live="polite"></p>
+                </div>
               </form>
             </section>
           )}
@@ -76,9 +98,9 @@ const devLoginAvailable = !isProduction(env);
             <section class="signin-box" aria-labelledby="google-signin-heading">
               <h2 id="google-signin-heading">Sign in with Google</h2>
               <p>Continue using your Google account.</p>
-              <button id="google-signin" class="button button--outline" type="button">
+              <Button id="google-signin" variant="outline">
                 Continue with Google
-              </button>
+              </Button>
               <p id="google-status" class="form-status" role="status" aria-live="polite"></p>
             </section>
           )}
@@ -87,24 +109,25 @@ const devLoginAvailable = !isProduction(env);
             <section class="signin-box" aria-labelledby="dev-signin-heading">
               <h2 id="dev-signin-heading">Local development sign-in</h2>
               <p>Sign in locally as a verified member or administrator to test the platform.</p>
-              <form id="dev-signin-form">
-                <label class="field">
-                  <span>Account role</span>
-                  <select name="role">
+              <form id="dev-signin-form" class="grid gap-4">
+                <Field label="Account role" htmlFor="dev-role">
+                  <NativeSelect id="dev-role" name="role">
                     <option value="member">Verified Member</option>
                     <option value="administrator">Administrator</option>
-                  </select>
-                </label>
-                <button class="button" type="submit">Sign in locally</button>
-                <p id="dev-status" class="form-status" role="status" aria-live="polite"></p>
+                  </NativeSelect>
+                </Field>
+                <div>
+                  <Button type="submit">Sign in locally</Button>
+                  <p id="dev-status" class="form-status" role="status" aria-live="polite"></p>
+                </div>
               </form>
             </section>
           )}
 
           {!emailAvailable && !googleAvailable && !devLoginAvailable && (
-            <div class="callout">
-              <p>Member sign-in is temporarily unavailable. Please try again shortly.</p>
-            </div>
+            <Alert variant="warning">
+              <AlertDescription>Member sign-in is temporarily unavailable. Please try again shortly.</AlertDescription>
+            </Alert>
           )}
         </div>
       </>
@@ -112,26 +135,29 @@ const devLoginAvailable = !isProduction(env);
       <>
         <header class="account-header">
           <div>
-            <h1>{user.name || 'Your member account'}</h1>
+            <h1>{memberView === 'activity' ? 'Activity' : memberView === 'account' ? 'My account' : 'My Engage'}</h1>
             <p>{user.email}</p>
           </div>
           <div class="account-header__actions">
             {user.isStaff && (
-              <a class="button button--outline" href="/admin/">
-                Open Admin Workspace →
-              </a>
+              <Button href="/admin/" variant="outline">
+                Review admin tasks →
+              </Button>
             )}
-            <a class="button" href="/policies/?status=voting">
-              View open votes →
-            </a>
+            <Button href="/proposals/?stage=decide">
+              See open votes →
+            </Button>
           </div>
         </header>
 
-        <div class="callout status-banner">
-          <p>
+        <div class="member-overview" aria-label="Your participation at a glance"><a href="#awaiting-heading"><svg class="nav-icon" aria-hidden="true"><use href="#icon-vote" /></svg><strong>{awaitingDecision.length}</strong><span>Votes for you</span></a><a href="/member/?view=activity#comments-heading"><svg class="nav-icon" aria-hidden="true"><use href="#icon-files" /></svg><strong>{activity?.comments.length ?? 0}</strong><span>Contributions</span></a><a href="/member/#proposals-heading"><svg class="nav-icon" aria-hidden="true"><use href="#icon-home" /></svg><strong>{activity?.proposals.length ?? 0}</strong><span>Your ideas</span></a></div>
+        <nav class="account-shortcuts" aria-label="My Engage sections"><Button href="/member/" variant={memberView === 'overview' ? 'secondary' : 'ghost'} size="sm" aria-current={memberView === 'overview' ? 'page' : undefined}>Overview</Button><Button href="/member/?view=activity" variant={memberView === 'activity' ? 'secondary' : 'ghost'} size="sm" aria-current={memberView === 'activity' ? 'page' : undefined}>Activity</Button><Button href="/member/?view=account" variant={memberView === 'account' ? 'secondary' : 'ghost'} size="sm" aria-current={memberView === 'account' ? 'page' : undefined}>My account</Button></nav>
+
+        <Alert className="status-banner" variant={user.status === 'verified' ? 'success' : user.status === 'suspended' ? 'destructive' : 'warning'}>
+          <AlertDescription>
             {user.status === 'verified' ? (
               <>
-                <strong>Membership verified.</strong> You can propose new motions, deliberate with structured stances, and vote on open party decisions.
+                <strong>Membership verified.</strong> You can suggest ideas and join discussions. Voting also depends on the eligibility rules for each ballot.
               </>
             ) : user.status === 'suspended' ? (
               <>
@@ -145,32 +171,27 @@ const devLoginAvailable = !isProduction(env);
                 below matches your party membership record.
               </>
             )}
-          </p>
-        </div>
+          </AlertDescription>
+        </Alert>
 
-        <section class="account-section" aria-labelledby="profile-heading">
-          <h2 id="profile-heading">Your display name</h2>
-          <form id="profile-form" class="profile-form">
-            <label class="field" for="profile-name">
-              <span>Full name</span>
-              <input
-                id="profile-name"
-                name="name"
-                value={user.name}
-                autocomplete="name"
-                required
-                minlength="2"
-                maxlength="100"
-              />
-            </label>
-            <button class="button button--outline" type="submit">Save name</button>
-            <p id="profile-status" class="form-status" role="status" aria-live="polite"></p>
-          </form>
-        </section>
+        <Card className="account-section overview-only" aria-labelledby="awaiting-heading">
+          <h2 id="awaiting-heading">Votes for you ({awaitingDecision.length})</h2>
+          {!user.canParticipate ? <p class="muted-note">Your membership must be verified before you can vote.</p> : awaitingDecision.length === 0 ? <p class="muted-note">You’re up to date on open decisions.</p> : (
+            <><ul class="activity-list">{awaitingDecision.slice(0, 5).map((p) => <li class="activity-row"><div><a class="activity-title" href={`/proposals/${p.slug}/`}>{p.title}</a><span class="activity-sub">{p.space}</span></div><Button href={`/proposals/${p.slug}/`} size="sm">Review &amp; vote</Button></li>)}</ul>{awaitingDecision.length > 5 && <details class="more-votes"><summary>Show {awaitingDecision.length - 5} more votes</summary><ul class="activity-list">{awaitingDecision.slice(5).map((p) => <li class="activity-row"><div><a class="activity-title" href={`/proposals/${p.slug}/`}>{p.title}</a><span class="activity-sub">{p.space}</span></div><Button href={`/proposals/${p.slug}/`} size="sm" variant="outline">Review</Button></li>)}</ul></details>}</>
+          )}
+        </Card>
+
+        {branchActivity.length > 0 && <Card className="account-section overview-only" aria-labelledby="branch-activity-heading">
+          <h2 id="branch-activity-heading">Activity in your branches</h2>
+          {branchActivity.map(({ branch, proposals }) => <section class="branch-activity" aria-labelledby={`branch-activity-${branch.branchId}`}>
+            <div class="branch-activity__heading"><h3 id={`branch-activity-${branch.branchId}`}>{branch.name}</h3><a href={`/proposals/?branch=${encodeURIComponent(branch.branchId)}`}>All branch activity →</a></div>
+            {proposals.length ? <ul class="activity-list">{proposals.map((proposal) => <li class="activity-row"><div><a class="activity-title" href={`/proposals/${proposal.slug}/`}>{proposal.title}</a><span class="activity-sub">{proposal.stage === 'decide' ? 'Open vote' : proposal.stage === 'deliberate' ? 'In discussion' : proposal.stage === 'implement' ? 'Implement' : 'New idea'}</span></div><Button href={`/proposals/${proposal.slug}/`} size="sm" variant="outline">View</Button></li>)}</ul> : <p class="muted-note">No current proposals involve this branch.</p>}
+          </section>)}
+        </Card>}
 
         {activity?.proposals && activity.proposals.length > 0 && (
-          <section class="account-section" aria-labelledby="proposals-heading">
-            <h2 id="proposals-heading">Proposals you authored ({activity.proposals.length})</h2>
+          <Card className="account-section overview-only" aria-labelledby="proposals-heading">
+          <h2 id="proposals-heading">Ideas you started ({activity.proposals.length})</h2>
             <ul class="activity-list">
               {activity.proposals.map((p) => (
                 <li class="activity-row">
@@ -179,24 +200,24 @@ const devLoginAvailable = !isProduction(env);
                       {p.title}
                     </a>
                     <span class="activity-sub">
-                      Stage: {p.stage} · {p.space}
+                      {p.space} · {p.stage === 'decide' ? 'Open vote' : p.stage === 'deliberate' ? 'In discussion' : p.stage === 'implement' ? 'Implement' : 'New idea'}
                     </span>
                   </div>
-                  <a class="button button--small button--outline" href={`/proposals/${p.slug}/`}>
+                  <Button href={`/proposals/${p.slug}/`} size="sm" variant="outline">
                     View
-                  </a>
+                  </Button>
                 </li>
               ))}
             </ul>
-          </section>
+          </Card>
         )}
 
-        <section class="account-section" aria-labelledby="votes-heading">
+        <Card className="account-section activity-only" aria-labelledby="votes-heading">
           <h2 id="votes-heading">Your recorded votes ({activity?.votes.length ?? 0})</h2>
           {!activity?.votes.length ? (
             <p class="muted-note">
               You have not voted on any decisions yet. Visit{' '}
-              <a href="/proposals/?stage=decide">Decisions (Open Votes)</a> to participate.
+              <a href="/proposals/?stage=decide">See open votes</a> to participate.
             </p>
           ) : (
             <ul class="activity-list">
@@ -212,21 +233,21 @@ const devLoginAvailable = !isProduction(env);
                       {v.reason ? ` · Reason: "${v.reason}"` : ''}
                     </span>
                   </div>
-                  <span class={`badge ${v.choice === 'approve' ? 'badge--adopted' : v.choice === 'abstain' ? 'badge--open' : 'badge--draft'}`}>
+                  <Badge variant={v.choice === 'approve' ? 'success' : v.choice === 'abstain' ? 'info' : 'destructive'}>
                     Voted: {v.choice.toUpperCase()}
-                  </span>
+                  </Badge>
                 </li>
               ))}
             </ul>
           )}
-        </section>
+        </Card>
 
-        <section class="account-section" aria-labelledby="comments-heading">
-          <h2 id="comments-heading">Your deliberation stances ({activity?.comments.length ?? 0})</h2>
+        <Card className="account-section activity-only" aria-labelledby="comments-heading">
+          <h2 id="comments-heading">Your contributions ({activity?.comments.length ?? 0})</h2>
           {!activity?.comments.length ? (
             <p class="muted-note">
-              You have not posted any deliberation stances yet. Open any item in{' '}
-              <a href="/proposals/">Proposals</a> to share your feedback or suggested amendments.
+              You have not joined a discussion yet. Open an idea in{' '}
+              <a href="/proposals/">Browse proposals</a> to share your feedback or suggest a wording change.
             </p>
           ) : (
             <ul class="activity-list">
@@ -238,14 +259,33 @@ const devLoginAvailable = !isProduction(env);
                     </a>
                     <p class="activity-body">{c.body}</p>
                   </div>
-                  <span class="badge">
+                  <Badge variant="outline">
                     Stance: {c.stance}
-                  </span>
+                  </Badge>
                 </li>
               ))}
             </ul>
           )}
-        </section>
+        </Card>
+        <details class="account-section account-settings account-only" id="account-settings" open={memberView === 'account'}><summary>Account settings</summary><section aria-labelledby="profile-heading">
+          <h2 id="profile-heading">Your display name</h2>
+          <form id="profile-form" class="profile-form">
+            <Field label="Full name" htmlFor="profile-name">
+              <Input
+                id="profile-name"
+                name="name"
+                defaultValue={user.name}
+                autoComplete="name"
+                required
+                minLength={2}
+                maxLength={100}
+              />
+            </Field>
+            <Button type="submit" variant="outline">Save name</Button>
+            <p id="profile-status" class="form-status" role="status" aria-live="polite"></p>
+          </form>
+        </section></details>
+
       </>
     )}
   </div>
@@ -366,6 +406,12 @@ const devLoginAvailable = !isProduction(env);
 </script>
 
 <style>
+  .account-shortcuts { display:flex; flex-wrap:wrap; gap:.55rem 1.5rem; padding:.8rem 0; margin:1rem 0; border-block:1px solid var(--horizon-line); font-weight:600; }
+  .account-settings summary { cursor:pointer; font-weight:700; font-size:1.15rem; }
+  .account-settings[open] summary { margin-bottom:1.5rem; }
+  .more-votes { margin-top:1rem; }
+  .more-votes summary { cursor:pointer; font-weight:700; }
+  .more-votes .activity-list { margin-top:1rem; }
   .member-page {
     max-width: 62rem;
   }
@@ -430,7 +476,7 @@ const devLoginAvailable = !isProduction(env);
     align-items: flex-end;
     gap: 0.85rem 1rem;
   }
-  .profile-form .field {
+  .profile-form [data-slot="field"] {
     margin: 0;
     min-width: min(100%, 20rem);
   }
@@ -457,6 +503,7 @@ const devLoginAvailable = !isProduction(env);
     padding: 1.15rem 0;
     border-bottom: 1px solid var(--horizon-line);
   }
+  .activity-row > div { min-width: 0; overflow-wrap: anywhere; }
   .activity-title {
     font-weight: 700;
     font-size: 1.05rem;
@@ -478,4 +525,34 @@ const devLoginAvailable = !isProduction(env);
     font-size: 0.94rem;
     max-width: 62ch;
   }
+  @media (max-width: 520px) {
+    .activity-row { flex-wrap: wrap; gap: 0.65rem; }
+    .activity-row > :last-child { max-width: 100%; }
+  }
+
+  .member-page { max-width:84rem; }
+  .member-page[data-view="activity"] .overview-only,.member-page[data-view="activity"] .account-only,.member-page[data-view="activity"] .member-overview,.member-page[data-view="activity"] .status-banner { display:none; }
+  .member-page[data-view="account"] .overview-only,.member-page[data-view="account"] .activity-only,.member-page[data-view="account"] .member-overview { display:none; }
+  .member-page[data-view="overview"] .activity-only,.member-page[data-view="overview"] .account-only { display:none; }
+  .account-shortcuts { display:flex; flex-wrap:wrap; gap:1.4rem; }
+  .account-shortcuts a { text-decoration:none; padding:.55rem .15rem; font-weight:700; }
+  .account-shortcuts a[aria-current="page"] { border-bottom:3px solid #6b48db; }
+  .account-header { margin-bottom:1.2rem; }
+  .account-header h1 { font:700 clamp(2rem,4vw,3rem)/1.1 Outfit,sans-serif; }
+  .member-overview { display:grid; grid-template-columns:repeat(3,1fr); gap:.8rem; }
+  .member-overview a { display:grid; gap:.15rem; padding:1.2rem; background:#fff; border:1px solid var(--horizon-line); border-radius:.7rem; text-decoration:none; }
+  .member-overview .nav-icon { width:1.5rem; height:1.5rem; color:#613bcd; }
+  .member-overview strong { font-size:1.6rem; line-height:1.1; }
+  .member-overview span { font-size:.85rem; }
+  .account-shortcuts { border-bottom:1px solid var(--horizon-line); padding-block:.9rem; }
+  .account-section { background:#fff; border:1px solid var(--horizon-line); border-radius:.7rem; padding:1.3rem 1.5rem; margin-top:1rem; }
+  .account-section h2 { font-size:1.25rem; }
+  .activity-list { border-top:0; }
+  .activity-row:last-child { border-bottom:0; }
+  .branch-activity + .branch-activity { margin-top:1rem; padding-top:1rem; border-top:1px solid var(--horizon-line); }
+  .branch-activity__heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:.5rem 1rem; }
+  .branch-activity__heading h3 { margin:0; font-size:1rem; }
+  .branch-activity__heading a { font-size:.88rem; font-weight:600; }
+  .status-banner { margin:1rem 0; }
+  @media(max-width:600px){.member-overview{grid-template-columns:1fr;gap:.45rem}.member-overview a{display:flex;align-items:center;gap:.7rem;padding:.7rem 1rem}.member-overview strong{font-size:1.3rem}.member-overview span{font-size:.85rem}.account-section{padding:1rem}}
 </style>
