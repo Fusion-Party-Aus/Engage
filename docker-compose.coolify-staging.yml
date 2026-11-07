@@ -50,8 +50,8 @@ services:
       context: .
       dockerfile: Dockerfile
       # BuildKit's default network could not resolve registry.npmjs.org on this
-      # host; host networking is build-time only and does not affect runtime.
-      network: host
+      # host; use Coolify's bridge network for the build only.
+      network: coolify
     restart: unless-stopped
     dns:
       - 1.1.1.1
