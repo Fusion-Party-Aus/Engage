@@ -84,9 +84,28 @@ Headless Chrome 156 against the built release and the restored data clone.
 | 768 × 1024 tablet | All tested routes rendered; no horizontal overflow; no console errors |
 | 1440 × 1000 desktop | All tested routes rendered; no horizontal overflow; no console errors |
 
-**108 checks, 0 failures.** Routes covered: `/`, `/proposals/`, proposal detail,
+**109 checks, 0 failures** for the full route and interaction matrix, plus
+**14 dedicated 390px ballot checks, 0 failures** after the member-ballot
+refinement.
+Routes covered: `/`, `/proposals/`, proposal detail,
 `/how-it-works/`, `/policies/`, `/privacy/`, `/terms/`, `/member/`, `/admin/`,
 `/admin/proposals/`, `/admin/members/`, `/admin/branches/`, `/admin/policies/`.
+
+The refined member ballot was validated at 390 × 844:
+
+- a single-row segmented Approve / Abstain / Reject control, no option cards or
+  floating radio indicators;
+- one compact results presentation, with a plain empty-state message when no
+  votes have been recorded;
+- a full-width primary action whose radius matches the segmented control, with
+  a neutral disabled treatment and the Horizon accent reserved for an enabled
+  action;
+- `Reason (optional)` above the field and a live `0/500` counter below;
+- a persistent one-line privacy disclosure with a Privacy Policy link;
+- human-readable revision metadata after the privacy line;
+- arrow-key selection and checked-state semantics;
+- closed-ballot read-only treatment;
+- no horizontal overflow and no console errors.
 
 Additional checks:
 
