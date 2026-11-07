@@ -1,6 +1,6 @@
 ---
 name: Engage — Horizon design system
-description: Fusion Party Australia's Horizon editorial design system for policy reading, member voting, and administration.
+description: Fusion Party Australia's editorial visual language for participation and policy.
 colors:
   horizon-purple: "#32105a"
   horizon-purple-deep: "#271047"
@@ -12,9 +12,6 @@ colors:
   horizon-muted: "#54465f"
   horizon-white: "#ffffff"
   horizon-focus: "#006a70"
-  horizon-border-input: "#8a7b99"
-  horizon-admin-hover: "#472275"
-  horizon-admin-note: "#dfd4ed"
   horizon-voting-bg: "#d3f5f7"
   horizon-voting-ink: "#09474c"
   horizon-success-bg: "#dff5e8"
@@ -26,20 +23,24 @@ colors:
 typography:
   display:
     fontFamily: "Newsreader, Georgia, serif"
-    fontSize: "2.75rem"
+    fontSize: "clamp(2.4rem, 5vw, 4.1rem)"
+    fontWeight: 600
+    lineHeight: 1.04
+    letterSpacing: "-.025em"
+  section:
+    fontFamily: "Newsreader, Georgia, serif"
+    fontSize: "clamp(1.85rem, 3.4vw, 2.75rem)"
     fontWeight: 600
     lineHeight: 1.1
-    letterSpacing: "-.025em"
   body:
     fontFamily: "Outfit, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.6
-  row-title:
+  label:
     fontFamily: "Outfit, sans-serif"
-    fontSize: "1.125rem"
+    fontSize: ".92rem"
     fontWeight: 600
-    lineHeight: 1.4
 rounded:
   control: ".45rem"
   container: ".75rem"
@@ -49,13 +50,59 @@ spacing:
   gap: "1rem"
   grid-gap: "1.25rem"
   section-gap: "3rem"
+components:
+  button-primary:
+    backgroundColor: "{colors.horizon-accent}"
+    textColor: "{colors.horizon-purple-deep}"
+    rounded: "{rounded.pill}"
+    padding: ".65rem 1.2rem"
+  button-secondary:
+    backgroundColor: "{colors.horizon-white}"
+    textColor: "{colors.horizon-purple}"
+    rounded: "{rounded.pill}"
+    padding: ".65rem 1.2rem"
 ---
 
-# Horizon Design System
+## Overview
 
-Engage uses Fusion Party Australia's Horizon visual system:
-- **Canvas & Palette**: Light editorial canvas (`#FFFFFF` and `#F2EEF9`) paired with deep Horizon violet (`#32105A` / `#271047`) for text and structure, and national cyan (`#00C9D2`) for primary actions.
-- **Typography**: `Newsreader` for display and section headings; `Outfit` for body copy, controls, metadata, and dense administrative registers.
-- **Information Architecture**:
-  - **Public & Member Views**: Flat separated policy registers and single-page policy views combining the policy commitment, intended outcomes, live voting, background rationale, and member discussion in one place.
-  - **Admin Workspace**: Protected 2-section workspace (`Policies & Votes` and `Members & Access`) with inline stage switching and policy editing.
+Horizon gives Engage an editorial voice: deep violet structure, cyan actions, lavender surfaces and clear reading space. Newsreader carries headlines; Outfit carries decisions, labels and dense records. The public experience invites reading, while member and officer screens put the next action first.
+
+**The Decision Rule.** Make the action prominent. Keep exact wording and authority close to any vote, ratification or publication action.
+
+## Colors
+
+Violet is the structural colour for text, navigation and authority. Cyan marks primary actions and active voting. White and lavender separate reading surfaces. Status colours identify success, warning and danger with explicit text labels. The focus colour remains visible against white and lavender.
+
+**The Status Rule.** Never rely on colour alone to explain eligibility, stage or policy authority.
+
+## Typography
+
+Use Newsreader for the page and section hierarchy, and Outfit for body text, controls, metadata and task rows. Keep long policy text at a readable measure. Use tabular numerals for counts and dates.
+
+## Layout
+
+The public layout uses a centred content width of 74rem with generous section spacing. Reading pages narrow the text measure. Administrative pages use a violet navigation rail at desktop widths and a disclosure menu at smaller widths. Public navigation changes to a menu at 760px; the admin rail changes at 960px.
+
+**The Reading Rule.** A page should offer one clear route into its main task before showing optional filters, provenance or procedural details.
+
+## Elevation & Depth
+
+Engage is mostly flat. Rules and tonal lavender surfaces provide separation; heavy shadows and floating dashboard cards are outside the established language.
+
+## Shapes
+
+Controls have gently rounded corners; action buttons are pill shaped. Containers and surfaces use moderate corner radii. The Fusion Horizon logo is the persistent brand mark. Ribbons are part of Horizon's identity; use them deliberately as brand composition, not as generic status decoration. The current shared CSS does not define a reusable ribbon component.
+
+## Components
+
+Primary cyan buttons lead to a task. Outlined buttons are secondary. Fields use visible labels, a solid border and a strong focus ring. Proposal lists and administration registers should favor scannable rows over repeated metadata cards. Navigation shows the current location with text or `aria-current`, and mobile menus expose the same destinations. Disclosure controls reveal revision, provenance and governance detail when needed.
+
+Astro owns page structure and server rendering. Shared Astro components handle static controls and layout; shadcn-compatible React components with Radix handle tabs, dialogs and interactions that need client state. Both use the same Horizon CSS classes and tokens. Keep shadcn's interaction patterns and use Horizon for the visual language. Do not hydrate static content or create a second set of visual rules in React.
+
+## Do's and Don'ts
+
+- Do use plain language for exploration and exact governance terms at decision points.
+- Do keep published policy visibly distinct from proposals and ballot results.
+- Do preserve the Horizon logo, colours and type pairing on every surface.
+- Don't place internal IDs, provenance classifications or procedural stages ahead of the user's task.
+- Don't invent thresholds, authority rules or visual assets that are not supported by the product record.

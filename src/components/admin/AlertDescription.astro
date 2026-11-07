@@ -1,0 +1,7 @@
+---
+import { cn } from '../../lib/utils';
+const { class: className, ...props } = Astro.props as any;
+---
+<div data-slot="alert-description" class={cn('col-start-2 grid justify-items-start gap-1 text-sm [&_p]:leading-relaxed', className)} {...props}>
+  <slot />
+</div>

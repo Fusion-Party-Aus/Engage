@@ -44,7 +44,10 @@ export interface RenderOptions {
   boldHeadings?: boolean;
 }
 
-export function renderPortableText(markdown: string, options: RenderOptions = {}): string {
+export function renderPortableText(
+  markdown: string,
+  options: RenderOptions = {},
+): string {
   if (!markdown || typeof markdown !== "string") return "";
 
   const boldHeadings = options.boldHeadings !== false;

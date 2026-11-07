@@ -6,6 +6,7 @@ import '@fontsource/outfit/latin-500.css';
 import '@fontsource/outfit/latin-600.css';
 import '@fontsource/outfit/latin-700.css';
 import '../styles/global.css';
+import { Button } from '../components/ui/button';
 import { getSessionUser } from '../lib/auth.ts';
 import { runtimeEnv } from '../lib/db.ts';
 
@@ -19,7 +20,7 @@ interface Props {
 
 const {
   title,
-  description = 'Read, discuss, and vote on Fusion Party Australia proposals, policies, and member decisions.',
+  description = 'Browse proposals, join discussions, vote when eligible, and read official policy from Fusion Party Australia.',
   canonical,
   noIndex = false,
   workspace = false,
@@ -48,6 +49,19 @@ const path = Astro.url.pathname;
     <title>{title}</title>
   </head>
   <body class:list={{ 'admin-body': workspace }}>
+    <svg class="icon-definitions" aria-hidden="true" focusable="false">
+      <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></symbol>
+      <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></symbol>
+      <symbol id="icon-files" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v14M18 6H9a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Z" /><path d="M11 11h5M11 15h5" /></symbol>
+      <symbol id="icon-book" viewBox="0 0 24 24"><path d="M12 7v14M3 18V5a2 2 0 0 1 2-2h3a4 4 0 0 1 4 4 4 4 0 0 1 4-4h3a2 2 0 0 1 2 2v13h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4z" /></symbol>
+      <symbol id="icon-vote" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /><path d="m2 12 1 1 2-2" /></symbol>
+      <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4m0-4h.01" /></symbol>
+      <symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M5 21a7 7 0 0 1 14 0" /></symbol>
+      <symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></symbol>
+      <symbol id="icon-branch" viewBox="0 0 24 24"><circle cx="6" cy="4" r="2" /><circle cx="6" cy="20" r="2" /><circle cx="18" cy="12" r="2" /><path d="M6 6v12m2-6h8M8 6a6 6 0 0 1 6 6" /></symbol>
+      <symbol id="icon-gauge" viewBox="0 0 24 24"><path d="M20.9 13a9 9 0 1 1-17.8 0M12 13l4-4M7 17h.01M12 19h.01M17 17h.01" /></symbol>
+      <symbol id="icon-logout" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" /></symbol>
+    </svg>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
       <a class="brand" href="/" aria-label="Engage home">
@@ -59,55 +73,78 @@ const path = Astro.url.pathname;
       </a>
 
       {workspace ? (
-        <nav class="primary-nav" aria-label="Workspace navigation">
-          <a href="/">Member site</a>
-          <a href="/proposals/">All Proposals</a>
-          <a class="nav-member" href="/member/">
-            {user ? user.name || user.email : 'Account'}
-          </a>
-          {user && (
-            <button class="nav-signout" type="button" data-signout>
-              Sign out
-            </button>
-          )}
-        </nav>
-      ) : (
-        <nav class="primary-nav" aria-label="Primary navigation">
-          <a
-            href="/proposals/"
-            aria-current={
-              path.startsWith('/proposals') && Astro.url.searchParams.get('stage') !== 'decide'
-                ? 'page'
-                : undefined
-            }
-          >
-            Proposals
-          </a>
-          <a
-            href="/proposals/?stage=decide"
-            aria-current={Astro.url.searchParams.get('stage') === 'decide' ? 'page' : undefined}
-          >
-            Decisions
-          </a>
-          <a href="/#how-it-works">How It Works</a>
-          {user?.isStaff && (
-            <a href="/admin/" aria-current={path.startsWith('/admin') ? 'page' : undefined}>
-              Admin
+        <details class="site-menu" open data-responsive-menu data-desktop-min="761px">
+          <summary><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-menu" /></svg></summary>
+          <nav class="primary-nav" aria-label="Workspace navigation">
+            <a href="/"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-home" /></svg>Engage home</a>
+            <a href="/proposals/"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-files" /></svg>Browse proposals</a>
+            <a class="nav-member" href="/member/">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-user" /></svg>
+              {user ? user.name || user.email : 'Account'}
             </a>
-          )}
-          <a
-            class="nav-member"
-            href="/member/"
-            aria-current={path.startsWith('/member') ? 'page' : undefined}
-          >
-            {user ? `Account (${user.name.split(' ')[0] || 'Member'})` : 'Member Sign In'}
-          </a>
-          {user && (
-            <button class="nav-signout" type="button" data-signout>
-              Sign out
-            </button>
-          )}
-        </nav>
+            {user && (
+              <Button variant="ghost" size="sm" className="text-[#eee4ff] hover:bg-white/10 hover:text-white" data-signout>
+                <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-logout" /></svg>Sign out
+              </Button>
+            )}
+          </nav>
+        </details>
+      ) : (
+        <details class="site-menu" open data-responsive-menu data-desktop-min="761px">
+          <summary><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-menu" /></svg>Menu</summary>
+          <nav class="primary-nav" aria-label="Primary navigation">
+            <a
+              href="/proposals/"
+              aria-current={
+                path.startsWith('/proposals') &&
+                !['decide', 'deliberate'].includes(Astro.url.searchParams.get('stage') ?? '')
+                  ? 'page'
+                  : undefined
+              }
+            >
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-files" /></svg>
+              Browse proposals
+            </a>
+            <a
+              href="/proposals/?stage=deliberate"
+              aria-current={Astro.url.searchParams.get('stage') === 'deliberate' ? 'page' : undefined}
+            >
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-users" /></svg>
+              Join discussions
+            </a>
+            <a href="/policies/" aria-current={path.startsWith('/policies') ? 'page' : undefined}>
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-book" /></svg>
+              Official policy
+            </a>
+            <a
+              href="/proposals/?stage=decide"
+              aria-current={Astro.url.searchParams.get('stage') === 'decide' ? 'page' : undefined}
+            >
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-vote" /></svg>
+              See open votes
+            </a>
+            <a href="/how-it-works/"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-info" /></svg>How it works</a>
+            {(user?.isStaff || user?.isBranchAdmin) && (
+              <a href="/admin/" aria-current={path.startsWith('/admin') ? 'page' : undefined}>
+                <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-gauge" /></svg>
+                Admin tasks
+              </a>
+            )}
+            <a
+              class="nav-member"
+              href="/member/"
+              aria-current={path.startsWith('/member') ? 'page' : undefined}
+            >
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-user" /></svg>
+              {user ? 'My Engage' : 'Sign in'}
+            </a>
+            {user && (
+              <Button variant="ghost" size="sm" className="text-[#eee4ff] hover:bg-white/10 hover:text-white" data-signout>
+                <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#icon-logout" /></svg>Sign out
+              </Button>
+            )}
+          </nav>
+        </details>
       )}
     </header>
 
@@ -121,11 +158,13 @@ const path = Astro.url.pathname;
           <img src="/fusion_horizon_logo_light.svg" alt="" width="32" height="32" />
           <span>Engage · Fusion Party Australia</span>
         </a>
-        <p>Participatory democracy: propose ideas, deliberate together, vote on decisions, and track implementation.</p>
+        <p>Browse proposals, join discussions, vote when eligible, and read official policy.</p>
         <div class="footer-links">
-          <a href="/proposals/">Proposals</a>
-          <a href="/proposals/?stage=decide">Decisions</a>
-          <a href="/proposals/?stage=implement">Implemented</a>
+          <a href="/proposals/">Browse proposals</a>
+          <a href="/proposals/?stage=deliberate">Join discussions</a>
+          <a href="/proposals/?stage=decide">See open votes</a>
+          <a href="/policies/">Official policy</a>
+          <a href="/branches/">Branches</a>
           <a href="/member/">Member account</a>
         </div>
       </footer>
@@ -133,6 +172,13 @@ const path = Astro.url.pathname;
   </body>
 </html>
 <script>
+  document.querySelectorAll<HTMLDetailsElement>('[data-responsive-menu]').forEach((menu) => {
+    const desktop = window.matchMedia(`(min-width: ${menu.dataset.desktopMin})`);
+    const sync = () => { menu.open = desktop.matches; };
+    sync();
+    desktop.addEventListener('change', sync);
+  });
+
   document.querySelectorAll<HTMLButtonElement>('[data-signout]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -147,15 +193,7 @@ const path = Astro.url.pathname;
 </script>
 <style>
   .nav-signout {
-    font: inherit;
     font-size: 0.9rem;
     font-weight: 600;
-    color: var(--horizon-muted);
-    border: 0;
-    background: none;
-    padding: 0.35rem 0.5rem;
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
   }
 </style>

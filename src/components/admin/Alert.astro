@@ -1,0 +1,7 @@
+---
+import { alertVariants } from '../ui/alert';
+const { class: className, variant = 'default', ...props } = Astro.props as any;
+---
+<div data-slot="alert" role="alert" class={alertVariants({ variant, className })} {...props}>
+  <slot />
+</div>
