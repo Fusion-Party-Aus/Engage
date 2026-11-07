@@ -1,7 +1,109 @@
 ---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Field } from '../../components/ui/field';
+import { Input } from '../../components/ui/input';
+import { NativeSelect } from '../../components/ui/native-select';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 export const prerender = false;
-Astro.response.headers.set('Cache-Control', 'private, no-store');
-
-const search = Astro.url.search;
-return Astro.redirect(`/proposals/${search}`, 301);
+const db = await getDatabase(runtimeEnv(Astro.locals));
+const q = (Astro.url.searchParams.get('q') ?? '').trim().toLowerCase();
+const jurisdiction = Astro.url.searchParams.get('jurisdiction') ?? '';
+const branchId = Astro.url.searchParams.get('branch') ?? '';
+const showHistory = Astro.url.searchParams.get('history') === '1';
+const [records, branches] = await Promise.all([
+  db.collection('policy_registry').find({ publicationStatus: { $in: ['published', 'withdrawn', 'superseded'] } }).sort({ title: 1 }).toArray(),
+  db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
+]);
+const policies = records.filter((policy: any) => (showHistory ? policy.publicationStatus !== 'published' : policy.publicationStatus === 'published') && (!q || `${policy.title} ${policy.summary} ${policy.category ?? ''} ${policy.approvedWording}`.toLowerCase().includes(q)) && (!jurisdiction || policy.jurisdiction === jurisdiction) && (!branchId || policy.jurisdictionBranchId === branchId));
+const jurisdictions = [...new Set(records.map((policy: any) => policy.jurisdiction).filter(Boolean))] as string[];
+const statusLabel = (status: string) => status === 'published' ? 'Published policy' : status === 'withdrawn' ? 'Withdrawn from publication' : 'Superseded policy';
+const statusVariant = (status: string) => status === 'published' ? 'success' : status === 'withdrawn' ? 'warning' : 'destructive';
 ---
+<SiteLayout title="Official policy · Engage" description="Read Fusion Party Australia's officially adopted and published policy wording." canonical={`${Astro.url.origin}/policies/`}>
+  <div class="page-wrap section-space policy-page">
+    <header class="policy-intro">
+      <h1>{showHistory ? 'Past policy records' : 'Official policy'}</h1>
+      <p>{showHistory ? 'Withdrawn and superseded records remain available for the public record. They are no longer current policy.' : <>This is the official policy library: wording Fusion has formally adopted and authorised for publication. To see ideas still under discussion, <a href="/proposals/">browse proposals</a>.</>}</p>
+      <nav aria-label="Policy status">
+        <Button href="/policies/" variant={!showHistory ? 'default' : 'ghost'} size="sm">Current policy</Button>
+        <Button href="/policies/?history=1" variant={showHistory ? 'default' : 'ghost'} size="sm">Past records</Button>
+      </nav>
+    </header>
+
+    <form class="policy-filters" method="get" action="/policies/">
+      {showHistory && <input type="hidden" name="history" value="1" />}
+      <Field label="Search policies" htmlFor="policy-search">
+        <Input id="policy-search" type="search" name="q" defaultValue={q} placeholder="Topic, title or wording" />
+      </Field>
+      <Field label="Jurisdiction" htmlFor="policy-jurisdiction">
+        <NativeSelect id="policy-jurisdiction" name="jurisdiction" defaultValue={jurisdiction}>
+          <option value="">All jurisdictions</option>
+          {jurisdictions.map((value) => <option value={value}>{value}</option>)}
+        </NativeSelect>
+      </Field>
+      <Field label="Branch" htmlFor="policy-branch">
+        <NativeSelect id="policy-branch" name="branch" defaultValue={branchId}>
+          <option value="">All branches</option>
+          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+        </NativeSelect>
+      </Field>
+      <Button type="submit">Search</Button>
+    </form>
+
+    {policies.length ? (
+      <div class="policy-grid">
+        {policies.map((policy: any) => (
+          <Card>
+            <CardHeader>
+              <div class="policy-card__status">
+                <Badge variant={statusVariant(policy.publicationStatus)}>{statusLabel(policy.publicationStatus)}</Badge>
+                <span>{policy.jurisdiction ?? 'Jurisdiction not recorded'}</span>
+              </div>
+              <CardTitle className="text-lg">
+                <a href={`/policies/${encodeURIComponent(policy.policyId)}/`}>{policy.title}</a>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>{policy.summary}</p>
+              {policy.commitments?.length > 0 && <ul>{policy.commitments.slice(0, 3).map((item: string) => <li>{item}</li>)}</ul>}
+            </CardContent>
+            <CardFooter className="policy-card__footer">
+              <p>Authority: {branches.find((branch: any) => branch.branchId === policy.governanceAuthorityBranchId)?.name ?? 'not recorded'}</p>
+              <Button href={`/policies/${encodeURIComponent(policy.policyId)}/`} variant="outline" size="sm">
+                {policy.publicationStatus === 'published' ? 'Read exact wording' : 'View policy history'}
+              </Button>
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
+    ) : (
+      <Card>
+        <CardContent className="grid justify-items-start gap-3 py-10">
+          <h2>{showHistory ? 'No past records found' : 'No current policies found'}</h2>
+          <p>{records.length ? 'Try a different search or filter.' : showHistory ? 'No past policy records have been brought into Engage yet.' : 'The official policy library is being prepared. Fusion’s existing adopted policies will appear here as their authoritative records are brought into Engage.'}</p>
+          <Button href="/proposals/" variant="outline">Browse proposals</Button>
+        </CardContent>
+      </Card>
+    )}
+  </div>
+</SiteLayout>
+
+<style>
+  .policy-page { max-width:84rem; }
+  .policy-intro { max-width:68rem; margin:0 0 2rem; }
+  .policy-intro h1 { margin:.25rem 0 .65rem; font:700 clamp(2.1rem,3.5vw,3.2rem)/1.1 Outfit,sans-serif; color:var(--horizon-purple); }
+  .policy-intro > p:last-of-type { color:var(--horizon-muted); line-height:1.65; }
+  .policy-intro nav { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.5rem; }
+  .policy-filters { display:grid; grid-template-columns:2fr 1fr 1fr auto; align-items:end; gap:1rem; margin:2rem 0; }
+  .policy-grid { display:grid; grid-template-columns:1fr; gap:.65rem; }
+  .policy-card__status { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; color:var(--horizon-muted); font-size:.88rem; }
+  .policy-card__footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; }
+  .policy-card__footer p { margin:0; color:var(--horizon-muted); font-size:.88rem; }
+  .policy-grid p { margin:0 0 .5rem; line-height:1.55; }
+  .policy-grid ul { margin:0; padding-left:1.25rem; }
+  .policy-grid h2 a { color:var(--horizon-purple); text-decoration:none; }
+  @media(max-width:760px) { .policy-filters { grid-template-columns:1fr; } }
+</style>

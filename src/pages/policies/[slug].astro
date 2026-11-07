@@ -1,8 +1,103 @@
 ---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 export const prerender = false;
-Astro.response.headers.set('Cache-Control', 'private, no-store');
-
-const { slug } = Astro.params;
-const search = Astro.url.search;
-return Astro.redirect(`/proposals/${encodeURIComponent(slug ?? '')}/${search}`, 301);
+const policyId = Astro.params.slug ?? '';
+const db = await getDatabase(runtimeEnv(Astro.locals));
+const policy = await db.collection('policy_registry').findOne({ policyId, publicationStatus: { $in: ['published', 'withdrawn', 'superseded'] } });
+if (!policy) Astro.response.status = 404;
+const branch = policy?.jurisdictionBranchId ? await db.collection('branches').findOne({ branchId: policy.jurisdictionBranchId }) : null;
+const authority = policy?.governanceAuthorityBranchId ? await db.collection('branches').findOne({ branchId: policy.governanceAuthorityBranchId }) : null;
+const revisions = policy?.revisionIds ?? [policy?.revisionId].filter(Boolean);
+const statusLabel = policy?.publicationStatus === 'published' ? 'Published policy' : policy?.publicationStatus === 'withdrawn' ? 'Withdrawn from publication' : 'Superseded policy';
+const statusVariant = policy?.publicationStatus === 'published' ? 'success' : policy?.publicationStatus === 'withdrawn' ? 'warning' : 'destructive';
 ---
+<SiteLayout title={policy ? `${policy.title} · Fusion Policy` : 'Policy not found · Engage'} description={policy?.summary ?? 'Published policy record.'} canonical={policy ? `${Astro.url.origin}/policies/${encodeURIComponent(policy.policyId)}/` : undefined}>
+  <div class="page-wrap section-space policy-detail">
+    <Button href="/policies/" variant="ghost" size="sm">← Official policy</Button>
+
+    {policy ? <>
+      <header class="policy-detail__header">
+        <div class="policy-detail__status">
+          <Badge variant={statusVariant}>{statusLabel}</Badge>
+          <span>{policy.jurisdiction ?? 'Jurisdiction not recorded'}</span>
+        </div>
+        <h1>{policy.title}</h1>
+        <p class="policy-summary">{policy.summary}</p>
+        <div class="policy-facts">
+          <span><strong>Governance authority</strong>{authority?.name ?? 'Not recorded'}</span>
+          <span><strong>Applies to</strong>{branch?.name ?? policy.jurisdiction ?? 'Jurisdiction not recorded'}</span>
+          <span><strong>Status</strong>{policy.publicationStatus}</span>
+        </div>
+        {policy.publicationStatus === 'superseded' && policy.supersededBy && <p>This policy was superseded. <a href={`/policies/${encodeURIComponent(policy.supersededBy)}/`}>View its successor</a>.</p>}
+        {policy.publicationStatus === 'withdrawn' && <p>This policy is no longer published as current policy.</p>}
+      </header>
+
+      {policy.commitments?.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Key commitments</CardTitle></CardHeader>
+          <CardContent><ul class="policy-list">{policy.commitments.map((item: string) => <li>{item}</li>)}</ul></CardContent>
+        </Card>
+      )}
+
+      {policy.publicationStatus === 'published' ? (
+        <Card className="exact-wording">
+          <CardHeader><CardTitle>Approved wording</CardTitle></CardHeader>
+          <CardContent>
+            <div class="typeset typeset-notes max-w-[37em]"><pre>{policy.approvedWording}</pre></div>
+            <p class="revision-ref">Authorised revision: <code>{policy.ratification?.ratifiedRevisionId ?? policy.revisionId}</code></p>
+          </CardContent>
+        </Card>
+      ) : (
+        <p class="policy-retired-note">This historical policy record remains visible to explain its status. It is not presented as current approved wording.</p>
+      )}
+
+      <Card className="policy-governance">
+        <details>
+          <summary>Governance record and provenance</summary>
+          <dl>
+            <dt>Policy identifier</dt><dd><code>{policy.policyId}</code></dd>
+            <dt>Ratifying authority</dt><dd>{authority?.name ?? policy.ratification?.authorityBranchId ?? 'Not recorded'}</dd>
+            <dt>Decision event</dt><dd>{policy.ratification?.decisionEventId ?? 'Not recorded'}</dd>
+            <dt>Ratified</dt><dd>{policy.ratification?.ratifiedAt ? new Date(policy.ratification.ratifiedAt).toLocaleDateString('en-AU', { dateStyle: 'long' }) : 'Date not recorded'}</dd>
+            <dt>Effective</dt><dd>{policy.effectiveAt ? new Date(policy.effectiveAt).toLocaleDateString('en-AU', { dateStyle: 'long' }) : 'Not recorded'}</dd>
+            <dt>Published</dt><dd>{policy.publishedAt ? new Date(policy.publishedAt).toLocaleDateString('en-AU', { dateStyle: 'long' }) : 'Not recorded'}</dd>
+            <dt>Provenance</dt><dd>{policy.provenance?.label ?? policy.provenance?.category ?? 'Not recorded'}{policy.provenance?.uncertaintyNote ? ` · ${policy.provenance.uncertaintyNote}` : ''}</dd>
+            <dt>Adopted amendments</dt><dd>{policy.ratification?.adoptedAmendmentIds?.join(', ') || 'None recorded'}</dd>
+            <dt>Published wording revisions</dt><dd>{revisions.map((id: string) => <code>{id}</code>).reduce((acc: any, item: any, index: number) => index ? [...acc, ', ', item] : [item], [])}</dd>
+          </dl>
+        </details>
+      </Card>
+    </> : (
+      <Card>
+        <CardContent className="grid justify-items-start gap-3 py-10">
+          <h1>Policy not found</h1>
+          <p>This record is not published in the policy registry.</p>
+          <Button href="/policies/" variant="outline">Read official policy</Button>
+        </CardContent>
+      </Card>
+    )}
+  </div>
+</SiteLayout>
+
+<style>
+  .policy-detail { display:grid; gap:1.25rem; max-width:58rem; }
+  .policy-detail__header { border-bottom:1px solid var(--horizon-line); padding-bottom:1.5rem; }
+  .policy-detail__status { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; color:var(--horizon-muted); font-size:.9rem; }
+  .policy-detail h1 { margin:.6rem 0 .8rem; font:600 clamp(2rem,5vw,3.5rem)/1.1 Newsreader,Georgia,serif; color:var(--horizon-purple); overflow-wrap:anywhere; }
+  .policy-summary { max-width:48rem; font-size:1.15rem; line-height:1.6; }
+  .policy-facts { display:flex; flex-wrap:wrap; gap:1rem 2rem; margin-top:1.5rem; }
+  .policy-facts span { display:grid; gap:.25rem; }
+  .policy-facts strong, .revision-ref { color:var(--horizon-muted); font-size:.9rem; }
+  .policy-list { margin:0; padding-left:1.25rem; line-height:1.6; }
+  .exact-wording pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .policy-governance details { padding:1rem 1.25rem; }
+  .policy-governance summary { min-height:2.5rem; display:flex; align-items:center; cursor:pointer; font-weight:650; }
+  .policy-governance dl { display:grid; grid-template-columns:minmax(9rem, 1fr) 2fr; gap:.65rem 1rem; overflow-wrap:anywhere; }
+  .policy-governance dt { font-weight:650; }
+  .policy-governance dd { margin:0; }
+  @media(max-width:600px) { .policy-governance dl { grid-template-columns:1fr; gap:.2rem; } .policy-governance dd { margin-bottom:.75rem; } }
+</style>
