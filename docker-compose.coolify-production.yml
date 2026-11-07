@@ -16,6 +16,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # BuildKit's default network could not resolve registry.npmjs.org on this
+      # host; host networking is build-time only and does not affect runtime.
+      network: host
     restart: unless-stopped
     dns:
       - 1.1.1.1
