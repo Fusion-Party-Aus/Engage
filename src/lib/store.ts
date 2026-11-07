@@ -1,4 +1,5 @@
-import { ObjectId, type Db } from "mongodb";
+import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
+import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { validPersonName } from "./auth.ts";
 import type {
   CommentRecord,
@@ -6,6 +7,7 @@ import type {
   MemberRecord,
   MembershipStatus,
   PolicyProvenance,
+  ProposalKind,
   ProposalRecord,
   ProposalStage,
   ProposalSummaryView,
@@ -16,15 +18,26 @@ import type {
   VoteRecord,
   VoteTally,
 } from "./types.ts";
+import { createHash, randomUUID } from "node:crypto";
 
-export function getDefaultProvenanceLabel(category: string): string {
+export function getDefaultProvenanceLabel(
+  category: string,
+  kind: ProposalKind = "policy",
+): string {
+  const isResolution = kind === "resolution";
   switch (category) {
     case "existing-repackaged":
-      return "Approved policy predecessor · Equivalence unverified";
+      return isResolution
+        ? "Preceding resolution · Equivalence unverified"
+        : "Approved policy predecessor · Equivalence unverified";
     case "materially-revised":
-      return "Approved policy predecessor · Materially revised";
+      return isResolution
+        ? "Preceding resolution · Materially revised"
+        : "Approved policy predecessor · Materially revised";
     case "new-proposal":
-      return "New proposal · No prior policy identified";
+      return isResolution
+        ? "New resolution · No prior authority identified"
+        : "New proposal · No prior policy identified";
     case "party-governance":
       return "Party Governance · Platform Review";
     case "draft-derived":
@@ -43,9 +56,28 @@ export const VALID_STAGES: ProposalStage[] = [
   "archived",
 ];
 
-export const VALID_STANCES: CommentStance[] = ["support", "concern", "amendment", "comment"];
+export const VALID_KINDS: ProposalKind[] = ["policy", "resolution"];
 
-export function normalizeStage(value: unknown, fallback: ProposalStage = "deliberate"): ProposalStage {
+export const VALID_STANCES: CommentStance[] = [
+  "support",
+  "concern",
+  "amendment",
+  "comment",
+];
+
+export function isValidStage(value: unknown): value is ProposalStage {
+  if (typeof value !== "string") return false;
+  const raw = value.trim().toLowerCase();
+  return (
+    VALID_STAGES.includes(raw as ProposalStage) ||
+    ["draft", "open", "voting", "adopted"].includes(raw)
+  );
+}
+
+export function normalizeStage(
+  value: unknown,
+  fallback: ProposalStage = "deliberate",
+): ProposalStage {
   const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
   if (raw === "propose" || raw === "draft") return "propose";
   if (raw === "deliberate" || raw === "open") return "deliberate";
@@ -53,6 +85,127 @@ export function normalizeStage(value: unknown, fallback: ProposalStage = "delibe
   if (raw === "implement" || raw === "adopted") return "implement";
   if (raw === "archived") return "archived";
   return fallback;
+}
+
+export function normalizeKind(value: unknown, proposalId = ""): ProposalKind {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "resolution" || raw === "governance") return "resolution";
+  if (raw === "policy") return "policy";
+  if (proposalId.toUpperCase().startsWith("GOV-")) return "resolution";
+  return "policy";
+}
+
+export function validateStageTransition(
+  fromStage: ProposalStage,
+  toStage: ProposalStage,
+): void {
+  if (fromStage === toStage) return;
+  if (!VALID_STAGES.includes(toStage)) {
+    throw new Error(
+      `Invalid lifecycle stage: '${toStage}'. Must be propose, deliberate, decide, implement, or archived.`,
+    );
+  }
+  if (
+    fromStage === "propose" &&
+    (toStage === "decide" || toStage === "implement")
+  ) {
+    throw new Error(
+      "Proposals in Stage 1 (Propose) must undergo member deliberation before entering Decide or Implement.",
+    );
+  }
+  if (fromStage === "deliberate" && toStage === "implement") {
+    throw new Error(
+      "Proposals in Stage 2 (Deliberate) must be voted on in the Decide stage before entering Implement.",
+    );
+  }
+}
+
+export function isProposalLocked(
+  stage: ProposalStage,
+  voteCount: number,
+): boolean {
+  return stage === "decide" || voteCount > 0;
+}
+
+export function parseOutcomes(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((o) => String(o).trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split("\n")
+      .map((line) => line.replace(/^[-*•\d.)\s]+/, "").trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+export function getSubstantiveChanges(
+  existing: ProposalRecord,
+  updates: {
+    title?: string;
+    summary?: string;
+    outcomes?: string[];
+    details?: string;
+    attachmentUrl?: string;
+    attachmentDescription?: string;
+    kind?: string;
+    branch?: string;
+  },
+): string[] {
+  const changes: string[] = [];
+  if (
+    updates.title !== undefined &&
+    updates.title.trim() !== existing.title.trim()
+  ) {
+    changes.push("title");
+  }
+  if (
+    updates.summary !== undefined &&
+    updates.summary.trim() !== existing.summary.trim()
+  ) {
+    changes.push("summary");
+  }
+  if (
+    updates.details !== undefined &&
+    updates.details.trim() !== (existing.details || "").trim()
+  ) {
+    changes.push("details");
+  }
+  if (
+    updates.attachmentUrl !== undefined &&
+    (updates.attachmentUrl.trim() || undefined) !==
+      (existing.attachmentUrl?.trim() || undefined)
+  ) {
+    changes.push("attachmentUrl");
+  }
+  if (
+    updates.attachmentDescription !== undefined &&
+    (updates.attachmentDescription.trim() || undefined) !==
+      (existing.attachmentDescription?.trim() || undefined)
+  ) {
+    changes.push("attachmentDescription");
+  }
+  if (
+    updates.kind !== undefined &&
+    normalizeKind(updates.kind, existing.proposalId) !==
+      normalizeKind(existing.kind, existing.proposalId)
+  ) {
+    changes.push("kind");
+  }
+  if (updates.outcomes !== undefined) {
+    const existingOutcomes = (existing.outcomes || [])
+      .map((o) => o.trim())
+      .filter(Boolean);
+    const newOutcomes = updates.outcomes.map((o) => o.trim()).filter(Boolean);
+    if (
+      existingOutcomes.length !== newOutcomes.length ||
+      existingOutcomes.some((val, idx) => val !== newOutcomes[idx])
+    ) {
+      changes.push("outcomes");
+    }
+  }
+  return changes;
 }
 
 export function slugify(text: string): string {
@@ -68,6 +221,7 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
   const space = String(raw.space || raw.category || "General");
   const summary = String(raw.summary || raw.statement || "");
   const stage = normalizeStage(raw.stage || raw.status || "deliberate");
+  const kind = normalizeKind(raw.kind, proposalId);
   return {
     proposalId,
     slug: String(raw.slug || slugify(raw.title || proposalId)),
@@ -80,8 +234,32 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     detailHtml: raw.detailHtml ? String(raw.detailHtml) : undefined,
     provenance: raw.provenance || undefined,
     attachmentUrl: raw.attachmentUrl ? String(raw.attachmentUrl) : undefined,
+    attachmentDescription: raw.attachmentDescription
+      ? String(raw.attachmentDescription).trim()
+      : undefined,
     stage,
-    implementationNote: raw.implementationNote ? String(raw.implementationNote) : undefined,
+    kind,
+    originatingBranchId: raw.originatingBranchId
+      ? String(raw.originatingBranchId)
+      : undefined,
+    governanceAuthorityBranchId: raw.governanceAuthorityBranchId
+      ? String(raw.governanceAuthorityBranchId)
+      : undefined,
+    jurisdictionBranchId: raw.jurisdictionBranchId
+      ? String(raw.jurisdictionBranchId)
+      : undefined,
+    publicationScope:
+      raw.publicationScope === "private" ||
+      raw.publicationScope === "branch" ||
+      raw.publicationScope === "national"
+        ? raw.publicationScope
+        : undefined,
+    ballotRevisionId: raw.ballotRevisionId
+      ? String(raw.ballotRevisionId)
+      : undefined,
+    implementationNote: raw.implementationNote
+      ? String(raw.implementationNote)
+      : undefined,
     authorId: raw.authorId ? String(raw.authorId) : undefined,
     authorName: raw.authorName ? String(raw.authorName) : undefined,
     createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
@@ -93,7 +271,6 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     categorySummary: String(raw.spaceSummary || raw.categorySummary || ""),
     statement: summary,
     status: stage,
-    kind: raw.kind || "proposal",
     division: raw.division || space,
   };
 }
@@ -110,6 +287,8 @@ export async function listProposals(
     status?: string;
     kind?: string;
     includeDrafts?: boolean;
+    branch?: string;
+    user?: SessionUser | null;
   } = {},
 ): Promise<ProposalSummaryView[]> {
   const rawProposals = await db
@@ -122,7 +301,7 @@ export async function listProposals(
 
   const [allComments, allVotes] = await Promise.all([
     db.collection<CommentRecord>("comments").find({}).toArray(),
-    db.collection<VoteRecord>("votes").find({}).toArray(),
+    db.collection<VoteRecord>(PROPOSAL_VOTES).find({}).toArray(),
   ]);
 
   const commentCounts = new Map<string, number>();
@@ -135,7 +314,13 @@ export async function listProposals(
   for (const v of allVotes) {
     const id = v.proposalId || (v as any).policyId;
     if (!id) continue;
-    const current = voteMap.get(id) ?? { approve: 0, abstain: 0, reject: 0, total: 0 };
+    if (v.ballotId !== proposalBallotId(id)) continue;
+    const current = voteMap.get(id) ?? {
+      approve: 0,
+      abstain: 0,
+      reject: 0,
+      total: 0,
+    };
     if (v.choice === "approve") current.approve += 1;
     else if (v.choice === "abstain") current.abstain += 1;
     else current.reject += 1;
@@ -146,24 +331,39 @@ export async function listProposals(
   const query = (options.search ?? "").trim().toLowerCase();
   const spaceFilter = (options.space ?? options.category ?? "").trim();
   const stageFilter =
-    (options.stage && options.stage !== "all") || (options.status && options.status !== "all")
+    (options.stage && options.stage !== "all") ||
+    (options.status && options.status !== "all")
       ? normalizeStage(options.stage ?? options.status)
       : "";
-  const allowArchived = options.includeArchived ?? options.includeDrafts ?? false;
+  const allowArchived =
+    options.includeArchived ?? options.includeDrafts ?? false;
 
   return allProposals
     .filter((p) => {
       if (!allowArchived && p.stage === "archived") {
         return false;
       }
+      if (options.user !== undefined && !canViewProposal(p, options.user))
+        return false;
       if (spaceFilter && spaceFilter !== "all" && p.space !== spaceFilter) {
         return false;
       }
       if (stageFilter && p.stage !== stageFilter) {
         return false;
       }
+      if (
+        options.branch &&
+        options.branch !== "all" &&
+        ![
+          p.originatingBranchId,
+          p.governanceAuthorityBranchId,
+          p.jurisdictionBranchId,
+        ].includes(options.branch)
+      )
+        return false;
       if (query) {
-        const haystack = `${p.proposalId} ${p.title} ${p.space} ${p.summary} ${p.details}`.toLowerCase();
+        const haystack =
+          `${p.proposalId} ${p.title} ${p.space} ${p.summary} ${p.details}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
       return true;
@@ -171,8 +371,54 @@ export async function listProposals(
     .map((p) => ({
       ...p,
       commentCount: commentCounts.get(p.proposalId) ?? 0,
-      votes: voteMap.get(p.proposalId) ?? { approve: 0, abstain: 0, reject: 0, total: 0 },
+      votes: voteMap.get(p.proposalId) ?? {
+        approve: 0,
+        abstain: 0,
+        reject: 0,
+        total: 0,
+      },
     }));
+}
+
+export function canViewProposal(
+  proposal: ProposalRecord,
+  user: SessionUser | null,
+): boolean {
+  if (user?.isStaff || user?.isAdmin) return true;
+  const isAuthor = Boolean(user && proposal.authorId === user.memberId);
+  if (proposal.publicationScope === "private")
+    return (
+      isAuthor ||
+      Boolean(
+        proposal.originatingBranchId &&
+        user?.branchAdminIds?.includes(proposal.originatingBranchId),
+      )
+    );
+  if (proposal.publicationScope === "branch") {
+    if (isAuthor) return true;
+    const branchId =
+      proposal.jurisdictionBranchId ?? proposal.originatingBranchId;
+    return Boolean(
+      branchId &&
+      (user?.activeBranchIds?.includes(branchId) ||
+        user?.branchAdminIds?.includes(branchId)),
+    );
+  }
+  return true;
+}
+
+export function canReviewArchivedProposal(
+  proposal: ProposalRecord,
+  user: SessionUser | null,
+): boolean {
+  return Boolean(
+    user &&
+    (user.isStaff ||
+      user.isAdmin ||
+      proposal.authorId === user.memberId ||
+      (proposal.originatingBranchId &&
+        user.branchAdminIds?.includes(proposal.originatingBranchId))),
+  );
 }
 
 export async function getProposalDetail(
@@ -198,19 +444,32 @@ export async function getProposalDetail(
 
   const proposal = normalizeProposalDoc(rawProposal);
 
-  if (proposal.stage === "archived" && !user?.isStaff) {
+  if (!canViewProposal(proposal, user)) return null;
+
+  const canReviewArchived = canReviewArchivedProposal(proposal, user);
+  if (proposal.stage === "archived" && !canReviewArchived) {
     return null;
   }
 
   const [rawComments, votes] = await Promise.all([
     db
       .collection<CommentRecord>("comments")
-      .find({ $or: [{ proposalId: proposal.proposalId }, { policyId: proposal.proposalId } as any] })
+      .find({
+        $or: [
+          { proposalId: proposal.proposalId },
+          { policyId: proposal.proposalId } as any,
+        ],
+      })
       .sort({ createdAt: 1 })
       .toArray(),
     db
-      .collection<VoteRecord>("votes")
-      .find({ $or: [{ proposalId: proposal.proposalId }, { policyId: proposal.proposalId } as any] })
+      .collection<VoteRecord>(PROPOSAL_VOTES)
+      .find({
+        $or: [
+          { proposalId: proposal.proposalId },
+          { policyId: proposal.proposalId } as any,
+        ],
+      })
       .sort({ updatedAt: -1 })
       .toArray(),
   ]);
@@ -220,12 +479,15 @@ export async function getProposalDetail(
     stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
     upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
   }));
+  const proposalVotes = votes.filter(
+    (vote) => vote.ballotId === proposalBallotId(proposal.proposalId),
+  );
 
   const tally: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
   let myVote: VoteChoice | null = null;
   let myReason = "";
 
-  for (const v of votes) {
+  for (const v of proposalVotes) {
     if (v.choice === "approve") tally.approve += 1;
     else if (v.choice === "abstain") tally.abstain += 1;
     else tally.reject += 1;
@@ -243,10 +505,63 @@ export async function getProposalDetail(
       votes: tally,
     },
     comments,
-    votesList: votes,
+    votesList: proposalVotes,
     myVote,
     myReason,
   };
+}
+
+/**
+ * Read immutable proposal revisions only when the requester may view the
+ * proposal itself. Archived proposals follow the same reviewer rule as the
+ * proposal detail page so revision history cannot be used to bypass it.
+ */
+export async function listProposalRevisions(
+  db: Db,
+  idOrSlug: string,
+  user: SessionUser | null,
+): Promise<{
+  proposalId: string;
+  revisions: Array<Record<string, unknown>>;
+} | null> {
+  const key = idOrSlug.trim();
+  if (!key) return null;
+
+  const col = db.collection<ProposalRecord>("proposals");
+  const rawProposal =
+    (await col.findOne({ slug: key })) ??
+    (await col.findOne({ proposalId: key })) ??
+    (await col.findOne({ policyId: key } as any));
+  if (!rawProposal) return null;
+
+  const proposal = normalizeProposalDoc(rawProposal);
+  if (!canViewProposal(proposal, user)) return null;
+  if (
+    proposal.stage === "archived" &&
+    !canReviewArchivedProposal(proposal, user)
+  )
+    return null;
+
+  const revisions: any[] = await db
+    .collection("proposal_revisions")
+    .find({ proposalId: proposal.proposalId })
+    .sort({ createdAt: 1 })
+    .toArray();
+  const data = revisions.map((revision, index) => {
+    const previous = revisions[index - 1];
+    const changes = previous
+      ? Object.keys(revision.snapshot).flatMap((field) => {
+          const before = previous.snapshot[field];
+          const after = revision.snapshot[field];
+          return JSON.stringify(before) === JSON.stringify(after)
+            ? []
+            : [{ field, before, after }];
+        })
+      : [{ field: "initial", before: null, after: revision.snapshot }];
+    const { _id, authorId, ...publicRevision } = revision;
+    return { ...publicRevision, changes };
+  });
+  return { proposalId: proposal.proposalId, revisions: data };
 }
 
 export async function saveProposal(
@@ -261,25 +576,176 @@ export async function saveProposal(
       : typeof body.policyId === "string"
         ? body.policyId.trim()
         : "";
-  const existing = existingId ? await col.findOne({ proposalId: existingId }) : null;
+  const existing = existingId
+    ? await col.findOne({ proposalId: existingId })
+    : null;
+  const branchFields = [
+    "originatingBranchId",
+    "governanceAuthorityBranchId",
+    "jurisdictionBranchId",
+    "publicationScope",
+  ] as const;
+  const branchAdminIds = user.branchAdminIds ?? [];
+  const canManageExisting = Boolean(
+    existing &&
+    (user.isStaff ||
+      (existing.originatingBranchId &&
+        branchAdminIds.includes(existing.originatingBranchId))),
+  );
+  if (!user.isAdmin) {
+    if (
+      [
+        "governanceAuthorityBranchId",
+        "jurisdictionBranchId",
+        "publicationScope",
+      ].some((field) => body[field] !== undefined)
+    )
+      throw new Error(
+        "Only a national administrator may set governance authority, jurisdiction, or publication scope.",
+      );
+    if (body.originatingBranchId !== undefined) {
+      const requestedOrigin = String(body.originatingBranchId ?? "").trim();
+      if (
+        !requestedOrigin ||
+        !branchAdminIds.includes(requestedOrigin) ||
+        (existing && requestedOrigin !== existing.originatingBranchId)
+      )
+        throw new Error(
+          "Only an administrator may assign a proposal origin in an explicitly delegated branch; proposal origin cannot be changed later.",
+        );
+    }
+  }
+  const isGovernanceOperator = Boolean(user.isStaff || canManageExisting);
 
   if (existing) {
-    const isAuthorInPropose = existing.authorId === user.memberId && existing.stage === "propose";
-    if (!user.isStaff && !isAuthorInPropose) {
-      throw new Error("Moderator or Administrator access is required to edit this proposal.");
+    const isAuthorInPropose =
+      existing.authorId === user.memberId && existing.stage === "propose";
+    if (!canManageExisting && !isAuthorInPropose) {
+      throw new Error(
+        "Moderator or Administrator access is required to edit this proposal.",
+      );
     }
   } else if (!user.canParticipate && !user.isStaff) {
-    throw new Error("Your membership must be verified before you can submit a proposal.");
+    throw new Error(
+      "Your membership must be verified before you can submit a proposal.",
+    );
+  }
+
+  if (existing) {
+    // Validate stage transition if changing stage
+    if (body.stage !== undefined || body.status !== undefined) {
+      const rawStageInput = body.stage !== undefined ? body.stage : body.status;
+      if (!isValidStage(rawStageInput)) {
+        throw new Error(
+          `Invalid lifecycle stage: '${String(rawStageInput)}'. Must be propose, deliberate, decide, implement, or archived.`,
+        );
+      }
+      const targetStage = normalizeStage(rawStageInput, existing.stage);
+      validateStageTransition(existing.stage, targetStage);
+      if (targetStage === "decide" && !user.isStaff && canManageExisting) {
+        const branchId = existing.governanceAuthorityBranchId;
+        if (
+          !branchId ||
+          !branchAdminIds.includes(branchId) ||
+          existing.jurisdictionBranchId !== branchId
+        ) {
+          throw new Error(
+            "A national administrator must explicitly assign this proposal's branch authority and jurisdiction before its local ballot can open.",
+          );
+        }
+      }
+      if (existing.stage === "decide" && targetStage === "implement") {
+        if (
+          !existing.ballotRevisionId ||
+          !(await db
+            .collection("ballot_results")
+            .findOne({
+              proposalId: existing.proposalId,
+              revisionId: existing.ballotRevisionId,
+              result: "successful",
+            }))
+        ) {
+          throw new Error(
+            "Record a successful ballot result for the exact frozen revision before moving this proposal to Implement.",
+          );
+        }
+      }
+    }
+
+    // Server-enforced ballot integrity lock
+    const voteCount = await db
+      .collection<VoteRecord>(PROPOSAL_VOTES)
+      .countDocuments({
+        $or: [
+          { proposalId: existing.proposalId },
+          { policyId: existing.proposalId } as any,
+        ],
+      });
+    const locked = isProposalLocked(existing.stage, voteCount);
+
+    if (locked) {
+      if (
+        branchFields.some(
+          (field) =>
+            body[field] !== undefined &&
+            body[field] !== (existing[field] ?? ""),
+        )
+      ) {
+        throw new Error(
+          "Governance authority, jurisdiction and publication scope are locked once a ballot begins.",
+        );
+      }
+      const candidateOutcomes =
+        body.outcomes !== undefined ? parseOutcomes(body.outcomes) : undefined;
+      const substantiveChanges = getSubstantiveChanges(existing, {
+        title: typeof body.title === "string" ? body.title : undefined,
+        summary:
+          typeof body.summary === "string"
+            ? body.summary
+            : typeof body.statement === "string"
+              ? body.statement
+              : undefined,
+        outcomes: candidateOutcomes,
+        details: typeof body.details === "string" ? body.details : undefined,
+        attachmentUrl:
+          typeof body.attachmentUrl === "string"
+            ? body.attachmentUrl
+            : undefined,
+        attachmentDescription:
+          typeof body.attachmentDescription === "string"
+            ? body.attachmentDescription
+            : undefined,
+        kind: typeof body.kind === "string" ? body.kind : undefined,
+      });
+
+      if (substantiveChanges.length > 0) {
+        const reason =
+          voteCount > 0
+            ? `voting has already begun and ${voteCount} member vote(s) have been cast`
+            : `the proposal is active in the Decide stage`;
+        throw new Error(
+          `Cannot modify substantive proposal content (${substantiveChanges.join(", ")}) because ${reason}. Substantive text is locked to protect ballot integrity. Create a revised proposal to submit modified motion text.`,
+        );
+      }
+    }
   }
 
   // Quick stage / implementationNote update by staff
   if (
     existing &&
-    user.isStaff &&
+    isGovernanceOperator &&
     Object.keys(body).every((k) =>
-      ["proposalId", "policyId", "stage", "status", "implementationNote"].includes(k),
+      [
+        "proposalId",
+        "policyId",
+        "stage",
+        "status",
+        "implementationNote",
+      ].includes(k),
     ) &&
-    (body.stage !== undefined || body.status !== undefined || body.implementationNote !== undefined)
+    (body.stage !== undefined ||
+      body.status !== undefined ||
+      body.implementationNote !== undefined)
   ) {
     const stage =
       body.stage !== undefined || body.status !== undefined
@@ -289,15 +755,48 @@ export async function saveProposal(
       typeof body.implementationNote === "string"
         ? body.implementationNote.trim()
         : existing.implementationNote;
+    let ballotRevisionId = existing.ballotRevisionId;
+    if (stage === "decide" && !ballotRevisionId) {
+      const latest = await db
+        .collection("proposal_revisions")
+        .find({ proposalId: existing.proposalId })
+        .sort({ createdAt: -1 })
+        .limit(1)
+        .toArray();
+      ballotRevisionId = latest[0]?.revisionId;
+      if (!ballotRevisionId)
+        throw new Error(
+          "A proposal revision is required before opening a ballot.",
+        );
+    }
     const updatedAt = new Date();
-    await col.updateOne(
-      { proposalId: existing.proposalId },
-      { $set: { stage, implementationNote, updatedAt } },
+    const set: Record<string, unknown> = {
+      stage,
+      implementationNote,
+      updatedAt,
+    };
+    if (ballotRevisionId) set.ballotRevisionId = ballotRevisionId;
+    const write = await col.updateOne(
+      { proposalId: existing.proposalId, updatedAt: existing.updatedAt },
+      { $set: set },
     );
-    return { ...existing, stage, implementationNote, updatedAt };
+    if (write.matchedCount !== 1)
+      throw new Error(
+        "Proposal changed while you were editing it. Reload the latest state and try again.",
+      );
+    return {
+      ...existing,
+      stage,
+      implementationNote,
+      ballotRevisionId,
+      updatedAt,
+    };
   }
 
-  const title = typeof body.title === "string" ? body.title.trim() : existing?.title ?? "";
+  const title =
+    typeof body.title === "string"
+      ? body.title.trim()
+      : (existing?.title ?? "");
   if (title.length < 4 || title.length > 200) {
     throw new Error("Title must be between 4 and 200 characters.");
   }
@@ -307,7 +806,7 @@ export async function saveProposal(
       ? body.space.trim()
       : typeof body.category === "string" && body.category.trim()
         ? body.category.trim()
-        : existing?.space ?? "General";
+        : (existing?.space ?? "General");
   if (space.length < 2 || space.length > 100) {
     throw new Error("Space / topic must be between 2 and 100 characters.");
   }
@@ -317,9 +816,11 @@ export async function saveProposal(
       ? body.summary.trim()
       : typeof body.statement === "string"
         ? body.statement.trim()
-        : existing?.summary ?? "";
+        : (existing?.summary ?? "");
   if (rawSummary.length < 10 || rawSummary.length > 2000) {
-    throw new Error("Proposal summary must be between 10 and 2,000 characters.");
+    throw new Error(
+      "Proposal summary must be between 10 and 2,000 characters.",
+    );
   }
 
   let outcomes: string[] = existing?.outcomes ?? [];
@@ -332,37 +833,114 @@ export async function saveProposal(
       .filter(Boolean);
   }
 
-  const details = typeof body.details === "string" ? body.details.trim() : existing?.details ?? "";
+  const details =
+    typeof body.details === "string"
+      ? body.details.trim()
+      : (existing?.details ?? "");
   const attachmentUrl =
     typeof body.attachmentUrl === "string"
       ? body.attachmentUrl.trim()
-      : existing?.attachmentUrl ?? "";
+      : (existing?.attachmentUrl ?? "");
   if (attachmentUrl && !/^(https?:\/\/|\/)/i.test(attachmentUrl)) {
-    throw new Error("Supporting link or image URL must start with https:// or /.");
+    throw new Error(
+      "Supporting link or image URL must start with https:// or /.",
+    );
   }
+
+  const attachmentDescription =
+    typeof body.attachmentDescription === "string"
+      ? body.attachmentDescription.trim()
+      : (existing?.attachmentDescription ?? "");
+
+  const kind = normalizeKind(
+    body.kind ?? existing?.kind ?? "policy",
+    existing?.proposalId ?? "",
+  );
 
   const implementationNote =
     typeof body.implementationNote === "string"
       ? body.implementationNote.trim()
-      : existing?.implementationNote ?? "";
+      : (existing?.implementationNote ?? "");
 
   // Non-staff member submissions always start in "propose" stage
-  const stage: ProposalStage = user.isStaff
+  const stage: ProposalStage = isGovernanceOperator
     ? normalizeStage(body.stage ?? body.status, existing?.stage ?? "propose")
-    : existing?.stage ?? "propose";
+    : (existing?.stage ?? "propose");
 
   const now = new Date();
 
+  const originatingBranchId =
+    typeof body.originatingBranchId === "string"
+      ? body.originatingBranchId.trim()
+      : existing?.originatingBranchId;
+  const governanceAuthorityBranchId =
+    typeof body.governanceAuthorityBranchId === "string"
+      ? body.governanceAuthorityBranchId.trim()
+      : existing?.governanceAuthorityBranchId;
+  const jurisdictionBranchId =
+    typeof body.jurisdictionBranchId === "string"
+      ? body.jurisdictionBranchId.trim()
+      : existing?.jurisdictionBranchId;
+  const publicationScope =
+    body.publicationScope === "national" ||
+    body.publicationScope === "branch" ||
+    body.publicationScope === "private"
+      ? body.publicationScope
+      : (existing?.publicationScope ??
+        (originatingBranchId && branchAdminIds.includes(originatingBranchId)
+          ? "branch"
+          : undefined));
+  if (user.isAdmin) {
+    for (const branchId of [
+      originatingBranchId,
+      governanceAuthorityBranchId,
+      jurisdictionBranchId,
+    ].filter(Boolean)) {
+      if (!(await db.collection("branches").findOne({ branchId })))
+        throw new Error(`Branch '${branchId}' does not exist.`);
+    }
+    if (publicationScope === "branch" && !jurisdictionBranchId)
+      throw new Error(
+        "Branch publication requires an explicit jurisdiction branch.",
+      );
+    if (publicationScope === "national" && !governanceAuthorityBranchId)
+      throw new Error(
+        "National publication requires an explicit governance authority branch.",
+      );
+  } else if (
+    originatingBranchId &&
+    branchAdminIds.includes(originatingBranchId)
+  ) {
+    if (
+      !(await db
+        .collection("branches")
+        .findOne({ branchId: originatingBranchId, recognised: true }))
+    )
+      throw new Error("Proposal origin must be a recognised assigned branch.");
+  } else if (!user.isAdmin && body.originatingBranchId !== undefined) {
+    throw new Error(
+      "An administrator must select a recognised proposal origin.",
+    );
+  }
+
   let provenance: PolicyProvenance | undefined = existing?.provenance;
   if (user.isStaff && body.provenance !== undefined) {
-    if (!body.provenance || (typeof body.provenance === "object" && !(body.provenance as any).category)) {
+    if (
+      !body.provenance ||
+      (typeof body.provenance === "object" &&
+        !(body.provenance as any).category)
+    ) {
       provenance = undefined;
     } else if (typeof body.provenance === "object") {
       const rawProv = body.provenance as Record<string, any>;
       const category = String(rawProv.category || "unverified").trim();
-      const label = String(rawProv.label || "").trim() || getDefaultProvenanceLabel(category);
+      const label =
+        String(rawProv.label || "").trim() ||
+        getDefaultProvenanceLabel(category, kind);
       const summary = String(rawProv.summary || "").trim();
-      const uncertaintyNote = rawProv.uncertaintyNote ? String(rawProv.uncertaintyNote).trim() : undefined;
+      const uncertaintyNote = rawProv.uncertaintyNote
+        ? String(rawProv.uncertaintyNote).trim()
+        : undefined;
 
       let lineage: ProvenanceLink[] = [];
       if (Array.isArray(rawProv.lineage)) {
@@ -405,8 +983,14 @@ export async function saveProposal(
       outcomes,
       details,
       attachmentUrl: attachmentUrl || undefined,
+      attachmentDescription: attachmentDescription || undefined,
+      kind,
       implementationNote: implementationNote || undefined,
       stage,
+      originatingBranchId,
+      governanceAuthorityBranchId,
+      jurisdictionBranchId,
+      publicationScope,
       provenance,
       updatedAt: now,
     };
@@ -417,31 +1001,104 @@ export async function saveProposal(
       outcomes: updated.outcomes,
       details: updated.details,
       attachmentUrl: updated.attachmentUrl,
+      attachmentDescription: updated.attachmentDescription,
+      kind: updated.kind,
       implementationNote: updated.implementationNote,
       stage: updated.stage,
+      originatingBranchId: updated.originatingBranchId,
+      governanceAuthorityBranchId: updated.governanceAuthorityBranchId,
+      jurisdictionBranchId: updated.jurisdictionBranchId,
+      publicationScope: updated.publicationScope,
       updatedAt: now,
     };
     if (user.isStaff && body.provenance !== undefined) {
       updateSet.provenance = provenance;
     }
 
-    await col.updateOne(
-      { proposalId: existing.proposalId },
-      {
-        $set: updateSet,
-        ...(user.isStaff && body.provenance === null ? { $unset: { provenance: 1 } } : {}),
-      },
-    );
+    const snapshot = {
+      title: updated.title,
+      summary: updated.summary,
+      outcomes: updated.outcomes,
+      details: updated.details,
+    };
+    const contentHash = createHash("sha256")
+      .update(JSON.stringify(snapshot))
+      .digest("hex");
+    const latestRevisions = await db
+      .collection("proposal_revisions")
+      .find({ proposalId: existing.proposalId })
+      .sort({ createdAt: -1 })
+      .limit(1)
+      .toArray();
+    const previousRevision = latestRevisions[0];
+    const appendRevision =
+      !previousRevision || previousRevision.contentHash !== contentHash;
+    const nextRevisionId = appendRevision
+      ? randomUUID()
+      : previousRevision.revisionId;
+    if (stage === "decide" && !updated.ballotRevisionId) {
+      updated.ballotRevisionId = nextRevisionId;
+      updateSet.ballotRevisionId = nextRevisionId;
+    }
+    const dbClient = (db as Db & { client?: Db["client"] }).client;
+    const session = dbClient?.startSession();
+    const writeProposalRevision = async (session?: ClientSession) => {
+      const write = await col.updateOne(
+        { proposalId: existing.proposalId, updatedAt: existing.updatedAt },
+        {
+          $set: updateSet,
+          ...(user.isStaff && body.provenance === null
+            ? { $unset: { provenance: 1 } }
+            : {}),
+        },
+        session ? { session } : undefined,
+      );
+      if (write.matchedCount !== 1)
+        throw new Error(
+          "Proposal changed while you were editing it. Reload the latest revision and try again.",
+        );
+      if (appendRevision)
+        await db
+          .collection("proposal_revisions")
+          .insertOne(
+            {
+              revisionId: nextRevisionId,
+              proposalId: updated.proposalId,
+              parentRevisionId: previousRevision?.revisionId ?? null,
+              authorId: user.memberId,
+              createdAt: now,
+              snapshot,
+              contentHash,
+              provenance: updated.provenance,
+            },
+            { session },
+          );
+    };
+    if (session) {
+      try {
+        await session.withTransaction(() => writeProposalRevision(session));
+      } finally {
+        await session.endSession();
+      }
+    } else {
+      await writeProposalRevision();
+    }
     return updated;
   }
 
   const count = await col.countDocuments();
   const proposalId =
-    existingId || `PROP-${String(count + 1).padStart(3, "0")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+    existingId ||
+    `PROP-${String(count + 1).padStart(3, "0")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
   const baseSlug = slugify(title) || proposalId.toLowerCase();
   const slugConflict = await col.findOne({ slug: baseSlug });
-  const slug = slugConflict ? `${baseSlug}-${proposalId.toLowerCase()}` : baseSlug;
+  const slug = slugConflict
+    ? `${baseSlug}-${proposalId.toLowerCase()}`
+    : baseSlug;
 
+  const createdKind = normalizeKind(body.kind, proposalId);
+
+  const revisionId = randomUUID();
   const created: ProposalRecord = {
     proposalId,
     slug,
@@ -451,8 +1108,15 @@ export async function saveProposal(
     outcomes,
     details,
     ...(attachmentUrl ? { attachmentUrl } : {}),
+    ...(attachmentDescription ? { attachmentDescription } : {}),
+    kind: createdKind,
     ...(implementationNote ? { implementationNote } : {}),
     stage,
+    ...(stage === "decide" ? { ballotRevisionId: revisionId } : {}),
+    originatingBranchId,
+    governanceAuthorityBranchId,
+    jurisdictionBranchId,
+    publicationScope,
     provenance,
     authorId: user.memberId,
     authorName: user.name || "Verified Member",
@@ -460,27 +1124,63 @@ export async function saveProposal(
     updatedAt: now,
   };
 
-  await col.insertOne(created);
+  const snapshot = {
+    title: created.title,
+    summary: created.summary,
+    outcomes: created.outcomes,
+    details: created.details,
+  };
+  const revision = {
+    revisionId,
+    proposalId,
+    parentRevisionId: null,
+    authorId: user.memberId,
+    createdAt: now,
+    snapshot,
+    contentHash: createHash("sha256")
+      .update(JSON.stringify(snapshot))
+      .digest("hex"),
+    provenance: created.provenance,
+  };
+  const dbClient = (db as Db & { client?: Db["client"] }).client;
+  const session = dbClient?.startSession();
+  try {
+    const insert = async (session?: ClientSession) => {
+      await col.insertOne(created, session ? { session } : undefined);
+      await db
+        .collection("proposal_revisions")
+        .insertOne(revision, session ? { session } : undefined);
+    };
+    if (session) await session.withTransaction(() => insert(session));
+    else await insert();
+  } finally {
+    if (session) await session.endSession();
+  }
   return created;
 }
 
-export async function deleteProposal(db: Db, user: SessionUser, proposalId: string): Promise<void> {
+export async function deleteProposal(
+  db: Db,
+  user: SessionUser,
+  proposalId: string,
+): Promise<void> {
   const id = proposalId.trim();
   if (!id) throw new Error("Proposal ID is required.");
   const col = db.collection<ProposalRecord>("proposals");
   const existing = await col.findOne({ proposalId: id });
   if (!existing) throw new Error("Proposal not found.");
 
-  const isAuthorInPropose = existing.authorId === user.memberId && existing.stage === "propose";
+  const isAuthorInPropose =
+    existing.authorId === user.memberId && existing.stage === "propose";
   if (!user.isAdmin && !isAuthorInPropose) {
-    throw new Error("Administrator access is required to delete this proposal.");
+    throw new Error(
+      "Administrator access is required to delete this proposal.",
+    );
   }
 
   await col.deleteOne({ proposalId: id });
-  await Promise.all([
-    db.collection("comments").deleteMany({ proposalId: id }),
-    db.collection("votes").deleteMany({ proposalId: id }),
-  ]);
+  await db.collection("comments").deleteMany({ proposalId: id });
+  // Retain decision records as voting history when a proposal is deleted.
 }
 
 export async function addComment(
@@ -489,7 +1189,9 @@ export async function addComment(
   body: Record<string, unknown>,
 ): Promise<CommentRecord> {
   if (!user.canParticipate) {
-    throw new Error("Your membership must be verified before you can contribute to deliberation.");
+    throw new Error(
+      "Your membership must be verified before you can contribute to deliberation.",
+    );
   }
 
   const proposalId =
@@ -498,8 +1200,14 @@ export async function addComment(
       : typeof body.policyId === "string"
         ? body.policyId.trim()
         : "";
-  const proposal = await db.collection<ProposalRecord>("proposals").findOne({ proposalId });
-  if (!proposal || proposal.stage === "archived") {
+  const proposal = await db
+    .collection<ProposalRecord>("proposals")
+    .findOne({ proposalId });
+  if (
+    !proposal ||
+    !canViewProposal(normalizeProposalDoc(proposal), user) ||
+    proposal.stage === "archived"
+  ) {
     throw new Error("This proposal is not open for deliberation.");
   }
 
@@ -509,7 +1217,9 @@ export async function addComment(
   }
 
   const rawStance = String(body.stance || body.kind || "comment");
-  const stance: CommentStance = VALID_STANCES.includes(rawStance as CommentStance)
+  const stance: CommentStance = VALID_STANCES.includes(
+    rawStance as CommentStance,
+  )
     ? (rawStance as CommentStance)
     : "comment";
 
@@ -532,14 +1242,27 @@ export async function toggleUpvoteComment(
   db: Db,
   user: SessionUser,
   commentId: string,
-): Promise<{ upvotes: string[]; count: number; endorsed: boolean; hasUpvoted: boolean }> {
+): Promise<{
+  upvotes: string[];
+  count: number;
+  endorsed: boolean;
+  hasUpvoted: boolean;
+}> {
   if (!user.canParticipate) {
-    throw new Error("Your membership must be verified to endorse deliberation points.");
+    throw new Error(
+      "Your membership must be verified to endorse deliberation points.",
+    );
   }
   const id = commentId.trim();
   const col = db.collection<CommentRecord>("comments");
   const existing = await col.findOne({ commentId: id });
   if (!existing) throw new Error("Comment not found.");
+
+  const proposal = await db
+    .collection<ProposalRecord>("proposals")
+    .findOne({ proposalId: existing.proposalId });
+  if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user))
+    throw new Error("Comment not found.");
 
   const current = Array.isArray(existing.upvotes) ? existing.upvotes : [];
   const hasEndorsed = current.includes(user.memberId);
@@ -556,12 +1279,21 @@ export async function toggleUpvoteComment(
   };
 }
 
-export async function deleteComment(db: Db, user: SessionUser, commentId: string): Promise<void> {
+export async function deleteComment(
+  db: Db,
+  user: SessionUser,
+  commentId: string,
+): Promise<void> {
   const id = commentId.trim();
   if (!id) throw new Error("Comment ID is required.");
   const col = db.collection<CommentRecord>("comments");
   const existing = await col.findOne({ commentId: id });
   if (!existing) throw new Error("Comment not found.");
+  const proposal = await db
+    .collection<ProposalRecord>("proposals")
+    .findOne({ proposalId: existing.proposalId });
+  if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user))
+    throw new Error("Comment not found.");
   if (existing.memberId !== user.memberId && !user.isStaff) {
     throw new Error("You can only delete your own contributions.");
   }
@@ -572,9 +1304,11 @@ export async function castVote(
   db: Db,
   user: SessionUser,
   body: Record<string, unknown>,
-): Promise<{ choice: VoteChoice; votes: VoteTally }> {
+): Promise<{ choice: VoteChoice; votes: VoteTally; amendmentId?: string }> {
   if (!user.canParticipate) {
-    throw new Error("Your membership must be verified before you can participate in decisions.");
+    throw new Error(
+      "Your membership must be verified before you can participate in decisions.",
+    );
   }
 
   const proposalId =
@@ -583,26 +1317,209 @@ export async function castVote(
       : typeof body.policyId === "string"
         ? body.policyId.trim()
         : "";
-  const proposal = await db.collection<ProposalRecord>("proposals").findOne({ proposalId });
-  if (!proposal) throw new Error("Proposal not found.");
+  const proposal = await db
+    .collection<ProposalRecord>("proposals")
+    .findOne({ proposalId });
+  if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user))
+    throw new Error("Proposal not found.");
+  if (proposal.jurisdictionBranchId) {
+    const branch = await db
+      .collection("branches")
+      .findOne({ branchId: proposal.jurisdictionBranchId, recognised: true });
+    if (!branch)
+      throw new Error(
+        "This branch electorate is not currently recognised or available for voting.",
+      );
+    const branchMembership = await db
+      .collection("branch_memberships")
+      .findOne({
+        branchId: proposal.jurisdictionBranchId,
+        memberId: user.memberId,
+        status: "active",
+      });
+    if (!branchMembership)
+      throw new Error(
+        "Active membership in this proposal's jurisdiction branch is required to vote.",
+      );
+  }
+  const amendmentId =
+    typeof body.amendmentId === "string" ? body.amendmentId.trim() : "";
+  if (amendmentId) {
+    if (proposal.stage !== "decide" || !proposal.ballotRevisionId)
+      throw new Error(
+        "The proposal must have an open, revision-bound ballot before an amendment ballot can be used.",
+      );
+    const amendment = await db
+      .collection("amendments")
+      .findOne({
+        amendmentId,
+        proposalId,
+        status: "voting",
+        baseRevisionId: proposal.ballotRevisionId,
+        ballotRevisionId: proposal.ballotRevisionId,
+      });
+    if (
+      !amendment?.ballotAmendmentRevisionId ||
+      amendment.ballotAmendmentRevisionId !== amendment.currentRevisionId ||
+      !(await db
+        .collection("amendment_revisions")
+        .findOne({
+          amendmentId,
+          revisionId: amendment.ballotAmendmentRevisionId,
+        }))
+    )
+      throw new Error(
+        "This amendment ballot is not bound to the current immutable wording revision.",
+      );
+    const rawChoice =
+      typeof body.choice === "string" ? body.choice.trim().toLowerCase() : "";
+    if (!["approve", "abstain", "reject", "do-not-approve"].includes(rawChoice))
+      throw new Error("Choose Approve, Abstain, or Reject.");
+    const choice: VoteChoice =
+      rawChoice === "approve"
+        ? "approve"
+        : rawChoice === "abstain"
+          ? "abstain"
+          : "reject";
+    const ballotId = `amendment:${amendmentId}`;
+    const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
+    await votesCol.updateOne(
+      { ballotId, memberId: user.memberId },
+      {
+        $set: {
+          ballotId,
+          proposalId,
+          amendmentId,
+          revisionId: amendment.ballotRevisionId,
+          amendmentRevisionId: amendment.ballotAmendmentRevisionId,
+          memberId: user.memberId,
+          authorName: user.name || "Verified Member",
+          choice,
+          reason:
+            typeof body.reason === "string"
+              ? body.reason.trim().slice(0, 500)
+              : "",
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true },
+    );
+    const allVotes = await votesCol.find({ ballotId }).toArray();
+    const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
+    for (const vote of allVotes) {
+      if (vote.choice === "approve") votes.approve++;
+      else if (vote.choice === "abstain") votes.abstain++;
+      else votes.reject++;
+      votes.total++;
+    }
+    return { choice, votes, amendmentId };
+  }
   if (proposal.stage !== "decide") {
     throw new Error("This proposal is not currently in the Decide stage.");
   }
 
-  const rawChoice = typeof body.choice === "string" ? body.choice.trim().toLowerCase() : "";
+  let ballotRevisionId = proposal.ballotRevisionId;
+  if (ballotRevisionId) {
+    const currentBallotId = proposalBallotId(proposalId);
+    const existingVotes = await db
+      .collection<VoteRecord>(PROPOSAL_VOTES)
+      .find({ proposalId, ballotId: currentBallotId })
+      .toArray();
+    if (existingVotes.some((vote) => vote.revisionId !== ballotRevisionId)) {
+      throw new Error(
+        "This ballot contains votes that are not bound to its frozen wording. An administrator must review and resolve the binding before voting can continue.",
+      );
+    }
+  }
+  if (!ballotRevisionId) {
+    const currentBallotId = proposalBallotId(proposalId);
+    const priorVotes = await db
+      .collection<VoteRecord>(PROPOSAL_VOTES)
+      .find({ proposalId, ballotId: currentBallotId })
+      .toArray();
+    if (priorVotes.length) {
+      const ids = [
+        ...new Set(
+          priorVotes
+            .map((vote) => vote.revisionId)
+            .filter(
+              (id): id is string => typeof id === "string" && id.length > 0,
+            ),
+        ),
+      ];
+      if (
+        ids.length !== 1 ||
+        priorVotes.some((vote) => vote.revisionId !== ids[0])
+      ) {
+        throw new Error(
+          "This existing ballot has votes without one consistent revision reference. An administrator must review and bind the wording before voting can continue.",
+        );
+      }
+      ballotRevisionId = ids[0];
+      if (
+        !(await db
+          .collection("proposal_revisions")
+          .findOne({ proposalId, revisionId: ballotRevisionId }))
+      )
+        throw new Error(
+          "The existing ballot revision is missing. An administrator must review the ballot before voting can continue.",
+        );
+    } else {
+      const latest = await db
+        .collection("proposal_revisions")
+        .find({ proposalId })
+        .sort({ createdAt: -1 })
+        .limit(1)
+        .toArray();
+      ballotRevisionId = latest[0]?.revisionId;
+    }
+    if (!ballotRevisionId)
+      throw new Error(
+        "A proposal revision is required before voting can begin.",
+      );
+    const bound = await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId, stage: "decide", ballotRevisionId: { $exists: false } },
+        { $set: { ballotRevisionId } },
+      );
+    if (!bound.matchedCount) {
+      const current = await db
+        .collection<ProposalRecord>("proposals")
+        .findOne({ proposalId, stage: "decide" });
+      if (!current?.ballotRevisionId)
+        throw new Error(
+          "The ballot changed while its revision was being bound. Reload and try again.",
+        );
+      ballotRevisionId = current.ballotRevisionId;
+    }
+  }
+
+  const rawChoice =
+    typeof body.choice === "string" ? body.choice.trim().toLowerCase() : "";
   if (!["approve", "abstain", "reject", "do-not-approve"].includes(rawChoice)) {
     throw new Error("Choose Approve, Abstain, or Reject.");
   }
   const choice: VoteChoice =
-    rawChoice === "approve" ? "approve" : rawChoice === "abstain" ? "abstain" : "reject";
-  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+    rawChoice === "approve"
+      ? "approve"
+      : rawChoice === "abstain"
+        ? "abstain"
+        : "reject";
+  const reason =
+    typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
 
-  const votesCol = db.collection<VoteRecord>("votes");
+  const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
   await votesCol.updateOne(
-    { proposalId: proposal.proposalId, memberId: user.memberId },
+    {
+      ballotId: proposalBallotId(proposal.proposalId),
+      memberId: user.memberId,
+    },
     {
       $set: {
+        ballotId: proposalBallotId(proposal.proposalId),
         proposalId: proposal.proposalId,
+        revisionId: ballotRevisionId,
         memberId: user.memberId,
         authorName: user.name || "Verified Member",
         choice,
@@ -613,7 +1530,9 @@ export async function castVote(
     { upsert: true },
   );
 
-  const allVotes = await votesCol.find({ proposalId: proposal.proposalId }).toArray();
+  const allVotes = await votesCol
+    .find({ ballotId: proposalBallotId(proposal.proposalId) })
+    .toArray();
   const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
   for (const v of allVotes) {
     if (v.choice === "approve") votes.approve += 1;
@@ -630,13 +1549,29 @@ export async function listUserActivity(
   memberId: string,
 ): Promise<{
   proposals: ProposalRecord[];
-  comments: Array<CommentRecord & { proposalTitle: string; proposalSlug: string }>;
-  votes: Array<VoteRecord & { proposalTitle: string; proposalSlug: string; proposalStage: ProposalStage }>;
+  comments: Array<
+    CommentRecord & { proposalTitle: string; proposalSlug: string }
+  >;
+  votes: Array<
+    VoteRecord & {
+      proposalTitle: string;
+      proposalSlug: string;
+      proposalStage: ProposalStage;
+    }
+  >;
 }> {
   const [proposals, comments, votes] = await Promise.all([
     db.collection<ProposalRecord>("proposals").find({}).toArray(),
-    db.collection<CommentRecord>("comments").find({ memberId }).sort({ createdAt: -1 }).toArray(),
-    db.collection<VoteRecord>("votes").find({ memberId }).sort({ updatedAt: -1 }).toArray(),
+    db
+      .collection<CommentRecord>("comments")
+      .find({ memberId })
+      .sort({ createdAt: -1 })
+      .toArray(),
+    db
+      .collection<VoteRecord>(PROPOSAL_VOTES)
+      .find({ memberId })
+      .sort({ updatedAt: -1 })
+      .toArray(),
   ]);
 
   const proposalMap = new Map(proposals.map((p) => [p.proposalId, p]));
@@ -663,11 +1598,54 @@ export async function listUserActivity(
   };
 }
 
-export async function listMembers(db: Db, search = ""): Promise<MemberRecord[]> {
+export async function listOutstandingDecisions(
+  db: Db,
+  memberId: string,
+  user?: SessionUser | null,
+): Promise<ProposalSummaryView[]> {
+  const [decisions, votes] = await Promise.all([
+    listProposals(db, { stage: "decide", user }),
+    db.collection<VoteRecord>(PROPOSAL_VOTES).find({ memberId }).toArray(),
+  ]);
+  const voted = new Set(votes.map((vote) => vote.proposalId));
+  const branchIds = [...new Set(
+    decisions
+      .map((decision) => decision.jurisdictionBranchId)
+      .filter((branchId): branchId is string => Boolean(branchId)),
+  )];
+  const [memberships, branches] = branchIds.length
+    ? await Promise.all([
+        db.collection<{ branchId: string }>("branch_memberships")
+          .find({ memberId, status: "active", branchId: { $in: branchIds } })
+          .toArray(),
+        db.collection<{ branchId: string }>("branches")
+          .find({ recognised: true, branchId: { $in: branchIds } })
+          .toArray(),
+      ])
+    : [[], []];
+  const activeMemberships = new Set(memberships.map(({ branchId }) => branchId));
+  const recognisedBranches = new Set(branches.map(({ branchId }) => branchId));
+  return decisions.filter((decision) => {
+    if (voted.has(decision.proposalId)) return false;
+    const branchId = decision.jurisdictionBranchId;
+    return !branchId || (activeMemberships.has(branchId) && recognisedBranches.has(branchId));
+  });
+}
+
+export async function listMembers(
+  db: Db,
+  search = "",
+): Promise<MemberRecord[]> {
   const [users, roles, memberships] = await Promise.all([
     db.collection("user").find({}).sort({ createdAt: -1 }).toArray(),
-    db.collection<{ memberId: string; role: UserRole }>("application_roles").find({}).toArray(),
-    db.collection<{ memberId: string; status: MembershipStatus }>("memberships").find({}).toArray(),
+    db
+      .collection<{ memberId: string; role: UserRole }>("application_roles")
+      .find({})
+      .toArray(),
+    db
+      .collection<{ memberId: string; status: MembershipStatus }>("memberships")
+      .find({})
+      .toArray(),
   ]);
 
   const roleMap = new Map<string, UserRole>();
@@ -676,7 +1654,9 @@ export async function listMembers(db: Db, search = ""): Promise<MemberRecord[]> 
       roleMap.set(r.memberId, r.role);
     }
   }
-  const statusMap = new Map<string, MembershipStatus>(memberships.map((m) => [m.memberId, m.status]));
+  const statusMap = new Map<string, MembershipStatus>(
+    memberships.map((m) => [m.memberId, m.status]),
+  );
   const q = search.trim().toLowerCase();
 
   return users
@@ -693,7 +1673,11 @@ export async function listMembers(db: Db, search = ""): Promise<MemberRecord[]> 
         createdAt: u.createdAt instanceof Date ? u.createdAt : undefined,
       };
     })
-    .filter((m) => !q || `${m.name} ${m.email} ${m.role} ${m.status}`.toLowerCase().includes(q));
+    .filter(
+      (m) =>
+        !q ||
+        `${m.name} ${m.email} ${m.role} ${m.status}`.toLowerCase().includes(q),
+    );
 }
 
 export async function saveMember(
@@ -712,22 +1696,30 @@ export async function saveMember(
   }
 
   const role = body.role !== undefined ? String(body.role) : undefined;
-  if (role !== undefined && !["member", "moderator", "administrator"].includes(role)) {
+  if (
+    role !== undefined &&
+    !["member", "moderator", "administrator"].includes(role)
+  ) {
     throw new Error("Choose Member, Moderator or Administrator.");
   }
 
   const status = body.status !== undefined ? String(body.status) : undefined;
-  if (status !== undefined && !["pending", "verified", "suspended"].includes(status)) {
+  if (
+    status !== undefined &&
+    !["pending", "verified", "suspended"].includes(status)
+  ) {
     throw new Error("Choose a valid membership status.");
   }
 
-  const disabled = body.disabled !== undefined ? Boolean(body.disabled) : undefined;
+  const disabled =
+    body.disabled !== undefined ? Boolean(body.disabled) : undefined;
   const users = db.collection("user");
   const now = new Date();
   let memberId: string;
 
   if (create) {
-    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const email =
+      typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new Error("Enter a valid email address.");
     }
@@ -744,7 +1736,10 @@ export async function saveMember(
     });
     memberId = saved.insertedId.toString();
   } else {
-    if (typeof body.memberId !== "string" || !/^[a-f0-9]{24}$/.test(body.memberId)) {
+    if (
+      typeof body.memberId !== "string" ||
+      !/^[a-f0-9]{24}$/.test(body.memberId)
+    ) {
       throw new Error("Choose a valid member account.");
     }
     memberId = body.memberId;
@@ -774,11 +1769,20 @@ export async function saveMember(
   if (role !== undefined) {
     await db.collection("application_roles").deleteMany({ memberId });
     if (role !== "member") {
-      await db.collection("application_roles").updateOne(
-        { memberId, role },
-        { $setOnInsert: { memberId, role, grantedAt: now, grantedBy: actor.memberId } },
-        { upsert: true },
-      );
+      await db
+        .collection("application_roles")
+        .updateOne(
+          { memberId, role },
+          {
+            $setOnInsert: {
+              memberId,
+              role,
+              grantedAt: now,
+              grantedBy: actor.memberId,
+            },
+          },
+          { upsert: true },
+        );
     }
   }
 
@@ -798,7 +1802,9 @@ export async function saveMember(
   }
 
   if (disabled === true) {
-    await db.collection("session").deleteMany({ userId: { $in: [memberId, new ObjectId(memberId)] } });
+    await db
+      .collection("session")
+      .deleteMany({ userId: { $in: [memberId, new ObjectId(memberId)] } });
   }
 
   return { memberId };

@@ -30,6 +30,10 @@ docker compose run --rm app node /app/scripts/seed-preview.mjs --confirm-preview
 
 Preview defaults to `APP_MODE=preview` with formal ballots disabled. For real member participation configure `APP_MODE=production`, a separate database, the Google OAuth credentials and Better Auth settings listed in `.env.example`. Register the public HTTPS callback origin with Google. Follow [release gates](release-gates.md) for administrator bootstrap, verification responsibilities and independent binding-ballot authorisation. Never reuse the synthetic preview database for members.
 
+## CI verification prerequisites
+
+Both GitHub workflows run `pnpm test` against an isolated, disposable single-node MongoDB replica set started with `docker run`. The runner must provide Docker, pnpm/node matching `.node-version`, and Python 3.x. The workflows export `VOTING_TEST_MONGODB_URI` and `AUTH_TEST_MONGODB_URI` for that isolated instance and assert that both variables are non-empty before running the suite, so the real MongoDB voting and authentication tests cannot be silently skipped. No workflow connects to the production database.
+
 ## Backups and restore drill
 
 The MongoDB named volume protects against app container replacement, not host or disk failure. Run regular logical backups to storage outside the NUC with restricted access and encryption at rest. The repository scripts require preview mode and use `mongodump` / `mongorestore`; install MongoDB Database Tools on the host. Load the ignored environment file into the shell first so the URI points to the host-published localhost port:

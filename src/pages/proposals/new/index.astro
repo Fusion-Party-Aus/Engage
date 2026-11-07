@@ -1,0 +1,99 @@
+---
+import SiteLayout from '../../../layouts/SiteLayout.astro';
+import { Button } from '../../../components/ui/button';
+import { Field } from '../../../components/ui/field';
+import { Input } from '../../../components/ui/input';
+import { Textarea } from '../../../components/ui/textarea';
+import { Alert, AlertDescription } from '../../../components/ui/alert';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { runtimeEnv } from '../../../lib/db.ts';
+
+export const prerender = false;
+const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
+---
+<SiteLayout title="Suggest an idea · Engage" description="Suggest a proposal for Fusion members to consider." noIndex>
+  <div class="page-wrap section-space compose-page">
+    <Button href="/proposals/" variant="ghost" size="sm">← Browse proposals</Button>
+    <header><h1>Suggest an idea</h1><p>Start with the change you want to see. You can refine the wording as members respond.</p></header>
+
+    {!user ? (
+      <Alert className="callout">
+        <AlertDescription>
+          <p>Sign in to suggest an idea.</p>
+          <Button href="/member/">Sign in</Button>
+        </AlertDescription>
+      </Alert>
+    ) : !user.canParticipate ? (
+      <Alert className="callout" variant="warning">
+        <AlertDescription>
+          <p>Your membership needs to be verified before you can submit an idea.</p>
+          <Button href="/member/" variant="outline">Check your account</Button>
+        </AlertDescription>
+      </Alert>
+    ) : (
+      <form id="new-proposal-form" class="compose-form">
+        <Field label="Title" htmlFor="proposal-title">
+          <Input id="proposal-title" name="title" required minLength={4} maxLength={200} placeholder="A clear, concise title" />
+        </Field>
+        <Field label="Topic" htmlFor="proposal-topic">
+          <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="For example: Housing" />
+        </Field>
+        <Field label="What would change?" htmlFor="proposal-summary">
+          <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder="Describe the change in a few sentences." />
+        </Field>
+        <details>
+          <summary>Add goals and background</summary>
+          <Field label="What should this achieve? One goal per line">
+            <Textarea name="outcomes" rows={4} />
+          </Field>
+          <Field label="Why does it matter?">
+            <Textarea name="details" rows={6} />
+          </Field>
+        </details>
+        <div class="form-actions">
+          <Button type="submit" id="submit-btn">Submit idea</Button>
+          <span id="submit-status" class="form-status" role="status" aria-live="polite"></span>
+        </div>
+      </form>
+    )}
+  </div>
+</SiteLayout>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>('#new-proposal-form');
+  const status = document.querySelector<HTMLElement>('#submit-status');
+  const button = document.querySelector<HTMLButtonElement>('#new-proposal-form button[type="submit"]');
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!status || !button) return;
+    button.disabled = true;
+    status.textContent = 'Submitting your idea…';
+    const data = new FormData(form);
+    const payload = {
+      title: data.get('title'), space: data.get('space'), summary: data.get('summary'),
+      details: data.get('details'), outcomes: String(data.get('outcomes') ?? '').split('\n').map((line) => line.trim()).filter(Boolean),
+      stage: 'propose',
+    };
+    try {
+      const response = await fetch('/api/proposals', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(payload) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not submit your idea.');
+      location.href = `/proposals/${result.proposal.slug}/`;
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : 'Could not submit your idea. Please try again.';
+      button.disabled = false;
+    }
+  });
+</script>
+
+<style>
+  .compose-page { max-width:53rem; }
+  header { margin:1rem 0 1.5rem; }
+  h1 { margin:0 0 .4rem; font:700 clamp(2.1rem,4vw,3rem)/1.1 Outfit,sans-serif; }
+  header p { margin:0; max-width:60ch; }
+  .compose-form { display:grid; gap:1.15rem; padding:clamp(1.2rem,3vw,2rem); background:#fff; border:1px solid var(--horizon-line); border-radius:.8rem; }
+  .compose-form details { border-top:1px solid var(--horizon-line); padding-top:1rem; }
+  .compose-form summary { cursor:pointer; font-weight:700; margin-bottom:1rem; }
+  .form-actions { display:flex; align-items:center; flex-wrap:wrap; gap:1rem; }
+  .callout p { margin:0 0 .75rem; }
+</style>

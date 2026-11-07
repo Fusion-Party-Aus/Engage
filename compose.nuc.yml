@@ -6,11 +6,14 @@ services:
     cpus: 0.75
     logging:
       driver: json-file
-      options: {max-size: "10m", max-file: "3"}
+      options: { max-size: "10m", max-file: "3" }
   app:
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
     mem_limit: 256m
     memswap_limit: 512m
     cpus: 0.75
     logging:
       driver: json-file
-      options: {max-size: "10m", max-file: "3"}
+      options: { max-size: "10m", max-file: "3" }

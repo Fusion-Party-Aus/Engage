@@ -1,0 +1,413 @@
+---
+import { Button } from '../ui/button';
+import type { SessionUser } from '../../lib/types.ts';
+
+interface Props {
+  user: SessionUser | null;
+  path: string;
+}
+
+const { user, path } = Astro.props;
+const stage = Astro.url.searchParams.get('stage') ?? '';
+const isStaff = Boolean(user?.isStaff || user?.isBranchAdmin);
+
+const links = [
+  {
+    href: '/proposals/',
+    label: 'Browse proposals',
+    icon: 'files',
+    current: path.startsWith('/proposals') && !['decide', 'deliberate'].includes(stage),
+  },
+  {
+    href: '/proposals/?stage=deliberate',
+    label: 'Join discussions',
+    icon: 'users',
+    current: stage === 'deliberate',
+  },
+  {
+    href: '/proposals/?stage=decide',
+    label: 'See open votes',
+    icon: 'vote',
+    current: stage === 'decide',
+  },
+  {
+    href: '/policies/',
+    label: 'Policy registry',
+    icon: 'book',
+    current: path.startsWith('/policies'),
+  },
+  {
+    href: '/how-it-works/',
+    label: 'How it works',
+    icon: 'info',
+    current: path.startsWith('/how-it-works'),
+  },
+];
+
+if (isStaff) {
+  links.push({
+    href: '/admin/',
+    label: 'Admin tasks',
+    icon: 'gauge',
+    current: path.startsWith('/admin'),
+  });
+}
+---
+
+<header class="site-header" data-site-header>
+  <div class="site-header__inner">
+    <a class="brand" href="/" aria-label="Engage home">
+      <img src="/fusion_horizon_logo_light.svg" alt="" width="40" height="40" />
+      <span class="brand__word">
+        Engage
+        <span class="brand__sub">Fusion Party Australia</span>
+      </span>
+    </a>
+
+    <nav class="site-nav" aria-label="Primary navigation">
+      {links.map((link) => (
+        <a href={link.href} aria-current={link.current ? 'page' : undefined}>
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <use href={`#icon-${link.icon}`} />
+          </svg>
+          {link.label}
+        </a>
+      ))}
+    </nav>
+
+    <div class="site-actions">
+      {user ? (
+        <>
+          <Button href="/member/" size="sm" className="h-9 px-4 text-sm">My Engage</Button>
+          <button class="site-signout" type="button" data-signout>Sign out</button>
+        </>
+      ) : (
+        <Button href="/member/" size="sm" className="h-9 px-4 text-sm">Sign in</Button>
+      )}
+    </div>
+
+    <details class="site-menu" data-responsive-menu>
+      <summary class="site-menu__toggle" aria-label="Menu">
+        <svg class="nav-icon menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <use href="#icon-menu" />
+        </svg>
+        <svg class="nav-icon close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg>
+      </summary>
+
+      <nav class="site-menu__panel" aria-label="Mobile navigation">
+        {links.map((link) => (
+          <a href={link.href} aria-current={link.current ? 'page' : undefined}>
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <use href={`#icon-${link.icon}`} />
+            </svg>
+            {link.label}
+          </a>
+        ))}
+
+        <div class="site-menu__account">
+          {user ? (
+            <>
+              <p class="site-menu__identity">
+                <span>Signed in as</span>
+                <strong>{user.name || user.email}</strong>
+              </p>
+              <Button href="/member/" className="w-full">My Engage</Button>
+              <button class="site-menu__signout" type="button" data-signout>Sign out</button>
+            </>
+          ) : (
+            <Button href="/member/" className="w-full">Sign in</Button>
+          )}
+        </div>
+      </nav>
+    </details>
+  </div>
+</header>
+
+<script>
+  const header = document.querySelector<HTMLElement>('[data-site-header]');
+  const syncScrolled = () => {
+    if (header) header.dataset.scrolled = String(window.scrollY > 8);
+  };
+
+  syncScrolled();
+  window.addEventListener('scroll', syncScrolled, { passive: true });
+
+  const menu = document.querySelector<HTMLDetailsElement>('[data-responsive-menu]');
+  const closeMenu = () => {
+    if (menu) menu.open = false;
+  };
+
+  document.addEventListener('click', (event) => {
+    if (!menu?.open) return;
+    const target = event.target;
+    if (target instanceof Node && !menu.contains(target)) closeMenu();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeMenu();
+  });
+
+  menu?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('a')) closeMenu();
+  });
+</script>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(255, 255, 255, 0.94);
+    border-bottom: 1px solid var(--horizon-line);
+    backdrop-filter: blur(14px);
+    transition: box-shadow 180ms ease, background-color 180ms ease;
+  }
+
+  .site-header[data-scrolled='true'] {
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 14px 32px -28px rgba(38, 11, 89, 0.65);
+  }
+
+  .site-header__inner {
+    width: min(var(--content-width), calc(100% - 3rem));
+    min-height: 4.5rem;
+    margin-inline: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex: 0 0 auto;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+  }
+
+  .brand img {
+    width: 2.25rem;
+    height: 2.25rem;
+    object-fit: contain;
+  }
+
+  .brand__word {
+    font-size: 1.08rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+
+  .brand__sub {
+    display: block;
+    margin-top: 0.22rem;
+    color: var(--horizon-muted);
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.035em;
+  }
+
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+    margin-left: auto;
+  }
+
+  .site-nav a {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 0.68rem;
+    border-radius: 0.5rem;
+    color: #3d2a5c;
+    font-size: 0.86rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .site-nav a:hover {
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+  }
+
+  .site-nav a[aria-current='page'] {
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple-deep);
+    box-shadow: inset 0 -2px var(--horizon-accent);
+  }
+
+  .site-nav .nav-icon {
+    display: none;
+  }
+
+  .site-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex: 0 0 auto;
+  }
+
+  .site-signout {
+    padding: 0;
+    background: none;
+    border: 0;
+    color: var(--horizon-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.22em;
+    cursor: pointer;
+  }
+
+  .site-signout:hover {
+    color: var(--horizon-purple-deep);
+  }
+
+  .site-menu {
+    display: none;
+    margin-left: auto;
+  }
+
+  .site-menu__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    background: var(--horizon-white);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.55rem;
+    color: var(--horizon-purple-deep);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .site-menu__toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .site-menu[open] .site-menu__toggle {
+    background: var(--horizon-lavender);
+  }
+
+  .site-menu__toggle .nav-icon {
+    width: 1.3rem;
+    height: 1.3rem;
+  }
+
+  .site-menu__toggle .close-icon {
+    display: none;
+  }
+
+  .site-menu[open] .menu-icon {
+    display: none;
+  }
+
+  .site-menu[open] .close-icon {
+    display: inline;
+  }
+
+  .site-menu__panel {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.6rem max(1rem, calc((100vw - var(--content-width)) / 2)) 1rem;
+    background: var(--horizon-white);
+    border-bottom: 1px solid var(--horizon-line);
+    box-shadow: 0 24px 32px -30px rgba(38, 11, 89, 0.7);
+  }
+
+  .site-menu__panel > a {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.7rem 0.75rem;
+    border-radius: 0.5rem;
+    color: var(--horizon-purple-deep);
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .site-menu__panel > a:hover,
+  .site-menu__panel > a[aria-current='page'] {
+    background: var(--horizon-lavender);
+    text-decoration: none;
+  }
+
+  .site-menu__account {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .site-menu__identity {
+    display: grid;
+    gap: 0.1rem;
+    margin: 0 0 0.25rem;
+    padding-inline: 0.75rem;
+    color: var(--horizon-muted);
+    font-size: 0.8rem;
+  }
+
+  .site-menu__identity strong {
+    color: var(--horizon-purple-deep);
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+  }
+
+  .site-menu__signout {
+    min-height: 2.5rem;
+    background: none;
+    border: 0;
+    color: var(--horizon-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.22em;
+    cursor: pointer;
+  }
+
+  @media (max-width: 980px) {
+    .site-header__inner {
+      min-height: 4rem;
+    }
+
+    .site-nav,
+    .site-actions {
+      display: none;
+    }
+
+    .site-menu {
+      display: block;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .site-header__inner {
+      width: calc(100% - 2rem);
+      gap: 0.75rem;
+    }
+
+    .brand img {
+      width: 2rem;
+      height: 2rem;
+    }
+
+    .brand__sub {
+      font-size: 0.64rem;
+    }
+  }
+</style>

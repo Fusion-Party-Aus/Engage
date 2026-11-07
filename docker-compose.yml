@@ -17,7 +17,13 @@ services:
     ports:
       - "${MONGO_BIND_ADDRESS:-127.0.0.1}:${MONGO_PORT:-27017}:27017"
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "/usr/local/bin/engage-mongo-healthcheck.js"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "/usr/local/bin/engage-mongo-healthcheck.js",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -26,9 +32,12 @@ services:
       - no-new-privileges:true
 
   app:
-    image: fusion-engage:${APP_IMAGE_TAG:-local}
+    image: ${APP_IMAGE:-fusion-engage:${APP_IMAGE_TAG:-local}}
     build: .
     restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
     depends_on:
       mongo:
         condition: service_healthy

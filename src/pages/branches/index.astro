@@ -1,0 +1,73 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { Card, CardContent } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { listProposals } from '../../lib/store.ts';
+export const prerender = false;
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
+const [branches, proposals] = await Promise.all([
+  db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
+  listProposals(db, { includeArchived: false, user }),
+]);
+const kinds = ['national', 'state', 'territory', 'constituent'];
+const grouped = kinds.map((kind) => ({ kind, items: branches.filter((branch: any) => branch.kind === kind) })).filter((group) => group.items.length);
+const relevant = user?.activeBranchIds?.length ? branches.filter((branch: any) => user.activeBranchIds?.includes(branch.branchId)) : [];
+const countFor = (branchId: string) => proposals.filter((proposal) => [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branchId)).length;
+---
+<SiteLayout title="Branches · Engage" description="Find Fusion's national, state, territory and constituent branches and their visible proposals." canonical="/branches/">
+  <div class="page-wrap section-space branch-directory">
+    <header class="page-intro">
+      <h1>Find your branch</h1>
+      <p>See where Fusion's ideas come from and which branch is involved. Branch membership and voting rights are checked separately for each ballot.</p>
+    </header>
+
+    {relevant.length > 0 && (
+      <section class="branch-group" aria-labelledby="your-branches-heading">
+        <h2 id="your-branches-heading">Your branches</h2>
+        <div class="branch-rows">
+          {relevant.map((branch: any) => (
+            <Card className="flex-row items-center justify-between gap-4 px-5 py-4">
+              <CardContent className="min-w-0 p-0">
+                <strong class="block">{branch.name}</strong>
+                <span class="text-sm text-muted-foreground">{countFor(branch.branchId)} visible ideas</span>
+              </CardContent>
+              <Button href={`/proposals/?branch=${encodeURIComponent(branch.branchId)}`} variant="outline" size="sm">View ideas →</Button>
+            </Card>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {grouped.map((group) => (
+      <section class="branch-group" aria-labelledby={`branch-${group.kind}`}>
+        <h2 id={`branch-${group.kind}`}>{group.kind === 'constituent' ? 'Constituent branches' : `${group.kind[0]!.toUpperCase()}${group.kind.slice(1)} branches`}</h2>
+        <div class="branch-rows">
+          {group.items.map((branch: any) => (
+            <Card className="flex-row items-center justify-between gap-4 px-5 py-4">
+              <CardContent className="min-w-0 p-0">
+                <strong class="block">{branch.name}</strong>
+                <span class="text-sm text-muted-foreground">{countFor(branch.branchId)} visible ideas</span>
+              </CardContent>
+              <Button href={`/proposals/?branch=${encodeURIComponent(branch.branchId)}`} variant="outline" size="sm">View ideas →</Button>
+            </Card>
+          ))}
+        </div>
+      </section>
+    ))}
+
+    {!grouped.length && <p>No branches are currently listed publicly.</p>}
+  </div>
+</SiteLayout>
+
+<style>
+  .branch-directory { max-width:66rem; }
+  .branch-group { margin:2rem 0 3rem; }
+  .branch-group h2 { font-size:clamp(1.6rem,3vw,2.2rem); }
+  .branch-rows { display:grid; gap:.65rem; }
+  @media(max-width:600px) {
+    .branch-rows :global([data-slot="card"]) { align-items:flex-start; flex-direction:column; }
+  }
+</style>

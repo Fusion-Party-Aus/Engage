@@ -1,41 +1,240 @@
 ---
 import SiteLayout from './SiteLayout.astro';
+import { Button } from '../components/ui/button';
+import {
+  BookOpen,
+  ChevronRight,
+  FileText,
+  GitBranch,
+  Home,
+  LayoutDashboard,
+  LifeBuoy,
+  LogOut,
+  PanelLeft,
+  PlusCircle,
+  ScrollText,
+  ShieldCheck,
+  Users,
+  X,
+} from 'lucide-react';
+import { getSessionUser } from '../lib/auth.ts';
+import { runtimeEnv } from '../lib/db.ts';
 import '../styles/admin.css';
 
 interface Props {
   title: string;
   description: string;
-  section?: 'policies' | 'members';
+  section?: 'overview' | 'proposals' | 'members' | 'branches' | 'policies';
   isAdmin?: boolean;
+  isBranchAdmin?: boolean;
 }
 
-const { title, description, section = 'policies', isAdmin = false } = Astro.props;
+const { title, description, section = 'policies', isAdmin = false, isBranchAdmin = false } = Astro.props;
+const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
+
+const proposalsHref = isAdmin || isBranchAdmin ? '/admin/proposals/' : '/admin/';
+const governanceItems = [
+  { key: 'overview', href: '/admin/', label: 'Needs attention', icon: LayoutDashboard, show: true },
+  { key: 'proposals', href: proposalsHref, label: 'Review ideas & votes', icon: FileText, show: isAdmin || isBranchAdmin },
+  { key: 'members', href: isAdmin ? '/admin/members/' : '/admin/branches/#membership-heading', label: 'Member access', icon: Users, show: isAdmin || isBranchAdmin },
+  { key: 'branches', href: '/admin/branches/#branches-heading', label: 'Branch work', icon: GitBranch, show: isAdmin || isBranchAdmin },
+  { key: 'policies', href: '/admin/policies/', label: 'Adopt & publish', icon: BookOpen, show: isAdmin },
+].filter((item) => item.show);
+
+const siteItems = [
+  { href: '/', label: 'Engage home', icon: Home },
+  { href: '/proposals/', label: 'All proposals', icon: FileText },
+  { href: '/policies/', label: 'Policy registry', icon: ScrollText },
+  { href: '/how-it-works/', label: 'How it works', icon: LifeBuoy },
+];
+
+const sectionLabel = governanceItems.find((item) => item.key === section)?.label ?? 'Administration';
+const displayName = user?.name || user?.email || 'Administrator';
+const initials = displayName
+  .split(/\s+/)
+  .filter(Boolean)
+  .slice(0, 2)
+  .map((part) => part[0]?.toUpperCase())
+  .join('') || 'A';
+const roleLabel = user?.isAdmin ? 'Administrator' : user?.isBranchAdmin ? 'Branch administrator' : 'Moderator';
 ---
+
 <SiteLayout title={`${title} · Engage Admin`} description={description} noIndex workspace>
-  <div class="admin-shell">
-    <aside class="admin-sidebar" aria-label="Administration navigation">
-      <nav class="admin-nav">
-        <a href="/admin/" aria-current={section === 'policies' ? 'page' : undefined}>
-          Proposals &amp; Votes
+  <div class="admin-shell" data-admin-shell data-sidebar-open="false" data-sidebar-collapsed="false">
+    <div class="admin-sidebar-scrim" data-sidebar-scrim hidden></div>
+
+    <aside id="admin-sidebar" class="admin-sidebar" aria-label="Administration navigation">
+      <div class="admin-sidebar__header">
+        <a href="/admin/" class="admin-brand">
+          <span class="admin-brand__mark" aria-hidden="true"><ShieldCheck className="size-5" /></span>
+          <span class="admin-brand__text">
+            <strong>Engage</strong>
+            <small>Administration</small>
+          </span>
         </a>
-        {isAdmin && (
-          <a href="/admin/members/" aria-current={section === 'members' ? 'page' : undefined}>
-            Members &amp; Access
-          </a>
-        )}
-      </nav>
-      <p class="admin-sidebar-note">
-        Manage party proposals, policies, member voting stages, and membership verification in one
-        place.
-      </p>
+        <button class="admin-sidebar__close" type="button" data-sidebar-close>
+          <X className="size-4" aria-hidden="true" />
+          <span class="sr-only">Close navigation</span>
+        </button>
+      </div>
+
+      <div class="admin-sidebar__content">
+        <Button href="/admin/proposals/?new=1#create-policy" size="sm" aria-label="Create proposal" className="admin-create-button w-full justify-start gap-2">
+          <PlusCircle className="size-4" />
+          <span class="admin-create-label">Create proposal</span>
+        </Button>
+
+        <nav class="admin-nav" aria-label="Administration">
+          <div class="admin-nav-group">
+            <p class="admin-nav-label">Governance</p>
+            <ul class="admin-nav-list">
+              {governanceItems.map((item) => {
+                const Icon = item.icon;
+                const current = section === item.key;
+                return (
+                  <li>
+                    <a href={item.href} class:list={['admin-nav-link', { 'is-active': current }]} aria-current={current ? 'page' : undefined} aria-label={item.label} title={item.label}>
+                      <Icon aria-hidden="true" />
+                      <span>{item.label}</span>
+                      {current && <ChevronRight className="admin-nav-chevron" aria-hidden="true" />}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div class="admin-nav-group">
+            <p class="admin-nav-label">Public site</p>
+            <ul class="admin-nav-list">
+              {siteItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <li>
+                    <a href={item.href} class="admin-nav-link" aria-label={item.label} title={item.label}>
+                      <Icon aria-hidden="true" />
+                      <span>{item.label}</span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </nav>
+      </div>
+
+      <div class="admin-sidebar__footer">
+        <details class="admin-user-menu">
+          <summary class="admin-user" aria-label={`Account menu for ${displayName}`}>
+            <span class="admin-user__avatar" aria-hidden="true">{initials}</span>
+            <span class="admin-user__details">
+              <strong>{displayName}</strong>
+              <small>{user?.email || roleLabel}</small>
+            </span>
+            <ChevronRight className="admin-user__chevron" aria-hidden="true" />
+          </summary>
+          <div class="admin-user-menu__panel">
+            <a href="/member/">Member account</a>
+            <a href="/">View public site</a>
+            <button type="button" data-signout>
+              <LogOut className="size-4" aria-hidden="true" />
+              Sign out
+            </button>
+          </div>
+        </details>
+        <p class="admin-sidebar__note">Actions are limited by your assigned authority. Every decision keeps its recorded wording and history.</p>
+      </div>
     </aside>
 
-    <div class="admin-content">
-      <header class="admin-intro">
-        <h1>{title}</h1>
-        <p>{description}</p>
+    <div class="admin-main">
+      <header class="admin-topbar">
+        <div class="admin-topbar__left">
+          <button class="admin-icon-button" type="button" data-sidebar-toggle aria-controls="admin-sidebar" aria-expanded="true">
+            <PanelLeft className="size-4" aria-hidden="true" />
+            <span class="sr-only">Toggle administration sidebar</span>
+          </button>
+          <span class="admin-topbar__divider" aria-hidden="true"></span>
+          <nav class="admin-breadcrumb" aria-label="Breadcrumb">
+            <ol>
+              <li><a href="/admin/">Admin</a></li>
+              <li aria-hidden="true"><ChevronRight /></li>
+              <li aria-current="page">{sectionLabel}</li>
+            </ol>
+          </nav>
+        </div>
+        <div class="admin-topbar__right">
+          <span class="admin-role">{roleLabel}</span>
+          <a href="/member/" class="admin-avatar-link" aria-label="Open member account">{initials}</a>
+        </div>
       </header>
-      <slot />
+
+      <div class="admin-content">
+        <header class="admin-intro">
+          <p class="admin-eyebrow">Admin workspace</p>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </header>
+        <slot />
+      </div>
     </div>
   </div>
+
+  <script>
+    const shell = document.querySelector<HTMLElement>('[data-admin-shell]');
+    const trigger = document.querySelector<HTMLButtonElement>('[data-sidebar-toggle]');
+    const scrim = document.querySelector<HTMLElement>('[data-sidebar-scrim]');
+    const closeButton = document.querySelector<HTMLButtonElement>('[data-sidebar-close]');
+    const desktop = window.matchMedia('(min-width: 1024px)');
+
+    const setBodyLock = (locked: boolean) => {
+      document.body.classList.toggle('admin-nav-open', locked);
+    };
+
+    const closeMobile = () => {
+      if (!shell || !trigger) return;
+      shell.dataset.sidebarOpen = 'false';
+      trigger.setAttribute('aria-expanded', 'false');
+      if (scrim) scrim.hidden = true;
+      setBodyLock(false);
+    };
+
+    const sync = () => {
+      if (!shell || !trigger) return;
+      if (desktop.matches) {
+        const collapsed = localStorage.getItem('admin-sidebar-collapsed') === 'true';
+        shell.dataset.sidebarCollapsed = String(collapsed);
+        shell.dataset.sidebarOpen = 'false';
+        trigger.setAttribute('aria-expanded', String(!collapsed));
+        if (scrim) scrim.hidden = true;
+        setBodyLock(false);
+      } else {
+        shell.dataset.sidebarCollapsed = 'false';
+        closeMobile();
+      }
+    };
+
+    trigger?.addEventListener('click', () => {
+      if (!shell) return;
+      if (desktop.matches) {
+        const collapsed = shell.dataset.sidebarCollapsed !== 'true';
+        shell.dataset.sidebarCollapsed = String(collapsed);
+        localStorage.setItem('admin-sidebar-collapsed', String(collapsed));
+        trigger.setAttribute('aria-expanded', String(!collapsed));
+      } else {
+        const open = shell.dataset.sidebarOpen !== 'true';
+        shell.dataset.sidebarOpen = String(open);
+        trigger.setAttribute('aria-expanded', String(open));
+        if (scrim) scrim.hidden = !open;
+        setBodyLock(open);
+      }
+    });
+
+    closeButton?.addEventListener('click', closeMobile);
+    scrim?.addEventListener('click', closeMobile);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeMobile();
+    });
+    desktop.addEventListener('change', sync);
+    sync();
+  </script>
 </SiteLayout>

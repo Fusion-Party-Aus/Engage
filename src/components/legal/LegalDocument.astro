@@ -1,0 +1,607 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import LegalText from './LegalText.astro';
+import type { LegalDocument } from '../../data/legal-documents';
+
+interface Props {
+  document: LegalDocument;
+  sibling: { href: string; label: string; description: string };
+}
+
+const { document, sibling } = Astro.props;
+const tocSections = [
+  ...document.sections.map((section) => ({
+    id: section.id,
+    label: `${section.number}. ${section.title}`,
+  })),
+  { id: 'document-control', label: 'Document control and status' },
+];
+---
+<SiteLayout
+  title={document.title}
+  description={document.description}
+  noIndex
+>
+  <div class="page-wrap section-space legal-page">
+    <header class="legal-header">
+      <div class="legal-header__badges">
+        <Badge variant="warning">{document.status}</Badge>
+        <Badge variant="outline">Version {document.version}</Badge>
+      </div>
+      <h1>{document.title}</h1>
+      <p class="legal-lead">{document.description}</p>
+
+      <dl class="legal-meta">
+        <div>
+          <dt>Operator</dt>
+          <dd>{document.operator}</dd>
+        </div>
+        <div>
+          <dt>ABN</dt>
+          <dd>{document.abn}</dd>
+        </div>
+        <div>
+          <dt>Applies to</dt>
+          <dd>Engage at engage.fusionparty.org.au</dd>
+        </div>
+        <div>
+          <dt>Registered party</dt>
+          <dd>{document.registeredPartyName} ({document.registeredPartyAbbreviation})</dd>
+        </div>
+        <div>
+          <dt>Contact</dt>
+          <dd><a href={`mailto:${document.contact}`}>{document.contact}</a></dd>
+        </div>
+        <div>
+          <dt>Legal correspondence</dt>
+          <dd>{document.address}</dd>
+        </div>
+        <div>
+          <dt>Effective date</dt>
+          <dd>{document.effectiveDate}</dd>
+        </div>
+        <div>
+          <dt>Last updated</dt>
+          <dd>{document.lastUpdated}</dd>
+        </div>
+      </dl>
+
+      <div class="legal-draft-notice" role="note">
+        <strong>Owner authorised, publication pending.</strong> Engage's owner has authorised this
+        version. A separate formal publication approval, if required, and the effective date are
+        still to be recorded. Legal review has not been completed. This document is not legal
+        advice.
+      </div>
+    </header>
+
+    <div class="legal-layout">
+      <aside class="legal-sidebar">
+        <nav class="legal-toc" aria-label="On this page">
+          <p class="legal-toc__title">On this page</p>
+          <ol>
+            {tocSections.map((section) => (
+              <li><a href={`#${section.id}`}>{section.label}</a></li>
+            ))}
+          </ol>
+        </nav>
+
+        <details class="legal-toc-mobile">
+          <summary>On this page</summary>
+          <nav aria-label="On this page">
+            <ol>
+              {tocSections.map((section) => (
+                <li><a href={`#${section.id}`}>{section.label}</a></li>
+              ))}
+            </ol>
+          </nav>
+        </details>
+      </aside>
+
+      <article class="legal-body" aria-label={`${document.title} contents`}>
+        {document.sections.map((section) => (
+          <section
+            id={section.id}
+            class="legal-section"
+            aria-labelledby={`${section.id}-heading`}
+          >
+            <h2 id={`${section.id}-heading`}>
+              <span class="legal-section__number" aria-hidden="true">{section.number}</span>
+              {section.title}
+            </h2>
+
+            {section.blocks.map((block) => {
+              if (block.type === 'subheading') {
+                return <h3>{block.text}</h3>;
+              }
+
+              if (block.type === 'paragraph') {
+                return <p><LegalText text={block.text} /></p>;
+              }
+
+              if (block.type === 'list') {
+                return block.ordered ? (
+                  <ol>
+                    {block.items.map((item) => <li><LegalText text={item} /></li>)}
+                  </ol>
+                ) : (
+                  <ul>
+                    {block.items.map((item) => <li><LegalText text={item} /></li>)}
+                  </ul>
+                );
+              }
+
+              if (block.type === 'definitions') {
+                return (
+                  <dl class="legal-definitions">
+                    {block.items.map((item) => (
+                      <div>
+                        <dt>{item.term}</dt>
+                        <dd><LegalText text={item.description} /></dd>
+                      </div>
+                    ))}
+                  </dl>
+                );
+              }
+
+              if (block.type === 'callout') {
+                return (
+                  <div
+                    class:list={['legal-callout', `legal-callout--${block.tone ?? 'info'}`]}
+                    role="note"
+                  >
+                    <p><strong>{block.title}</strong></p>
+                    <p><LegalText text={block.text} /></p>
+                  </div>
+                );
+              }
+
+              return null;
+            })}
+          </section>
+        ))}
+
+        <section
+          id="document-control"
+          class="legal-section legal-approval"
+          aria-labelledby="document-control-heading"
+        >
+          <h2 id="document-control-heading">Document control and status</h2>
+
+          <dl class="legal-definitions">
+            <div>
+              <dt>Status</dt>
+              <dd>{document.approval.status}</dd>
+            </div>
+            <div>
+              <dt>Legal review</dt>
+              <dd>{document.approval.legalReview}</dd>
+            </div>
+            <div>
+              <dt>Authorised approval</dt>
+              <dd>{document.approval.authorisedBy}</dd>
+            </div>
+          </dl>
+
+          <h3>Before publication</h3>
+          <p>
+            Owner authorisation has been recorded. Before these documents operate, record any
+            separate formal publication approval required by Fusion's rules, set the effective date,
+            and complete qualified legal review where required. This document is not legal advice.
+          </p>
+        </section>
+
+        <footer class="legal-footer">
+          <div>
+            <p class="legal-footer__label">Related document</p>
+            <p><a href={sibling.href}>{sibling.label}</a> — {sibling.description}</p>
+          </div>
+          <div class="legal-footer__actions">
+            <Button href={sibling.href} variant="outline">{sibling.label}</Button>
+            <Button href="/" variant="ghost">Back to Engage</Button>
+          </div>
+        </footer>
+      </article>
+    </div>
+  </div>
+</SiteLayout>
+
+<style>
+  .legal-page {
+    max-width: 84rem;
+  }
+
+  .legal-header {
+    max-width: 62rem;
+    margin-bottom: clamp(2rem, 4vw, 3.5rem);
+  }
+
+  .legal-header__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .legal-header h1 {
+    max-width: 18ch;
+    margin: 0 0 0.9rem;
+    color: var(--horizon-purple);
+  }
+
+  .legal-lead {
+    max-width: 62ch;
+    margin: 0;
+    color: var(--horizon-muted);
+    font-size: 1.125rem;
+    line-height: 1.65;
+  }
+
+  .legal-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 1rem 1.5rem;
+    margin: 1.75rem 0;
+    padding: 1.25rem 0;
+    border-top: 1px solid var(--horizon-line);
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .legal-meta div {
+    min-width: 0;
+  }
+
+  .legal-meta dt,
+  .legal-footer__label {
+    margin: 0 0 0.2rem;
+    color: var(--horizon-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .legal-meta dd {
+    margin: 0;
+    color: var(--horizon-purple-deep);
+    font-weight: 600;
+    overflow-wrap: break-word;
+  }
+
+  .legal-draft-notice {
+    max-width: 62rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid #ebd49f;
+    border-left: 4px solid var(--horizon-warn-ink);
+    border-radius: 0.45rem;
+    background: var(--horizon-warn-bg);
+    color: var(--horizon-warn-ink);
+    line-height: 1.6;
+  }
+
+  .legal-draft-notice strong {
+    display: block;
+    margin-bottom: 0.2rem;
+  }
+
+  .legal-layout {
+    display: grid;
+    grid-template-columns: minmax(13rem, 17rem) minmax(0, 47rem);
+    justify-content: space-between;
+    gap: clamp(2rem, 5vw, 5rem);
+    align-items: start;
+  }
+
+  .legal-sidebar {
+    position: sticky;
+    top: 1.5rem;
+  }
+
+  .legal-toc {
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: var(--horizon-lavender-soft);
+  }
+
+  .legal-toc__title {
+    margin: 0 0 0.65rem;
+    color: var(--horizon-purple-deep);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .legal-toc ol,
+  .legal-toc-mobile ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.1rem;
+  }
+
+  .legal-toc a,
+  .legal-toc-mobile a {
+    display: block;
+    min-height: 2.25rem;
+    padding: 0.4rem 0;
+    color: var(--horizon-purple);
+    font-size: 0.88rem;
+    font-weight: 600;
+    line-height: 1.35;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+
+  .legal-toc a:hover,
+  .legal-toc-mobile a:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.22em;
+  }
+
+  .legal-toc-mobile {
+    display: none;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: var(--horizon-lavender-soft);
+  }
+
+  .legal-toc-mobile summary {
+    min-height: 2.75rem;
+    padding: 0.7rem 1rem;
+    cursor: pointer;
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+  }
+
+  .legal-toc-mobile nav {
+    padding: 0 1rem 0.9rem;
+  }
+
+  .legal-body {
+    min-width: 0;
+    max-width: 47rem;
+    color: var(--horizon-purple);
+    overflow-wrap: anywhere;
+  }
+
+  .legal-body p,
+  .legal-body li,
+  .legal-body dd {
+    line-height: 1.7;
+    text-wrap: pretty;
+  }
+
+  .legal-body p {
+    margin: 0 0 1rem;
+  }
+
+  .legal-body ul,
+  .legal-body ol {
+    margin: 0 0 1.15rem;
+    padding-left: 1.35rem;
+  }
+
+  .legal-body li {
+    margin-bottom: 0.45rem;
+  }
+
+  .legal-body h3 {
+    margin: 1.9rem 0 0.65rem;
+    color: var(--horizon-purple-deep);
+    font-size: 1.1rem;
+  }
+
+  .legal-section {
+    padding-top: 0.5rem;
+    margin-bottom: 2.25rem;
+    scroll-margin-top: 1.5rem;
+  }
+
+  .legal-section h2 {
+    display: flex;
+    gap: 0.65rem;
+    align-items: baseline;
+    margin: 0 0 1rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--horizon-line);
+    font: 600 clamp(1.45rem, 2.4vw, 1.9rem) / 1.15 Newsreader, Georgia, serif;
+    color: var(--horizon-purple-deep);
+  }
+
+  .legal-section__number {
+    flex: 0 0 auto;
+    color: #8e77c4;
+    font-family: Outfit, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .legal-body :global(a) {
+    color: var(--horizon-purple-deep);
+    text-decoration-color: var(--horizon-accent);
+    text-decoration-thickness: 2px;
+  }
+
+  .legal-body :global(a:hover) {
+    color: var(--horizon-focus);
+  }
+
+  .legal-definitions {
+    display: grid;
+    gap: 0.9rem;
+    margin: 0 0 1.2rem;
+  }
+
+  .legal-definitions > div {
+    display: grid;
+    grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr);
+    gap: 0.35rem 1.25rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .legal-definitions > div:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .legal-definitions dt {
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+  }
+
+  .legal-definitions dd {
+    margin: 0;
+  }
+
+  .legal-callout {
+    margin: 1.15rem 0 1.35rem;
+    padding: 0.95rem 1.1rem;
+    border: 1px solid var(--horizon-line);
+    border-left: 4px solid var(--horizon-purple);
+    border-radius: 0.45rem;
+    background: var(--horizon-lavender-soft);
+  }
+
+  .legal-callout p {
+    margin: 0;
+  }
+
+  .legal-callout p + p {
+    margin-top: 0.35rem;
+  }
+
+  .legal-callout strong {
+    color: var(--horizon-purple-deep);
+  }
+
+  .legal-callout--warning {
+    border-color: #ebd49f;
+    border-left-color: var(--horizon-warn-ink);
+    background: var(--horizon-warn-bg);
+  }
+
+  .legal-callout--warning,
+  .legal-callout--warning strong {
+    color: var(--horizon-warn-ink);
+  }
+
+  .legal-approval {
+    margin-top: 3rem;
+    padding: 1.35rem 1.45rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: var(--horizon-lavender-soft);
+  }
+
+  .legal-approval h2 {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .legal-approval h3 {
+    margin-top: 1.5rem;
+  }
+
+  .legal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: end;
+    gap: 1.25rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .legal-footer p {
+    margin: 0;
+    max-width: 38rem;
+    color: var(--horizon-muted);
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  .legal-footer__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  @media (max-width: 960px) {
+    .legal-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .legal-sidebar {
+      position: static;
+    }
+
+    .legal-toc {
+      display: none;
+    }
+
+    .legal-toc-mobile {
+      display: block;
+      margin-bottom: 1rem;
+    }
+
+    .legal-body {
+      max-width: 62rem;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .legal-header h1 {
+      max-width: none;
+    }
+
+    .legal-meta {
+      grid-template-columns: 1fr;
+      gap: 0.85rem;
+    }
+
+    .legal-definitions > div {
+      grid-template-columns: 1fr;
+      gap: 0.2rem;
+    }
+
+    .legal-footer {
+      align-items: start;
+      flex-direction: column;
+    }
+
+    .legal-footer__actions {
+      width: 100%;
+    }
+
+    .legal-footer__actions :global([data-slot="button"]) {
+      width: 100%;
+    }
+  }
+
+  @media print {
+    .legal-sidebar,
+    .legal-footer,
+    .legal-draft-notice {
+      display: none;
+    }
+
+    .legal-layout {
+      display: block;
+    }
+
+    .legal-body {
+      max-width: none;
+    }
+
+    .legal-section {
+      break-inside: avoid;
+    }
+  }
+</style>

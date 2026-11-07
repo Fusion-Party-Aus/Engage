@@ -1,0 +1,295 @@
+---
+interface Feature {
+  icon: string;
+  title: string;
+  description: string;
+  href: string;
+  cta: string;
+}
+
+interface Props {
+  id: string;
+  title: string;
+  eyebrow?: string;
+  intro?: string;
+  action?: { href: string; label: string };
+  features: Feature[];
+}
+
+const { id, title, eyebrow, intro, action, features } = Astro.props;
+const headingId = `${id}-heading`;
+---
+
+<section class="feature-section" aria-labelledby={headingId}>
+  <div class="feature-heading">
+    <div>
+      {eyebrow && <p class="feature-eyebrow">{eyebrow}</p>}
+      <h2 id={headingId}>{title}</h2>
+      {intro && <p class="feature-intro">{intro}</p>}
+    </div>
+    {action && (
+      <a class="feature-action" href={action.href}>
+        {action.label}
+        <span aria-hidden="true">→</span>
+      </a>
+    )}
+  </div>
+
+  <div class="feature-frame">
+    <span class="feature-corner feature-corner--tl" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" /></svg></span>
+    <span class="feature-corner feature-corner--tr" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" /></svg></span>
+    <span class="feature-corner feature-corner--bl" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" /></svg></span>
+    <span class="feature-corner feature-corner--br" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" /></svg></span>
+
+    <div class="feature-grid">
+      {features.map((feature) => (
+        <article class="feature-card">
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><use href={`#icon-${feature.icon}`} /></svg>
+          </span>
+          <h3><a class="feature-card__title-link" href={feature.href}>{feature.title}</a></h3>
+          <p>{feature.description}</p>
+          <span class="feature-card__cta">
+            {feature.cta}
+            <span aria-hidden="true">→</span>
+          </span>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .feature-section {
+    margin-block: clamp(2.75rem, 5.5vw, 4.5rem);
+  }
+
+  .feature-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .feature-eyebrow {
+    margin: 0 0 0.45rem;
+    color: #6237bf;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .feature-heading h2 {
+    margin: 0;
+    color: var(--horizon-purple-deep);
+  }
+
+  .feature-intro {
+    max-width: 60ch;
+    margin: 0.55rem 0 0;
+    color: var(--horizon-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .feature-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding-bottom: 0.2rem;
+    color: #4223a3;
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .feature-action:hover {
+    text-decoration: underline;
+    text-decoration-color: var(--horizon-accent);
+    text-decoration-thickness: 2px;
+  }
+
+  .feature-frame {
+    position: relative;
+    background: var(--horizon-white);
+    border: 1px dashed var(--horizon-line);
+    border-radius: 0.9rem;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .feature-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 15rem;
+    padding: clamp(1.5rem, 3vw, 2rem);
+  }
+
+  .feature-card + .feature-card {
+    border-left: 1px dashed var(--horizon-line);
+  }
+
+  .feature-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    color: #6237bf;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  }
+
+  .feature-icon svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .feature-card h3 {
+    margin: 1.35rem 0 0.55rem;
+    font-size: 1.25rem;
+    line-height: 1.25;
+    color: var(--horizon-purple-deep);
+  }
+
+  .feature-card__title-link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .feature-card__title-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 0.9rem;
+  }
+
+  .feature-card__title-link:focus-visible {
+    outline: none;
+  }
+
+  .feature-card:focus-within {
+    outline: 2px solid var(--horizon-focus);
+    outline-offset: -2px;
+    border-radius: 0.9rem;
+  }
+
+  .feature-card p {
+    margin: 0 0 1.5rem;
+    color: var(--horizon-muted);
+    font-size: 0.95rem;
+    line-height: 1.55;
+  }
+
+  .feature-card__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: auto;
+    color: #4223a3;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .feature-card__cta span {
+    transition: transform 160ms ease;
+  }
+
+  .feature-card:hover {
+    background: linear-gradient(180deg, rgba(243, 241, 251, 0.65), transparent 70%);
+  }
+
+  .feature-card:hover .feature-icon {
+    background: var(--horizon-accent);
+    border-color: transparent;
+    color: var(--horizon-accent-ink);
+  }
+
+  .feature-card:hover .feature-card__cta span {
+    transform: translateX(3px);
+  }
+
+  .feature-corner {
+    position: absolute;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 1rem;
+    height: 1rem;
+    color: #9e8cb2;
+    pointer-events: none;
+  }
+
+  .feature-corner svg {
+    width: 0.85rem;
+    height: 0.85rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+
+  .feature-corner--tl {
+    top: 0;
+    left: 0;
+    transform: translate(-50%, -50%);
+  }
+
+  .feature-corner--tr {
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
+  }
+
+  .feature-corner--bl {
+    bottom: 0;
+    left: 0;
+    transform: translate(-50%, 50%);
+  }
+
+  .feature-corner--br {
+    right: 0;
+    bottom: 0;
+    transform: translate(50%, 50%);
+  }
+
+  @media (max-width: 780px) {
+    .feature-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .feature-card {
+      min-height: 0;
+    }
+
+    .feature-card + .feature-card {
+      border-left: 0;
+      border-top: 1px dashed var(--horizon-line);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .feature-heading {
+      align-items: flex-start;
+    }
+
+    .feature-card {
+      padding: 1.35rem;
+    }
+  }
+</style>

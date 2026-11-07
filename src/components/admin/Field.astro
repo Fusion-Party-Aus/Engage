@@ -1,0 +1,16 @@
+---
+import { cn } from '../../lib/utils';
+interface Props extends astroHTML.JSX.HTMLAttributes {
+  label?: string;
+  htmlFor?: string;
+  hint?: string;
+  error?: string;
+}
+const { class: className, label, htmlFor, hint, error, ...props } = Astro.props;
+---
+<div data-slot="field" class={cn('grid min-w-0 gap-2', className)} {...props}>
+  {label && <label for={htmlFor} class="flex items-center gap-2 text-sm font-semibold leading-none select-none">{label}</label>}
+  <slot />
+  {hint && !error && <p data-slot="field-description" class="text-sm text-muted-foreground">{hint}</p>}
+  {error && <p data-slot="field-error" role="alert" class="text-sm font-medium text-destructive">{error}</p>}
+</div>

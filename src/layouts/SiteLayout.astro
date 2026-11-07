@@ -6,8 +6,11 @@ import '@fontsource/outfit/latin-500.css';
 import '@fontsource/outfit/latin-600.css';
 import '@fontsource/outfit/latin-700.css';
 import '../styles/global.css';
+import SiteHeader from '../components/site/SiteHeader.astro';
+import SiteFooter from '../components/site/SiteFooter.astro';
 import { getSessionUser } from '../lib/auth.ts';
 import { runtimeEnv } from '../lib/db.ts';
+import { trustedCanonical } from '../lib/public-origin.ts';
 
 interface Props {
   title: string;
@@ -19,7 +22,7 @@ interface Props {
 
 const {
   title,
-  description = 'Read, discuss, and vote on Fusion Party Australia proposals, policies, and member decisions.',
+  description = 'Browse proposals, join discussions, vote when eligible, and explore the policy registry from Fusion Party Australia.',
   canonical,
   noIndex = false,
   workspace = false,
@@ -34,6 +37,13 @@ const privateHost =
   Astro.url.hostname === '127.0.0.1';
 const preventIndexing = noIndex || privateHost;
 const path = Astro.url.pathname;
+const canonicalHref = canonical
+  ? trustedCanonical(canonical, {
+      env,
+      requestUrl: Astro.url,
+      development: import.meta.env.DEV,
+    })
+  : undefined;
 ---
 <!doctype html>
 <html lang="en-AU">
@@ -43,93 +53,29 @@ const path = Astro.url.pathname;
     <meta name="theme-color" content="#32105a" />
     <meta name="description" content={description} />
     {preventIndexing && <meta name="robots" content="noindex, nofollow" />}
-    {canonical && <link rel="canonical" href={canonical} />}
+    {canonicalHref && <link rel="canonical" href={canonicalHref} />}
     <link rel="icon" href="/fusion_horizon_logo_light.svg" type="image/svg+xml" />
     <title>{title}</title>
   </head>
   <body class:list={{ 'admin-body': workspace }}>
+    <svg class="icon-definitions" aria-hidden="true" focusable="false">
+      <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></symbol>
+      <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></symbol>
+      <symbol id="icon-files" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v14M18 6H9a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Z" /><path d="M11 11h5M11 15h5" /></symbol>
+      <symbol id="icon-book" viewBox="0 0 24 24"><path d="M12 7v14M3 18V5a2 2 0 0 1 2-2h3a4 4 0 0 1 4 4 4 4 0 0 1 4-4h3a2 2 0 0 1 2 2v13h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4z" /></symbol>
+      <symbol id="icon-vote" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /><path d="m2 12 1 1 2-2" /></symbol>
+      <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4m0-4h.01" /></symbol>
+      <symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></symbol>
+      <symbol id="icon-gauge" viewBox="0 0 24 24"><path d="M20.9 13a9 9 0 1 1-17.8 0M12 13l4-4M7 17h.01M12 19h.01M17 17h.01" /></symbol>
+    </svg>
     <a class="skip-link" href="#main-content">Skip to content</a>
-    <header class="site-header">
-      <a class="brand" href="/" aria-label="Engage home">
-        <img src="/fusion_horizon_logo_light.svg" alt="" width="40" height="40" />
-        <span class="brand__word">
-          Engage
-          <span class="brand__sub">Fusion Party Australia</span>
-        </span>
-      </a>
-
-      {workspace ? (
-        <nav class="primary-nav" aria-label="Workspace navigation">
-          <a href="/">Member site</a>
-          <a href="/proposals/">All Proposals</a>
-          <a class="nav-member" href="/member/">
-            {user ? user.name || user.email : 'Account'}
-          </a>
-          {user && (
-            <button class="nav-signout" type="button" data-signout>
-              Sign out
-            </button>
-          )}
-        </nav>
-      ) : (
-        <nav class="primary-nav" aria-label="Primary navigation">
-          <a
-            href="/proposals/"
-            aria-current={
-              path.startsWith('/proposals') && Astro.url.searchParams.get('stage') !== 'decide'
-                ? 'page'
-                : undefined
-            }
-          >
-            Proposals
-          </a>
-          <a
-            href="/proposals/?stage=decide"
-            aria-current={Astro.url.searchParams.get('stage') === 'decide' ? 'page' : undefined}
-          >
-            Decisions
-          </a>
-          <a href="/#how-it-works">How It Works</a>
-          {user?.isStaff && (
-            <a href="/admin/" aria-current={path.startsWith('/admin') ? 'page' : undefined}>
-              Admin
-            </a>
-          )}
-          <a
-            class="nav-member"
-            href="/member/"
-            aria-current={path.startsWith('/member') ? 'page' : undefined}
-          >
-            {user ? `Account (${user.name.split(' ')[0] || 'Member'})` : 'Member Sign In'}
-          </a>
-          {user && (
-            <button class="nav-signout" type="button" data-signout>
-              Sign out
-            </button>
-          )}
-        </nav>
-      )}
-    </header>
+    <SiteHeader user={user} path={path} />
 
     <main id="main-content">
       <slot />
     </main>
 
-    {!workspace && (
-      <footer class="site-footer">
-        <a class="footer-brand" href="/">
-          <img src="/fusion_horizon_logo_light.svg" alt="" width="32" height="32" />
-          <span>Engage · Fusion Party Australia</span>
-        </a>
-        <p>Participatory democracy: propose ideas, deliberate together, vote on decisions, and track implementation.</p>
-        <div class="footer-links">
-          <a href="/proposals/">Proposals</a>
-          <a href="/proposals/?stage=decide">Decisions</a>
-          <a href="/proposals/?stage=implement">Implemented</a>
-          <a href="/member/">Member account</a>
-        </div>
-      </footer>
-    )}
+    {!workspace && <SiteFooter user={user} />}
   </body>
 </html>
 <script>
@@ -145,17 +91,3 @@ const path = Astro.url.pathname;
     });
   });
 </script>
-<style>
-  .nav-signout {
-    font: inherit;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--horizon-muted);
-    border: 0;
-    background: none;
-    padding: 0.35rem 0.5rem;
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
-  }
-</style>

@@ -1,0 +1,259 @@
+---
+import type { SessionUser } from '../../lib/types.ts';
+
+interface Props {
+  user: SessionUser | null;
+}
+
+const { user } = Astro.props;
+const year = new Date().getFullYear();
+const isStaff = Boolean(user?.isStaff || user?.isBranchAdmin);
+
+const groups = [
+  {
+    id: 'explore',
+    label: 'Explore',
+    links: [
+      { href: '/proposals/', label: 'Browse proposals' },
+      { href: '/proposals/?stage=deliberate', label: 'Join discussions' },
+      { href: '/proposals/?stage=decide', label: 'See open votes' },
+    ],
+  },
+  {
+    id: 'governance',
+    label: 'Governance',
+    links: [
+      { href: '/policies/', label: 'Policy registry' },
+      { href: '/branches/', label: 'Branches' },
+      { href: '/how-it-works/', label: 'How it works' },
+    ],
+  },
+  {
+    id: 'account',
+    label: 'Your account',
+    links: [
+      { href: '/member/', label: user ? 'My Engage' : 'Sign in' },
+      { href: '/proposals/new/', label: 'Suggest an idea' },
+      ...(isStaff ? [{ href: '/admin/', label: 'Admin tasks' }] : []),
+    ],
+  },
+];
+---
+
+<footer class="site-footer" id="site-footer">
+  <div class="site-footer__inner">
+    <div class="site-footer__grid">
+      <div class="site-footer__brand">
+        <a class="footer-brand" href="/" aria-label="Engage home">
+          <img src="/fusion_horizon_logo_light.svg" alt="" width="36" height="36" />
+          <span>
+            <strong>Engage</strong>
+            <small>Fusion Party Australia</small>
+          </span>
+        </a>
+        <p class="site-footer__tagline">
+          Explore ideas, join discussions, and vote on the decisions that shape Fusion.
+        </p>
+        <p class="site-footer__note">
+          A member platform for Fusion Party Australia. Voting is optional and depends on the ballot
+          and your membership.
+        </p>
+      </div>
+
+      <div class="site-footer__groups">
+        {groups.map((group) => (
+          <nav class="footer-group" aria-labelledby={`footer-${group.id}`}>
+            <h2 class="footer-group__title" id={`footer-${group.id}`}>{group.label}</h2>
+            <ul>
+              {group.links.map((link) => (
+                <li><a href={link.href}>{link.label}</a></li>
+              ))}
+            </ul>
+          </nav>
+        ))}
+      </div>
+    </div>
+
+    <div class="site-footer__bottom">
+      <p>&copy; {year} Fusion Party Australia</p>
+      <nav aria-label="Legal">
+        <a href="/privacy/">Privacy</a>
+        <a href="/terms/">Terms</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    position: relative;
+    background:
+      radial-gradient(65% 120% at 12% -10%, rgba(124, 74, 209, 0.55), transparent 62%),
+      radial-gradient(50% 90% at 92% 0%, rgba(0, 201, 210, 0.16), transparent 66%),
+      #240a59;
+    color: #d9d0ea;
+  }
+
+  .site-footer::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, var(--horizon-accent), #7b4ad1 55%, transparent);
+  }
+
+  .site-footer__inner {
+    width: min(var(--content-width), calc(100% - 3rem));
+    margin-inline: auto;
+    padding: clamp(2.75rem, 5vw, 4.25rem) 0 1.5rem;
+  }
+
+  .site-footer__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr);
+    gap: clamp(2rem, 5vw, 5rem);
+  }
+
+  .footer-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    color: #fff;
+    text-decoration: none;
+  }
+
+  .footer-brand img {
+    width: 2.25rem;
+    height: 2.25rem;
+    object-fit: contain;
+  }
+
+  .footer-brand strong {
+    display: block;
+    font-size: 1.08rem;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+  }
+
+  .footer-brand small {
+    display: block;
+    margin-top: 0.18rem;
+    color: #b9a9d6;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  .site-footer__tagline {
+    max-width: 34ch;
+    margin: 1.35rem 0 0.55rem;
+    color: #efe9ff;
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .site-footer__note {
+    max-width: 42ch;
+    margin: 0;
+    color: #b3a4cf;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .site-footer__groups {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+
+  .footer-group__title {
+    margin: 0 0 0.85rem;
+    color: #fff;
+    font-family: Outfit, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .footer-group ul {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .footer-group a {
+    color: #c5b9dd;
+    font-size: 0.9rem;
+    text-decoration: none;
+  }
+
+  .footer-group a:hover {
+    color: #fff;
+    text-decoration: underline;
+    text-decoration-color: var(--horizon-accent);
+    text-decoration-thickness: 2px;
+  }
+
+  .site-footer__bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: clamp(2rem, 4vw, 3rem);
+    padding-top: 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+  }
+
+  .site-footer__bottom p {
+    margin: 0;
+    color: #a99bc6;
+    font-size: 0.8rem;
+  }
+
+  .site-footer__bottom nav {
+    display: flex;
+    gap: 1.25rem;
+  }
+
+  .site-footer__bottom a {
+    color: #cfc3e4;
+    font-size: 0.8rem;
+    text-decoration: none;
+  }
+
+  .site-footer__bottom a:hover {
+    color: #fff;
+    text-decoration: underline;
+    text-decoration-color: var(--horizon-accent);
+    text-decoration-thickness: 2px;
+  }
+
+  @media (max-width: 900px) {
+    .site-footer__grid {
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .site-footer__inner {
+      width: calc(100% - 2rem);
+      padding-top: 2.5rem;
+    }
+
+    .site-footer__groups {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.75rem 1.25rem;
+    }
+
+    .site-footer__bottom {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+</style>
