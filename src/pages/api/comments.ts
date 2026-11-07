@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
+import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import {
   addComment,
   deleteComment,
@@ -21,6 +22,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const db = await getDatabase(env);
+    const gate = await requireLegalAcceptance(db, user, env);
+    if (gate) return gate;
     const comment = await addComment(db, user, body);
     return Response.json({ comment }, { status: 201 });
   } catch (error) {
@@ -49,6 +52,8 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     const body = (await request.json()) as Record<string, unknown>;
     const commentId = String(body.commentId ?? "");
     const db = await getDatabase(env);
+    const gate = await requireLegalAcceptance(db, user, env);
+    if (gate) return gate;
     const result = await toggleUpvoteComment(db, user, commentId);
     return Response.json(result);
   } catch (error) {

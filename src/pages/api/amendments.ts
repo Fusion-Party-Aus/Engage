@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { randomUUID } from "node:crypto";
 import { getSessionUser } from "../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
+import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import { createAmendmentRevision } from "../../lib/amendments.ts";
 import {
   canViewProposal,
@@ -72,6 +73,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { status: 400 },
       );
     const db = await getDatabase(env);
+    const gate = await requireLegalAcceptance(db, user, env);
+    if (gate) return gate;
     const proposal = await db.collection("proposals").findOne({ proposalId });
     if (
       !proposal ||

@@ -1,0 +1,14 @@
+---
+import LegalDocument from '../../components/legal/LegalDocument.astro';
+import { privacyPolicy } from '../../data/legal-documents.ts';
+
+export const prerender = false;
+---
+<LegalDocument
+  document={privacyPolicy}
+  sibling={{
+    href: '/terms/',
+    label: 'Terms of Use',
+    description: 'the rules for browsing and taking part in Engage.',
+  }}
+/>

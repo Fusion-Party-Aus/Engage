@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
+import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import { castVote } from "../../lib/store.ts";
 
 export const prerender = false;
@@ -17,6 +18,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const db = await getDatabase(env);
+    const gate = await requireLegalAcceptance(db, user, env);
+    if (gate) return gate;
     const result = await castVote(db, user, body);
     return Response.json(result);
   } catch (error) {

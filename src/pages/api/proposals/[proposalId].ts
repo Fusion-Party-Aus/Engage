@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
 import { ballotRecordsForViewer } from "../../../lib/ballot-privacy.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
+import { requireLegalAcceptance } from "../../../lib/legal-acceptance.ts";
 import {
   deleteProposal,
   getProposalDetail,
@@ -36,6 +37,8 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const db = await getDatabase(env);
+    const gate = await requireLegalAcceptance(db, user, env);
+    if (gate) return gate;
     const id = params.proposalId ?? params.policyId ?? "";
     const proposal = await saveProposal(db, user, { ...body, proposalId: id });
     return Response.json({ proposal, policy: proposal });

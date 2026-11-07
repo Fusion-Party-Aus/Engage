@@ -1,0 +1,14 @@
+---
+import LegalDocument from '../../components/legal/LegalDocument.astro';
+import { termsOfUse } from '../../data/legal-documents.ts';
+
+export const prerender = false;
+---
+<LegalDocument
+  document={termsOfUse}
+  sibling={{
+    href: '/privacy/',
+    label: 'Privacy Policy',
+    description: 'how Fusion handles personal information in Engage.',
+  }}
+/>

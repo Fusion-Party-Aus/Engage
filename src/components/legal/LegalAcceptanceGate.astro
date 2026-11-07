@@ -1,0 +1,214 @@
+---
+import { Button } from '../ui/button';
+---
+<section
+  class="legal-acceptance"
+  data-legal-acceptance-gate
+  aria-labelledby="legal-acceptance-heading"
+  hidden
+>
+  <h2 id="legal-acceptance-heading">Before you take part</h2>
+  <p>
+    To vote, comment, submit a proposal or amend wording, you need to accept the current Terms of
+    Use and acknowledge the Privacy Policy.
+  </p>
+
+  <form data-legal-acceptance-form class="legal-acceptance__form">
+    <label class="legal-acceptance__choice">
+      <input type="checkbox" name="termsAccepted" value="true" required />
+      <span>
+        I agree to the <a href="/terms/">Terms of Use</a>
+        (version <span data-terms-version>current version</span>).
+      </span>
+    </label>
+
+    <label class="legal-acceptance__choice">
+      <input type="checkbox" name="privacyAcknowledged" value="true" required />
+      <span>
+        I have read the <a href="/privacy/">Privacy Policy</a>
+        (version <span data-privacy-version>current version</span>).
+      </span>
+    </label>
+
+    <p class="legal-acceptance__hint">
+      This acknowledgement records that you have read the Privacy Policy. It is not a substitute for
+      any separate consent that may be required for sensitive information.
+    </p>
+
+    <input type="hidden" name="termsVersion" data-terms-version-input />
+    <input type="hidden" name="privacyVersion" data-privacy-version-input />
+
+    <div class="legal-acceptance__actions">
+      <Button type="submit">Record acceptance</Button>
+      <span class="legal-acceptance__status" role="status" aria-live="polite" data-acceptance-status></span>
+    </div>
+  </form>
+</section>
+
+<script>
+  const gate = document.querySelector<HTMLElement>('[data-legal-acceptance-gate]');
+  const form = gate?.querySelector<HTMLFormElement>('[data-legal-acceptance-form]');
+  const status = gate?.querySelector<HTMLElement>('[data-acceptance-status]');
+
+  async function loadStatus() {
+    if (!gate || !form) return;
+    try {
+      const response = await fetch('/api/legal/acceptance', {
+        headers: { accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (!response.ok) return;
+      const data = (await response.json()) as {
+        enabled?: boolean;
+        accepted?: boolean;
+        terms?: { version?: string };
+        privacy?: { version?: string };
+      };
+      if (!data.enabled || data.accepted) return;
+
+      const termsVersion = data.terms?.version ?? '';
+      const privacyVersion = data.privacy?.version ?? '';
+      const termsText = gate.querySelector('[data-terms-version]');
+      const privacyText = gate.querySelector('[data-privacy-version]');
+      const termsInput = form.querySelector<HTMLInputElement>('[data-terms-version-input]');
+      const privacyInput = form.querySelector<HTMLInputElement>('[data-privacy-version-input]');
+      if (termsText) termsText.textContent = termsVersion;
+      if (privacyText) privacyText.textContent = privacyVersion;
+      if (termsInput) termsInput.value = termsVersion;
+      if (privacyInput) privacyInput.value = privacyVersion;
+      gate.hidden = false;
+    } catch {
+      // Fail closed: the participation API still enforces acceptance.
+    }
+  }
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    if (status) status.textContent = 'Recording acceptance…';
+
+    try {
+      const data = new FormData(form);
+      const response = await fetch('/api/legal/acceptance', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          termsAccepted: data.get('termsAccepted') === 'true',
+          privacyAcknowledged: data.get('privacyAcknowledged') === 'true',
+          termsVersion: String(data.get('termsVersion') ?? ''),
+          privacyVersion: String(data.get('privacyVersion') ?? ''),
+        }),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(result.error || 'Could not record acceptance.');
+      }
+      if (status) status.textContent = 'Acceptance recorded.';
+      gate?.setAttribute('hidden', '');
+      location.reload();
+    } catch (error) {
+      if (status) {
+        status.textContent =
+          error instanceof Error ? error.message : 'Could not record acceptance.';
+      }
+      if (submit) submit.disabled = false;
+    }
+  });
+
+  void loadStatus();
+</script>
+
+<style>
+  .legal-acceptance {
+    display: grid;
+    gap: 0.9rem;
+    margin: 1.25rem 0;
+    padding: 1.35rem 1.5rem;
+    border: 1px solid #ebd49f;
+    border-left: 4px solid var(--horizon-warn-ink);
+    border-radius: 0.75rem;
+    background: var(--horizon-warn-bg);
+    color: var(--horizon-warn-ink);
+  }
+
+  .legal-acceptance[hidden] {
+    display: none;
+  }
+
+  .legal-acceptance h2 {
+    margin: 0;
+    font: 600 1.5rem/1.15 Newsreader, Georgia, serif;
+    color: var(--horizon-warn-ink);
+  }
+
+  .legal-acceptance p {
+    margin: 0;
+    max-width: 62ch;
+    line-height: 1.55;
+  }
+
+  .legal-acceptance__form {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .legal-acceptance__choice {
+    display: grid;
+    grid-template-columns: 1.15rem minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: start;
+    line-height: 1.5;
+  }
+
+  .legal-acceptance__choice input {
+    width: 1.1rem;
+    height: 1.1rem;
+    margin-top: 0.2rem;
+    accent-color: var(--horizon-purple);
+  }
+
+  .legal-acceptance__choice a {
+    color: var(--horizon-purple-deep);
+    font-weight: 700;
+    text-decoration-color: var(--horizon-accent);
+    text-decoration-thickness: 2px;
+  }
+
+  .legal-acceptance__hint {
+    color: var(--horizon-warn-ink);
+    font-size: 0.9rem;
+  }
+
+  .legal-acceptance__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+  }
+
+  .legal-acceptance__status {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  @media (max-width: 600px) {
+    .legal-acceptance {
+      padding: 1rem;
+    }
+
+    .legal-acceptance__actions {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .legal-acceptance__actions :global([data-slot="button"]) {
+      width: 100%;
+    }
+  }
+</style>

@@ -1,5 +1,6 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import LegalAcceptanceGate from '../../components/legal/LegalAcceptanceGate.astro';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Alert, AlertDescription } from '../../components/ui/alert';
@@ -7,6 +8,7 @@ import { Badge } from '../../components/ui/badge';
 import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
+import MemberSettings from '../../components/member/MemberSettings';
 import {
   devLoginEnabled,
   emailLoginConfigured,
@@ -58,6 +60,11 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
           <p>
             Use the email address and full name on your Fusion Party membership. After your first
             sign-in, an administrator verifies your membership so you can comment and vote.
+          </p>
+          <p class="signin-legal">
+            Member participation is subject to the{' '}
+            <a href="/terms/">Terms of Use</a> and{' '}
+            <a href="/privacy/">Privacy Policy</a>.
           </p>
         </header>
 
@@ -174,6 +181,8 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
           </AlertDescription>
         </Alert>
 
+        <LegalAcceptanceGate />
+
         <Card className="account-section overview-only" aria-labelledby="awaiting-heading">
           <h2 id="awaiting-heading">Votes for you ({awaitingDecision.length})</h2>
           {!user.canParticipate ? <p class="muted-note">Your membership must be verified before you can vote.</p> : awaitingDecision.length === 0 ? <p class="muted-note">You’re up to date on open decisions.</p> : (
@@ -267,24 +276,24 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
             </ul>
           )}
         </Card>
-        <details class="account-section account-settings account-only" id="account-settings" open={memberView === 'account'}><summary>Account settings</summary><section aria-labelledby="profile-heading">
-          <h2 id="profile-heading">Your display name</h2>
-          <form id="profile-form" class="profile-form">
-            <Field label="Full name" htmlFor="profile-name">
-              <Input
-                id="profile-name"
-                name="name"
-                defaultValue={user.name}
-                autoComplete="name"
-                required
-                minLength={2}
-                maxLength={100}
-              />
-            </Field>
-            <Button type="submit" variant="outline">Save name</Button>
-            <p id="profile-status" class="form-status" role="status" aria-live="polite"></p>
-          </form>
-        </section></details>
+        {memberView === 'account' && (
+          <div class="account-settings" id="account-settings">
+            <MemberSettings
+              client:load
+              name={user.name}
+              email={user.email}
+              role={user.role}
+              status={user.status}
+              canParticipate={user.canParticipate}
+              branches={memberBranches.map((branch: any) => ({ id: branch.branchId, name: branch.name }))}
+              stats={{
+                votes: activity?.votes.length ?? 0,
+                contributions: activity?.comments.length ?? 0,
+                ideas: activity?.proposals.length ?? 0,
+              }}
+            />
+          </div>
+        )}
 
       </>
     )}
@@ -384,31 +393,11 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     });
     if (res.ok) location.reload();
   });
-
-  const profileForm = document.querySelector<HTMLFormElement>('#profile-form');
-  profileForm?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!profileForm.reportValidity()) return;
-    const status = document.querySelector<HTMLElement>('#profile-status')!;
-    const btn = profileForm.querySelector<HTMLButtonElement>('button')!;
-    btn.disabled = true;
-    status.textContent = 'Saving…';
-    try {
-      const name = String(new FormData(profileForm).get('name')).trim();
-      const result = await authClient.updateUser({ name });
-      status.textContent = result.error ? 'Could not save name.' : 'Name saved.';
-    } catch {
-      status.textContent = 'Could not save name.';
-    } finally {
-      btn.disabled = false;
-    }
-  });
 </script>
 
 <style>
   .account-shortcuts { display:flex; flex-wrap:wrap; gap:.55rem 1.5rem; padding:.8rem 0; margin:1rem 0; border-block:1px solid var(--horizon-line); font-weight:600; }
-  .account-settings summary { cursor:pointer; font-weight:700; font-size:1.15rem; }
-  .account-settings[open] summary { margin-bottom:1.5rem; }
+  .account-settings { margin-top: 1rem; }
   .more-votes { margin-top:1rem; }
   .more-votes summary { cursor:pointer; font-weight:700; }
   .more-votes .activity-list { margin-top:1rem; }
@@ -420,6 +409,15 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
     gap: 1.5rem;
     margin-top: 1rem;
+  }
+  .signin-legal {
+    margin-top: 0.85rem;
+    color: var(--horizon-muted);
+    font-size: 0.92rem;
+  }
+  .signin-legal a {
+    color: var(--horizon-purple-deep);
+    font-weight: 600;
   }
   .signin-box {
     padding: 1.75rem;
@@ -469,20 +467,6 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
   .account-section h2 {
     margin: 0 0 1rem;
     font-size: 1.65rem;
-  }
-  .profile-form {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 0.85rem 1rem;
-  }
-  .profile-form [data-slot="field"] {
-    margin: 0;
-    min-width: min(100%, 20rem);
-  }
-  .profile-form .form-status {
-    width: 100%;
-    margin: 0;
   }
 
   .muted-note {

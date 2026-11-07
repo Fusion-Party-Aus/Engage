@@ -1,0 +1,29 @@
+---
+interface Props {
+  text: string;
+}
+
+const { text } = Astro.props;
+const parts = text.split(/(\[[^\]]+\]\([^)]+\))/g).filter(Boolean);
+const linkPattern = /^\[([^\]]+)\]\(([^)]+)\)$/;
+---
+{
+  parts.map((part) => {
+    const match = part.match(linkPattern);
+    if (!match) return part;
+    const [, label, href] = match;
+    const external = /^https?:\/\//i.test(href);
+    return external ? (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`${label} (opens in a new tab)`}
+      >
+        {label}
+      </a>
+    ) : (
+      <a href={href}>{label}</a>
+    );
+  })
+}

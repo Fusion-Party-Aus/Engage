@@ -10,9 +10,11 @@ import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { NativeSelect } from '../../components/ui/native-select';
 import { Alert, AlertDescription } from '../../components/ui/alert';
+import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { getProposalDetail } from '../../lib/store.ts';
+import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import type { ProposalStage } from '../../lib/types.ts';
 
 export const prerender = false;
@@ -31,6 +33,15 @@ if (!detail) {
 
 const proposal = detail?.proposal;
 const revisions = proposal ? await db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray() : [];
+const ballotRevision = proposal?.ballotRevisionId
+  ? revisions.find((revision: any) => revision.revisionId === proposal.ballotRevisionId)
+  : null;
+const ballotRevisionLabel = proposal?.ballotRevisionId
+  ? revisionDisplayLabel({
+      revisionId: String(proposal.ballotRevisionId),
+      createdAt: ballotRevision?.createdAt ?? proposal.createdAt,
+    })
+  : 'being prepared';
 const policyRecord = proposal ? await db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }) : null;
 const branchEligibility = proposal?.jurisdictionBranchId && user?.canParticipate
   ? await db.collection('branch_memberships').findOne({ memberId: user.memberId, branchId: proposal.jurisdictionBranchId, status: 'active' })
@@ -93,7 +104,7 @@ const isResolution = proposal
 <SiteLayout
   title={proposal ? `${proposal.title} · Engage` : 'Proposal not found · Engage'}
   description={proposal?.summary ?? 'Participatory proposal details, member deliberation, and voting.'}
-  canonical={proposal ? `${Astro.url.origin}/proposals/${proposal.slug}/` : undefined}
+  canonical={proposal ? `/proposals/${proposal.slug}/` : undefined}
 >
   <div class="page-wrap section-space proposal-detail-page">
     {!proposal ? (
@@ -473,7 +484,7 @@ const isResolution = proposal
                     return (
                       <li>
                         <strong>{new Date(revision.createdAt).toLocaleString('en-AU')}</strong>
-                        <span>Revision {revision.revisionId.slice(0, 8)} · {changed.length ? `${changed.length} changed ${changed.length === 1 ? 'field' : 'fields'}` : parent ? 'No wording changes' : 'Initial wording'}</span>
+                        <span>{revisionDisplayLabel({ revisionId: String(revision.revisionId), createdAt: revision.createdAt, ordinal: revisions.length - index })} · <code title={String(revision.revisionId)}>{String(revision.revisionId).slice(0, 8)}</code> · {changed.length ? `${changed.length} changed ${changed.length === 1 ? 'field' : 'fields'}` : parent ? 'No wording changes' : 'Initial wording'}</span>
                         {changed.length > 0 && (
                           <details>
                             <summary>View wording changes</summary>
@@ -598,11 +609,13 @@ const isResolution = proposal
                 </div>
               </div>
 
+              <BallotPrivacyNotice />
+
               <!-- Voting buttons -->
               {proposal.stage === 'decide' && (
                 <div class="sidebar-vote-wrapper">
                   {canVoteOnProposal ? (
-                    <ProposalBallot client:load proposalId={proposal.proposalId} revision={proposal.ballotRevisionId ? String(proposal.ballotRevisionId).slice(0, 8) : 'being prepared'} initialChoice={myVote} initialReason={myReason} initialTally={votes} />
+                    <ProposalBallot client:load proposalId={proposal.proposalId} revision={String(proposal.ballotRevisionId ?? '')} revisionLabel={ballotRevisionLabel} initialChoice={myVote} initialReason={myReason} initialTally={votes} />
                   ) : user?.canParticipate && proposal.jurisdictionBranchId ? (
                     <Alert className="sidebar-nudge"><AlertDescription><p>{branchElectorate ? 'This decision is for an authorised branch electorate. Current branch eligibility is not on file for your account.' : 'This branch electorate is not currently recognised or available for voting.'}</p></AlertDescription></Alert>
                   ) : user ? (
