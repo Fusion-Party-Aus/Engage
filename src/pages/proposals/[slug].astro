@@ -93,9 +93,6 @@ const stanceCounts = {
 };
 
 const votes = proposal?.votes ?? { approve: 0, abstain: 0, reject: 0, total: 0 };
-const approvePct = votes.total > 0 ? Math.round((votes.approve / votes.total) * 100) : 0;
-const abstainPct = votes.total > 0 ? Math.round((votes.abstain / votes.total) * 100) : 0;
-const rejectPct = votes.total > 0 ? Math.round((votes.reject / votes.total) * 100) : 0;
 
 const isResolution = proposal
   ? proposal.kind === 'resolution' || proposal.proposalId.toUpperCase().startsWith('GOV-')
@@ -572,51 +569,18 @@ const isResolution = proposal
               <div class="decision-card-head">
                 <div>
                   <span class="decision-sub">
-                    {proposal.stage === 'decide' ? 'Stage 3 · Decision Open' : 'Decision Status'}
+                    {proposal.stage === 'decide' ? 'Stage 3 · Decision' : stageLabel(proposal.stage)}
                   </span>
                   <h3>Member Ballot</h3>
                 </div>
-                {proposal.stage === 'decide' ? (
-                  <Badge variant="info">Active</Badge>
-                ) : (
-                  <Badge variant={proposal.stage === 'implement' ? 'success' : 'outline'}>
-                    {proposal.stage}
-                  </Badge>
-                )}
+                <Badge variant={proposal.stage === 'decide' ? 'success' : 'muted'}>
+                  {proposal.stage === 'decide' ? 'Open' : 'Closed'}
+                </Badge>
               </div>
 
-              <!-- Tally bar -->
-              <div class="tally-box">
-                <div class="tally-bar" aria-hidden="true">
-                  <div class="tally-bar__approve" style={{ width: `${approvePct}%` }} title={`Approve: ${approvePct}%`}></div>
-                  <div class="tally-bar__abstain" style={{ width: `${abstainPct}%` }} title={`Abstain: ${abstainPct}%`}></div>
-                  <div class="tally-bar__reject" style={{ width: `${rejectPct}%` }} title={`Reject: ${rejectPct}%`}></div>
-                </div>
-
-                <div class="tally-legend">
-                  <span class="legend-item--approve">
-                    <strong>{votes.approve}</strong> Approve ({approvePct}%)
-                  </span>
-                  <span class="legend-item--abstain">
-                    <strong>{votes.abstain}</strong> Abstain
-                  </span>
-                  <span class="legend-item--reject">
-                    <strong>{votes.reject}</strong> Reject
-                  </span>
-                </div>
-                <div class="tally-total">
-                  Total: <strong class="tabular">{votes.total}</strong> verified member {votes.total === 1 ? 'vote' : 'votes'}
-                </div>
-              </div>
-
-              <BallotPrivacyNotice />
-
-              <!-- Voting buttons -->
-              {proposal.stage === 'decide' && (
+              {proposal.stage === 'decide' && !canVoteOnProposal && (
                 <div class="sidebar-vote-wrapper">
-                  {canVoteOnProposal ? (
-                    <ProposalBallot client:load proposalId={proposal.proposalId} revision={String(proposal.ballotRevisionId ?? '')} revisionLabel={ballotRevisionLabel} initialChoice={myVote} initialReason={myReason} initialTally={votes} />
-                  ) : user?.canParticipate && proposal.jurisdictionBranchId ? (
+                  {user?.canParticipate && proposal.jurisdictionBranchId ? (
                     <Alert className="sidebar-nudge"><AlertDescription><p>{branchElectorate ? 'This decision is for an authorised branch electorate. Current branch eligibility is not on file for your account.' : 'This branch electorate is not currently recognised or available for voting.'}</p></AlertDescription></Alert>
                   ) : user ? (
                     <Alert className="sidebar-nudge">
@@ -634,6 +598,28 @@ const isResolution = proposal
                     </Alert>
                   )}
                 </div>
+              )}
+
+              {proposal.stage === 'decide' || votes.total > 0 ? (
+                <ProposalBallot
+                  client:load
+                  proposalId={proposal.proposalId}
+                  initialChoice={myVote}
+                  initialReason={myReason}
+                  initialTally={votes}
+                  open={proposal.stage === 'decide'}
+                  canVote={canVoteOnProposal}
+                />
+              ) : (
+                <p class="m-0 text-sm text-muted-foreground">Voting has not opened for this proposal.</p>
+              )}
+
+              <BallotPrivacyNotice />
+
+              {proposal.ballotRevisionId && (
+                <p class="ballot-revision">
+                  Wording: <span title={String(proposal.ballotRevisionId)}>{ballotRevisionLabel}</span>
+                </p>
               )}
             </section>
 
@@ -1487,108 +1473,21 @@ const isResolution = proposal
     color: var(--horizon-purple-deep);
   }
 
-  .tally-box {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .tally-bar {
-    display: flex;
-    height: 10px;
-    background: var(--horizon-lavender);
-    border-radius: 999px;
-    overflow: hidden;
-  }
-
-  .tally-bar__approve { background: #12472b; transition: width 0.3s ease; }
-  .tally-bar__abstain { background: #b8860b; transition: width 0.3s ease; }
-  .tally-bar__reject { background: #8b0000; transition: width 0.3s ease; }
-
-  .tally-legend {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.82rem;
-    color: var(--horizon-purple);
-  }
-
-  .legend-item--approve strong { color: #12472b; }
-  .legend-item--abstain strong { color: #593b06; }
-  .legend-item--reject strong { color: #631717; }
-
-  .tally-total {
-    font-size: 0.82rem;
+  .ballot-revision {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.4;
     color: var(--horizon-muted);
-    border-top: 1px solid var(--horizon-line);
-    padding-top: 0.5rem;
+  }
+
+  .ballot-revision span {
+    color: var(--horizon-purple);
+    font-weight: 600;
   }
 
   .sidebar-vote-wrapper {
     border-top: 1px solid var(--horizon-line);
     padding-top: 1rem;
-  }
-
-  .your-vote-line {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.88rem;
-    margin-bottom: 0.75rem;
-    color: var(--horizon-purple);
-  }
-
-  .your-vote-line strong {
-    color: var(--horizon-purple-deep);
-  }
-
-  .vote-buttons {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.4rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .vote-btn {
-    padding: 0.55rem 0.5rem;
-    border-radius: 0.45rem;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    border: 1px solid var(--horizon-line);
-    background: var(--horizon-white);
-    color: var(--horizon-purple-deep);
-    text-align: center;
-    transition: all 0.15s ease;
-  }
-
-  .vote-btn--approve:hover, .vote-btn--approve.is-selected {
-    background: var(--horizon-success-bg);
-    border-color: #12472b;
-    color: #12472b;
-    font-weight: 700;
-  }
-
-  .vote-btn--abstain:hover, .vote-btn--abstain.is-selected {
-    background: var(--horizon-warn-bg);
-    border-color: #593b06;
-    color: #593b06;
-    font-weight: 700;
-  }
-
-  .vote-btn--reject:hover, .vote-btn--reject.is-selected {
-    background: var(--horizon-danger-bg);
-    border-color: #631717;
-    color: #631717;
-    font-weight: 700;
-  }
-
-  .vote-reason-sidebar {
-    width: 100%;
-    padding: 0.45rem 0.65rem;
-    font-size: 0.85rem;
-    border: 1px solid #8a7b99;
-    border-radius: 0.35rem;
-    background: var(--horizon-white);
   }
 
   .sidebar-nudge {
