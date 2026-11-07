@@ -39,3 +39,10 @@ To grant administrator permissions to an existing signed-in user in production:
 ```sh
 docker compose -p engage --env-file /opt/engage/.env -f docker-compose.yml -f compose.nuc.yml exec app node scripts/grant-engage-admin.mjs <userId>
 ```
+
+## Coolify deployment
+
+Production and staging deployment through Coolify is documented in
+[docs/coolify-deployment.md](docs/coolify-deployment.md). The approval-gated
+production cutover and rollback steps are in
+[docs/coolify-cutover-checklist.md](docs/coolify-cutover-checklist.md).

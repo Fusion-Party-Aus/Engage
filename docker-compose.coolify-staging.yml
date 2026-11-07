@@ -58,7 +58,6 @@ services:
         condition: service_healthy
     environment:
       APP_MODE: ${APP_MODE:-preview}
-      FORMAL_BALLOTS_ENABLED: ${FORMAL_BALLOTS_ENABLED:-false}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:-engage_staging}
       MONGODB_URI: "mongodb://${MONGO_APP_USER:-fusion_app}:${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in Coolify}@mongo:27017/${MONGODB_DB_NAME:-engage_staging}?authSource=${MONGODB_DB_NAME:-engage_staging}&replicaSet=engage&directConnection=true"
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
