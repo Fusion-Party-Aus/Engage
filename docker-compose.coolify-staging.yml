@@ -1,0 +1,101 @@
+# Coolify staging stack for Engage.
+#
+# Deployed by Coolify (nexus-debian) to the Alpine NUC as an isolated project.
+# It deliberately has its own MongoDB replica set, database, named volume and
+# loopback-only ports so it can never touch the production Engage stack.
+#
+# Coolify supplies the values through the application environment. Nothing in
+# this file should be committed with real secrets.
+services:
+  mongo:
+    image: mongo:8.0
+    restart: unless-stopped
+    entrypoint: ["bash", "/usr/local/bin/engage-mongo-start.sh"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Set MONGO_INITDB_ROOT_USERNAME in Coolify}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Set MONGO_INITDB_ROOT_PASSWORD in Coolify}
+      MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME:-engage_staging}
+      MONGO_APP_USER: ${MONGO_APP_USER:-fusion_app}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in Coolify}
+    volumes:
+      - mongo_data:/data/db
+      - ./docker/mongo-start.sh:/usr/local/bin/engage-mongo-start.sh:ro
+      - ./docker/mongo-healthcheck.js:/usr/local/bin/engage-mongo-healthcheck.js:ro
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/10-create-app-user.js:ro
+    ports:
+      - "127.0.0.1:${STAGING_MONGO_PORT:-27042}:27017"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "/usr/local/bin/engage-mongo-healthcheck.js",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - staging
+
+  app:
+    image: fusion-engage:${APP_IMAGE_TAG:-coolify-staging}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      APP_MODE: ${APP_MODE:-preview}
+      FORMAL_BALLOTS_ENABLED: ${FORMAL_BALLOTS_ENABLED:-false}
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-engage_staging}
+      MONGODB_URI: "mongodb://${MONGO_APP_USER:-fusion_app}:${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in Coolify}@mongo:27017/${MONGODB_DB_NAME:-engage_staging}?authSource=${MONGODB_DB_NAME:-engage_staging}&replicaSet=engage&directConnection=true"
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      AUTH_EMAIL_FROM: ${AUTH_EMAIL_FROM:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+    ports:
+      - "127.0.0.1:${STAGING_APP_PORT:-4400}:4321"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:4321/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    memswap_limit: 512m
+    cpus: 0.75
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - staging
+
+volumes:
+  mongo_data:
+
+networks:
+  staging:
+    driver: bridge

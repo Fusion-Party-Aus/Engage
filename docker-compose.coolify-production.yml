@@ -1,0 +1,63 @@
+# Coolify production application for Engage.
+#
+# Coolify (nexus-debian) builds and runs ONLY the application container on the
+# Alpine NUC. The existing production MongoDB container, its `engage_mongo_data`
+# volume, and the existing `engage_default` Docker network are reused in place
+# and are not recreated or migrated.
+#
+# The public endpoint is preserved: Cloudflare Tunnel still points at
+# 127.0.0.1:4321, and this container binds the same loopback port.
+#
+# Coolify supplies all values through the application environment. Do not
+# commit real secrets.
+services:
+  app:
+    image: fusion-engage:${APP_IMAGE_TAG:-coolify-production}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
+    environment:
+      APP_MODE: ${APP_MODE:-production}
+      FORMAL_BALLOTS_ENABLED: ${FORMAL_BALLOTS_ENABLED:-true}
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:?Set MONGODB_DB_NAME in Coolify}
+      MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI in Coolify}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      AUTH_EMAIL_FROM: ${AUTH_EMAIL_FROM:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+    ports:
+      - "127.0.0.1:${APP_PORT:-4321}:4321"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:4321/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    memswap_limit: 512m
+    cpus: 0.75
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - engage
+
+networks:
+  engage:
+    external: true
+    name: engage_default
