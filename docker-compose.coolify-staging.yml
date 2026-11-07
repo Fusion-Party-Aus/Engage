@@ -8,7 +8,10 @@
 # this file should be committed with real secrets.
 services:
   mongo:
-    image: mongo:8.0
+    image: fusion-engage-mongo:${MONGO_IMAGE_TAG:-coolify-staging}
+    build:
+      context: .
+      dockerfile: docker/mongo.Dockerfile
     restart: unless-stopped
     entrypoint: ["bash", "/usr/local/bin/engage-mongo-start.sh"]
     environment:
@@ -19,9 +22,6 @@ services:
       MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in Coolify}
     volumes:
       - mongo_data:/data/db
-      - ./docker/mongo-start.sh:/usr/local/bin/engage-mongo-start.sh:ro
-      - ./docker/mongo-healthcheck.js:/usr/local/bin/engage-mongo-healthcheck.js:ro
-      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/10-create-app-user.js:ro
     ports:
       - "127.0.0.1:${STAGING_MONGO_PORT:-27042}:27017"
     healthcheck:
@@ -58,7 +58,6 @@ services:
         condition: service_healthy
     environment:
       APP_MODE: ${APP_MODE:-preview}
-      FORMAL_BALLOTS_ENABLED: ${FORMAL_BALLOTS_ENABLED:-false}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:-engage_staging}
       MONGODB_URI: "mongodb://${MONGO_APP_USER:-fusion_app}:${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in Coolify}@mongo:27017/${MONGODB_DB_NAME:-engage_staging}?authSource=${MONGODB_DB_NAME:-engage_staging}&replicaSet=engage&directConnection=true"
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}

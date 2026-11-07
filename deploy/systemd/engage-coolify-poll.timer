@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll the Engage Git branch every two minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=true
+Unit=engage-coolify-poll.service
+
+[Install]
+WantedBy=timers.target

@@ -22,7 +22,6 @@ services:
       - 1.0.0.1
     environment:
       APP_MODE: ${APP_MODE:-production}
-      FORMAL_BALLOTS_ENABLED: ${FORMAL_BALLOTS_ENABLED:-true}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:?Set MONGODB_DB_NAME in Coolify}
       MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI in Coolify}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
