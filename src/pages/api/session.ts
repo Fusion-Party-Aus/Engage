@@ -2,9 +2,9 @@ import type { APIRoute } from "astro";
 import {
   clearDevSessionCookie,
   createDevSessionCookie,
+  devLoginEnabled,
   getAuth,
   getSessionUser,
-  isProduction,
   loginConfigured,
 } from "../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
@@ -15,12 +15,14 @@ export const prerender = false;
 export const GET: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  const activity = user ? await listUserActivity(await getDatabase(env), user.memberId) : null;
+  const activity = user
+    ? await listUserActivity(await getDatabase(env), user.memberId)
+    : null;
   return Response.json(
     {
       identity: user,
       membershipStatus: user?.status ?? null,
-      loginAvailable: loginConfigured(env) || !isProduction(env),
+      loginAvailable: loginConfigured(env) || devLoginEnabled(env),
       activity,
     },
     { headers: { "cache-control": "private, no-store" } },
@@ -29,14 +31,22 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
-  if (isProduction(env)) {
-    return Response.json({ error: "Development sign-in is disabled in production." }, { status: 403 });
+  if (!devLoginEnabled(env)) {
+    return Response.json(
+      { error: "Development sign-in is disabled." },
+      { status: 403 },
+    );
   }
   const body = await request.json().catch(() => ({}));
   const role = body?.role === "administrator" ? "administrator" : "member";
   return Response.json(
     { ok: true, role },
-    { headers: { "set-cookie": createDevSessionCookie(role), "cache-control": "private, no-store" } },
+    {
+      headers: {
+        "set-cookie": createDevSessionCookie(role),
+        "cache-control": "private, no-store",
+      },
+    },
   );
 };
 
@@ -49,7 +59,10 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   if (loginConfigured(env)) {
     try {
       const auth = await getAuth(env);
-      const response = await auth.api.signOut({ headers: request.headers, asResponse: true });
+      const response = await auth.api.signOut({
+        headers: request.headers,
+        asResponse: true,
+      });
       const setCookie = response.headers.get("set-cookie");
       if (setCookie) headers.append("set-cookie", setCookie);
     } catch {
