@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, 'fix/**', 'codex/**']
+    branches: [main, "fix/**", "codex/**"]
 permissions:
   contents: read
 jobs:
@@ -12,6 +12,7 @@ jobs:
     timeout-minutes: 15
     env:
       VOTING_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
+      AUTH_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -21,7 +22,7 @@ jobs:
           cache: pnpm
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.x"
       - run: pnpm install --frozen-lockfile
       - name: Start isolated MongoDB replica set
         run: |
@@ -45,7 +46,11 @@ jobs:
           } finally { await client.close(); }
           JS
       - run: pnpm check
-      - name: Node and real MongoDB voting regressions
+      - name: Confirm isolated MongoDB test configuration
+        run: |
+          test -n "${VOTING_TEST_MONGODB_URI:-}"
+          test -n "${AUTH_TEST_MONGODB_URI:-}"
+      - name: Node and real MongoDB voting/authentication regressions
         run: pnpm test
       - run: pnpm build
       - name: MongoDB logs on failure

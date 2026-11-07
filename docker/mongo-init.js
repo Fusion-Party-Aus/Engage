@@ -1,4 +1,5 @@
-const databaseName = process.env.MONGO_INITDB_DATABASE || "fusion_horizon_policy_preview";
+const databaseName =
+  process.env.MONGO_INITDB_DATABASE || "fusion_horizon_policy_preview";
 const appDatabase = db.getSiblingDB(databaseName);
 
 appDatabase.createUser({

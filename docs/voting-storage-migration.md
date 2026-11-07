@@ -138,8 +138,12 @@ consultation ballots, unchanged originals/indexes, dry-run, restart/idempotency,
 invalid/duplicate/conflicting data, membership and stage rejection. The original
 two-policy test failed with the exact production error before the fix. CI supplies
 an isolated MongoDB URI; without it, these integration tests explicitly skip.
-`pnpm check` and `pnpm build` cover the application. The workflow no longer calls
-the removed `test:cutoff`/`test:auth` scripts from the pre-rewrite application.
+`pnpm check` and `pnpm build` cover the application. The NUC and application-check
+workflows run `pnpm test` only; they no longer call the removed `test:cutoff`/`test:auth`
+scripts from the pre-rewrite application. Both workflows set
+`VOTING_TEST_MONGODB_URI` and `AUTH_TEST_MONGODB_URI` for the disposable CI replica set
+and fail if either variable is empty, so the real MongoDB voting and authentication
+tests run instead of silently skipping.
 
 Validation in this investigation reproduced the exact E11000 before the fix.
 The suite includes a synthetic four-record fixture matching the NUC field shape
