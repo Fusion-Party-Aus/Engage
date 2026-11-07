@@ -1,7 +1,16 @@
+import type { PlatformEnv } from "./types.ts";
+import { resolvePublicOrigin } from "./public-origin.ts";
+
 export async function publicJson(
   request: Request,
   data: unknown,
-  options: { maxAge?: number; immutable?: boolean; canonical?: string } = {},
+  options: {
+    maxAge?: number;
+    immutable?: boolean;
+    /** A path (preferred) or any URL; only its path is retained. */
+    canonical?: string;
+    env?: PlatformEnv;
+  } = {},
 ): Promise<Response> {
   const body = JSON.stringify(data);
   const digest = await crypto.subtle.digest(
@@ -17,8 +26,18 @@ export async function publicJson(
     "cache-control": cache,
     etag,
   });
-  const canonical = options.canonical ?? new URL(request.url).href;
-  headers.set("link", `<${canonical}>; rel="canonical"`);
+  const requestUrl = new URL(request.url);
+  const origin = resolvePublicOrigin({
+    env: options.env,
+    requestUrl,
+  });
+  const canonicalPath =
+    options.canonical?.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "") ||
+    `${requestUrl.pathname}${requestUrl.search}`;
+  headers.set(
+    "link",
+    `<${new URL(canonicalPath, `${origin}/`).href}>; rel="canonical"`,
+  );
   if (matchesIfNoneMatch(request.headers.get("if-none-match"), etag))
     return new Response(null, { status: 304, headers });
   return new Response(body, { headers });

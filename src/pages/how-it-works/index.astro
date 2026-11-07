@@ -133,15 +133,15 @@ const pathways = [
     empty: 'No ballots are open right now.',
   },
   {
-    title: 'Read official policy',
+    title: 'Policy registry',
     who: 'Anyone',
-    body: 'Read only wording that has been formally adopted and authorised for publication.',
+    body: 'Engage’s registry holds only wording formally adopted and authorised for publication. It is not yet populated in this release; proposals here are not ratified policy.',
     href: '/policies/',
-    action: 'Read official policy',
+    action: 'Open the policy registry',
     icon: BookOpen,
     liveLabel: 'Recently published',
     live: live.policy,
-    empty: 'The official policy library is being prepared. Fusion’s existing adopted policies will appear here as their authoritative records are brought into Engage.',
+    empty: 'Engage does not yet hold official policy records. This does not mean Fusion has no adopted policy: those policies remain available through the party’s official channels.',
   },
 ];
 
@@ -182,14 +182,14 @@ const details: Array<{ title: string; body: string; link?: { href: string; label
       <div class="how-hero__copy">
         <h1>How an idea becomes a decision.</h1>
         <p class="how-hero__lead">
-          Engage is Fusion Party Australia’s place to explore ideas, discuss proposed changes, vote when eligible, and read official policy. You can read everything public without an account.
+          Engage is Fusion Party Australia’s place to explore ideas, discuss proposed changes, vote when eligible, and explore the policy registry. You can read everything public without an account.
         </p>
         <p class="how-hero__in-short">
           <strong>In short:</strong> an idea is discussed, voted on when eligible, and only becomes adopted policy after formal ratification and authorised publication.
         </p>
         <div class="how-hero__actions">
           <Button href="/proposals/">Browse proposals <ArrowRight aria-hidden="true" className="size-4" /></Button>
-          <Button href="/policies/" variant="outline">Read official policy</Button>
+          <Button href="/policies/" variant="outline">Policy registry</Button>
         </div>
       </div>
 
@@ -201,7 +201,7 @@ const details: Array<{ title: string; body: string; link?: { href: string; label
           <ul class="how-legend__list">
             <li>
               <Compass aria-hidden="true" className="size-4" />
-              <div><strong>Anyone</strong><span>Read public proposals and official policy.</span></div>
+              <div><strong>Anyone</strong><span>Read public proposals and the policy registry.</span></div>
             </li>
             <li>
               <MessageSquare aria-hidden="true" className="size-4" />
@@ -257,7 +257,7 @@ const details: Array<{ title: string; body: string; link?: { href: string; label
             </div>
             <h3>A successful ballot is not adopted policy.</h3>
             <p>A proposal ballot decides the wording. It does not ratify or publish policy. After the vote, the decision is processed through the steps below where they apply.</p>
-            <Button href="/policies/" variant="outline">Read official policy <ArrowRight aria-hidden="true" className="size-4" /></Button>
+            <Button href="/policies/" variant="outline">Policy registry <ArrowRight aria-hidden="true" className="size-4" /></Button>
           </div>
           <ol class="after-vote__steps">
             <li>
@@ -266,7 +266,7 @@ const details: Array<{ title: string; body: string; link?: { href: string; label
             </li>
             <li>
               <span aria-hidden="true">02</span>
-              <div><strong>Authorised publication</strong><p>Only then does the exact wording appear in the official policy library.</p></div>
+              <div><strong>Authorised publication</strong><p>Only then does the exact wording appear in the policy registry.</p></div>
             </li>
           </ol>
         </div>

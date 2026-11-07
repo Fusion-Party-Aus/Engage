@@ -4,7 +4,7 @@ import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  integrations: [react({ experimentalReactChildren: true })],
+  integrations: [react()],
   vite: { plugins: [tailwindcss()] },
   output: "server",
   adapter: node({ mode: "standalone" }),

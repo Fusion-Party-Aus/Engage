@@ -3,7 +3,8 @@ import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { publicJson } from "../../../lib/public-api.ts";
 export const prerender = false;
 export const GET: APIRoute = async ({ locals, request }) => {
-  const db = await getDatabase(runtimeEnv(locals));
+  const env = runtimeEnv(locals);
+  const db = await getDatabase(env);
   const rows = await db
     .collection("policy_registry")
     .find({ publicationStatus: "published" })
@@ -18,5 +19,5 @@ export const GET: APIRoute = async ({ locals, request }) => {
         ),
     ),
   ].sort();
-  return publicJson(request, { data }, { maxAge: 300 });
+  return publicJson(request, { data }, { maxAge: 300, env });
 };

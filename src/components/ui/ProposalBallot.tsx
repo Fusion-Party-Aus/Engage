@@ -6,10 +6,10 @@ import { Badge } from './badge';
 
 type Choice = 'approve' | 'abstain' | 'reject';
 type Tally = { approve: number; abstain: number; reject: number; total: number };
-interface Props { proposalId: string; revision: string; initialChoice: Choice | null; initialReason: string; initialTally: Tally }
+interface Props { proposalId: string; revision: string; revisionLabel: string; initialChoice: Choice | null; initialReason: string; initialTally: Tally }
 const choices: Array<[Choice, string]> = [['approve','Approve'],['abstain','Abstain'],['reject','Reject']];
 
-export default function ProposalBallot({ proposalId, revision, initialChoice, initialReason, initialTally }: Props) {
+export default function ProposalBallot({ proposalId, revision, revisionLabel, initialChoice, initialReason, initialTally }: Props) {
   const [choice, setChoice] = useState<Choice | null>(initialChoice);
   const [reason, setReason] = useState(initialReason);
   const [tally, setTally] = useState(initialTally);
@@ -28,7 +28,7 @@ export default function ProposalBallot({ proposalId, revision, initialChoice, in
   const pct = (n: number) => tally.total ? Math.round(n / tally.total * 100) : 0;
   return (
     <div className="grid gap-3">
-      <p className="m-0 text-sm">Voting on wording revision <code>{revision}</code>. Your vote records your view of this version only.</p>
+      <p className="m-0 text-sm">Voting on <span title={revision}>{revisionLabel}</span>. Your vote records your view of this version only.</p>
       <p className="m-0 text-sm">
         Your vote: <Badge variant={choice ? 'secondary' : 'muted'}>{choice ? choice.toUpperCase() : 'Not voted'}</Badge>
       </p>

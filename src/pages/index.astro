@@ -1,7 +1,7 @@
 ---
 import SiteLayout from '../layouts/SiteLayout.astro';
+import FeatureGrid from '../components/site/FeatureGrid.astro';
 import { Button } from '../components/ui/button';
-import { Card } from '../components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { getSessionUser } from '../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../lib/db.ts';
@@ -17,8 +17,10 @@ const votes = proposals.filter((p) => p.stage === 'decide');
 const discussions = proposals.filter((p) => p.stage === 'deliberate');
 const mine = user?.canParticipate ? await listOutstandingDecisions(db, user.memberId, user) : [];
 const branch = user?.activeBranchIds?.length ? proposals.filter((p) => user.activeBranchIds?.includes(p.originatingBranchId ?? '')) : [];
+const publishedPolicyCount = await db.collection('policy_registry').countDocuments({ publicationStatus: 'published' });
+const registryAvailable = publishedPolicyCount > 0;
 ---
-<SiteLayout title="Engage · Fusion Party Australia" description="Explore Fusion's ideas, take part when you choose, and read official policy." canonical={`${Astro.url.origin}/`}>
+<SiteLayout title="Engage · Fusion Party Australia" description="Explore Fusion's ideas, take part when you choose, and follow proposals and official policy." canonical="/">
   {user ? (
     <div class="page-wrap section-space journey-home member-home">
       <header class="journey-hero">
@@ -34,8 +36,39 @@ const branch = user?.activeBranchIds?.length ? proposals.filter((p) => user.acti
     </div>
   ) : (
     <>
-      <section class="journey-visitor-hero"><div class="page-wrap journey-hero-grid"><div><h1>Help shape what Fusion does next.</h1><p>Engage is where members share ideas, discuss proposed changes and vote on decisions. Anyone can browse what is being considered and read official policy.</p><div class="journey-actions"><Button href="/proposals/">Browse proposals</Button><Button href="/policies/" variant="outline">Read official policy</Button></div></div><img src="/melbourne-station.webp" alt="People moving through a sunlit Melbourne train station" width="640" height="460" /></div></section>
-      <div class="page-wrap section-space journey-home"><section class="journey-section" aria-labelledby="happening"><div class="journey-heading"><div><h2 id="happening">See what is happening</h2></div></div><div class="journey-next"><Card><a href="/proposals/?stage=decide"><svg class="nav-icon" aria-hidden="true"><use href="#icon-vote" /></svg><h3>{votes.length} open votes</h3><p>Read the wording before you decide.</p><strong>See open votes →</strong></a></Card><Card><a href="/proposals/?stage=deliberate"><svg class="nav-icon" aria-hidden="true"><use href="#icon-files" /></svg><h3>{discussions.length} discussions</h3><p>Read the discussion and suggested changes.</p><strong>Join discussions →</strong></a></Card><Card><a href="/policies/"><svg class="nav-icon" aria-hidden="true"><use href="#icon-book" /></svg><h3>Official policy</h3><p>Read formally adopted and published policy.</p><strong>Read official policy →</strong></a></Card></div></section><section class="journey-section journey-invite"><h2>Want to take part?</h2><p>Members can suggest ideas and join discussions. Voting depends on the ballot and your membership.</p><Button href="/member/">Sign in or get started</Button><Button href="/how-it-works/" variant="link">How Engage works →</Button></section></div>
+      <section class="journey-visitor-hero"><div class="page-wrap journey-hero-grid"><div><h1>Help shape what Fusion does next.</h1><p>Engage is where members share ideas, discuss proposed changes and vote on decisions. Anyone can browse what is being considered. {registryAvailable ? 'Published official policy is available in the policy registry.' : 'The policy registry is not yet populated with official records; proposals here are not ratified policy.'}</p><div class="journey-actions"><Button href="/proposals/">Browse proposals</Button><Button href="/policies/" variant="outline">{registryAvailable ? 'Read official policy' : 'About the policy registry'}</Button></div></div><img src="/melbourne-station.webp" alt="People moving through a sunlit Melbourne train station" width="640" height="460" /></div></section>
+      <div class="page-wrap section-space journey-home"><FeatureGrid
+        id="happening"
+        eyebrow="On Engage"
+        title="See what is happening"
+        intro="Open votes, active discussions and the official policy record."
+        action={{ href: '/proposals/', label: 'Browse all proposals' }}
+        features={[
+          {
+            icon: 'vote',
+            title: `${votes.length} open votes`,
+            description: 'Read the wording before you decide.',
+            href: '/proposals/?stage=decide',
+            cta: 'See open votes',
+          },
+          {
+            icon: 'files',
+            title: `${discussions.length} discussions`,
+            description: 'Read the discussion and suggested changes.',
+            href: '/proposals/?stage=deliberate',
+            cta: 'Join discussions',
+          },
+          {
+            icon: 'book',
+            title: 'Policy registry',
+            description: registryAvailable
+              ? 'Read formally adopted and published policy.'
+              : 'Official policy records are not yet available in Engage. Proposals here are not ratified policy.',
+            href: '/policies/',
+            cta: registryAvailable ? 'Read official policy' : 'About the policy registry',
+          },
+        ]}
+      /><section class="journey-section journey-invite"><h2>Want to take part?</h2><p>Members can suggest ideas and join discussions. Voting depends on the ballot and your membership.</p><Button href="/member/">Sign in or get started</Button><Button href="/how-it-works/" variant="link">How Engage works →</Button></section></div>
     </>
   )}
 </SiteLayout>

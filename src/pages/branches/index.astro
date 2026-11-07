@@ -17,7 +17,7 @@ const grouped = kinds.map((kind) => ({ kind, items: branches.filter((branch: any
 const relevant = user?.activeBranchIds?.length ? branches.filter((branch: any) => user.activeBranchIds?.includes(branch.branchId)) : [];
 const countFor = (branchId: string) => proposals.filter((proposal) => [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branchId)).length;
 ---
-<SiteLayout title="Branches · Engage" description="Find Fusion's national, state, territory and constituent branches and their visible proposals." canonical={`${Astro.url.origin}/branches/`}>
+<SiteLayout title="Branches · Engage" description="Find Fusion's national, state, territory and constituent branches and their visible proposals." canonical="/branches/">
   <div class="page-wrap section-space branch-directory">
     <header class="page-intro">
       <h1>Find your branch</h1>

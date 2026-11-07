@@ -4,7 +4,8 @@ import { publicPolicy } from "../../../../lib/public-policy.ts";
 import { publicJson } from "../../../../lib/public-api.ts";
 export const prerender = false;
 export const GET: APIRoute = async ({ params, locals, request }) => {
-  const db = await getDatabase(runtimeEnv(locals));
+  const env = runtimeEnv(locals);
+  const db = await getDatabase(env);
   const row = await db
     .collection("policy_registry")
     .findOne({ policyId: params.id, publicationStatus: "published" });
@@ -15,10 +16,8 @@ export const GET: APIRoute = async ({ params, locals, request }) => {
     request,
     { data },
     {
-      canonical: new URL(
-        `/api/v1/policies/${encodeURIComponent(data.policyId)}`,
-        request.url,
-      ).href,
+      canonical: `/api/v1/policies/${encodeURIComponent(data.policyId)}`,
+      env,
     },
   );
 };

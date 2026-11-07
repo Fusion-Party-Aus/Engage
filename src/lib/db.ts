@@ -1,11 +1,8 @@
-import {
-  ensureVoteStorage,
-  PROPOSAL_VOTES,
-  proposalBallotId,
-} from "./vote-storage.ts";
+import { ensureVoteStorage, PROPOSAL_VOTES } from "./vote-storage.ts";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import { createHash } from "node:crypto";
 import baselineItems from "../data/policies.json" with { type: "json" };
+import { ensureLegacyProposalRevision } from "./proposal-revision.ts";
 import type { PlatformEnv, ProposalRecord, ProposalStage } from "./types.ts";
 
 let clientPromise: Promise<MongoClient> | undefined;
@@ -83,7 +80,7 @@ async function ensureSeeded(db: Db): Promise<void> {
   await pending;
 }
 
-async function initializeDatabase(db: Db): Promise<void> {
+export async function initializeDatabase(db: Db): Promise<void> {
   try {
     await ensureVoteStorage(db);
     await Promise.all([
@@ -269,17 +266,12 @@ async function initializeDatabase(db: Db): Promise<void> {
       const raw = item as Record<string, any>;
       const proposalId = String(raw.proposalId || raw.policyId);
       const stage = mapBaselineStage(raw.stage || raw.defaultStatus);
-      const setFields: Record<string, any> = { updatedAt: now };
-      if (raw.provenance) setFields.provenance = raw.provenance;
-      if (raw.detailHtml) setFields.detailHtml = raw.detailHtml;
-      if (raw.attachmentUrl)
-        setFields.attachmentUrl = String(raw.attachmentUrl);
-      if (raw.attachmentDescription)
-        setFields.attachmentDescription = String(raw.attachmentDescription);
       const kind =
         raw.kind || (proposalId.startsWith("GOV-") ? "resolution" : "policy");
-      setFields.kind = kind;
 
+      // Seeding is insert-only. A restart must not rewrite an existing proposal,
+      // including its updatedAt timestamp, because that would make routine
+      // initialisation look like a substantive content change.
       await proposalsCol.updateOne(
         { proposalId },
         {
@@ -292,11 +284,20 @@ async function initializeDatabase(db: Db): Promise<void> {
             summary: String(raw.summary || raw.statement || ""),
             outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
             details: String(raw.details || ""),
+            ...(raw.provenance ? { provenance: raw.provenance } : {}),
+            ...(raw.detailHtml ? { detailHtml: raw.detailHtml } : {}),
+            ...(raw.attachmentUrl
+              ? { attachmentUrl: String(raw.attachmentUrl) }
+              : {}),
+            ...(raw.attachmentDescription
+              ? { attachmentDescription: String(raw.attachmentDescription) }
+              : {}),
             stage,
+            kind,
             authorName: "Fusion Working Group",
             createdAt: now,
+            updatedAt: now,
           },
-          $set: setFields,
         },
         { upsert: true },
       );
@@ -304,90 +305,11 @@ async function initializeDatabase(db: Db): Promise<void> {
 
     // Backfill one immutable starting revision for legacy records. Existing
     // proposal and vote documents are untouched; the hash makes this restartable.
+    // Ballots are never bound here: a ballot whose votes are not already bound to
+    // one immutable revision requires an explicit, reviewed migration decision.
     const existingProposals = await proposalsCol.find({}).toArray();
     for (const proposal of existingProposals) {
-      const hasRevision = await db
-        .collection("proposal_revisions")
-        .findOne({ proposalId: proposal.proposalId });
-      if (hasRevision) continue;
-      const snapshot = {
-        title: proposal.title,
-        summary: proposal.summary,
-        outcomes: proposal.outcomes ?? [],
-        details: proposal.details ?? "",
-      };
-      const revisionId = `legacy-${createHash("sha256").update(String(proposal.proposalId)).digest("hex")}`;
-      await db
-        .collection("proposal_revisions")
-        .updateOne(
-          { revisionId },
-          {
-            $setOnInsert: {
-              revisionId,
-              proposalId: proposal.proposalId,
-              parentRevisionId: null,
-              authorId: proposal.authorId ?? "system:migration",
-              createdAt: proposal.createdAt ?? now,
-              snapshot,
-              contentHash: createHash("sha256")
-                .update(JSON.stringify(snapshot))
-                .digest("hex"),
-              provenance: proposal.provenance,
-            },
-          },
-          { upsert: true },
-        );
-    }
-
-    // Bind open ballots that have no recorded votes. Existing votes are only
-    // rebound when every vote already names the same immutable revision.
-    for (const proposal of existingProposals) {
-      if (proposal.stage !== "decide" || proposal.ballotRevisionId) continue;
-      const ballotId = proposalBallotId(proposal.proposalId);
-      const votes = await db
-        .collection(PROPOSAL_VOTES)
-        .find({ proposalId: proposal.proposalId, ballotId })
-        .toArray();
-      const recordedRevisionIds = [
-        ...new Set(
-          votes
-            .map((vote) => vote.revisionId)
-            .filter(
-              (id): id is string => typeof id === "string" && id.length > 0,
-            ),
-        ),
-      ];
-      if (
-        votes.length &&
-        (recordedRevisionIds.length !== 1 ||
-          votes.some((vote) => vote.revisionId !== recordedRevisionIds[0]))
-      )
-        continue;
-      const revisionId = votes.length
-        ? recordedRevisionIds[0]
-        : (
-            await db
-              .collection("proposal_revisions")
-              .find({ proposalId: proposal.proposalId })
-              .sort({ createdAt: -1 })
-              .limit(1)
-              .toArray()
-          )[0]?.revisionId;
-      if (
-        revisionId &&
-        (await db
-          .collection("proposal_revisions")
-          .findOne({ proposalId: proposal.proposalId, revisionId }))
-      ) {
-        await proposalsCol.updateOne(
-          {
-            proposalId: proposal.proposalId,
-            stage: "decide",
-            ballotRevisionId: { $exists: false },
-          },
-          { $set: { ballotRevisionId: revisionId } },
-        );
-      }
+      await ensureLegacyProposalRevision(db, proposal);
     }
   } catch (error) {
     seededDbs.delete(db);

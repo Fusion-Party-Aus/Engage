@@ -21,12 +21,13 @@ const policies = records.filter((policy: any) => (showHistory ? policy.publicati
 const jurisdictions = [...new Set(records.map((policy: any) => policy.jurisdiction).filter(Boolean))] as string[];
 const statusLabel = (status: string) => status === 'published' ? 'Published policy' : status === 'withdrawn' ? 'Withdrawn from publication' : 'Superseded policy';
 const statusVariant = (status: string) => status === 'published' ? 'success' : status === 'withdrawn' ? 'warning' : 'destructive';
+const hasRegistryRecords = records.length > 0;
 ---
-<SiteLayout title="Official policy · Engage" description="Read Fusion Party Australia's officially adopted and published policy wording." canonical={`${Astro.url.origin}/policies/`}>
+<SiteLayout title="Official policy registry · Engage" description="Fusion Party Australia's official policy registry and publication record." canonical="/policies/">
   <div class="page-wrap section-space policy-page">
     <header class="policy-intro">
-      <h1>{showHistory ? 'Past policy records' : 'Official policy'}</h1>
-      <p>{showHistory ? 'Withdrawn and superseded records remain available for the public record. They are no longer current policy.' : <>This is the official policy library: wording Fusion has formally adopted and authorised for publication. To see ideas still under discussion, <a href="/proposals/">browse proposals</a>.</>}</p>
+      <h1>{showHistory ? 'Past policy records' : 'Official policy registry'}</h1>
+      <p>{showHistory ? 'Withdrawn and superseded records remain available for the public record. They are no longer current policy.' : hasRegistryRecords ? <>This is the official policy registry: wording Fusion has formally adopted and authorised for publication. To see ideas still under discussion, <a href="/proposals/">browse proposals</a>.</> : <>This is Engage’s official policy registry. It does not yet hold the authoritative records of Fusion’s adopted policies. That does not mean Fusion has no adopted policy: those policies remain available through the party’s official channels. Proposals in Engage are not ratified policy.</>}</p>
       <nav aria-label="Policy status">
         <Button href="/policies/" variant={!showHistory ? 'default' : 'ghost'} size="sm">Current policy</Button>
         <Button href="/policies/?history=1" variant={showHistory ? 'default' : 'ghost'} size="sm">Past records</Button>
@@ -82,9 +83,12 @@ const statusVariant = (status: string) => status === 'published' ? 'success' : s
     ) : (
       <Card>
         <CardContent className="grid justify-items-start gap-3 py-10">
-          <h2>{showHistory ? 'No past records found' : 'No current policies found'}</h2>
-          <p>{records.length ? 'Try a different search or filter.' : showHistory ? 'No past policy records have been brought into Engage yet.' : 'The official policy library is being prepared. Fusion’s existing adopted policies will appear here as their authoritative records are brought into Engage.'}</p>
-          <Button href="/proposals/" variant="outline">Browse proposals</Button>
+          <h2>{records.length ? (showHistory ? 'No past records match this search' : 'No current policies match this search') : showHistory ? 'No past policy records in Engage yet' : 'No official policy records in Engage yet'}</h2>
+          <p>{records.length ? 'Try a different search or filter.' : showHistory ? 'Withdrawn and superseded records will appear here when they are brought into Engage.' : 'Engage does not yet hold the authoritative records of Fusion’s adopted policies. Their absence here does not mean Fusion has no adopted policy. Policies remain available through the party’s official channels, and proposals on this site are not ratified policy.'}</p>
+          <div class="grid justify-items-start gap-2">
+            <Button href="/proposals/" variant="outline">Browse proposals</Button>
+            <a href="https://www.fusionparty.org.au/" rel="noreferrer noopener">Visit Fusion Party Australia</a>
+          </div>
         </CardContent>
       </Card>
     )}

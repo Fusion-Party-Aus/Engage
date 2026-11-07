@@ -37,6 +37,7 @@ export interface PlatformEnv {
   MONGODB_DB_NAME?: string;
   SESSION_SECRET?: string;
   BETTER_AUTH_URL?: string;
+  PUBLIC_ORIGIN?: string;
   BETTER_AUTH_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;

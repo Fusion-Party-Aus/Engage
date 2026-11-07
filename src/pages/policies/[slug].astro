@@ -15,9 +15,9 @@ const revisions = policy?.revisionIds ?? [policy?.revisionId].filter(Boolean);
 const statusLabel = policy?.publicationStatus === 'published' ? 'Published policy' : policy?.publicationStatus === 'withdrawn' ? 'Withdrawn from publication' : 'Superseded policy';
 const statusVariant = policy?.publicationStatus === 'published' ? 'success' : policy?.publicationStatus === 'withdrawn' ? 'warning' : 'destructive';
 ---
-<SiteLayout title={policy ? `${policy.title} · Fusion Policy` : 'Policy not found · Engage'} description={policy?.summary ?? 'Published policy record.'} canonical={policy ? `${Astro.url.origin}/policies/${encodeURIComponent(policy.policyId)}/` : undefined}>
+<SiteLayout title={policy ? `${policy.title} · Fusion Policy` : 'Policy not found · Engage'} description={policy?.summary ?? 'Published policy record.'} canonical={policy ? `/policies/${encodeURIComponent(policy.policyId)}/` : undefined}>
   <div class="page-wrap section-space policy-detail">
-    <Button href="/policies/" variant="ghost" size="sm">← Official policy</Button>
+    <Button href="/policies/" variant="ghost" size="sm">← Policy registry</Button>
 
     {policy ? <>
       <header class="policy-detail__header">
@@ -76,7 +76,7 @@ const statusVariant = policy?.publicationStatus === 'published' ? 'success' : po
         <CardContent className="grid justify-items-start gap-3 py-10">
           <h1>Policy not found</h1>
           <p>This record is not published in the policy registry.</p>
-          <Button href="/policies/" variant="outline">Read official policy</Button>
+          <Button href="/policies/" variant="outline">Policy registry</Button>
         </CardContent>
       </Card>
     )}

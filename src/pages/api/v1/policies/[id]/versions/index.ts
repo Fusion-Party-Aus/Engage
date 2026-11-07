@@ -3,7 +3,8 @@ import { getDatabase, runtimeEnv } from "../../../../../../lib/db.ts";
 import { publicJson } from "../../../../../../lib/public-api.ts";
 export const prerender = false;
 export const GET: APIRoute = async ({ params, locals, request, url }) => {
-  const db = await getDatabase(runtimeEnv(locals));
+  const env = runtimeEnv(locals);
+  const db = await getDatabase(env);
   const p = await db
     .collection("policy_registry")
     .findOne({ policyId: params.id, publicationStatus: "published" });
@@ -23,11 +24,15 @@ export const GET: APIRoute = async ({ params, locals, request, url }) => {
   );
   const hasMore = rows.length > limit;
   const page = rows.slice(0, limit);
-  return publicJson(request, {
-    data: page.map(({ _id, authorId, ...r }) => r),
-    meta: {
-      limit,
-      nextCursor: hasMore ? String(page.at(-1)?.revisionId ?? "") : null,
+  return publicJson(
+    request,
+    {
+      data: page.map(({ _id, authorId, ...r }) => r),
+      meta: {
+        limit,
+        nextCursor: hasMore ? String(page.at(-1)?.revisionId ?? "") : null,
+      },
     },
-  });
+    { env },
+  );
 };

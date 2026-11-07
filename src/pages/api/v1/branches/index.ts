@@ -3,7 +3,8 @@ import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { publicJson } from "../../../../lib/public-api.ts";
 export const prerender = false;
 export const GET: APIRoute = async ({ locals, request, url }) => {
-  const db = await getDatabase(runtimeEnv(locals));
+  const env = runtimeEnv(locals);
+  const db = await getDatabase(env);
   const limit = Math.min(
     100,
     Math.max(1, Number(url.searchParams.get("limit")) || 50),
@@ -26,11 +27,15 @@ export const GET: APIRoute = async ({ locals, request, url }) => {
     ...(branch.parentBranchId ? { parentBranchId: branch.parentBranchId } : {}),
     recognised: true,
   }));
-  return publicJson(request, {
-    data,
-    meta: {
-      limit,
-      nextCursor: hasMore ? String(page.at(-1)?.branchId ?? "") : null,
+  return publicJson(
+    request,
+    {
+      data,
+      meta: {
+        limit,
+        nextCursor: hasMore ? String(page.at(-1)?.branchId ?? "") : null,
+      },
     },
-  });
+    { env },
+  );
 };
