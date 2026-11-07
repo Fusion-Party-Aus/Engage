@@ -1,6 +1,6 @@
 # Coolify deployment for Engage
 
-Status as of 2026-11-08:
+Status as of 2026-11-08 (cutover-readiness verification):
 
 - **Staging is deployed by Coolify and verified healthy.**
 - **The full trigger was exercised end to end:** a push to `main` was detected
@@ -9,9 +9,26 @@ Status as of 2026-11-08:
 - **Production is configured in Coolify but intentionally not started.** The
   existing production stack is still running untouched. Cutover requires the
   explicit approval described in [the cutover checklist](coolify-cutover-checklist.md).
+- **Cutover readiness has been verified without touching production.** A
+  production image was prebuilt from `main` at `1b973faf...`, smoke-tested on a
+  spare port, and protected from Coolify's image prune. That image is a
+  **deployment rehearsal artifact**; it is not the final release and must not be
+  deployed unless it independently matches the final approved Git commit. The
+  no-rebuild deployment path and the last-moment custom start command were
+  exercised on staging. The pre-cutover backup was restored into a disposable
+  MongoDB and verified. Production still runs `engage-app-1`; the cutover
+  remains approval-gated.
 - **GitHub push triggers deployment through a poller on `nexus-debian`.**
   Coolify has no public HTTPS endpoint, so GitHub cannot deliver an inbound
   webhook. The poller calls Coolify's own deploy API when `main` moves.
+
+> **Source of truth:** Coolify deploys `main`. The rehearsal commit
+> `1b973fafbedb763e15bc868e5fdcad0e13486ae4` is **not** the final release
+> identity. Before cutover, set `RELEASE_SHA` to the final integrated commit on
+> `main`, rebuild and relabel the image from that exact commit, and record its
+> image ID. Build production only from the approved `main` commit, not from a
+> feature branch. See the release identity block in
+> [the cutover checklist](coolify-cutover-checklist.md).
 
 ## 1. Topology
 
@@ -234,6 +251,104 @@ ssh -N -L 4400:127.0.0.1:4400 alpine
 # then open http://127.0.0.1:4400
 ```
 
+## 6.1 Storage and prebuilt production image verification (2026-11-08)
+
+### Storage
+
+Coolify's persistent data is on `/mnt/storage`; its Docker state is not.
+
+| Location | Backing storage | Verified state |
+| --- | --- | --- |
+| Coolify persistent data (`/data/coolify`) | bind mount from `/mnt/storage/appdata/coolify` (mergerfs pool) | 17 T pool, 7.4 T free, 1% inodes used |
+| Coolify PostgreSQL / Redis volumes | `/var/lib/docker/volumes` on Debian `/var` | DB 17 MB; `/var` 64 G, 16 G free, 16% inodes |
+| Debian Docker images / containers / build cache | `/var/lib/docker` on Debian `/var` | 42.55 GB images across **all** workloads; build cache 0; 16 G free |
+| NUC `/data/coolify` (generated compose/env) | NUC `/` LV | ~260 KB |
+| NUC Docker images / containers / build cache | `/var/lib/docker` on NUC `/` LV | 10.43 GB images, 2.09 GB volumes, build cache 0; 23.1 G free after cleanup |
+| Debian `/home` | `/dev/nvme0n1p4` | 704 MB free (98%); Coolify uses only the 24 KB poller directory. This is unrelated to Coolify. |
+
+Notes:
+
+- `/data/coolify` is the only Coolify path on `/mnt/storage`. PostgreSQL,
+  Redis, Docker images, deployment helper containers, and build caches live
+  under `/var/lib/docker`, not `/mnt/storage`.
+- No storage was moved or reconfigured. Free space and inode availability are
+  adequate for the cutover on both hosts.
+- Residual risk: Docker's root is not on `/mnt/storage` on either host. Monitor
+  `/var` on Debian and `/` on the NUC. Do not prune
+  `fusion-engage:review-20261106`, `fusion-engage:prod-1b973fafbedb`, or
+  `engage_mongo_data`.
+- The 42.55 GB of Debian images is shared by many unrelated stacks (media,
+  CRM, analytics, etc.); Coolify's own control-plane images are roughly
+  2 GB. `/home` being nearly full is the user's data, not Coolify.
+
+### Prebuilt production image (2026-11-08 rehearsal artifact)
+
+> This image is a rehearsal artifact and is **not** the final release. A final
+> image must be rebuilt from `$RELEASE_SHA` using the checklist and then
+> smoke-tested and re-protected.
+
+| Item | Value |
+| --- | --- |
+| Rehearsal commit | `1b973fafbedb763e15bc868e5fdcad0e13486ae4` (`main`) |
+| Rehearsal image tag | `fusion-engage:prod-1b973fafbedb` |
+| Rehearsal image ID | `sha256:49a05daf12783c9dcb727dcc6ed9c024eb6dcf06808f768570c0ed5b04cb62d6` |
+| Size | 401.5 MB |
+| Labels | `org.opencontainers.image.revision`, `.source`, `.created` |
+| Protection container | `engage-prebuilt-prod-1b973fafbedb` (stopped, no ports) |
+
+The image is built on the NUC with `DOCKER_BUILDKIT=0` from a `git archive` of
+the exact commit, not from a working tree. It was smoke-tested on
+`127.0.0.1:14321` attached to the staging network with staging environment
+values: `/api/health` returned `{"ok":true,"status":"healthy"}` and `/`,
+`/policies/`, `/member/`, and `/admin/` returned 200. Production port `4321`
+was never bound by the test.
+
+**Coolify image-prune caveat.** `CleanupDocker` deletes tagged images that no
+container references. A prebuilt image will be removed before cutover unless it
+is protected. The stopped placeholder container
+`engage-prebuilt-prod-1b973fafbedb` keeps the image in use, so `docker rmi`
+refuses to remove it. A real `CleanupDocker` run was executed on 2026-11-08 and
+the image survived. Keep the placeholder until the cutover container has
+started; remove it only after the new app is stable.
+
+### No-rebuild deployment path
+
+Coolify 4.6.0 builds Compose images before it stops the application's own
+containers. For this app, Coolify's automatic image-reuse path is disabled
+because `docker_compose_custom_build_command` is set. The verified cutover path
+is:
+
+1. Prebuild and smoke-test the image (above).
+2. Set `APP_IMAGE_TAG` to the final release tag (see the release identity block
+   in the cutover checklist), not the rehearsal tag.
+3. Set `docker_compose_custom_build_command=true` (a no-op).
+4. Install `/opt/engage/backups/fb.sh` (from
+   `scripts/coolify-final-backup.sh`) and set
+   `docker_compose_custom_start_command` to the 221-character sequence that
+   stops `engage-app-1`, runs the script in a disposable `mongo:8.0` container
+   to take a final quiescent backup, and starts the prebuilt image with
+   `docker compose --project-name <uuid> up -d --no-build`. The script keeps
+   the command inside Coolify's `varchar(255)` column.
+5. Trigger the Coolify deployment. Coolify clones the commit, runs the no-op
+   build, skips the registry pull, stops only its own containers (none on the
+   first cutover), then runs the custom start command. The old app stays up
+   until the custom start command runs; downtime is the stop, the tiny final
+   backup, and the container start.
+6. Coolify's health check verifies `/api/health`.
+
+The no-op build and prebuilt-image start were tested on staging: the new
+staging container ran the prebuilt image ID and the deployment log showed no
+build. The custom start command was tested on staging against a disposable
+stand-in container; it stopped the stand-in and started the app. The exact
+production command, including `--project-name` and `--no-build`, was validated
+with Coolify's own `injectDockerComposeFlags` and
+`SHELL_SAFE_COMMAND_PATTERN`.
+
+**Do not use Coolify's `/start` endpoint for the cutover start or rollback.**
+It queues a full deployment and rebuilds the images (verified on staging on
+2026-11-08). Use the deployment trigger with the no-op build/custom start, or
+`docker compose up -d --no-build` directly.
+
 ## 7. Health checks, logs, and observability
 
 ### Health checks
@@ -329,21 +444,35 @@ app, and do not enable a production webhook, until:
 ## 9. Production cutover (requires explicit approval)
 
 The full checklist is in
-[`docs/coolify-cutover-checklist.md`](coolify-cutover-checklist.md). The short
-version:
+[`docs/coolify-cutover-checklist.md`](coolify-cutover-checklist.md). The
+verified short version:
 
 1. Obtain explicit approval and a maintenance window.
-2. Take/confirm a fresh logical backup.
-3. Confirm the Coolify production app config and that port `4321` is held only
-   by `engage-app-1`.
-4. `docker stop engage-app-1` (do not remove it).
-5. Trigger the Coolify production deployment.
-6. Verify `/api/health`, the main routes, logs, and the public HTTPS endpoint.
-7. Keep `engage-app-1` stopped for 24–48 hours as the rollback.
-8. If unhealthy, stop the Coolify app and `docker start engage-app-1`.
+2. Freeze: pause the staging poller; confirm production auto-deploy is off, no
+   production deployment is queued, and no scheduled task can redeploy
+   production.
+3. Prebuild and protect the exact production image from the approved `main`
+   commit (section 6.1). Smoke-test it on a spare loopback port against the
+   staging database. Record the image ID and revision label.
+4. Take a fresh logical backup, restore-test it into a disposable MongoDB, and
+   copy it off-host to `/mnt/storage/data/engage-backups/` on `nexus-debian`.
+5. Configure the production app with a temporary `read`+`write`+`deploy` token:
+   `APP_IMAGE_TAG=prod-<sha>`, `docker_compose_custom_build_command=true`, and
+   the last-moment custom start command described in section 6.1.
+6. Trigger the Coolify production deployment. The old app stays up during
+   clone/prep; the custom start command then stops `engage-app-1`, takes the
+   final quiescent backup, and starts the prebuilt image with `--no-build`.
+7. Copy the final post-stop backup off-host and verify its SHA-256.
+8. Verify `/api/health`, the main routes, logs, DB access, the container image
+   ID, and the public HTTPS endpoint.
+9. Keep `engage-app-1` stopped (not removed) for 24–48 hours as the rollback.
+10. After the window, restore the normal build command, remove the custom start
+    command and placeholder, and revoke the temporary token.
 
 This is the only step that interrupts the existing deployment, which is why it
-is gated on approval.
+is gated on approval. The old app is stopped by the cutover deployment itself,
+not by a separate manual stop before the build, so the downtime does not
+include a build.
 
 ## 10. Rollback
 
@@ -368,18 +497,40 @@ rebuilt from the selected commit; do not rely on a floating `latest` tag.
 
 ### Production (Coolify-managed app)
 
-Use the same commit-based rollback. The app container is replaced; the Mongo
-container, volume, and network are untouched.
+Use the same commit-based rollback for a later code rollback. The app container
+is replaced; the Mongo container, volume, and network are untouched.
+
+**Do not use `POST /api/v1/applications/{uuid}/start` as a pure start.** It
+queues a full deployment and rebuilds the images (verified on staging on
+2026-11-08). For the cutover start, use the no-op build + custom start path in
+section 6.1; for rollback, use `docker start engage-app-1`.
 
 ### Production (legacy stack)
 
 If the Coolify app is unhealthy or the cutover must be abandoned:
 
 ```sh
-ssh alpine 'docker stop <coolify-production-app-container>'
+# 1. Stop the Coolify-managed app. The stop action removes its container and
+#    releases port 4321. It does not touch engage-app-1 or MongoDB.
+curl -sS -X POST "$COOLIFY_URL/api/v1/applications/$PROD_UUID/stop" \
+  -H "Authorization: Bearer $COOLIFY_TOKEN"
+
+# 2. Verify the Coolify container is gone and port 4321 is free
+ssh alpine 'docker ps -a --filter name=k4jns8zq5ctcnzixaadzza4k'
+ssh alpine 'ss -ltnp | grep 4321 || echo "port 4321 free"'
+
+# 3. Restart the preserved legacy container. This does not rebuild anything.
 ssh alpine 'docker start engage-app-1'
 ssh alpine 'curl -sf http://127.0.0.1:4321/api/health'
+curl -sf https://engage.fusionparty.org.au/api/health
 ```
+
+The stop path was verified on staging: Coolify stopped and removed only its own
+app containers, and the loopback port was free afterwards. The legacy image
+`fusion-engage:review-20261106` was also started on a spare port against the
+staging database and served `/api/health`, `/`, `/policies/`, and `/member/`
+successfully. `docker start engage-app-1` reuses the existing container and
+image; it never builds.
 
 Alternatively recreate the old app from the preserved release:
 
@@ -390,9 +541,41 @@ docker compose -p engage --env-file /opt/engage/.env \
   -f docker-compose.yml -f compose.nuc.yml up -d --no-build --wait app
 ```
 
+Before the cutover, verify the preserved legacy release is intact:
+
+```sh
+ssh alpine 'docker inspect engage-app-1 --format "{{.Config.Image}} {{.Image}} {{.HostConfig.RestartPolicy.Name}}"'
+ssh alpine 'docker image inspect fusion-engage:review-20261106 --format "{{.Id}}"'
+ssh alpine 'cd /opt/engage/current && docker compose -p engage --env-file /opt/engage/.env \
+  -f docker-compose.yml -f compose.nuc.yml config --quiet && echo "compose OK"'
+```
+
 Do not remove `engage-app-1`, its image, `engage_mongo_data`, or the release
 directory until the Coolify-managed production app has been stable for an
 agreed period.
+
+### Rollback trigger and safeguards
+
+Trigger a rollback if any of these is true after the cutover:
+
+- No healthy container within 60 seconds of `engage-app-1` stopping.
+- `/api/health` returns non-200, or the container restarts repeatedly.
+- Logs show database authentication or connection errors.
+- Main routes return 5xx, or the public HTTPS endpoint stays unavailable.
+- The new container's image ID does not match the recorded prebuilt image ID.
+
+Safeguards verified before the cutover:
+
+- Production `is_auto_deploy_enabled = false`; preview deployments are off.
+- The poller targets staging only; production has zero deployments queued.
+- No enabled scheduled task exists for production.
+- The production GitHub webhook secret is present but inert while auto-deploy
+  is off; Coolify is LAN-only and must not be exposed during the window.
+- `engage-app-1`, `fusion-engage:review-20261106`, `/opt/engage/current`,
+  `/opt/engage/.env`, `engage-mongo-1`, `engage_mongo_data`, and
+  `engage_default` are preserved.
+- `engage-app-1` has `RestartPolicy=unless-stopped`, so it does not restart by
+  itself while intentionally stopped during the cutover.
 
 ### Database
 
@@ -414,7 +597,34 @@ It was produced with the Mongo image's `mongodump`, the existing app
 credentials, and the existing `engage_default` network. No database writes were
 performed.
 
-To take another backup:
+### Restore verification (2026-11-08)
+
+`gzip -t` only proves the archive is not corrupt. The archive was restored into
+a disposable, network-isolated `mongo:8.0` container using a tmpfs database
+(no production access, no published ports):
+
+```text
+mongorestore --archive=... --gzip \
+  --nsFrom='engage_production.*' --nsTo='engage_restore_test.*'
+
+414 document(s) restored successfully. 0 document(s) failed to restore.
+```
+
+All 22 collections were present, with counts matching production exactly:
+
+```text
+account 6, application_roles 5, ballots 0, comments 10, consultation_rounds 0,
+consultation_submissions 0, deployment_checks 1, memberships 31,
+mutation_rate_limits 0, operational_audit 3, policies 0, policy_revisions 0,
+proposal_votes 194, proposals 81, rateLimit 3, review_revisions 1, reviews 1,
+schema_migrations 1, session 42, user 31, verification 0, votes 4
+```
+
+Indexes were recreated (`memberships` 2, `proposals` 4, `proposal_votes` 2,
+`votes` 4, `mutation_rate_limits` 3), and representative documents retained
+their expected fields. `engage_production` was not modified.
+
+### Taking a backup
 
 ```sh
 ssh alpine
@@ -424,9 +634,48 @@ docker run --rm --network engage_default --env-file /opt/engage/.env \
   sh -c 'mongodump --host mongo --port 27017 \
     --username "$MONGO_APP_USER" --password "$MONGO_APP_PASSWORD" \
     --authenticationDatabase "$MONGODB_DB_NAME" --db "$MONGODB_DB_NAME" \
-    --gzip --archive=/backup/pre-coolify-'"$STAMP"'.archive.gz'
-chmod 600 /opt/engage/backups/pre-coolify-"$STAMP".archive.gz
+    --gzip --archive=/backup/pre-cutover-'"$STAMP"'.archive.gz'
+chmod 600 /opt/engage/backups/pre-cutover-"$STAMP".archive.gz
+gzip -t /opt/engage/backups/pre-cutover-"$STAMP".archive.gz
 ```
+
+The cutover custom start command takes the **final** backup automatically
+after `engage-app-1` stops and before the new app starts, so it contains every
+write up to the cutover. The backup logic is the small host script
+`/opt/engage/backups/fb.sh` (source:
+`scripts/coolify-final-backup.sh`). The command runs that script in a
+disposable `mongo:8.0` container with the host `/opt/engage/.env` mounted
+read-only at `/tmp/e` and `/opt/engage/backups` at `/b`. The script extracts
+only the Mongo keys, so the spaces in `AUTH_EMAIL_FROM` do not break shell
+parsing, and the Docker CLI does not need to read the host env path itself.
+The script keeps the custom start command at 221 characters, inside Coolify's
+`varchar(255)` column. It was tested against the staging database on
+2026-11-08 and the archive passed `gzip -t`.
+
+### Off-host policy
+
+Engage backups were previously local to the NUC only. The verified off-host
+path is now:
+
+```text
+/mnt/storage/data/engage-backups/ on nexus-debian
+```
+
+`nexus-debian` can pull from the NUC as root. After each backup (including the
+final post-stop backup):
+
+```sh
+ssh debian 'mkdir -p /mnt/storage/data/engage-backups && chmod 700 /mnt/storage/data/engage-backups'
+ssh debian "scp -q root@192.168.86.199:/opt/engage/backups/<file>.archive.gz \
+  /mnt/storage/data/engage-backups/"
+ssh debian 'chmod 600 /mnt/storage/data/engage-backups/<file>.archive.gz'
+ssh debian 'sha256sum /mnt/storage/data/engage-backups/<file>.archive.gz'
+ssh alpine 'sha256sum /opt/engage/backups/<file>.archive.gz'
+```
+
+The existing `pre-coolify-20261108-002730.archive.gz` was copied there and its
+SHA-256 matched on both hosts. This is a manual step; no scheduled off-host job
+exists yet. Treat "off-host copy missing" as a cutover blocker.
 
 Restore only into a new, empty database and only with approval. Never restore
 over `engage_production`.
@@ -442,12 +691,23 @@ over `engage_production`.
 | Server validation says `jq` is missing | Install `jq` on the NUC (`apk add jq`) and re-run validation. |
 | Coolify UI/API unreachable from GitHub | Expected: the instance is LAN-only. Use the poller or add a public tunnel ingress. |
 | `docker compose` warns about orphan containers | Use the Coolify project name/UUID shown in `/data/coolify/applications/<uuid>`. Do not run a second Compose project against the production stack. |
+| Cutover deployment starts a build even though the prebuilt image exists | Coolify's automatic image reuse is disabled when a custom build command is set. Set `docker_compose_custom_build_command=true` for the cutover and start with `docker compose ... up -d --no-build`. |
+| Prebuilt image disappears before cutover | `CleanupDocker` prunes tagged images that no container references. Rebuild and keep a stopped placeholder container (`docker create`) using the image; verify it survives a cleanup run. |
+| Custom start command fails with `No such container: engage-app-1` | The legacy container was removed. Recreate it from `/opt/engage/current` with `up -d --no-build`, or remove the `docker stop engage-app-1` prefix before retrying. |
+| Custom start creates `j57..._staging` or the wrong Compose project | The custom start command omitted `--project-name <uuid>`. Include it explicitly; the flag injector only adds `-f`/`--env-file`. |
+| Custom start command rejected or truncated | `docker_compose_custom_start_command` is `varchar(255)`. Keep the backup logic in `/opt/engage/backups/fb.sh`; the 221-character command fits. |
+| `POST /applications/{uuid}/start` rebuilds the app | Expected in Coolify 4.6.0. Do not use it for a pure start or rollback. Use the no-op build path for cutover and `docker start engage-app-1` for rollback. |
+| Final backup missing after cutover | The custom start command chains `docker stop`, the `mongodump` container, and `docker compose ... up`. If the dump fails, the new app does not start. Check `/opt/engage/backups` and the deployment log, then roll back. |
 
 Host notes:
 
-- The NUC has `18.1 GiB` free on `/`; Debian has `4.7 GiB` free on `/` and
-  `726 MiB` on `/home`. Builds run on the NUC, not Debian. Monitor Debian disk
-  before enabling more Coolify resources.
+- The NUC has `23.1 GiB` free on `/` after the 2026-11-08 cleanup; Debian has
+  `4.7 GiB` free on `/`, `16 GiB` on `/var`, and `704 MiB` on `/home`. Builds
+  run on the NUC, not Debian. Monitor both hosts before enabling more Coolify
+  resources.
+- Coolify's persistent data is on `/mnt/storage` (17 T, 7.4 T free). Docker's
+  root (`/var/lib/docker`) is not on `/mnt/storage` on either host. This is
+  acceptable today but is the main storage risk.
 - The NUC's `/etc/apk/repositories` points at Alpine `v3.20` while the OS is
   `3.23.4`. This pre-dates this work. Only `jq` was added; review before a
   future `apk upgrade`.
@@ -468,7 +728,29 @@ Host notes:
 - **Coolify UI exposure.** Bind/restrict port `8000` before treating this as a
   production control plane.
 - **Token rotation.** Rotate the setup and poller tokens after handover and
-  store them in the team password manager.
+  store them in the team password manager. The cutover needs a temporary
+  `read`+`write`+`deploy` token; revoke it immediately after the window.
+- **Docker root is not on `/mnt/storage`.** Coolify's persistent data is on the
+  storage pool, but `/var/lib/docker` (images, build cache, PostgreSQL/Redis
+  volumes) is on `/var` on Debian and `/` on the NUC. Monitor free space; do
+  not prune the legacy or prebuilt images during the rollback window.
+- **Prebuilt image protection is manual.** A stopped placeholder container
+  keeps the image alive through `CleanupDocker`. Remove it only after the new
+  app is stable.
+- **Off-host backup is manual.** The verified path is
+  `/mnt/storage/data/engage-backups/` on `nexus-debian`, copied with `scp` and
+  checked by SHA-256. No scheduled off-host job exists yet.
+- **Production webhook secret is present but inert.** `manual_webhook_secret_github`
+  is set on the production app, but `is_auto_deploy_enabled=false` means a
+  webhook cannot queue a deployment. Do not expose Coolify publicly while
+  auto-deploy is off; clear or rotate the secret before enabling webhooks.
+- **Coolify `/start` is not a pure start.** It rebuilds the images. Use the
+  no-op build + custom start path for cutover and `docker start engage-app-1`
+  for rollback.
+- **Branch note.** The deployed source of truth is `main`. These operational
+  docs were integrated from the Coolify workstream and now live with the release
+  line. Rebuild the production image from the final integrated `main` commit;
+  the `1b973faf...` image is only the readiness rehearsal artifact.
 
 ## Appendix A: Identifiers
 
@@ -479,6 +761,10 @@ Host notes:
 | Staging application | `sgo3uctmylpzyyszoj8drskb` |
 | Production application | `k4jns8zq5ctcnzixaadzza4k` |
 | Staging deployment verified | `bm7ro3vyqdvczyr1pa9xzfeg` |
+| Rehearsal production commit (not final) | `1b973fafbedb763e15bc868e5fdcad0e13486ae4` |
+| Rehearsal production image | `fusion-engage:prod-1b973fafbedb` / `sha256:49a05daf...` |
+| Rehearsal image protection container | `engage-prebuilt-prod-1b973fafbedb` (stopped) |
+| Off-host backup path | `/mnt/storage/data/engage-backups/` on `nexus-debian` |
 | GitHub deploy key | id `169098251`, read-only |
 | Coolify SSH key | `alpine-nuc-coolify` |
 | Coolify Git key | `engage-github-deploy` |
@@ -534,5 +820,21 @@ curl -s -X POST "$COOLIFY_URL/api/v1/applications/$APP_UUID/start" \
 | Staging health | `{"ok":true,"status":"healthy"}` |
 | Staging DB | ping `1`, collections present |
 | Pre-cutover backup | 180 KiB, gzip OK, mode 0600 |
+| Backup restore test | 414 documents, 22 collections, 0 failures, indexes recreated, counts match production |
+| Off-host backup copy | `/mnt/storage/data/engage-backups/`, SHA-256 matches NUC copy |
+| Coolify persistent data | `/data/coolify` bind-mounted from `/mnt/storage/appdata/coolify` |
+| Storage free/inodes | `/mnt/storage` 7.4 T free, 1% inodes; Debian `/var` 16 G free; NUC `/` 23.1 G free |
+| Docker root | `/var/lib/docker` on Debian `/var` and NUC `/` (not `/mnt/storage`) |
+| Production runtime env hashes | all 10 exact matches vs `engage-app-1` |
+| Production auto-deploy / scheduled tasks | `false` / none; zero production deployments |
+| Rehearsal production image | `fusion-engage:prod-1b973fafbedb`, ID `sha256:49a05daf...`, revision `1b973faf...` (not the final release) |
+| Prebuilt smoke test | port `14321` against staging DB; health + `/`, `/policies/`, `/member/`, `/admin/` 200 |
+| Image survives Coolify cleanup | real `CleanupDocker` run; placeholder container kept the image |
+| No-op build staging deploy | deployment finished; container ran the prebuilt image ID; no build in log |
+| Custom start command staging test | stopped a stand-in container, started the app; injected command validated |
+| Coolify stop path | stopped/removed only its app containers; loopback port released |
+| Coolify `/start` behaviour | queues a full deployment and rebuilds images (do not use for pure start) |
+| Legacy image restart evidence | `fusion-engage:review-20261106` healthy on spare port; compose config valid |
+| Production final state | `engage-app-1` and `engage-mongo-1` healthy, port `4321` unchanged, no cutover performed |
 | GitHub deploy key | read-only, SSH clone verified |
 | Poller dry run | exits 0 when SHA unchanged |

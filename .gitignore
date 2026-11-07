@@ -12,3 +12,6 @@ playwright-report/
 .DS_Store
 
 .impeccable/
+
+corpus/
+national-neon-site/
