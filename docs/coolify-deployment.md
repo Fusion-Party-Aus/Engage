@@ -80,9 +80,11 @@ This is why the production Compose file has no `mongo` service and no volume.
   stays on `4.6.0` until an operator upgrades deliberately.
 - Registration remains disabled.
 - Two API tokens were created:
-  - an automation token with `read`, `write`, `deploy`, `root` for setup;
-  - a least-privilege poller token with `read`, `deploy`.
-- Tokens are stored outside Git. Rotate them if exposed.
+  - an automation token with `read`, `write`, `deploy`, `root` for setup; it
+    was **revoked after configuration**;
+  - a least-privilege poller token with `read`, `deploy`, which remains for the
+    deployment trigger.
+- Tokens are stored outside Git. Rotate the poller token if exposed.
 
 ### 4.2 Remote server
 
@@ -281,6 +283,10 @@ On each run it:
 
 The poller uses a `read` + `deploy` token. It runs no tests and builds nothing
 itself; Coolify performs the build and deployment on the NUC.
+
+The poller resolves the branch over public HTTPS. If the repository is made
+private, give the poller a read-only GitHub token or an SSH deploy key before
+the next poll; otherwise it will log an error and stop queuing deployments.
 
 Because the SHA is recorded when the deployment is **queued**, a failed
 deployment is not retried automatically. Inspect the Coolify deployment log,
@@ -524,7 +530,7 @@ curl -s -X POST "$COOLIFY_URL/api/v1/applications/$APP_UUID/start" \
 | Production URI hash vs running container | exact match |
 | Production runtime env hashes | all exact matches |
 | Staging deployment | finished, both containers healthy |
-| Poller end-to-end deployment | `ukwx3w1uoucblvt0orve5lpf` finished at `ef8e9a8` |
+| Poller end-to-end deployments | `ukwx3w1uoucblvt0orve5lpf` at `ef8e9a8`; `nlf1wyw42ncaazzkxpufdz2n` at `cffc1a0` |
 | Staging health | `{"ok":true,"status":"healthy"}` |
 | Staging DB | ping `1`, collections present |
 | Pre-cutover backup | 180 KiB, gzip OK, mode 0600 |
