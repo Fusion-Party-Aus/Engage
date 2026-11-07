@@ -1,0 +1,873 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { Input } from '../../../components/ui/input';
+import { NativeSelect } from '../../../components/ui/native-select';
+import { Textarea } from '../../../components/ui/textarea';
+import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, ShieldAlert } from 'lucide-react';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { listProposals } from '../../../lib/store.ts';
+import type { ProposalStage } from '../../../lib/types.ts';
+import { Button } from '../../../components/ui/button';
+import { Badge } from '../../../components/ui/badge';
+import Card from '../../../components/admin/Card.astro';
+import CardContent from '../../../components/admin/CardContent.astro';
+import Field from '../../../components/admin/Field.astro';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+
+if (!user) {
+  return Astro.redirect('/member/', 302);
+}
+if (!user.isStaff && !user.isBranchAdmin) {
+  Astro.response.status = 403;
+}
+
+const db = await getDatabase(env);
+const branchAdminIds = user.branchAdminIds ?? [];
+const branches = user.isAdmin ? await db.collection('branches').find({}).sort({ name: 1 }).toArray() : user.isBranchAdmin ? await db.collection('branches').find({ branchId: { $in: branchAdminIds } }).sort({ name: 1 }).toArray() : await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray();
+const query = (Astro.url.searchParams.get('q') ?? '').trim();
+const stageFilter = (Astro.url.searchParams.get('stage') ?? 'all').trim();
+const branchFilter = (Astro.url.searchParams.get('branch') ?? 'all').trim();
+const editId = (Astro.url.searchParams.get('edit') ?? '').trim();
+const reviseId = (Astro.url.searchParams.get('revise') ?? '').trim();
+const newProposal = Astro.url.searchParams.get('new') === '1';
+
+const allProposals = user.isStaff || user.isBranchAdmin
+  ? (await listProposals(db, {
+      includeArchived: true,
+      search: query,
+      stage: stageFilter,
+    })).filter((proposal) => user.isStaff || (proposal.originatingBranchId && branchAdminIds.includes(proposal.originatingBranchId)) && (!branchFilter || branchFilter === 'all' || [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branchFilter)))
+  : [];
+const unboundBallotRevisions = new Map<string, any[]>();
+for (const proposal of allProposals.filter((item) => item.stage === 'decide' && !item.ballotRevisionId)) {
+  unboundBallotRevisions.set(proposal.proposalId, await db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray());
+}
+const proposalIds = allProposals.map((proposal) => proposal.proposalId);
+const amendmentRows = proposalIds.length ? await db.collection('amendments').find({ proposalId: { $in: proposalIds }, status: { $nin: ['withdrawn', 'rejected', 'applied', 'not-endorsed', 'inconclusive'] } }).sort({ createdAt: 1 }).toArray() : [];
+const amendmentsByProposal = new Map<string, any[]>();
+for (const amendment of amendmentRows) {
+  const history = await db.collection('amendment_revisions').find({ amendmentId: amendment.amendmentId }).sort({ createdAt: 1 }).toArray();
+  amendment.revisionHistory = history;
+  const current = history.find((row: any) => row.revisionId === amendment.currentRevisionId);
+  if (current) amendment.changes = current.snapshot;
+  amendmentsByProposal.set(amendment.proposalId, [...(amendmentsByProposal.get(amendment.proposalId) ?? []), amendment]);
+}
+
+const editingProposal = editId ? allProposals.find((p) => p.proposalId === editId) : null;
+const revisingProposal = reviseId ? allProposals.find((p) => p.proposalId === reviseId) : null;
+const isRevision = Boolean(revisingProposal && !editingProposal);
+
+const isLocked = editingProposal
+  ? editingProposal.stage === 'decide' || editingProposal.votes.total > 0
+  : false;
+const voteCount = editingProposal?.votes.total ?? 0;
+const currentKind = editingProposal
+  ? (editingProposal.kind ?? (editingProposal.proposalId.startsWith('GOV-') ? 'resolution' : 'policy'))
+  : (revisingProposal ? (revisingProposal.kind ?? 'policy') : 'policy');
+const isResolution = currentKind === 'resolution';
+
+const initialTitle = editingProposal
+  ? editingProposal.title
+  : (revisingProposal ? `${revisingProposal.title} (Revised)` : '');
+const initialSpace = editingProposal
+  ? editingProposal.space
+  : (revisingProposal ? revisingProposal.space : 'General');
+const initialSummary = editingProposal
+  ? editingProposal.summary
+  : (revisingProposal ? revisingProposal.summary : '');
+const initialOutcomes = editingProposal
+  ? editingProposal.outcomes
+  : (revisingProposal ? revisingProposal.outcomes : []);
+const initialDetails = editingProposal
+  ? editingProposal.details
+  : (revisingProposal ? revisingProposal.details : '');
+const initialAttachmentUrl = editingProposal
+  ? (editingProposal.attachmentUrl ?? '')
+  : (revisingProposal ? (revisingProposal.attachmentUrl ?? '') : '');
+const initialAttachmentDescription = editingProposal
+  ? (editingProposal.attachmentDescription ?? '')
+  : (revisingProposal ? (revisingProposal.attachmentDescription ?? '') : '');
+const initialImplementationNote = editingProposal ? (editingProposal.implementationNote ?? '') : '';
+
+const initialProvenance = editingProposal
+  ? editingProposal.provenance
+  : (revisingProposal
+      ? {
+          category: 'materially-revised',
+          label: `${revisingProposal.kind === 'resolution' ? 'Preceding resolution' : 'Approved policy predecessor'} · Materially revised`,
+          summary: `Substantive revision of ${revisingProposal.proposalId} (${revisingProposal.title}) following member deliberation and voting.`,
+          uncertaintyNote: revisingProposal.provenance?.uncertaintyNote,
+          lineage: [
+            {
+              label: revisingProposal.title,
+              url: `/proposals/${revisingProposal.slug}/`,
+              description: `Preceding ballot: ${revisingProposal.proposalId}`,
+            },
+            ...(revisingProposal.provenance?.lineage ?? []),
+          ],
+          valuesAlignment: revisingProposal.provenance?.valuesAlignment ?? [],
+        }
+      : null);
+
+const spaces = [...new Set(allProposals.map((p) => p.space))].sort();
+
+const stageOptions: Array<[ProposalStage, string]> = [
+  ['propose', '1. Propose (Intake)'],
+  ['deliberate', '2. Deliberate (Discussion)'],
+  ['decide', '3. Decide (Voting)'],
+  ['implement', '4. Implement (Decision processing)'],
+  ['archived', 'Archived'],
+];
+const stageTone = (stage: string) => stage === 'decide' ? 'warning' : stage === 'implement' ? 'success' : stage === 'deliberate' ? 'info' : stage === 'archived' ? 'outline' : 'muted';
+const stageLabel = (stage: string) => stage === 'decide' ? 'Open vote' : stage === 'deliberate' ? 'In discussion' : stage === 'implement' ? 'Implement' : stage === 'archived' ? 'Archived' : 'New idea';
+const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && item.governanceAuthorityBranchId === item.jurisdictionBranchId && branchAdminIds.includes(item.governanceAuthorityBranchId ?? ''));
+---
+
+<AdminLayout
+  title="Review ideas and votes"
+  description="Review proposals, ballots, suggested changes and recorded outcomes."
+  section="proposals"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  {!user.isStaff && !user.isBranchAdmin ? (
+    <Alert variant="destructive">
+      <ShieldAlert />
+      <AlertTitle>Access required</AlertTitle>
+      <AlertDescription>Moderator or Administrator access is required to view this workspace.</AlertDescription>
+    </Alert>
+  ) : (
+    <div class="admin-stack">
+      <details id="proposal-editor" class="admin-disclosure proposal-editor-disclosure" open={Boolean(editingProposal || isRevision || newProposal)}>
+        <summary>
+          <PlusCircle className="size-4" aria-hidden="true" />
+          <span class="grid min-w-0 gap-0.5">
+            <strong class="text-sm font-semibold text-foreground">{editingProposal ? 'Edit proposal' : isRevision ? 'Create a revised proposal' : 'Create a proposal or resolution'}</strong>
+            <span class="text-xs font-normal text-muted-foreground">Open this form when you are ready to draft or make an authorised edit.</span>
+          </span>
+        </summary>
+        <div class="admin-disclosure__body">
+          <section id="create-policy" aria-labelledby="editor-heading">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 id="editor-heading" class="m-0 text-base font-semibold text-foreground">
+                {editingProposal
+                  ? `Edit ${editingProposal.proposalId}: ${editingProposal.title}`
+                  : isRevision
+                    ? `Branch Revision of ${revisingProposal?.proposalId}`
+                    : 'Create a new proposal or resolution'}
+              </h2>
+              {(editingProposal || isRevision) && (
+                <Button href="/admin/proposals/" variant="outline" size="sm">Cancel</Button>
+              )}
+            </div>
+
+            {isRevision && (
+              <Alert class="mb-4" variant="info">
+                <GitBranch />
+                <AlertTitle>Substantive revision mode</AlertTitle>
+                <AlertDescription>
+                  Creating a revised motion based on <strong>{revisingProposal?.proposalId}</strong> ({revisingProposal?.title}).
+                  The original proposal and its {revisingProposal?.votes.total} vote(s) remain untouched in the archives.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {isLocked && (
+              <Alert class="mb-4" variant="warning">
+                <Lock />
+                <AlertTitle>Substantive motion text locked</AlertTitle>
+                <AlertDescription>
+                  <p class="m-0">This proposal is {editingProposal?.stage === 'decide' ? 'currently active in the Decide (voting) stage' : `in the ${editingProposal?.stage} stage`} with <strong>{voteCount} member vote{voteCount === 1 ? '' : 's'}</strong> cast. To protect ballot integrity, the title, summary, commitments, rationale, classification, and attachments cannot be altered. Lifecycle stage, topic space, provenance metadata, and implementation notes remain editable.</p>
+                  <Button className="mt-3" href={`/admin/proposals/?revise=${encodeURIComponent(editingProposal!.proposalId)}#create-policy`} variant="outline" size="sm">Branch / revise as new proposal</Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <form id="proposal-editor-form" data-editing-id={editingProposal?.proposalId ?? ''} class="grid gap-4">
+              {user.isBranchAdmin && !user.isAdmin && (editingProposal
+                ? <input type="hidden" name="originatingBranchId" value={editingProposal.originatingBranchId ?? ''} />
+                : <Field label="Proposal originating branch" htmlFor="editor-origin-branch" hint="This records where the idea began. A national administrator must set its authority and jurisdiction before a branch ballot can open.">
+                    <NativeSelect defaultValue="" id="editor-origin-branch" name="originatingBranchId" required>
+                      <option value="">Choose your branch</option>
+                      {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                    </NativeSelect>
+                  </Field>)}
+              <div class="admin-form-grid">
+                <Field label="Lifecycle stage" htmlFor="editor-stage">
+                  <NativeSelect defaultValue={editingProposal ? editingProposal.stage : 'deliberate'} id="editor-stage" name="stage">
+                    {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+                  </NativeSelect>
+                </Field>
+
+                <Field label="Classification" htmlFor="proposal-kind-select">
+                  <NativeSelect defaultValue={isResolution ? 'resolution' : 'policy'} id="proposal-kind-select" name="kind" disabled={isLocked}>
+                    <option value="policy">Policy Proposal</option>
+                    <option value="resolution">Governance Resolution</option>
+                  </NativeSelect>
+                  {isLocked && <input type="hidden" name="kind" value={isResolution ? 'resolution' : 'policy'} />}
+                </Field>
+
+                <Field label="Space / topic" htmlFor="editor-space">
+                  <Input id="editor-space" name="space" list="space-options" required minLength={2} maxLength={100} defaultValue={initialSpace} placeholder="e.g. Governance, Economy, Climate, Digital Rights" />
+                  <datalist id="space-options">
+                    {spaces.map((sp) => <option value={sp} />)}
+                  </datalist>
+                </Field>
+              </div>
+
+              {user.isAdmin && (
+                <details class="admin-disclosure admin-disclosure--muted">
+                  <summary><GitBranch className="size-4" aria-hidden="true" />Branch and publication scope</summary>
+                  <div class="admin-disclosure__body">
+                    <p class="admin-inline-note">Set the originating branch, governance authority, policy jurisdiction, and publication scope separately. A branch policy is not automatically a national policy.</p>
+                    <div class="admin-form-grid">
+                      <Field label="Originating branch" htmlFor="editor-origin-scope">
+                        <NativeSelect defaultValue={editingProposal?.originatingBranchId ?? ''} id="editor-origin-scope" name="originatingBranchId" disabled={isLocked}>
+                          <option value="">Not specified</option>
+                          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                        </NativeSelect>
+                      </Field>
+                      <Field label="Governance authority" htmlFor="editor-governance-authority">
+                        <NativeSelect defaultValue={editingProposal?.governanceAuthorityBranchId ?? ''} id="editor-governance-authority" name="governanceAuthorityBranchId" disabled={isLocked}>
+                          <option value="">Not specified</option>
+                          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                        </NativeSelect>
+                      </Field>
+                      <Field label="Policy jurisdiction" htmlFor="editor-jurisdiction">
+                        <NativeSelect defaultValue={editingProposal?.jurisdictionBranchId ?? ''} id="editor-jurisdiction" name="jurisdictionBranchId" disabled={isLocked}>
+                          <option value="">Not specified</option>
+                          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                        </NativeSelect>
+                      </Field>
+                      <Field label="Publication scope" htmlFor="editor-publication-scope">
+                        <NativeSelect defaultValue={editingProposal?.publicationScope ?? ''} id="editor-publication-scope" name="publicationScope" disabled={isLocked}>
+                          <option value="">Not specified</option>
+                          <option value="private">Private</option>
+                          <option value="branch">Branch</option>
+                          <option value="national">National</option>
+                        </NativeSelect>
+                      </Field>
+                    </div>
+                  </div>
+                </details>
+              )}
+
+              <Field
+                label={isLocked ? 'Title (locked)' : 'Title'}
+                htmlFor="editor-title"
+              >
+                <Input id="editor-title" name="title" required minLength={4} maxLength={200} defaultValue={initialTitle} readOnly={isLocked} className={isLocked ? 'admin-locked' : undefined} placeholder="e.g. Adopt Horizon visual identity, or Universal Dental in Medicare" />
+              </Field>
+
+              <Field
+                label={isLocked ? 'Core statement / summary (locked)' : 'Core statement / summary'}
+                htmlFor="editor-summary"
+              >
+                <Textarea id="editor-summary" name="summary" required minLength={10} maxLength={2000} rows={3} defaultValue={initialSummary} readOnly={isLocked} className={isLocked ? 'admin-locked' : undefined} />
+              </Field>
+
+              <Field
+                label={isLocked ? 'Key commitments / outcomes (one per line · locked)' : 'Key commitments / outcomes (one per line)'}
+                htmlFor="editor-outcomes"
+              >
+                <Textarea id="editor-outcomes" name="outcomes" rows={3} defaultValue={initialOutcomes.join('\n')} readOnly={isLocked} className={isLocked ? 'admin-locked' : undefined} />
+              </Field>
+
+              <Field
+                label={isLocked ? 'Detailed background, rationale & text (locked)' : 'Detailed background, rationale & text'}
+                htmlFor="editor-details"
+              >
+                <Textarea id="editor-details" name="details" rows={6} defaultValue={initialDetails} readOnly={isLocked} className={isLocked ? 'admin-locked' : undefined} />
+              </Field>
+
+              <div class="admin-form-grid">
+                <Field
+                  label={isLocked ? 'Supporting attachment URL (optional · locked)' : 'Supporting attachment URL (optional)'}
+                  htmlFor="editor-attachment-url"
+                >
+                  <Input id="editor-attachment-url" name="attachmentUrl" defaultValue={initialAttachmentUrl} readOnly={isLocked} className={isLocked ? 'admin-locked' : undefined} placeholder="e.g. /fusion_horizon_logo_light.svg or https://..." />
+                </Field>
+
+                <Field
+                  label={isLocked ? 'Attachment description (optional · locked)' : 'Attachment description (optional)'}
+                  htmlFor="editor-attachment-description"
+                >
+                  <Input id="editor-attachment-description" name="attachmentDescription" defaultValue={initialAttachmentDescription} readOnly={isLocked} className={isLocked ? 'admin-locked' : undefined} placeholder="e.g. Official Horizon identity emblem: vector marks and palette tokens" />
+                </Field>
+
+                <Field label="Decision-processing note (for Stage 4)" htmlFor="editor-implementation-note">
+                  <Input id="editor-implementation-note" name="implementationNote" defaultValue={initialImplementationNote} placeholder="e.g. Ratification scheduled; publication completed; rollout milestone recorded." />
+                </Field>
+              </div>
+
+              <details class="admin-disclosure admin-disclosure--muted" open={Boolean(initialProvenance)}>
+                <summary>
+                  <ListChecks className="size-4" aria-hidden="true" />
+                  {isResolution ? 'Resolution context & authority' : 'Policy provenance & prior approval'}
+                </summary>
+                <div class="admin-disclosure__body">
+                  <div class="admin-form-grid">
+                    <Field label="Provenance classification" htmlFor="prov-category-select">
+                      <NativeSelect defaultValue={initialProvenance?.category ?? 'none'} id="prov-category-select" name="provCategory">
+                        <option value="none">None (clear provenance)</option>
+                        <option value="existing-repackaged">{isResolution ? 'Preceding resolution · equivalence unverified' : 'Approved policy predecessor · equivalence unverified'}</option>
+                        <option value="materially-revised">{isResolution ? 'Preceding resolution · materially revised' : 'Approved policy predecessor · materially revised'}</option>
+                        <option value="new-proposal">{isResolution ? 'New resolution · no prior authority identified' : 'New proposal · no prior policy identified'}</option>
+                        <option value="party-governance">Party governance · internal platform review</option>
+                        <option value="draft-derived">Draft branch predecessor · unapproved</option>
+                        <option value="unverified">Mapping unverified</option>
+                      </NativeSelect>
+                    </Field>
+
+                    <Field label="Custom badge label (optional)" htmlFor="prov-label-input">
+                      <Input id="prov-label-input" name="provLabel" defaultValue={initialProvenance?.label ?? ''} placeholder="Defaults based on classification" />
+                    </Field>
+                  </div>
+
+                  <Field label={isResolution ? 'Resolution context summary' : 'Provenance summary'} htmlFor="prov-summary">
+                    <Textarea id="prov-summary" name="provSummary" rows={2} defaultValue={initialProvenance?.summary ?? ''} placeholder={isResolution ? 'e.g. Internal governance motion to adopt...' : 'e.g. Cites a direct predecessor on a published Fusion policy page...'} />
+                  </Field>
+
+                  <Field label="What is still uncertain / scrutiny notes" htmlFor="prov-uncertainty">
+                    <Input id="prov-uncertainty" name="provUncertainty" defaultValue={initialProvenance?.uncertaintyNote ?? ''} placeholder="e.g. Specific clause or operational wording comparison notes." />
+                  </Field>
+
+                  <Field label={isResolution ? 'Preceding documents & authorities (format: Title | URL | Description)' : 'Prior policy predecessors (format: Title | URL | Description)'} htmlFor="prov-lineage">
+                    <Textarea id="prov-lineage" name="provLineage" rows={3} defaultValue={(initialProvenance?.lineage ?? []).map((l) => [l.label, l.url, l.description].filter(Boolean).join(' | ')).join('\n')} placeholder="Fair + Inclusive Society | https://www.fusionparty.org.au/fair_inclusive_society | Direct predecessor: replacing stamp duty with land tax" />
+                  </Field>
+
+                  <Field label="Values & principles alignment (one per line)" htmlFor="prov-values">
+                    <Textarea id="prov-values" name="provValues" rows={2} defaultValue={(initialProvenance?.valuesAlignment ?? []).join('\n')} placeholder="Principle: Sustainable Urban Prosperity — Replacing transaction taxes with land-value taxation..." />
+                  </Field>
+                </div>
+              </details>
+
+              <div class="admin-actions">
+                <Button type="submit">{editingProposal ? 'Save changes' : isRevision ? 'Create revised proposal' : 'Create proposal'}</Button>
+                {editingProposal && user.isAdmin && (
+                  <Button id="delete-proposal-btn" variant="destructive" type="button" data-delete-id={editingProposal.proposalId} data-vote-count={voteCount}>
+                    Delete proposal
+                  </Button>
+                )}
+                <p id="editor-status" class="form-status admin-status" role="status" aria-live="polite"></p>
+              </div>
+            </form>
+          </section>
+        </div>
+      </details>
+
+      <Card class="gap-0">
+        <CardContent class="p-5">
+          <form method="get" action="/admin/proposals/" class="admin-form-grid">
+            <Field label="Search proposals" htmlFor="proposal-search">
+              <div class="relative">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input id="proposal-search" type="search" name="q" defaultValue={query} placeholder="Search by title, ID, or space" className="pl-9" />
+              </div>
+            </Field>
+
+            <Field label="Stage" htmlFor="proposal-stage-filter">
+              <NativeSelect defaultValue={stageFilter} id="proposal-stage-filter" name="stage">
+                <option value="all">All stages ({allProposals.length})</option>
+                {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+              </NativeSelect>
+            </Field>
+
+            <Field label="Branch" htmlFor="proposal-branch-filter">
+              <NativeSelect defaultValue={branchFilter} id="proposal-branch-filter" name="branch">
+                <option value="all">All branches</option>
+                {branches.filter((branch: any) => branch.recognised).map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+              </NativeSelect>
+            </Field>
+
+            <div class="flex items-end"><Button type="submit" variant="outline">Filter</Button></div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <section class="grid gap-3" aria-label="Proposals register">
+        {allProposals.length === 0 ? (
+          <Card>
+            <CardContent class="grid justify-items-start gap-2 py-10">
+              <p class="m-0 text-sm font-semibold text-foreground">No items match this filter.</p>
+              <p class="m-0 text-sm text-muted-foreground">Try a different search term or stage.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          allProposals.map((item) => (
+            <Card class="gap-0">
+              <CardContent class="grid gap-4 p-5">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="grid min-w-0 gap-1.5">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Badge variant={stageTone(item.stage)}>{stageLabel(item.stage)}</Badge>
+                      <Badge variant="outline" label={item.space} />
+                      {item.kind === 'resolution' || item.proposalId.startsWith('GOV-') ? <Badge variant="info">Resolution</Badge> : <Badge variant="muted">Policy proposal</Badge>}
+                    </div>
+                    <h3 class="m-0 text-base font-semibold text-foreground">
+                      <a href={`/proposals/${item.slug}/`} class="no-underline hover:underline">{item.title}</a>
+                    </h3>
+                    <p class="m-0 text-sm text-muted-foreground">
+                      {item.proposalId}
+                      {item.jurisdictionBranchId && ` · ${branches.find((branch: any) => branch.branchId === item.jurisdictionBranchId)?.name ?? 'Branch scoped'}`}
+                      {item.votes.total > 0 && ` · ${item.votes.total} vote${item.votes.total === 1 ? '' : 's'}`}
+                      {item.commentCount > 0 && ` · ${item.commentCount} contribution${item.commentCount === 1 ? '' : 's'}`}
+                    </p>
+                  </div>
+                  <div class="flex shrink-0 flex-wrap gap-2">
+                    <Button href={`/proposals/${item.slug}/`} variant="outline" size="sm"><FileText />Read proposal</Button>
+                    <Button href={`/admin/proposals/?edit=${encodeURIComponent(item.proposalId)}#create-policy`} variant="ghost" size="sm">Edit</Button>
+                  </div>
+                </div>
+
+                <details class="proposal-manage">
+                  <summary><Gavel className="size-4" aria-hidden="true" />Manage proposal</summary>
+                  <div class="grid gap-3 border-t pt-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{item.proposalId}</Badge>
+                      {item.provenance && <Badge variant="muted" label={item.provenance.label} />}
+                      <Badge variant="success">{item.votes.approve} approve</Badge>
+                      <Badge variant="muted">{item.votes.abstain} abstain</Badge>
+                      <Badge variant="destructive">{item.votes.reject} reject</Badge>
+                    </div>
+
+                    <div class="admin-form-grid">
+                      <Field label="Lifecycle stage" htmlFor={`quick-stage-${item.proposalId}`}>
+                        <NativeSelect
+                          defaultValue={item.stage}
+                          id={`quick-stage-${item.proposalId}`}
+                          aria-label={`Stage for ${item.title}`}
+                          data-quick-proposal-id={item.proposalId}
+                          data-current-stage={item.stage}
+                          data-vote-count={item.votes.total}
+                          data-title={item.title}
+                        >
+                          {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+                        </NativeSelect>
+                      </Field>
+                    </div>
+
+                    {canManageBallot(item) && item.stage === 'decide' && !item.ballotRevisionId && (
+                      <details class="admin-disclosure admin-disclosure--muted">
+                        <summary><Lock className="size-4" aria-hidden="true" />Review and bind ballot wording</summary>
+                        <div class="admin-disclosure__body">
+                          <p class="admin-inline-note">This ballot has no saved wording reference. Check the revision history, then explicitly select the wording that the recorded votes apply to. Engage will log your reason and decision event reference.</p>
+                          <a href={`/proposals/${item.slug}/#revision-history-heading`}>Review proposal history</a>
+                          {(unboundBallotRevisions.get(item.proposalId)?.length ?? 0) > 0 ? (
+                            <form class="ballot-bind-form grid gap-3" data-proposal-id={item.proposalId}>
+                              <Field label="Wording revision" htmlFor={`bind-revision-${item.proposalId}`}>
+                                <NativeSelect defaultValue="" id={`bind-revision-${item.proposalId}`} name="revisionId" required>
+                                  <option value="">Choose the reviewed revision</option>
+                                  {unboundBallotRevisions.get(item.proposalId)!.map((revision: any) => <option value={revision.revisionId}>{String(revision.revisionId).slice(0, 12)} · {new Date(revision.createdAt).toLocaleString('en-AU')} · {String(revision.contentHash ?? '').slice(0, 10)}</option>)}
+                                </NativeSelect>
+                              </Field>
+                              <Field label="Review decision event reference" htmlFor={`bind-event-${item.proposalId}`}>
+                                <Input id={`bind-event-${item.proposalId}`} name="decisionEventId" required maxLength={200} />
+                              </Field>
+                              <Field label="Reason and evidence reviewed" htmlFor={`bind-reason-${item.proposalId}`}>
+                                <Textarea id={`bind-reason-${item.proposalId}`} name="reason" rows={3} required maxLength={1000} />
+                              </Field>
+                              <div class="admin-actions">
+                                <Button variant="outline" size="sm" type="submit">Bind reviewed wording</Button>
+                                <span class="admin-status" role="status" aria-live="polite"></span>
+                              </div>
+                            </form>
+                          ) : <p class="admin-inline-note">No saved proposal revision is available to bind. Create or recover a revision before proceeding.</p>}
+                        </div>
+                      </details>
+                    )}
+
+                    {canManageBallot(item) && item.stage === 'decide' && (
+                      <details class="admin-disclosure admin-disclosure--muted">
+                        <summary><Gavel className="size-4" aria-hidden="true" />Record ballot outcome</summary>
+                        <div class="admin-disclosure__body">
+                          <p class="admin-inline-note">Apply the organisation&apos;s authorised rules. Engage does not calculate a passing threshold. A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
+                          <p class="m-0 text-sm"><strong>Frozen revision:</strong> {item.ballotRevisionId ?? 'Needs administrator review'}</p>
+                          <form class="ballot-result-form grid gap-3" data-proposal-id={item.proposalId}>
+                            <div class="admin-form-grid">
+                              <Field label="Outcome" htmlFor={`ballot-result-${item.proposalId}`}>
+                                <NativeSelect defaultValue="" id={`ballot-result-${item.proposalId}`} name="result" required>
+                                  <option value="">Choose outcome</option>
+                                  <option value="successful">Successful</option>
+                                  <option value="unsuccessful">Unsuccessful</option>
+                                  <option value="inconclusive">Inconclusive</option>
+                                </NativeSelect>
+                              </Field>
+                              <Field label="Decision event reference" htmlFor={`ballot-event-${item.proposalId}`}>
+                                <Input id={`ballot-event-${item.proposalId}`} name="decisionEventId" required maxLength={200} />
+                              </Field>
+                            </div>
+                            <div class="admin-actions">
+                              <Button variant="outline" size="sm" type="submit" disabled={!item.ballotRevisionId}>Record result</Button>
+                              <span class="admin-status" role="status" aria-live="polite"></span>
+                            </div>
+                          </form>
+                        </div>
+                      </details>
+                    )}
+
+                    {(user.isAdmin || user.isBranchAdmin) && (amendmentsByProposal.get(item.proposalId)?.length ?? 0) > 0 && (
+                      <details class="admin-disclosure admin-disclosure--muted">
+                        <summary><ListChecks className="size-4" aria-hidden="true" />Review {amendmentsByProposal.get(item.proposalId)!.length} amendment{amendmentsByProposal.get(item.proposalId)!.length === 1 ? '' : 's'}</summary>
+                        <div class="admin-disclosure__body">
+                          {amendmentsByProposal.get(item.proposalId)!.map((amendment: any) => (
+                            <section class="grid gap-3 border-b pb-4 last:border-b-0 last:pb-0" data-amendment-id={amendment.amendmentId}>
+                              <div>
+                                <h4 class="m-0 text-sm font-semibold text-foreground">{amendment.changes?.title ?? 'Proposed wording change'} <span class="font-normal text-muted-foreground">· {amendment.status}</span></h4>
+                                <p class="m-0 mt-1 text-xs text-muted-foreground">Proposal revision <code>{String(amendment.baseRevisionId).slice(0, 8)}</code> · wording revision <code>{String(amendment.currentRevisionId ?? 'legacy').slice(0, 8)}</code>{amendment.conflicts?.length ? ` · overlapping fields: ${amendment.conflicts.join(', ')}` : ''}</p>
+                              </div>
+                              {amendment.revisionHistory?.length > 1 && (
+                                <details>
+                                  <summary class="cursor-pointer text-sm font-medium">Wording history ({amendment.revisionHistory.length} revisions)</summary>
+                                  <ol class="mt-2 grid gap-1 text-xs text-muted-foreground">{amendment.revisionHistory.map((row: any) => <li><code>{String(row.revisionId).slice(0, 8)}</code> · {new Date(row.createdAt).toLocaleString()}</li>)}</ol>
+                                </details>
+                              )}
+                              {['proposed', 'stale', 'conflict'].includes(amendment.status) && (
+                                <details class="rounded-md border bg-background p-3">
+                                  <summary class="cursor-pointer text-sm font-medium">Resolve amendment</summary>
+                                  <form class="amendment-resolve-form mt-3 grid gap-3" data-amendment-id={amendment.amendmentId} data-conflict={String(amendment.status === 'conflict')}>
+                                    <div class="admin-form-grid">
+                                      <Field label="Review outcome" htmlFor={`amendment-outcome-${amendment.amendmentId}`}>
+                                        <NativeSelect defaultValue="ready" id={`amendment-outcome-${amendment.amendmentId}`} name="outcome">
+                                          <option value="ready">Resolve and mark ready for an endorsement ballot</option>
+                                          <option value="rejected">Reject</option>
+                                          <option value="withdrawn">Withdraw</option>
+                                        </NativeSelect>
+                                      </Field>
+                                      <Field label="Reason" htmlFor={`amendment-reason-${amendment.amendmentId}`}>
+                                        <Textarea id={`amendment-reason-${amendment.amendmentId}`} name="reason" rows={2} required maxLength={1000} />
+                                      </Field>
+                                    </div>
+                                    {amendment.status === 'conflict' && (
+                                      <div class="grid gap-3">
+                                        <p class="admin-inline-note">Enter explicit replacement wording for the overlapping fields. This resolves the conflict; it does not approve or apply the amendment.</p>
+                                        {Object.entries(amendment.changes ?? {}).map(([field, value]: [string, any]) => (
+                                          <Field label={field} htmlFor={`amendment-field-${amendment.amendmentId}-${field}`}>
+                                            <Textarea id={`amendment-field-${amendment.amendmentId}-${field}`} data-change-field={field} rows={3} defaultValue={Array.isArray(value) ? value.join('\n') : String(value ?? '')} />
+                                          </Field>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div class="admin-actions">
+                                      <Button variant="outline" size="sm" type="submit">Save resolution</Button>
+                                      <span class="admin-status" role="status" aria-live="polite"></span>
+                                    </div>
+                                  </form>
+                                </details>
+                              )}
+                              {['proposed', 'ready'].includes(amendment.status) && item.stage === 'decide' && item.ballotRevisionId === amendment.baseRevisionId && canManageBallot(item) && (
+                                <form class="amendment-open-form grid gap-2" data-amendment-id={amendment.amendmentId}>
+                                  <p class="admin-inline-note">Open an endorsement ballot against frozen proposal and amendment wording revisions.</p>
+                                  <div class="admin-actions">
+                                    <Button variant="outline" size="sm" type="submit">Open amendment ballot</Button>
+                                    <span class="admin-status" role="status" aria-live="polite"></span>
+                                  </div>
+                                </form>
+                              )}
+                              {amendment.status === 'voting' && canManageBallot(item) && (
+                                <form class="amendment-close-form grid gap-3" data-amendment-id={amendment.amendmentId}>
+                                  <div class="admin-form-grid">
+                                    <Field label="Endorsement result" htmlFor={`amendment-result-${amendment.amendmentId}`}>
+                                      <NativeSelect defaultValue="" id={`amendment-result-${amendment.amendmentId}`} name="result">
+                                        <option value="">Choose result</option>
+                                        <option value="endorsed">Endorsed</option>
+                                        <option value="not-endorsed">Not endorsed</option>
+                                        <option value="inconclusive">Inconclusive</option>
+                                      </NativeSelect>
+                                    </Field>
+                                    <Field label="Ballot event reference" htmlFor={`amendment-event-${amendment.amendmentId}`}>
+                                      <Input id={`amendment-event-${amendment.amendmentId}`} name="decisionEventId" required maxLength={200} />
+                                    </Field>
+                                  </div>
+                                  <div class="admin-actions">
+                                    <Button variant="outline" size="sm" type="submit">Close amendment ballot</Button>
+                                    <span class="admin-status" role="status" aria-live="polite"></span>
+                                  </div>
+                                </form>
+                              )}
+                              {amendment.status === 'endorsed' && canManageBallot(item) && (
+                                <form class="amendment-approve-form grid gap-3" data-amendment-id={amendment.amendmentId}>
+                                  <Field label="Formal approval event reference" htmlFor={`amendment-approve-${amendment.amendmentId}`}>
+                                    <Input id={`amendment-approve-${amendment.amendmentId}`} name="decisionEventId" required maxLength={200} />
+                                  </Field>
+                                  <div class="admin-actions">
+                                    <Button variant="outline" size="sm" type="submit">Record formal approval</Button>
+                                    <span class="admin-status" role="status" aria-live="polite"></span>
+                                  </div>
+                                </form>
+                              )}
+                            </section>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                </details>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </section>
+    </div>
+  )}
+</AdminLayout>
+
+<script>
+  const editorForm = document.querySelector<HTMLFormElement>('#proposal-editor-form');
+  const editorStatus = document.querySelector<HTMLElement>('#editor-status');
+
+  editorForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!editorForm.reportValidity()) return;
+    const editingId = editorForm.dataset.editingId;
+    const submitBtn = editorForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    submitBtn.disabled = true;
+    if (editorStatus) editorStatus.textContent = 'Saving…';
+
+    try {
+      const formData = new FormData(editorForm);
+      const outcomesRaw = String(formData.get('outcomes') ?? '');
+      const outcomes = outcomesRaw
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      const provCategory = String(formData.get('provCategory') || '').trim();
+      let provenance = undefined;
+      if (provCategory && provCategory !== 'none') {
+        const lineageRaw = String(formData.get('provLineage') || '');
+        const lineage = lineageRaw
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const parts = line.split('|').map((p) => p.trim());
+            return {
+              label: parts[0] || '',
+              url: parts[1] || null,
+              description: parts[2] || '',
+            };
+          })
+          .filter((l) => l.label);
+
+        const valuesRaw = String(formData.get('provValues') || '');
+        const valuesAlignment = valuesRaw
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        provenance = {
+          category: provCategory,
+          label: String(formData.get('provLabel') || '').trim(),
+          summary: String(formData.get('provSummary') || '').trim(),
+          uncertaintyNote: String(formData.get('provUncertainty') || '').trim() || undefined,
+          lineage,
+          valuesAlignment,
+        };
+      } else if (provCategory === 'none') {
+        provenance = null;
+      }
+
+      const data = {
+        proposalId: editingId || undefined,
+        title: formData.get('title'),
+        space: formData.get('space'),
+        stage: formData.get('stage'),
+        kind: formData.get('kind') || undefined,
+        summary: formData.get('summary'),
+        details: formData.get('details'),
+        outcomes,
+        attachmentUrl: formData.get('attachmentUrl') || undefined,
+        attachmentDescription: formData.get('attachmentDescription') || undefined,
+        implementationNote: formData.get('implementationNote') || undefined,
+        ...(formData.has('originatingBranchId') ? { originatingBranchId: formData.get('originatingBranchId') } : {}),
+        ...(formData.has('governanceAuthorityBranchId') ? { governanceAuthorityBranchId: formData.get('governanceAuthorityBranchId') } : {}),
+        ...(formData.has('jurisdictionBranchId') ? { jurisdictionBranchId: formData.get('jurisdictionBranchId') } : {}),
+        ...(formData.has('publicationScope') ? { publicationScope: formData.get('publicationScope') } : {}),
+        provenance,
+      };
+
+      const url = editingId ? `/api/proposals/${encodeURIComponent(editingId)}` : '/api/proposals';
+      const method = editingId ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Could not save proposal.');
+      location.href = `/proposals/${payload.proposal.slug}/`;
+    } catch (err) {
+      if (editorStatus) {
+        editorStatus.textContent = err instanceof Error ? err.message : 'Could not save proposal.';
+      }
+      submitBtn.disabled = false;
+    }
+  });
+
+  document.querySelectorAll<HTMLFormElement>('.ballot-result-form').forEach((form) => form.addEventListener('submit', async (event) => {
+    event.preventDefault(); if (!form.reportValidity()) return;
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); const status = form.querySelector<HTMLElement>('[role="status"]');
+    if (button) button.disabled = true;
+    try {
+      const fields = new FormData(form); const body = { proposalId: form.dataset.proposalId, result: fields.get('result'), decisionEventId: fields.get('decisionEventId') };
+      const response = await fetch('/api/admin/ballots/result', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || 'Could not record ballot result.');
+      if (status) status.textContent = 'Outcome recorded.'; location.reload();
+    } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not record ballot result.'; if (button) button.disabled = false; }
+  }));
+
+  document.querySelectorAll<HTMLFormElement>('.ballot-bind-form').forEach((form) => form.addEventListener('submit', async (event) => {
+    event.preventDefault(); if (!form.reportValidity()) return;
+    const fields = new FormData(form); const revisionId = String(fields.get('revisionId') ?? '');
+    if (!confirm(`Bind this ballot and its existing votes to wording revision ${revisionId.slice(0, 12)}? This records an administrative review decision.`)) return;
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); const status = form.querySelector<HTMLElement>('[role="status"]');
+    if (button) button.disabled = true;
+    try {
+      const response = await fetch('/api/admin/ballots/bind', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proposalId: form.dataset.proposalId, revisionId, decisionEventId: fields.get('decisionEventId'), reason: fields.get('reason') }) });
+      const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || 'Could not bind reviewed ballot wording.');
+      if (status) status.textContent = 'Wording revision recorded.'; location.reload();
+    } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not bind reviewed ballot wording.'; if (button) button.disabled = false; }
+  }));
+
+  const amendmentActions: Array<[string, string, (form: HTMLFormElement) => Record<string, unknown>]> = [
+    ['.amendment-open-form', '/api/admin/amendments/open-ballot', (form) => ({ amendmentId: form.dataset.amendmentId })],
+    ['.amendment-resolve-form', '/api/admin/amendments/resolve', (form) => {
+      const fields = new FormData(form); const changes: Record<string, unknown> = {};
+      form.querySelectorAll<HTMLTextAreaElement>('[data-change-field]').forEach((input) => {
+        const key = input.dataset.changeField!; const current = input.value;
+        changes[key] = key === 'outcomes' ? current.split('\n').map((line) => line.trim()).filter(Boolean) : current;
+      });
+      return { amendmentId: form.dataset.amendmentId, outcome: fields.get('outcome'), reason: fields.get('reason'), ...(Object.keys(changes).length ? { changes } : {}) };
+    }],
+    ['.amendment-close-form', '/api/admin/amendments/close-ballot', (form) => ({ amendmentId: form.dataset.amendmentId, ...Object.fromEntries(new FormData(form).entries()) })],
+    ['.amendment-approve-form', '/api/admin/amendments/accept', (form) => ({ amendmentId: form.dataset.amendmentId, ...Object.fromEntries(new FormData(form).entries()) })],
+    ['.amendment-apply-form', '/api/admin/amendments/apply', (form) => ({ amendmentId: form.dataset.amendmentId })],
+  ];
+  for (const [selector, endpoint, buildBody] of amendmentActions) {
+    document.querySelectorAll<HTMLFormElement>(selector).forEach((form) => form.addEventListener('submit', async (event) => {
+      event.preventDefault(); if (!form.reportValidity()) return;
+      const status = form.querySelector<HTMLElement>('[role="status"]'); const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (endpoint.endsWith('/apply') && !confirm('Apply this formally approved amendment as a new proposal revision? The existing voted wording will remain unchanged.')) return;
+      if (button) button.disabled = true;
+      try {
+        const response = await fetch(endpoint, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(buildBody(form)) });
+        const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || 'Could not update amendment.');
+        if (status) status.textContent = 'Saved.'; location.reload();
+      } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not update amendment.'; if (button) button.disabled = false; }
+    }));
+  }
+
+  document.querySelector<HTMLButtonElement>('#delete-proposal-btn')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget as HTMLButtonElement;
+    const proposalId = btn.dataset.deleteId;
+    const voteCount = parseInt(btn.dataset.voteCount || '0', 10);
+    if (!proposalId) return;
+
+    let confirmMsg = `Delete ${proposalId}? This cannot be undone.`;
+    if (voteCount > 0) {
+      confirmMsg = `WARNING: This proposal has ${voteCount} member vote(s) recorded! Deleting it will permanently delete the voting record. Consider archiving instead.\n\nAre you sure you want to delete ${proposalId}?`;
+    }
+
+    if (!confirm(confirmMsg)) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not delete proposal.');
+      location.href = '/admin/';
+    } catch (err: any) {
+      alert(err.message || 'Could not delete proposal.');
+      btn.disabled = false;
+    }
+  });
+
+  document.querySelectorAll<HTMLSelectElement>('[data-quick-proposal-id]').forEach((select) => {
+    select.addEventListener('change', async () => {
+      const proposalId = select.dataset.quickProposalId;
+      const title = select.dataset.title || proposalId;
+      const currentStage = select.dataset.currentStage || select.value;
+      const voteCount = parseInt(select.dataset.voteCount || '0', 10);
+      const newStage = select.value;
+      if (!proposalId || currentStage === newStage) return;
+
+      let confirmMsg = '';
+      if (newStage === 'decide') {
+        confirmMsg = `Open ballot for "${title}" (Stage 3: Decide)? Once voting begins, substantive content will be locked to protect ballot integrity.`;
+      } else if (currentStage === 'decide' && voteCount > 0) {
+        confirmMsg = `This proposal currently has ${voteCount} member vote(s). Moving it to "${newStage}" will conclude or pause active voting. All cast votes will remain safely preserved. Proceed?`;
+      } else if (newStage === 'implement') {
+        confirmMsg = `Move "${title}" to Stage 4 · Implement? This starts delivery tracking after a successful ballot; formal ratification and publication remain separate.`;
+      } else if (newStage === 'archived') {
+        confirmMsg = `Archive "${title}"? It will no longer be visible to general members.`;
+      }
+
+      if (confirmMsg && !confirm(confirmMsg)) {
+        select.value = currentStage;
+        return;
+      }
+
+      select.disabled = true;
+      try {
+        const res = await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ stage: newStage }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to update stage');
+        }
+        select.dataset.currentStage = newStage;
+        location.reload();
+      } catch (err: any) {
+        alert(err.message || 'Failed to update stage');
+        select.value = currentStage;
+      } finally {
+        select.disabled = false;
+      }
+    });
+  });
+</script>
+
+<style>
+  .proposal-editor-disclosure > summary {
+    align-items: flex-start;
+  }
+  .proposal-manage {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.6rem;
+    background: var(--horizon-lavender-soft);
+    padding: 0 0.9rem;
+  }
+  .proposal-manage > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.7rem;
+    cursor: pointer;
+    color: var(--horizon-purple);
+    font-size: 0.86rem;
+    font-weight: 600;
+    list-style: none;
+  }
+  .proposal-manage > summary::-webkit-details-marker { display: none; }
+  .proposal-manage > summary::after { content: '+'; margin-left: auto; font-size: 1.05rem; line-height: 1; }
+  .proposal-manage[open] > summary::after { content: '−'; }
+  .proposal-manage[open] > summary { border-bottom: 1px solid var(--horizon-line); }
+  .proposal-manage > summary:focus-visible { outline: 3px solid var(--horizon-focus); outline-offset: -2px; }
+</style>

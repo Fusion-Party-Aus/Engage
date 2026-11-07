@@ -1,5 +1,10 @@
-import { ensureVoteStorage } from "./vote-storage.ts";
+import {
+  ensureVoteStorage,
+  PROPOSAL_VOTES,
+  proposalBallotId,
+} from "./vote-storage.ts";
 import { MongoClient, ObjectId, type Db } from "mongodb";
+import { createHash } from "node:crypto";
 import baselineItems from "../data/policies.json" with { type: "json" };
 import type { PlatformEnv, ProposalRecord, ProposalStage } from "./types.ts";
 
@@ -8,7 +13,8 @@ let clientUri: string | undefined;
 const seededDbs = new WeakMap<object, Promise<void>>();
 
 export function runtimeEnv(locals?: unknown): PlatformEnv {
-  const runtime = (locals as { runtime?: { env?: PlatformEnv }; env?: PlatformEnv } | undefined);
+  const runtime = locals as
+    { runtime?: { env?: PlatformEnv }; env?: PlatformEnv } | undefined;
   return {
     ...(process.env as unknown as PlatformEnv),
     ...(runtime?.runtime?.env ?? {}),
@@ -16,7 +22,9 @@ export function runtimeEnv(locals?: unknown): PlatformEnv {
   };
 }
 
-export async function getDatabase(env: PlatformEnv = runtimeEnv()): Promise<Db> {
+export async function getDatabase(
+  env: PlatformEnv = runtimeEnv(),
+): Promise<Db> {
   const uri = env.MONGODB_URI;
   const dbName = env.MONGODB_DB_NAME || "engage";
 
@@ -56,15 +64,17 @@ export async function getDatabase(env: PlatformEnv = runtimeEnv()): Promise<Db> 
 
 function mapBaselineStage(defaultStatus?: string): ProposalStage {
   if (defaultStatus === "voting" || defaultStatus === "decide") return "decide";
-  if (defaultStatus === "adopted" || defaultStatus === "implement") return "implement";
-  if (defaultStatus === "draft" || defaultStatus === "propose") return "propose";
+  if (defaultStatus === "adopted" || defaultStatus === "implement")
+    return "implement";
+  if (defaultStatus === "draft" || defaultStatus === "propose")
+    return "propose";
   return "deliberate";
 }
 
 async function ensureSeeded(db: Db): Promise<void> {
   let pending = seededDbs.get(db);
   if (!pending) {
-    pending = initializeDatabase(db).catch(error => {
+    pending = initializeDatabase(db).catch((error) => {
       seededDbs.delete(db);
       throw error;
     });
@@ -74,20 +84,186 @@ async function ensureSeeded(db: Db): Promise<void> {
 }
 
 async function initializeDatabase(db: Db): Promise<void> {
-
   try {
     await ensureVoteStorage(db);
     await Promise.all([
-      db.collection("proposals").createIndex({ proposalId: 1 }, { unique: true }).catch(() => {}),
-      db.collection("proposals").createIndex({ slug: 1 }, { unique: true }).catch(() => {}),
-      db.collection("proposals").createIndex({ stage: 1, space: 1 }).catch(() => {}),
-      db.collection("comments").createIndex({ commentId: 1 }, { unique: true }).catch(() => {}),
-      db.collection("comments").createIndex({ proposalId: 1, createdAt: 1 }).catch(() => {}),
-      db.collection("memberships").createIndex({ memberId: 1 }, { unique: true, name: "membership_member_unique" }).catch(() => {}),
-      db.collection("application_roles").createIndex({ memberId: 1, role: 1 }, { unique: true, name: "member_role_unique" }).catch(() => {}),
+      db
+        .collection("proposals")
+        .createIndex({ proposalId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("proposals")
+        .createIndex({ slug: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("proposals")
+        .createIndex({ stage: 1, space: 1 })
+        .catch(() => {}),
+      db
+        .collection("comments")
+        .createIndex({ commentId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("comments")
+        .createIndex({ proposalId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("comments")
+        .createIndex({ memberId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection(PROPOSAL_VOTES)
+        .createIndex({ proposalId: 1, updatedAt: -1 })
+        .catch(() => {}),
+      db
+        .collection(PROPOSAL_VOTES)
+        .createIndex({ memberId: 1, updatedAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("proposals")
+        .createIndex({ authorId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("memberships")
+        .createIndex(
+          { memberId: 1 },
+          { unique: true, name: "membership_member_unique" },
+        )
+        .catch(() => {}),
+      db
+        .collection("application_roles")
+        .createIndex(
+          { memberId: 1, role: 1 },
+          { unique: true, name: "member_role_unique" },
+        )
+        .catch(() => {}),
+      db
+        .collection("branches")
+        .createIndex({ branchId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("proposal_revisions")
+        .createIndex({ revisionId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("proposal_revisions")
+        .createIndex({ proposalId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("policy_registry")
+        .createIndex({ policyId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("publication_events")
+        .createIndex({ eventId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("ballot_results")
+        .createIndex({ proposalId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("ballot_binding_events")
+        .createIndex({ eventId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("amendments")
+        .createIndex({ amendmentId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("amendments")
+        .createIndex({ proposalId: 1, status: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("amendment_revisions")
+        .createIndex({ revisionId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("amendment_revisions")
+        .createIndex({ amendmentId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("branch_memberships")
+        .createIndex({ branchId: 1, memberId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("branch_memberships")
+        .createIndex({ memberId: 1, status: 1, branchRole: 1, branchId: 1 })
+        .catch(() => {}),
+      db
+        .collection("branch_membership_events")
+        .createIndex({ eventId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("branch_membership_events")
+        .createIndex({ branchId: 1, memberId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("branch_events")
+        .createIndex({ eventId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("branch_events")
+        .createIndex({ branchId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("branch_referrals")
+        .createIndex({ proposalId: 1, targetBranchId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("branch_referrals")
+        .createIndex({ referralId: 1 }, { unique: true })
+        .catch(() => {}),
     ]);
 
     const now = new Date();
+    // Preserve existing amendment records while assigning a first immutable wording revision.
+    const amendments = await db.collection("amendments").find({}).toArray();
+    for (const amendment of amendments) {
+      if (amendment.currentRevisionId) continue;
+      const snapshot =
+        amendment.changes && typeof amendment.changes === "object"
+          ? amendment.changes
+          : {};
+      const existingRevision = await db
+        .collection("amendment_revisions")
+        .findOne({ amendmentId: amendment.amendmentId });
+      const revisionId =
+        existingRevision?.revisionId ??
+        `legacy-${createHash("sha256").update(String(amendment.amendmentId)).digest("hex")}`;
+      await db
+        .collection("amendment_revisions")
+        .updateOne(
+          { revisionId },
+          {
+            $setOnInsert: {
+              revisionId,
+              amendmentId: amendment.amendmentId,
+              parentRevisionId: null,
+              authorId: amendment.authorId ?? "system:migration",
+              createdAt: amendment.createdAt ?? now,
+              snapshot,
+              contentHash: createHash("sha256")
+                .update(JSON.stringify(snapshot))
+                .digest("hex"),
+              provenance: "legacy-backfill",
+            },
+          },
+          { upsert: true },
+        );
+      const revision =
+        existingRevision ??
+        (await db.collection("amendment_revisions").findOne({ revisionId }));
+      if (revision)
+        await db
+          .collection("amendments")
+          .updateOne(
+            {
+              amendmentId: amendment.amendmentId,
+              currentRevisionId: { $exists: false },
+            },
+            { $set: { currentRevisionId: revision.revisionId } },
+          );
+    }
     const proposalsCol = db.collection<ProposalRecord>("proposals");
     for (const item of baselineItems) {
       const raw = item as Record<string, any>;
@@ -96,9 +272,12 @@ async function initializeDatabase(db: Db): Promise<void> {
       const setFields: Record<string, any> = { updatedAt: now };
       if (raw.provenance) setFields.provenance = raw.provenance;
       if (raw.detailHtml) setFields.detailHtml = raw.detailHtml;
-      if (raw.attachmentUrl) setFields.attachmentUrl = String(raw.attachmentUrl);
-      if (raw.attachmentDescription) setFields.attachmentDescription = String(raw.attachmentDescription);
-      const kind = raw.kind || (proposalId.startsWith("GOV-") ? "resolution" : "policy");
+      if (raw.attachmentUrl)
+        setFields.attachmentUrl = String(raw.attachmentUrl);
+      if (raw.attachmentDescription)
+        setFields.attachmentDescription = String(raw.attachmentDescription);
+      const kind =
+        raw.kind || (proposalId.startsWith("GOV-") ? "resolution" : "policy");
       setFields.kind = kind;
 
       await proposalsCol.updateOne(
@@ -122,6 +301,94 @@ async function initializeDatabase(db: Db): Promise<void> {
         { upsert: true },
       );
     }
+
+    // Backfill one immutable starting revision for legacy records. Existing
+    // proposal and vote documents are untouched; the hash makes this restartable.
+    const existingProposals = await proposalsCol.find({}).toArray();
+    for (const proposal of existingProposals) {
+      const hasRevision = await db
+        .collection("proposal_revisions")
+        .findOne({ proposalId: proposal.proposalId });
+      if (hasRevision) continue;
+      const snapshot = {
+        title: proposal.title,
+        summary: proposal.summary,
+        outcomes: proposal.outcomes ?? [],
+        details: proposal.details ?? "",
+      };
+      const revisionId = `legacy-${createHash("sha256").update(String(proposal.proposalId)).digest("hex")}`;
+      await db
+        .collection("proposal_revisions")
+        .updateOne(
+          { revisionId },
+          {
+            $setOnInsert: {
+              revisionId,
+              proposalId: proposal.proposalId,
+              parentRevisionId: null,
+              authorId: proposal.authorId ?? "system:migration",
+              createdAt: proposal.createdAt ?? now,
+              snapshot,
+              contentHash: createHash("sha256")
+                .update(JSON.stringify(snapshot))
+                .digest("hex"),
+              provenance: proposal.provenance,
+            },
+          },
+          { upsert: true },
+        );
+    }
+
+    // Bind open ballots that have no recorded votes. Existing votes are only
+    // rebound when every vote already names the same immutable revision.
+    for (const proposal of existingProposals) {
+      if (proposal.stage !== "decide" || proposal.ballotRevisionId) continue;
+      const ballotId = proposalBallotId(proposal.proposalId);
+      const votes = await db
+        .collection(PROPOSAL_VOTES)
+        .find({ proposalId: proposal.proposalId, ballotId })
+        .toArray();
+      const recordedRevisionIds = [
+        ...new Set(
+          votes
+            .map((vote) => vote.revisionId)
+            .filter(
+              (id): id is string => typeof id === "string" && id.length > 0,
+            ),
+        ),
+      ];
+      if (
+        votes.length &&
+        (recordedRevisionIds.length !== 1 ||
+          votes.some((vote) => vote.revisionId !== recordedRevisionIds[0]))
+      )
+        continue;
+      const revisionId = votes.length
+        ? recordedRevisionIds[0]
+        : (
+            await db
+              .collection("proposal_revisions")
+              .find({ proposalId: proposal.proposalId })
+              .sort({ createdAt: -1 })
+              .limit(1)
+              .toArray()
+          )[0]?.revisionId;
+      if (
+        revisionId &&
+        (await db
+          .collection("proposal_revisions")
+          .findOne({ proposalId: proposal.proposalId, revisionId }))
+      ) {
+        await proposalsCol.updateOne(
+          {
+            proposalId: proposal.proposalId,
+            stage: "decide",
+            ballotRevisionId: { $exists: false },
+          },
+          { $set: { ballotRevisionId: revisionId } },
+        );
+      }
+    }
   } catch (error) {
     seededDbs.delete(db);
     throw error;
@@ -140,13 +407,22 @@ let sharedMemoryDb: Db | undefined;
 export function createMemoryDb(): Db {
   const collections = new Map<string, Array<Record<string, any>>>();
 
-  const matchesFilter = (doc: Record<string, any>, filter: Record<string, any> = {}): boolean => {
+  const matchesFilter = (
+    doc: Record<string, any>,
+    filter: Record<string, any> = {},
+  ): boolean => {
     for (const [key, cond] of Object.entries(filter)) {
       if (key === "$or" && Array.isArray(cond)) {
         if (!cond.some((sub) => matchesFilter(doc, sub))) return false;
         continue;
       }
-      const val = doc[key];
+      const val = key
+        .split(".")
+        .reduce<any>(
+          (value, part) =>
+            value && typeof value === "object" ? value[part] : undefined,
+          doc,
+        );
       if (
         cond &&
         typeof cond === "object" &&
@@ -155,13 +431,30 @@ export function createMemoryDb(): Db {
         !(cond instanceof RegExp)
       ) {
         if ("$in" in cond && Array.isArray(cond.$in)) {
-          if (!cond.$in.some((item: any) => String(item) === String(val))) return false;
+          if (!cond.$in.some((item: any) => String(item) === String(val)))
+            return false;
+          continue;
+        }
+        if ("$exists" in cond) {
+          if (key in doc !== Boolean(cond.$exists)) return false;
           continue;
         }
         if ("$ne" in cond) {
           if (val === cond.$ne) return false;
           continue;
         }
+        const asComparable = (value: any) =>
+          value instanceof Date ? value.getTime() : value;
+        if ("$gt" in cond && !(asComparable(val) > asComparable(cond.$gt)))
+          return false;
+        if ("$gte" in cond && !(asComparable(val) >= asComparable(cond.$gte)))
+          return false;
+        if ("$lt" in cond && !(asComparable(val) < asComparable(cond.$lt)))
+          return false;
+        if ("$lte" in cond && !(asComparable(val) <= asComparable(cond.$lte)))
+          return false;
+        if (["$gt", "$gte", "$lt", "$lte"].some((operator) => operator in cond))
+          continue;
       }
       if (cond instanceof RegExp) {
         if (!cond.test(String(val ?? ""))) return false;
@@ -194,7 +487,9 @@ export function createMemoryDb(): Db {
         countDocuments: async (filter: Record<string, any> = {}) =>
           store.filter((doc) => matchesFilter(doc, filter)).length,
         find(filter: Record<string, any> = {}) {
-          let results = store.filter((doc) => matchesFilter(doc, filter)).map((d) => ({ ...d }));
+          let results = store
+            .filter((doc) => matchesFilter(doc, filter))
+            .map((d) => ({ ...d }));
           const cursor = {
             sort(spec: Record<string, 1 | -1>) {
               const entries = Object.entries(spec);
@@ -232,7 +527,10 @@ export function createMemoryDb(): Db {
         },
         updateOne: async (
           filter: Record<string, any>,
-          update: { $set?: Record<string, any>; $setOnInsert?: Record<string, any> },
+          update: {
+            $set?: Record<string, any>;
+            $setOnInsert?: Record<string, any>;
+          },
           options?: { upsert?: boolean },
         ) => {
           const idx = store.findIndex((doc) => matchesFilter(doc, filter));
@@ -244,12 +542,22 @@ export function createMemoryDb(): Db {
             const _id = new ObjectId();
             const doc: Record<string, any> = { _id };
             for (const [k, v] of Object.entries(filter)) {
-              if (typeof v !== "object" || v instanceof ObjectId || v instanceof Date) doc[k] = v;
+              if (
+                typeof v !== "object" ||
+                v instanceof ObjectId ||
+                v instanceof Date
+              )
+                doc[k] = v;
             }
             if (update.$setOnInsert) Object.assign(doc, update.$setOnInsert);
             if (update.$set) Object.assign(doc, update.$set);
             store.push(doc);
-            return { matchedCount: 0, modifiedCount: 0, upsertedId: _id, acknowledged: true };
+            return {
+              matchedCount: 0,
+              modifiedCount: 0,
+              upsertedId: _id,
+              acknowledged: true,
+            };
           }
           return { matchedCount: 0, modifiedCount: 0, acknowledged: true };
         },

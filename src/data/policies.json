@@ -93,9 +93,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -129,9 +127,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -165,9 +161,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -200,9 +194,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -235,9 +227,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -270,9 +260,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -306,9 +294,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -341,9 +327,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -377,9 +361,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -415,9 +397,7 @@
       "label": "Approved policy predecessor · Equivalence unverified",
       "summary": "Cites a direct predecessor on a published Fusion policy page, restructured into Reclaim's 4-tier format; material equivalence of the detailed mechanism wording remains unverified.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-general"
-      ],
+      "sourceTypes": ["approved-policy-page-general"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -459,9 +439,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Adapts or expands prior Fusion policy, submissions, or state-level positions with new or materially revised mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-fragment"
-      ],
+      "sourceTypes": ["approved-policy-page-fragment"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -504,9 +482,7 @@
       "label": "Approved policy predecessor · Equivalence unverified",
       "summary": "Cites a direct predecessor on a published Fusion policy page, restructured into Reclaim's 4-tier format; material equivalence of the detailed mechanism wording remains unverified.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-fragment"
-      ],
+      "sourceTypes": ["approved-policy-page-fragment"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -548,10 +524,7 @@
       "label": "Approved policy predecessor · Equivalence unverified",
       "summary": "Cites a direct predecessor on a published Fusion policy page, restructured into Reclaim's 4-tier format; material equivalence of the detailed mechanism wording remains unverified.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-fragment",
-        "submission"
-      ],
+      "sourceTypes": ["approved-policy-page-fragment", "submission"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -603,10 +576,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Adapts or expands prior Fusion policy, submissions, or state-level positions with new or materially revised mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-fragment",
-        "submission"
-      ],
+      "sourceTypes": ["approved-policy-page-fragment", "submission"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -655,9 +625,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Adapts or expands prior Fusion policy, submissions, or state-level positions with new or materially revised mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-fragment"
-      ],
+      "sourceTypes": ["approved-policy-page-fragment"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -702,9 +670,7 @@
       "label": "New proposal · No prior policy identified",
       "summary": "Explicitly recorded in the AGM Round 1 lineage notes as having no pre-existing approved Fusion policy, submission, or statement.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "none-identified"
-      ],
+      "sourceTypes": ["none-identified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -749,10 +715,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Adapts or expands prior Fusion policy, submissions, or state-level positions with new or materially revised mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-general",
-        "submission"
-      ],
+      "sourceTypes": ["approved-policy-page-general", "submission"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -800,9 +763,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Adapts or expands prior Fusion policy, submissions, or state-level positions with new or materially revised mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-fragment"
-      ],
+      "sourceTypes": ["approved-policy-page-fragment"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -846,9 +807,7 @@
       "label": "Approved policy predecessor · Equivalence unverified",
       "summary": "Cites a direct predecessor on a published Fusion policy page, restructured into Reclaim's 4-tier format; material equivalence of the detailed mechanism wording remains unverified.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-general"
-      ],
+      "sourceTypes": ["approved-policy-page-general"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -890,9 +849,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -926,9 +883,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -962,9 +917,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -998,9 +951,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -1034,9 +985,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -1072,9 +1021,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Cites only parliamentary inquiry submissions or general FAQ entries rather than formally approved national policy chapters, or explicitly introduces new/expanded mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "submission"
-      ],
+      "sourceTypes": ["submission"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1119,9 +1066,7 @@
       "label": "New proposal · No prior policy identified",
       "summary": "Explicitly recorded in the AGM Round 1 lineage notes as having no pre-existing approved Fusion policy, submission, or statement.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "none-identified"
-      ],
+      "sourceTypes": ["none-identified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1166,9 +1111,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Cites only parliamentary inquiry submissions or general FAQ entries rather than formally approved national policy chapters, or explicitly introduces new/expanded mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "submission"
-      ],
+      "sourceTypes": ["submission"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1212,9 +1155,7 @@
       "label": "Approved policy predecessor · Equivalence unverified",
       "summary": "Cites a direct predecessor on a published Fusion policy page, restructured into Reclaim's 4-tier format; material equivalence of the detailed mechanism wording remains unverified.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-general"
-      ],
+      "sourceTypes": ["approved-policy-page-general"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1258,9 +1199,7 @@
       "label": "Approved policy predecessor · Equivalence unverified",
       "summary": "Cites a direct predecessor on a published Fusion policy page, restructured into Reclaim's 4-tier format; material equivalence of the detailed mechanism wording remains unverified.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-general"
-      ],
+      "sourceTypes": ["approved-policy-page-general"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1304,9 +1243,7 @@
       "label": "New proposal · No prior policy identified",
       "summary": "Explicitly recorded in the AGM Round 1 lineage notes as having no pre-existing approved Fusion policy, submission, or statement.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "none-identified"
-      ],
+      "sourceTypes": ["none-identified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1350,9 +1287,7 @@
       "label": "New proposal · No prior policy identified",
       "summary": "Explicitly recorded in the AGM Round 1 lineage notes as having no pre-existing approved Fusion policy, submission, or statement.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "none-identified"
-      ],
+      "sourceTypes": ["none-identified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1396,9 +1331,7 @@
       "label": "Approved policy predecessor · Equivalence unverified",
       "summary": "Cites a direct predecessor on a published Fusion policy page, restructured into Reclaim's 4-tier format; material equivalence of the detailed mechanism wording remains unverified.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-general"
-      ],
+      "sourceTypes": ["approved-policy-page-general"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1442,9 +1375,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -1478,9 +1409,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -1514,9 +1443,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -1551,9 +1478,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -1588,9 +1513,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -1625,9 +1548,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -1663,9 +1584,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Cites only parliamentary inquiry submissions or general FAQ entries rather than formally approved national policy chapters, or explicitly introduces new/expanded mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "submission"
-      ],
+      "sourceTypes": ["submission"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1708,9 +1627,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Cites only parliamentary inquiry submissions or general FAQ entries rather than formally approved national policy chapters, or explicitly introduces new/expanded mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "submission"
-      ],
+      "sourceTypes": ["submission"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1754,9 +1671,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Cites only parliamentary inquiry submissions or general FAQ entries rather than formally approved national policy chapters, or explicitly introduces new/expanded mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "submission"
-      ],
+      "sourceTypes": ["submission"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1798,10 +1713,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Adapts or expands prior Fusion policy, submissions, or state-level positions with new or materially revised mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "submission",
-        "approved-policy-page-fragment"
-      ],
+      "sourceTypes": ["submission", "approved-policy-page-fragment"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1910,9 +1822,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Adapts or expands prior Fusion policy, submissions, or state-level positions with new or materially revised mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-general"
-      ],
+      "sourceTypes": ["approved-policy-page-general"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -1957,9 +1867,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Cites only parliamentary inquiry submissions or general FAQ entries rather than formally approved national policy chapters, or explicitly introduces new/expanded mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "submission"
-      ],
+      "sourceTypes": ["submission"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2003,9 +1911,7 @@
       "label": "Approved policy predecessor · Equivalence unverified",
       "summary": "Cites a direct predecessor on a published Fusion policy page, restructured into Reclaim's 4-tier format; material equivalence of the detailed mechanism wording remains unverified.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-general"
-      ],
+      "sourceTypes": ["approved-policy-page-general"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2048,9 +1954,7 @@
       "label": "New proposal · No prior policy identified",
       "summary": "Explicitly recorded in the AGM Round 1 lineage notes as having no pre-existing approved Fusion policy, submission, or statement.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "none-identified"
-      ],
+      "sourceTypes": ["none-identified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2093,9 +1997,7 @@
       "label": "Derived from unpublished draft · Unapproved",
       "summary": "Cites an external Google Doc ('Unpublished Migration Policy - Accepted cica March 2026') rather than published party policy.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "unpublished-draft"
-      ],
+      "sourceTypes": ["unpublished-draft"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2138,9 +2040,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Cites only parliamentary inquiry submissions or general FAQ entries rather than formally approved national policy chapters, or explicitly introduces new/expanded mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "policy-faq"
-      ],
+      "sourceTypes": ["policy-faq"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2182,9 +2082,7 @@
       "label": "Derived from unpublished draft · Unapproved",
       "summary": "Cites an external Google Doc ('Unpublished Migration Policy - Accepted cica March 2026') rather than published party policy.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "unpublished-draft"
-      ],
+      "sourceTypes": ["unpublished-draft"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2227,9 +2125,7 @@
       "label": "Derived from unpublished draft · Unapproved",
       "summary": "Cites an external Google Doc ('Unpublished Migration Policy - Accepted cica March 2026') rather than published party policy.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "unpublished-draft"
-      ],
+      "sourceTypes": ["unpublished-draft"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2272,9 +2168,7 @@
       "label": "Derived from unpublished draft · Unapproved",
       "summary": "Cites an external Google Doc ('Unpublished Migration Policy - Accepted cica March 2026') rather than published party policy.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "unpublished-draft"
-      ],
+      "sourceTypes": ["unpublished-draft"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2317,9 +2211,7 @@
       "label": "Derived from unpublished draft · Unapproved",
       "summary": "Cites an external Google Doc ('Unpublished Migration Policy - Accepted cica March 2026') rather than published party policy.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "unpublished-draft"
-      ],
+      "sourceTypes": ["unpublished-draft"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2362,9 +2254,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Cites only parliamentary inquiry submissions or general FAQ entries rather than formally approved national policy chapters, or explicitly introduces new/expanded mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "state-branch-policy"
-      ],
+      "sourceTypes": ["state-branch-policy"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2408,9 +2298,7 @@
       "label": "Approved policy predecessor · Equivalence unverified",
       "summary": "Cites a direct predecessor on a published Fusion policy page, restructured into Reclaim's 4-tier format; material equivalence of the detailed mechanism wording remains unverified.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "approved-policy-page-general"
-      ],
+      "sourceTypes": ["approved-policy-page-general"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2453,9 +2341,7 @@
       "label": "Materially revised or submission/FAQ-derived",
       "summary": "Cites only parliamentary inquiry submissions or general FAQ entries rather than formally approved national policy chapters, or explicitly introduces new/expanded mechanisms.",
       "evidenceBasis": "round1-lineage-note",
-      "sourceTypes": [
-        "policy-faq"
-      ],
+      "sourceTypes": ["policy-faq"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": true,
       "materialEquivalenceVerified": false,
@@ -2497,9 +2383,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2533,9 +2417,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2569,9 +2451,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2605,9 +2485,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2641,9 +2519,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2677,9 +2553,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2713,9 +2587,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2750,9 +2622,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2787,9 +2657,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2824,9 +2692,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2860,9 +2726,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2897,9 +2761,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2934,9 +2796,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -2971,9 +2831,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -3008,9 +2866,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -3045,9 +2901,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -3083,9 +2937,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -3121,9 +2973,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -3159,9 +3009,7 @@
       "label": "Flagged 'New' in static export · Lineage unverified",
       "summary": "Badged 'New — pending AGM vote' in the Reclaim static export (/pending-vote/), but outside the 36-policy AGM Round 1 lineage dataset.",
       "evidenceBasis": "static-export-new-badge-only",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": true,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
@@ -3195,9 +3043,7 @@
       "label": "Mapping unverified",
       "summary": "Not badged 'New' in the static export, but no provenance mapping to prior approved Fusion policy wording has been recorded in the repository.",
       "evidenceBasis": "none",
-      "sourceTypes": [
-        "unverified"
-      ],
+      "sourceTypes": ["unverified"],
       "flaggedNewInStaticExport": false,
       "lineageVerified": false,
       "materialEquivalenceVerified": false,
