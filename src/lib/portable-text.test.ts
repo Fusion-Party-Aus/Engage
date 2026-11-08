@@ -98,4 +98,23 @@ describe("Portable Text & Markdown Renderer", () => {
     assert.equal(renderPortableText(""), "");
     assert.equal(renderPortableText("   \n\n   "), "");
   });
+
+  it("renders standalone and inline markdown images safely (including [!Alt](url) shorthand)", () => {
+    const md = `![Horizon emblem](/fusion_horizon_logo_light.svg)
+
+Paragraph with [!Inline chart](https://fusionparty.org.au/chart.png) and unsafe ![bad](javascript:alert(1)).`;
+    const html = renderPortableText(md);
+
+    assert.ok(
+      html.includes(
+        '<figure class="portable-figure"><img src="/fusion_horizon_logo_light.svg" alt="Horizon emblem" loading="lazy" /><figcaption>Horizon emblem</figcaption></figure>',
+      ),
+    );
+    assert.ok(
+      html.includes(
+        '<img class="portable-inline-image" src="https://fusionparty.org.au/chart.png" alt="Inline chart" loading="lazy" />',
+      ),
+    );
+    assert.equal(html.includes('src="javascript:'), false);
+  });
 });

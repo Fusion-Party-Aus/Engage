@@ -1,6 +1,6 @@
 /**
  * Portable Text & Markdown renderer for Engage
- * Converts markdown text (headings, bold headers, lists, links, inline styles) into clean, semantic HTML.
+ * Converts markdown text (headings, bold headers, lists, images, links, inline styles) into clean, semantic HTML.
  */
 
 export function escapeHtml(str: string): string {
@@ -17,6 +17,17 @@ export function parseInline(text: string): string {
 
   // Inline code: `code`
   out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  // Markdown images: ![alt](https://...) or ![alt](/relative/path)
+  // Also tolerate [!alt](url) shorthand used by editors
+  out = out.replace(
+    /!\[([^\]]*)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/g,
+    '<img class="portable-inline-image" src="$2" alt="$1" loading="lazy" />',
+  );
+  out = out.replace(
+    /\[\!([^\]]*)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/g,
+    '<img class="portable-inline-image" src="$2" alt="$1" loading="lazy" />',
+  );
 
   // Markdown links: [text](https://...) or [text](/relative/path)
   out = out.replace(
@@ -93,6 +104,24 @@ export function renderPortableText(
       flushParagraph();
       closeLists();
       closeBlockquote();
+      continue;
+    }
+
+    // Standalone image line: ![Alt text](url) or [!Alt text](url)
+    const imageBlockMatch = trimmed.match(
+      /^(?:!\[([^\]]*)\]|\[\!([^\]]*)\])\((https?:\/\/[^\s)]+|\/[^\s)]+)\)$/,
+    );
+    if (imageBlockMatch) {
+      flushParagraph();
+      closeLists();
+      closeBlockquote();
+      const rawAlt = (imageBlockMatch[1] ?? imageBlockMatch[2] ?? "").trim();
+      const safeAlt = escapeHtml(rawAlt);
+      const safeSrc = escapeHtml(imageBlockMatch[3]!);
+      const caption = safeAlt ? `<figcaption>${safeAlt}</figcaption>` : "";
+      html.push(
+        `<figure class="portable-figure"><img src="${safeSrc}" alt="${safeAlt}" loading="lazy" />${caption}</figure>`,
+      );
       continue;
     }
 

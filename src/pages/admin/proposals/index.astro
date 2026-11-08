@@ -120,6 +120,19 @@ const initialProvenance = editingProposal
       : null);
 
 const spaces = [...new Set(allProposals.map((p) => p.space))].sort();
+const allScopedProposals = user.isStaff || user.isBranchAdmin
+  ? (await listProposals(db, { includeArchived: true })).filter((proposal) => user.isStaff || (proposal.originatingBranchId && branchAdminIds.includes(proposal.originatingBranchId)))
+  : [];
+const registerCounts = {
+  all: allScopedProposals.length,
+  propose: allScopedProposals.filter((p) => p.stage === 'propose').length,
+  deliberate: allScopedProposals.filter((p) => p.stage === 'deliberate').length,
+  decide: allScopedProposals.filter((p) => p.stage === 'decide').length,
+  implement: allScopedProposals.filter((p) => p.stage === 'implement').length,
+  archived: allScopedProposals.filter((p) => p.stage === 'archived').length,
+};
+const unboundCount = allScopedProposals.filter((p) => p.stage === 'decide' && !p.ballotRevisionId).length;
+const openAmendmentsCount = amendmentRows.length;
 
 const stageOptions: Array<[ProposalStage, string]> = [
   ['propose', '1. Propose (Intake)'],
@@ -284,9 +297,17 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
               </Field>
 
               <Field
-                label={isLocked ? 'Detailed background, rationale & text (locked)' : 'Detailed background, rationale & text'}
+                label={isLocked ? 'Detailed background, rationale & text (locked)' : 'Detailed background, rationale & text (Markdown & ![Alt text](URL) supported)'}
                 htmlFor="editor-details"
               >
+                {!isLocked && (
+                  <div class="mb-1.5 flex items-center gap-2">
+                    <Button type="button" variant="outline" size="sm" id="admin-insert-image-btn">
+                      + Add image
+                    </Button>
+                    <span class="text-xs text-muted-foreground">Inserts <code>![Alt text](https://...)</code> into rationale</span>
+                  </div>
+                )}
                 <Textarea id="editor-details" name="details" rows={6} defaultValue={initialDetails} readOnly={isLocked} className={isLocked ? 'admin-locked' : undefined} />
               </Field>
 
@@ -366,19 +387,72 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         </div>
       </details>
 
-      <Card class="gap-0">
-        <CardContent class="p-5">
-          <form method="get" action="/admin/proposals/" class="admin-form-grid">
+      <!-- Project Detail 1 Top 4-Stat Strip -->
+      <div class="project-detail-strip" aria-label="Proposal register summary">
+        <a href="/admin/proposals/" class="project-stat-cell">
+          <span class="project-stat-cell__label"><FileText aria-hidden="true" />Total register</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{registerCounts.all}</strong>
+            <span class="project-stat-cell__hint tabular">{registerCounts.deliberate} in discussion</span>
+          </div>
+        </a>
+        <a href="/admin/proposals/?stage=decide" class="project-stat-cell">
+          <span class="project-stat-cell__label"><Gavel aria-hidden="true" />Active ballots</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{registerCounts.decide}</strong>
+            <span class="project-stat-cell__hint tabular">{unboundCount ? `${unboundCount} unbound` : 'All bound'}</span>
+          </div>
+        </a>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><ListChecks aria-hidden="true" />Open amendments</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{openAmendmentsCount}</strong>
+            <span class="project-stat-cell__hint">Across active records</span>
+          </div>
+        </div>
+        <a href="/admin/proposals/?stage=implement" class="project-stat-cell">
+          <span class="project-stat-cell__label"><Lock aria-hidden="true" />Stage 4 · Implement</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{registerCounts.implement}</strong>
+            <span class="project-stat-cell__hint">Post-ballot processing</span>
+          </div>
+        </a>
+      </div>
+
+      <div class="admin-register-surface">
+        <!-- Stage Tabs & Search Toolbar -->
+        <div class="admin-register-toolbar">
+          <nav class="project-tabs" aria-label="Filter register by stage">
+            {[
+              ['all', 'All records', registerCounts.all],
+              ['propose', '1. Propose', registerCounts.propose],
+              ['deliberate', '2. Deliberate', registerCounts.deliberate],
+              ['decide', '3. Decide', registerCounts.decide],
+              ['implement', '4. Implement', registerCounts.implement],
+              ['archived', 'Archived', registerCounts.archived],
+            ].map(([val, label, count]) => (
+              <a
+                href={val === 'all' ? '/admin/proposals/' : `/admin/proposals/?stage=${val}`}
+                class:list={['project-tab', { 'is-active': stageFilter === val }]}
+                aria-current={stageFilter === val ? 'page' : undefined}
+              >
+                {label}
+                <span class="project-tab__count tabular">{count}</span>
+              </a>
+            ))}
+          </nav>
+
+          <form method="get" action="/admin/proposals/" class="admin-register-filters">
             <Field label="Search proposals" htmlFor="proposal-search">
               <div class="relative">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="proposal-search" type="search" name="q" defaultValue={query} placeholder="Search by title, ID, or space" className="pl-9" />
+                <Input id="proposal-search" type="search" name="q" defaultValue={query} placeholder="Filter by title, ID (GOV-002), or topic space" className="pl-9" />
               </div>
             </Field>
 
             <Field label="Stage" htmlFor="proposal-stage-filter">
               <NativeSelect defaultValue={stageFilter} id="proposal-stage-filter" name="stage">
-                <option value="all">All stages ({allProposals.length})</option>
+                <option value="all">All stages ({registerCounts.all})</option>
                 {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
               </NativeSelect>
             </Field>
@@ -390,64 +464,82 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
               </NativeSelect>
             </Field>
 
-            <div class="flex items-end"><Button type="submit" variant="outline">Filter</Button></div>
+            <div class="flex items-end gap-2">
+              <Button type="submit" size="sm" variant="outline">Apply</Button>
+              {(query || stageFilter !== 'all' || branchFilter !== 'all') && (
+                <Button href="/admin/proposals/" size="sm" variant="ghost">Reset</Button>
+              )}
+            </div>
           </form>
-        </CardContent>
-      </Card>
+        </div>
 
-      <section class="grid gap-3" aria-label="Proposals register">
-        {allProposals.length === 0 ? (
-          <Card>
-            <CardContent class="grid justify-items-start gap-2 py-10">
-              <p class="m-0 text-sm font-semibold text-foreground">No items match this filter.</p>
-              <p class="m-0 text-sm text-muted-foreground">Try a different search term or stage.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          allProposals.map((item) => (
-            <Card class="gap-0">
-              <CardContent class="grid gap-4 p-5">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div class="grid min-w-0 gap-1.5">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <Badge variant={stageTone(item.stage)}>{stageLabel(item.stage)}</Badge>
-                      <Badge variant="outline" label={item.space} />
-                      {item.kind === 'resolution' || item.proposalId.startsWith('GOV-') ? <Badge variant="info">Resolution</Badge> : <Badge variant="muted">Policy proposal</Badge>}
-                    </div>
-                    <h3 class="m-0 text-base font-semibold text-foreground">
-                      <a href={`/proposals/${item.slug}/`} class="no-underline hover:underline">{item.title}</a>
-                    </h3>
-                    <p class="m-0 text-sm text-muted-foreground">
-                      {item.proposalId}
-                      {item.jurisdictionBranchId && ` · ${branches.find((branch: any) => branch.branchId === item.jurisdictionBranchId)?.name ?? 'Branch scoped'}`}
-                      {item.votes.total > 0 && ` · ${item.votes.total} vote${item.votes.total === 1 ? '' : 's'}`}
-                      {item.commentCount > 0 && ` · ${item.commentCount} contribution${item.commentCount === 1 ? '' : 's'}`}
-                    </p>
-                  </div>
-                  <div class="flex shrink-0 flex-wrap gap-2">
-                    <Button href={`/proposals/${item.slug}/`} variant="outline" size="sm"><FileText />Read proposal</Button>
-                    <Button href={`/admin/proposals/?edit=${encodeURIComponent(item.proposalId)}#create-policy`} variant="ghost" size="sm">Edit</Button>
-                  </div>
-                </div>
+        <section class="admin-register-list" aria-label="Proposals register">
+          {allProposals.length === 0 ? (
+            <div class="px-5 py-10 text-center">
+              <p class="m-0 text-sm font-semibold text-foreground">No proposals match this filter.</p>
+              <p class="m-0 mt-1 text-sm text-muted-foreground">Try clearing your search term or selecting all stages.</p>
+            </div>
+          ) : (
+            allProposals.map((item) => {
+              const itemAmendments = amendmentsByProposal.get(item.proposalId) ?? [];
+              const branchLabel = item.jurisdictionBranchId
+                ? branches.find((branch: any) => branch.branchId === item.jurisdictionBranchId)?.name ?? 'Branch scoped'
+                : 'Party-wide';
+              return (
+                <article class="admin-register-row" id={`proposal-${item.proposalId}`}>
+                  <div class="admin-register-row__top">
+                    <div class="admin-register-row__main">
+                      <div class="admin-register-row__meta">
+                        <span class="tabular admin-register-id">{item.proposalId}</span>
+                        <Badge variant={stageTone(item.stage)}>{stageLabel(item.stage)}</Badge>
+                        <Badge variant="outline">{item.space}</Badge>
+                        <span class="admin-register-branch">{branchLabel}</span>
+                        {item.stage === 'decide' && (
+                          <Badge variant={item.ballotRevisionId ? 'success' : 'warning'}>
+                            {item.ballotRevisionId ? 'Wording bound' : 'Wording unbound'}
+                          </Badge>
+                        )}
+                        {itemAmendments.length > 0 && (
+                          <Badge variant="warning">{itemAmendments.length} amendment{itemAmendments.length === 1 ? '' : 's'}</Badge>
+                        )}
+                      </div>
 
-                <details class="proposal-manage">
-                  <summary><Gavel className="size-4" aria-hidden="true" />Manage proposal</summary>
-                  <div class="grid gap-3 border-t pt-4">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{item.proposalId}</Badge>
-                      {item.provenance && <Badge variant="muted" label={item.provenance.label} />}
-                      <Badge variant="success">{item.votes.approve} approve</Badge>
-                      <Badge variant="muted">{item.votes.abstain} abstain</Badge>
-                      <Badge variant="destructive">{item.votes.reject} reject</Badge>
+                      <h3 class="admin-register-row__title">
+                        <a href={`/admin/proposals/${item.slug}/`}>{item.title}</a>
+                      </h3>
+
+                      <p class="admin-register-row__stats tabular">
+                        <span><strong>{item.votes.total}</strong> votes ({item.votes.approve} approve · {item.votes.reject} reject)</span>
+                        <span aria-hidden="true">·</span>
+                        <span><strong>{item.commentCount}</strong> deliberation stances</span>
+                      </p>
                     </div>
 
-                    <div class="admin-form-grid">
-                      <Field label="Lifecycle stage" htmlFor={`quick-stage-${item.proposalId}`}>
-                        <NativeSelect
-                          defaultValue={item.stage}
-                          id={`quick-stage-${item.proposalId}`}
-                          aria-label={`Stage for ${item.title}`}
-                          data-quick-proposal-id={item.proposalId}
+                    <div class="admin-register-row__actions">
+                      <Button href={`/admin/proposals/${item.slug}/`} size="sm">Workspace</Button>
+                      <Button href={`/admin/proposals/?edit=${encodeURIComponent(item.proposalId)}#create-policy`} variant="outline" size="sm">Edit</Button>
+                      <Button href={`/proposals/${item.slug}/`} variant="ghost" size="sm">Public</Button>
+                    </div>
+                  </div>
+
+                  <details class="proposal-manage">
+                    <summary><Gavel className="size-3.5" aria-hidden="true" />Quick ballot &amp; stage controls</summary>
+                    <div class="grid gap-3 border-t pt-3 pb-3">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{item.proposalId}</Badge>
+                        {item.provenance && <Badge variant="muted" label={item.provenance.label} />}
+                        <Badge variant="success">{item.votes.approve} approve</Badge>
+                        <Badge variant="muted">{item.votes.abstain} abstain</Badge>
+                        <Badge variant="destructive">{item.votes.reject} reject</Badge>
+                      </div>
+
+                      <div class="admin-form-grid">
+                        <Field label="Lifecycle stage" htmlFor={`quick-stage-${item.proposalId}`}>
+                          <NativeSelect
+                            defaultValue={item.stage}
+                            id={`quick-stage-${item.proposalId}`}
+                            aria-label={`Stage for ${item.title}`}
+                            data-quick-proposal-id={item.proposalId}
                           data-current-stage={item.stage}
                           data-vote-count={item.votes.total}
                           data-title={item.title}
@@ -613,18 +705,42 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                     )}
                   </div>
                 </details>
-              </CardContent>
-            </Card>
-          ))
+              </article>
+            );
+          })
         )}
-      </section>
+        </section>
+      </div>
     </div>
   )}
 </AdminLayout>
 
 <script>
+  // A record workspace can link directly to one register row's management
+  // controls. Open the disclosure so the linked action is visible.
+  if (location.hash.startsWith('#proposal-')) {
+    const target = document.querySelector<HTMLElement>(location.hash);
+    target?.querySelector<HTMLDetailsElement>('details.proposal-manage')?.setAttribute('open', '');
+    target?.scrollIntoView({ block: 'start' });
+  }
+
   const editorForm = document.querySelector<HTMLFormElement>('#proposal-editor-form');
   const editorStatus = document.querySelector<HTMLElement>('#editor-status');
+
+  const adminInsertImageBtn = document.querySelector<HTMLButtonElement>('#admin-insert-image-btn');
+  const adminDetailsTextarea = document.querySelector<HTMLTextAreaElement>('#editor-details');
+  adminInsertImageBtn?.addEventListener('click', () => {
+    if (!adminDetailsTextarea) return;
+    const url = prompt('Enter image URL (starting with https:// or /):', 'https://');
+    if (!url || !url.trim()) return;
+    const alt = prompt('Enter image description (alt text):', 'Supporting figure') || 'Supporting image';
+    const snippet = `\n![${alt.trim()}](${url.trim()})\n`;
+    const start = adminDetailsTextarea.selectionStart ?? adminDetailsTextarea.value.length;
+    const end = adminDetailsTextarea.selectionEnd ?? adminDetailsTextarea.value.length;
+    adminDetailsTextarea.value =
+      adminDetailsTextarea.value.slice(0, start) + snippet + adminDetailsTextarea.value.slice(end);
+    adminDetailsTextarea.focus();
+  });
 
   editorForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -849,26 +965,158 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
   .proposal-editor-disclosure > summary {
     align-items: flex-start;
   }
+
+  .admin-register-surface {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: var(--horizon-white);
+    overflow: hidden;
+  }
+
+  .admin-register-toolbar {
+    padding: 0.5rem 1.25rem 1rem;
+    background: var(--horizon-surface);
+    border-bottom: 1px solid var(--horizon-line);
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .admin-register-filters {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 0.75rem;
+    align-items: end;
+  }
+
+  .admin-register-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .admin-register-row {
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid var(--horizon-line);
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .admin-register-row:last-child {
+    border-bottom: 0;
+  }
+
+  .admin-register-row:hover {
+    background: #fafbff;
+  }
+
+  .admin-register-row__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+  }
+
+  .admin-register-row__main {
+    min-width: 0;
+    flex: 1;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .admin-register-row__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.76rem;
+  }
+
+  .admin-register-id {
+    font-weight: 700;
+    color: var(--horizon-muted);
+  }
+
+  .admin-register-branch {
+    color: var(--horizon-muted);
+    font-weight: 500;
+  }
+
+  .admin-register-row__title {
+    margin: 0;
+    font-size: 0.96rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .admin-register-row__title a {
+    color: var(--horizon-ink);
+    text-decoration: none;
+  }
+
+  .admin-register-row__title a:hover {
+    color: var(--horizon-purple);
+    text-decoration: underline;
+  }
+
+  .admin-register-row__stats {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+
+  .admin-register-row__stats strong {
+    color: var(--horizon-ink);
+  }
+
+  .admin-register-row__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+  }
+
   .proposal-manage {
     border: 1px solid var(--horizon-line);
-    border-radius: 0.6rem;
-    background: var(--horizon-lavender-soft);
-    padding: 0 0.9rem;
+    border-radius: 0.5rem;
+    background: var(--horizon-surface);
+    padding: 0 0.75rem;
   }
   .proposal-manage > summary {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    min-height: 2.7rem;
+    gap: 0.4rem;
+    min-height: 2.15rem;
     cursor: pointer;
-    color: var(--horizon-purple);
-    font-size: 0.86rem;
+    color: var(--horizon-muted);
+    font-size: 0.78rem;
     font-weight: 600;
     list-style: none;
   }
+  .proposal-manage > summary:hover {
+    color: var(--horizon-ink);
+  }
   .proposal-manage > summary::-webkit-details-marker { display: none; }
-  .proposal-manage > summary::after { content: '+'; margin-left: auto; font-size: 1.05rem; line-height: 1; }
+  .proposal-manage > summary::after { content: '+'; margin-left: auto; font-size: 0.95rem; line-height: 1; }
   .proposal-manage[open] > summary::after { content: '−'; }
   .proposal-manage[open] > summary { border-bottom: 1px solid var(--horizon-line); }
   .proposal-manage > summary:focus-visible { outline: 3px solid var(--horizon-focus); outline-offset: -2px; }
+
+  @media (max-width: 860px) {
+    .admin-register-filters {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .admin-register-filters > :first-child {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .admin-register-filters {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>

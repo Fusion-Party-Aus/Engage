@@ -5,6 +5,7 @@ import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { Textarea } from '../../../components/ui/textarea';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
+import { ImagePlus, Link as LinkIcon } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { runtimeEnv } from '../../../lib/db.ts';
 
@@ -14,7 +15,10 @@ const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
 <SiteLayout title="Suggest an idea · Engage" description="Suggest a proposal for Fusion members to consider." noIndex>
   <div class="page-wrap section-space compose-page">
     <Button href="/proposals/" variant="ghost" size="sm">← Browse proposals</Button>
-    <header><h1>Suggest an idea</h1><p>Start with the change you want to see. You can refine the wording as members respond.</p></header>
+    <header>
+      <h1>Suggest an idea</h1>
+      <p>Start with the change you want to see. You can refine the wording as members respond.</p>
+    </header>
 
     {!user ? (
       <Alert className="callout">
@@ -33,23 +37,66 @@ const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
     ) : (
       <form id="new-proposal-form" class="compose-form">
         <Field label="Title" htmlFor="proposal-title">
-          <Input id="proposal-title" name="title" required minLength={4} maxLength={200} placeholder="A clear, concise title" />
+          <Input id="proposal-title" name="title" required minLength={4} maxLength={200} placeholder="A clear, concise title (e.g. Expand regional rail frequencies)" />
         </Field>
-        <Field label="Topic" htmlFor="proposal-topic">
-          <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="For example: Housing" />
+        <Field label="Topic space" htmlFor="proposal-topic">
+          <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="For example: Housing, Climate, Governance, Digital Rights" />
         </Field>
-        <Field label="What would change?" htmlFor="proposal-summary">
-          <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder="Describe the change in a few sentences." />
+        <Field label="What would change? (Summary)" htmlFor="proposal-summary">
+          <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder="Describe the proposed change in a few clear sentences." />
         </Field>
-        <details>
-          <summary>Add goals and background</summary>
-          <Field label="What should this achieve? One goal per line">
-            <Textarea name="outcomes" rows={4} />
-          </Field>
-          <Field label="Why does it matter?">
-            <Textarea name="details" rows={6} />
-          </Field>
+
+        <details open>
+          <summary>Add goals, background &amp; images</summary>
+          <div class="compose-details-grid">
+            <Field label="What should this achieve? (One commitment per line)" htmlFor="proposal-outcomes">
+              <Textarea id="proposal-outcomes" name="outcomes" rows={4} placeholder="1. First key commitment&#10;2. Second key commitment" />
+            </Field>
+
+            <div class="markdown-field-group">
+              <div class="markdown-field-head">
+                <label for="proposal-details">Why does it matter? (Rationale &amp; markdown)</label>
+                <div class="markdown-toolbar">
+                  <button type="button" class="toolbar-btn" id="insert-image-btn">
+                    <ImagePlus className="size-3.5" aria-hidden="true" />
+                    Add image
+                  </button>
+                  <button type="button" class="toolbar-btn" id="insert-link-btn">
+                    <LinkIcon className="size-3.5" aria-hidden="true" />
+                    Add link
+                  </button>
+                </div>
+              </div>
+              <Textarea
+                id="proposal-details"
+                name="details"
+                rows={7}
+                placeholder="Provide background evidence, design rationale, or attach an inline image with ![Alt text](https://example.com/image.png)..."
+              />
+              <p class="field-hint">
+                Supports Markdown headings, lists, links, and inline images via <code>![Alt text](https://...)</code> or <code>[!Alt text](https://...)</code>.
+              </p>
+            </div>
+
+            <div class="attachment-fields-row">
+              <Field label="Featured image or reference URL (optional)" htmlFor="proposal-attachment-url">
+                <Input
+                  id="proposal-attachment-url"
+                  name="attachmentUrl"
+                  placeholder="https://example.com/diagram.png or /path/to/file.pdf"
+                />
+              </Field>
+              <Field label="Attachment description (optional)" htmlFor="proposal-attachment-desc">
+                <Input
+                  id="proposal-attachment-desc"
+                  name="attachmentDescription"
+                  placeholder="Caption or description of the attached image/document"
+                />
+              </Field>
+            </div>
+          </div>
         </details>
+
         <div class="form-actions">
           <Button type="submit" id="submit-btn">Submit idea</Button>
           <span id="submit-status" class="form-status" role="status" aria-live="polite"></span>
@@ -63,37 +110,189 @@ const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
   const form = document.querySelector<HTMLFormElement>('#new-proposal-form');
   const status = document.querySelector<HTMLElement>('#submit-status');
   const button = document.querySelector<HTMLButtonElement>('#new-proposal-form button[type="submit"]');
+  const detailsTextarea = document.querySelector<HTMLTextAreaElement>('#proposal-details');
+  const insertImageBtn = document.querySelector<HTMLButtonElement>('#insert-image-btn');
+  const insertLinkBtn = document.querySelector<HTMLButtonElement>('#insert-link-btn');
+
+  insertImageBtn?.addEventListener('click', () => {
+    if (!detailsTextarea) return;
+    const url = prompt('Enter image URL (starting with https:// or /):', 'https://');
+    if (!url || !url.trim()) return;
+    const alt = prompt('Enter image description (alt text):', 'Supporting diagram') || 'Supporting image';
+    const snippet = `\n![${alt.trim()}](${url.trim()})\n`;
+    const start = detailsTextarea.selectionStart ?? detailsTextarea.value.length;
+    const end = detailsTextarea.selectionEnd ?? detailsTextarea.value.length;
+    detailsTextarea.value =
+      detailsTextarea.value.slice(0, start) + snippet + detailsTextarea.value.slice(end);
+    detailsTextarea.focus();
+  });
+
+  insertLinkBtn?.addEventListener('click', () => {
+    if (!detailsTextarea) return;
+    const url = prompt('Enter link URL (starting with https:// or /):', 'https://');
+    if (!url || !url.trim()) return;
+    const label = prompt('Enter link text:', 'Reference document') || 'Reference link';
+    const snippet = `[${label.trim()}](${url.trim()})`;
+    const start = detailsTextarea.selectionStart ?? detailsTextarea.value.length;
+    const end = detailsTextarea.selectionEnd ?? detailsTextarea.value.length;
+    detailsTextarea.value =
+      detailsTextarea.value.slice(0, start) + snippet + detailsTextarea.value.slice(end);
+    detailsTextarea.focus();
+  });
+
   form?.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!status || !button) return;
     button.disabled = true;
     status.textContent = 'Submitting your idea…';
     const data = new FormData(form);
+    const attachmentUrl = String(data.get('attachmentUrl') ?? '').trim();
+    const attachmentDescription = String(data.get('attachmentDescription') ?? '').trim();
     const payload = {
-      title: data.get('title'), space: data.get('space'), summary: data.get('summary'),
-      details: data.get('details'), outcomes: String(data.get('outcomes') ?? '').split('\n').map((line) => line.trim()).filter(Boolean),
+      title: data.get('title'),
+      space: data.get('space'),
+      summary: data.get('summary'),
+      details: data.get('details'),
+      outcomes: String(data.get('outcomes') ?? '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean),
+      ...(attachmentUrl ? { attachmentUrl } : {}),
+      ...(attachmentDescription ? { attachmentDescription } : {}),
       stage: 'propose',
     };
     try {
-      const response = await fetch('/api/proposals', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(payload) });
+      const response = await fetch('/api/proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not submit your idea.');
       location.href = `/proposals/${result.proposal.slug}/`;
     } catch (error) {
-      status.textContent = error instanceof Error ? error.message : 'Could not submit your idea. Please try again.';
+      status.textContent =
+        error instanceof Error ? error.message : 'Could not submit your idea. Please try again.';
       button.disabled = false;
     }
   });
 </script>
 
 <style>
-  .compose-page { max-width:53rem; }
-  header { margin:1rem 0 1.5rem; }
-  h1 { margin:0 0 .4rem; font:700 clamp(2.1rem,4vw,3rem)/1.1 Outfit,sans-serif; }
-  header p { margin:0; max-width:60ch; }
-  .compose-form { display:grid; gap:1.15rem; padding:clamp(1.2rem,3vw,2rem); background:#fff; border:1px solid var(--horizon-line); border-radius:.8rem; }
-  .compose-form details { border-top:1px solid var(--horizon-line); padding-top:1rem; }
-  .compose-form summary { cursor:pointer; font-weight:700; margin-bottom:1rem; }
-  .form-actions { display:flex; align-items:center; flex-wrap:wrap; gap:1rem; }
-  .callout p { margin:0 0 .75rem; }
+  .compose-page {
+    max-width: 54rem;
+  }
+
+  header {
+    margin: 1rem 0 1.5rem;
+  }
+
+  h1 {
+    margin: 0 0 0.4rem;
+    font: 600 clamp(2.1rem, 4vw, 2.8rem)/1.08 Newsreader, Georgia, serif;
+  }
+
+  header p {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--horizon-muted);
+  }
+
+  .compose-form {
+    display: grid;
+    gap: 1.15rem;
+    padding: clamp(1.2rem, 3vw, 2rem);
+    background: #fff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.8rem;
+  }
+
+  .compose-form details {
+    border-top: 1px solid var(--horizon-line);
+    padding-top: 1rem;
+  }
+
+  .compose-form summary {
+    cursor: pointer;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+
+  .compose-details-grid {
+    display: grid;
+    gap: 1.1rem;
+  }
+
+  .markdown-field-group {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .markdown-field-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .markdown-field-head label {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--horizon-ink);
+  }
+
+  .markdown-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.28rem 0.6rem;
+    border-radius: 0.38rem;
+    border: 1px solid var(--horizon-line);
+    background: var(--horizon-surface);
+    color: var(--horizon-purple-deep);
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .toolbar-btn:hover {
+    background: var(--horizon-lavender);
+    border-color: #b7a2df;
+  }
+
+  .field-hint {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+
+  .attachment-fields-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem;
+  }
+
+  .form-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .callout p {
+    margin: 0 0 0.75rem;
+  }
+
+  @media (max-width: 640px) {
+    .attachment-fields-row {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>

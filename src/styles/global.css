@@ -53,6 +53,29 @@
   --typeset-flow: 1.25em;
 }
 
+.portable-figure {
+  margin: 1.25rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--horizon-line);
+  border-radius: 0.6rem;
+  background: var(--horizon-lavender-soft);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.portable-figure img,
+.portable-inline-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.4rem;
+}
+
+.portable-figure figcaption {
+  font-size: 0.8rem;
+  color: var(--horizon-muted);
+}
+
 * {
   box-sizing: border-box;
 }
