@@ -69,13 +69,13 @@ const countFor = (branchId: string) => proposals.filter((proposal) => [proposal.
           {siteConfig.stateSites.map((site) => (
             <Card className="flex-row items-center justify-between gap-4 px-5 py-4">
               <CardContent className="min-w-0 p-0">
-                <strong class="block">{site.code} · {site.label}</strong>
-                <span class="text-sm text-muted-foreground">{site.websiteUrl.replace(/^https?:\/\//, '')}</span>
+                <strong class="block">{site.code} · {site.name}</strong>
+                <span class="text-sm text-muted-foreground">{site.websiteHref.replace(/^https?:\/\//, '')}</span>
               </CardContent>
               <div class="flex flex-wrap items-center gap-2">
-                <Button href={site.websiteUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">Website ↗</Button>
-                {site.facebookUrl && (
-                  <Button href={site.facebookUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">Facebook ↗</Button>
+                <Button href={site.websiteHref} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">Website ↗</Button>
+                {site.facebookHref && (
+                  <Button href={site.facebookHref} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">Facebook ↗</Button>
                 )}
               </div>
             </Card>

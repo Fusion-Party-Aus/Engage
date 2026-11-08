@@ -14,7 +14,8 @@
     "preview": "astro preview",
     "check": "astro check",
     "test": "node --experimental-strip-types --test src/**/*.test.ts",
-    "ballots:migrate": "node --experimental-strip-types scripts/ballot-migration.ts"
+    "ballots:migrate": "node --experimental-strip-types scripts/ballot-migration.ts",
+    "branches:migrate": "node --experimental-strip-types scripts/seed-branches.ts"
   },
   "dependencies": {
     "@astrojs/node": "11.1.9",

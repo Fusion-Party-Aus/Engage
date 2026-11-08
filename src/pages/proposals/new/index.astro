@@ -7,10 +7,14 @@ import { Textarea } from '../../../components/ui/textarea';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
 import { ImagePlus, Link as LinkIcon } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
-import { runtimeEnv } from '../../../lib/db.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 
 export const prerender = false;
-const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
+const env = runtimeEnv(Astro.locals);
+const [user, db] = await Promise.all([getSessionUser(Astro.request, env), getDatabase(env)]);
+const branches = user?.isAdmin || user?.isBranchAdmin
+  ? await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()
+  : [];
 ---
 <SiteLayout title="Suggest an idea · Engage" description="Suggest a proposal for Fusion members to consider." noIndex>
   <div class="page-wrap section-space compose-page">
@@ -43,6 +47,15 @@ const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
         </Field>
         <Field label="Topic space" htmlFor="proposal-topic">
           <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="For example: Housing, Climate, Governance, Digital Rights" />
+        </Field>
+        <Field label="Proposal scope" htmlFor="proposal-branch">
+          <select id="proposal-branch" name="branch" class="w-full" required>
+            <option value="national">National</option>
+            {branches.filter((branch: any) => user?.isAdmin || user?.branchAdminIds?.includes(branch.branchId)).map((branch: any) => (
+              <option value={branch.branchId}>{branch.name}</option>
+            ))}
+          </select>
+          <p class="field-hint">Branch proposals are visible within their branch and require a branch administrator to create.</p>
         </Field>
         <Field label="What would change? (Summary)" htmlFor="proposal-summary">
           <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder="Describe the proposed change in a few clear sentences." />
@@ -162,6 +175,7 @@ const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
       ...(attachmentUrl ? { attachmentUrl } : {}),
       ...(attachmentDescription ? { attachmentDescription } : {}),
       stage: 'propose',
+      ...(String(data.get('branch') ?? '') !== 'national' ? { originatingBranchId: String(data.get('branch') ?? '').trim() } : {}),
     };
     try {
       const response = await fetch('/api/proposals', {

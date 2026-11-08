@@ -622,6 +622,11 @@ export async function saveProposal(
           "Only an administrator may assign a proposal origin in an explicitly delegated branch; proposal origin cannot be changed later.",
         );
     }
+    if (!existing && body.originatingBranchId !== undefined) {
+      const requestedOrigin = String(body.originatingBranchId).trim();
+      if (!(await db.collection("branches").findOne({ branchId: requestedOrigin, recognised: true })))
+        throw new Error("Proposal origin must be a recognised branch.");
+    }
   }
   const isGovernanceOperator = Boolean(user.isStaff || canManageExisting);
 
