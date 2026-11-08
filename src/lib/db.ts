@@ -7,6 +7,8 @@ import type { PlatformEnv, ProposalRecord, ProposalStage } from "./types.ts";
 
 let clientPromise: Promise<MongoClient> | undefined;
 let clientUri: string | undefined;
+let mongoFallbackUntil = 0;
+const dbInstanceCache = new Map<string, Db>();
 const seededDbs = new WeakMap<object, Promise<void>>();
 
 export function runtimeEnv(locals?: unknown): PlatformEnv {
@@ -34,23 +36,37 @@ export async function getDatabase(
     return memDb;
   }
 
+  if (env.APP_MODE !== "production" && Date.now() < mongoFallbackUntil) {
+    const memDb = getMemoryDb();
+    await ensureSeeded(memDb);
+    return memDb;
+  }
+
   try {
     if (clientUri !== uri || !clientPromise) {
       clientUri = uri;
+      dbInstanceCache.clear();
       clientPromise = new MongoClient(uri, {
-        maxPoolSize: 5,
-        serverSelectionTimeoutMS: 3_000,
-        connectTimeoutMS: 3_000,
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
+        connectTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
       }).connect();
     }
     const client = await clientPromise;
-    const db = client.db(dbName);
+    const cacheKey = `${uri}::${dbName}`;
+    let db = dbInstanceCache.get(cacheKey);
+    if (!db) {
+      db = client.db(dbName);
+      dbInstanceCache.set(cacheKey, db);
+    }
     await ensureSeeded(db);
     return db;
   } catch (error) {
     clientUri = undefined;
     clientPromise = undefined;
+    dbInstanceCache.clear();
     if (env.APP_MODE !== "production") {
+      mongoFallbackUntil = Date.now() + 60_000;
       const memDb = getMemoryDb();
       await ensureSeeded(memDb);
       return memDb;
@@ -262,55 +278,59 @@ export async function initializeDatabase(db: Db): Promise<void> {
           );
     }
     const proposalsCol = db.collection<ProposalRecord>("proposals");
-    for (const item of baselineItems) {
-      const raw = item as Record<string, any>;
-      const proposalId = String(raw.proposalId || raw.policyId);
-      const stage = mapBaselineStage(raw.stage || raw.defaultStatus);
-      const kind =
-        raw.kind || (proposalId.startsWith("GOV-") ? "resolution" : "policy");
+    await Promise.all(
+      baselineItems.map((item) => {
+        const raw = item as Record<string, any>;
+        const proposalId = String(raw.proposalId || raw.policyId);
+        const stage = mapBaselineStage(raw.stage || raw.defaultStatus);
+        const kind =
+          raw.kind || (proposalId.startsWith("GOV-") ? "resolution" : "policy");
 
-      // Seeding is insert-only. A restart must not rewrite an existing proposal,
-      // including its updatedAt timestamp, because that would make routine
-      // initialisation look like a substantive content change.
-      await proposalsCol.updateOne(
-        { proposalId },
-        {
-          $setOnInsert: {
-            proposalId,
-            slug: String(raw.slug),
-            title: String(raw.title),
-            space: String(raw.space || raw.category || "General"),
-            spaceSummary: String(raw.spaceSummary || raw.categorySummary || ""),
-            summary: String(raw.summary || raw.statement || ""),
-            outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
-            details: String(raw.details || ""),
-            ...(raw.provenance ? { provenance: raw.provenance } : {}),
-            ...(raw.detailHtml ? { detailHtml: raw.detailHtml } : {}),
-            ...(raw.attachmentUrl
-              ? { attachmentUrl: String(raw.attachmentUrl) }
-              : {}),
-            ...(raw.attachmentDescription
-              ? { attachmentDescription: String(raw.attachmentDescription) }
-              : {}),
-            stage,
-            kind,
-            authorName: "Fusion Working Group",
-            createdAt: now,
-            updatedAt: now,
+        // Seeding is insert-only. A restart must not rewrite an existing proposal,
+        // including its updatedAt timestamp, because that would make routine
+        // initialisation look like a substantive content change.
+        return proposalsCol.updateOne(
+          { proposalId },
+          {
+            $setOnInsert: {
+              proposalId,
+              slug: String(raw.slug),
+              title: String(raw.title),
+              space: String(raw.space || raw.category || "General"),
+              spaceSummary: String(raw.spaceSummary || raw.categorySummary || ""),
+              summary: String(raw.summary || raw.statement || ""),
+              outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
+              details: String(raw.details || ""),
+              ...(raw.provenance ? { provenance: raw.provenance } : {}),
+              ...(raw.detailHtml ? { detailHtml: raw.detailHtml } : {}),
+              ...(raw.attachmentUrl
+                ? { attachmentUrl: String(raw.attachmentUrl) }
+                : {}),
+              ...(raw.attachmentDescription
+                ? { attachmentDescription: String(raw.attachmentDescription) }
+                : {}),
+              stage,
+              kind,
+              authorName: "Fusion Working Group",
+              createdAt: now,
+              updatedAt: now,
+            },
           },
-        },
-        { upsert: true },
-      );
-    }
+          { upsert: true },
+        );
+      }),
+    );
 
     // Backfill one immutable starting revision for legacy records. Existing
     // proposal and vote documents are untouched; the hash makes this restartable.
     // Ballots are never bound here: a ballot whose votes are not already bound to
     // one immutable revision requires an explicit, reviewed migration decision.
     const existingProposals = await proposalsCol.find({}).toArray();
-    for (const proposal of existingProposals) {
-      await ensureLegacyProposalRevision(db, proposal);
-    }
+    await Promise.all(
+      existingProposals.map((proposal) =>
+        ensureLegacyProposalRevision(db, proposal),
+      ),
+    );
   } catch (error) {
     seededDbs.delete(db);
     throw error;
@@ -321,6 +341,8 @@ export async function closeDatabase(): Promise<void> {
   const pending = clientPromise;
   clientPromise = undefined;
   clientUri = undefined;
+  mongoFallbackUntil = 0;
+  dbInstanceCache.clear();
   if (pending) await (await pending).close();
 }
 

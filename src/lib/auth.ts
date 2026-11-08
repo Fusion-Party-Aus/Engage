@@ -53,12 +53,19 @@ export function loginConfigured(env: PlatformEnv): boolean {
   );
 }
 
+const authCache = new WeakMap<object, ReturnType<typeof createEngageAuth>>();
+
 export async function getAuth(env: PlatformEnv) {
   if (!loginConfigured(env)) {
     throw new Error("Member sign-in is not configured.");
   }
   const db = await getDatabase(env);
-  return createEngageAuth(db, env);
+  let instance = authCache.get(db);
+  if (!instance) {
+    instance = createEngageAuth(db, env);
+    authCache.set(db, instance);
+  }
+  return instance;
 }
 
 export function createEngageAuth(db: Db, env: PlatformEnv) {
@@ -269,6 +276,11 @@ export async function getSessionUser(
   }
 
   if (!loginConfigured(env)) return null;
+
+  // Fast path for anonymous visitors: avoid Better Auth + MongoDB round-trip
+  // when no session cookie is present on the request.
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  if (!cookieHeader.includes("better-auth")) return null;
 
   try {
     const auth = await getAuth(env);

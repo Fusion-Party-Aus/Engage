@@ -300,8 +300,16 @@ export async function listProposals(
   const allProposals = rawProposals.map(normalizeProposalDoc);
 
   const [allComments, allVotes] = await Promise.all([
-    db.collection<CommentRecord>("comments").find({}).toArray(),
-    db.collection<VoteRecord>(PROPOSAL_VOTES).find({}).toArray(),
+    db
+      .collection<CommentRecord>("comments")
+      .find({})
+      .project({ proposalId: 1, policyId: 1 })
+      .toArray(),
+    db
+      .collection<VoteRecord>(PROPOSAL_VOTES)
+      .find({})
+      .project({ proposalId: 1, policyId: 1, ballotId: 1, choice: 1 })
+      .toArray(),
   ]);
 
   const commentCounts = new Map<string, number>();
@@ -1269,8 +1277,17 @@ export async function toggleUpvoteComment(
   const updated = hasEndorsed
     ? current.filter((m) => m !== user.memberId)
     : [...current, user.memberId];
+  const currentEvents = Array.isArray(existing.upvoteEvents)
+    ? existing.upvoteEvents
+    : [];
+  const updatedEvents = hasEndorsed
+    ? currentEvents.filter((event) => event.memberId !== user.memberId)
+    : [...currentEvents, { memberId: user.memberId, at: new Date() }];
 
-  await col.updateOne({ commentId: id }, { $set: { upvotes: updated } });
+  await col.updateOne(
+    { commentId: id },
+    { $set: { upvotes: updated, upvoteEvents: updatedEvents } },
+  );
   return {
     upvotes: updated,
     count: updated.length,
