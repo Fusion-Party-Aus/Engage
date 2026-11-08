@@ -23,8 +23,10 @@ const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
     {!user ? (
       <Alert className="callout">
         <AlertDescription>
-          <p>Sign in to suggest an idea.</p>
-          <Button href="/member/">Sign in</Button>
+          <p>Sign in with your passkey or a 1-click email link to suggest an idea—you’ll be returned right here.</p>
+          <Button href={`/member/?returnTo=${encodeURIComponent('/proposals/new/')}&intent=propose`}>
+            Sign in to suggest an idea
+          </Button>
         </AlertDescription>
       </Alert>
     ) : !user.canParticipate ? (

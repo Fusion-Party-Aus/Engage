@@ -1,6 +1,6 @@
 # Product Marketing Context
 
-**Document version:** v1
+**Document version:** v2
 **Last updated:** 2026-11-09
 
 ## Product Overview
@@ -118,8 +118,12 @@
 *Decisions and tested lessons. Newest first. Keep it to about 20 active entries.*
 | Date | Learning | Evidence | Applies to | Status |
 |------|----------|----------|------------|--------|
-| 2026-11-09 | Returning members only need email (or passkey/Google) to sign in; full name is only required on first-time email registration, so hiding/collapsing or clarifying the name field reduces returning-member friction. | Codebase audit (`src/lib/auth.ts` `NAME_REQUIRED` hook) | `signup`, `onboarding` | active |
+| 2026-11-09 | Automatic passkey prompting works in two complementary layers: (1) eager WebAuthn `signIn.passkey()` on `/member/` for returning devices with `engage_passkey_enrolled=true` (plus an opt-out toggle) and Conditional UI (`autoFill: true`) on the email field; (2) post-sign-in Conditional Create (`useAutoRegister: true`) + a 1-click passkey upgrade banner in `MemberOnboarding`. | `@better-auth/passkey` client spec & WebAuthn Conditional UI/Create | `signup`, `onboarding`, `cro` | active |
+| 2026-11-09 | Preserving deep-link intent (`?returnTo=...&intent=vote|deliberate|propose&title=...`) across passkey, magic link, and Google sign-in eliminates context loss when a member clicks "Sign in to vote" on a proposal page. | `src/pages/proposals/[slug].astro` & `src/pages/member/index.astro` | `cro`, `signup`, `marketing-psychology` | active |
+| 2026-11-09 | Enhancing the post-vote confirmation in `ProposalBallot.tsx` (Peak-End Rule) with direct links to `#deliberation` ("Share your reasoning in discussion") and `/member/` ("Check remaining open ballots") turns a single vote into a multi-action session without page reloads. | `src/components/ui/ProposalBallot.tsx` | `marketing-psychology`, `onboarding` | active |
+| 2026-11-09 | Returning members only need email (or passkey/Google) to sign in; full name is only required on first-time email registration, so collapsing the name field into a `<details>` disclosure and pre-filling remembered email reduces returning-member friction. | Codebase audit (`src/lib/auth.ts` `NAME_REQUIRED` hook) | `signup`, `onboarding` | active |
 
 ## Changelog
 *Newest first. One line per revision: what changed and why.*
+- v2 (2026-11-09) — Added automatic passkey sign-in prompting, WebAuthn conditional auto-registration, deep-link intent preservation (`?returnTo=`), returning-member email memory, and Peak-End post-vote loops.
 - v1 (2026-11-09) — Initial context drafted from codebase (`PRODUCT.md`, `DESIGN.md`, `src/pages/member/index.astro`, `src/pages/how-it-works/index.astro`) for Sign-in UI/UX, Passkey support, and Member Onboarding flow.

@@ -1,6 +1,14 @@
 [
   {
-    "hash": "5ef40c8",
+    "hash": "f8787b9",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
+  },
+  {
+    "hash": "31e34df",
     "date": "2026-11-09",
     "type": "feat",
     "category": "feature",

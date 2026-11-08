@@ -14,6 +14,7 @@ import AttentionQueue from '../../components/member/AttentionQueue.astro';
 import CatchUpDigest from '../../components/member/CatchUpDigest.astro';
 import GovernanceLog from '../../components/member/GovernanceLog.astro';
 import {
+  ArrowRight,
   Compass,
   Fingerprint,
   KeyRound,
@@ -41,17 +42,37 @@ const [db, user] = await Promise.all([
   getSessionUser(Astro.request, env),
 ]);
 
-const activity = user ? await listUserActivity(db, user.memberId) : null;
-const memberTimelineEvents: ActivityTimelineEvent[] = user
-  ? await listMemberActivityStream(db, user.memberId)
-  : [];
+const [
+  activity,
+  memberTimelineEvents,
+  awaitingDecision,
+  memberBranches,
+  visibleProposals,
+  allCatchUpGroups,
+  userPasskeyCount,
+] = user
+  ? await Promise.all([
+      listUserActivity(db, user.memberId),
+      listMemberActivityStream(db, user.memberId),
+      user.canParticipate ? listOutstandingDecisions(db, user.memberId, user) : Promise.resolve([]),
+      user.activeBranchIds?.length
+        ? db
+            .collection('branches')
+            .find({ branchId: { $in: user.activeBranchIds }, recognised: true })
+            .sort({ name: 1 })
+            .toArray()
+        : Promise.resolve([]),
+      listProposals(db, { user }),
+      buildMemberCatchUp(db, user.memberId, new Date(0), user),
+      db
+        .collection('passkey')
+        .countDocuments({ userId: user.memberId })
+        .catch(() => 0),
+    ])
+  : [null, [] as ActivityTimelineEvent[], [], [], [], [] as MemberCatchUpGroup[], 0];
+
 const memberTimeline = buildActivityTimeline(memberTimelineEvents);
 const memberTimelineCount = memberTimelineEvents.length;
-const awaitingDecision = user?.canParticipate ? await listOutstandingDecisions(db, user.memberId, user) : [];
-const memberBranches = user?.activeBranchIds?.length
-  ? await db.collection('branches').find({ branchId: { $in: user.activeBranchIds }, recognised: true }).sort({ name: 1 }).toArray()
-  : [];
-const visibleProposals = user ? await listProposals(db, { user }) : [];
 const deliberationOpportunities = visibleProposals
   .filter((proposal) => proposal.stage === 'deliberate')
   .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -67,9 +88,6 @@ const lastSeen =
     ? parsedLastSeen
     : null;
 const catchUpSince = lastSeen ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-const allCatchUpGroups: MemberCatchUpGroup[] = user
-  ? await buildMemberCatchUp(db, user.memberId, new Date(0), user)
-  : [];
 const catchUpGroups = allCatchUpGroups
   .map((group) => {
     const items = group.items.filter((item) => item.date >= catchUpSince);
@@ -129,15 +147,31 @@ const emailAvailable = emailLoginConfigured(env);
 const googleAvailable = googleLoginConfigured(env);
 const devLoginAvailable = devLoginEnabled(env);
 const passkeyAvailable = passkeyLoginConfigured(env) || devLoginAvailable;
-const userPasskeyCount = user
-  ? await db.collection('passkey').countDocuments({ userId: user.memberId }).catch(() => 0)
-  : 0;
 const totalContributions =
   (activity?.votes.length ?? 0) +
   (activity?.comments.length ?? 0) +
   (activity?.proposals.length ?? 0);
 const requestedView = Astro.url.searchParams.get('view');
 const memberView = requestedView === 'activity' || requestedView === 'account' ? requestedView : 'overview';
+
+// Contextual Intent Preservation (Message Match & Safe Same-Origin Redirect)
+const rawReturnTo = Astro.url.searchParams.get('returnTo')?.trim() ?? '';
+const safeReturnTo =
+  rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//') && !rawReturnTo.startsWith('/api/')
+    ? rawReturnTo
+    : '/member/';
+const rawIntent = Astro.url.searchParams.get('intent')?.trim() ?? '';
+const intentLabel =
+  rawIntent === 'vote'
+    ? 'Cast your formal ballot'
+    : rawIntent === 'deliberate'
+      ? 'Join the member discussion'
+      : rawIntent === 'propose'
+        ? 'Suggest a new proposal'
+        : safeReturnTo !== '/member/'
+          ? 'Continue where you left off'
+          : '';
+const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140) ?? '';
 ---
 <SiteLayout
   title="My Engage · Fusion Party Australia"
@@ -146,14 +180,34 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
 >
   <div class="page-wrap section-space member-page" data-view={memberView}>
     {!user ? (
-      <div class="signin-shell">
+      <div class="signin-shell" data-return-to={safeReturnTo}>
         <div class="signin-main">
+          {intentLabel && (
+            <div class="signin-intent-banner" role="region" aria-label="Sign-in destination">
+              <div class="signin-intent-banner__body">
+                <Badge variant="info">{intentLabel}</Badge>
+                <p class="signin-intent-banner__text">
+                  {rawTargetTitle ? (
+                    <>
+                      Sign in to continue to <strong>{rawTargetTitle}</strong>—you’ll be returned directly to your place.
+                    </>
+                  ) : (
+                    <>Sign in below and we’ll take you straight back to where you were.</>
+                  )}
+                </p>
+              </div>
+              <a href={safeReturnTo} class="signin-intent-banner__back">
+                Return without signing in <ArrowRight className="size-3.5" aria-hidden="true" />
+              </a>
+            </div>
+          )}
+
           <header class="signin-hero">
             <div class="signin-hero__badges">
               <Badge variant="info">Passwordless member access</Badge>
               <Badge variant="outline">Passkey · Email link · Google</Badge>
             </div>
-            <h1>Sign in to take part.</h1>
+            <h1>{intentLabel ? `${intentLabel}.` : 'Sign in to take part.'}</h1>
             <p class="signin-hero__lead">
               Explore proposals, shape policy wording, and vote on bound revisions. Returning members can sign in with a passkey or email link; first-time members only need the email and full name on their Fusion Party membership.
             </p>
@@ -170,9 +224,9 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
                 <div class="signin-card__header">
                   <div>
                     <h2 id="primary-signin-heading">Member sign-in</h2>
-                    <p>No password to remember—choose your fastest sign-in method below.</p>
+                    <p id="signin-card-subtitle">No password to remember—choose your fastest sign-in method below.</p>
                   </div>
-                  <Badge variant="secondary">Takes 30 sec</Badge>
+                  <Badge variant="secondary" id="signin-speed-badge">Takes 30 sec</Badge>
                 </div>
 
                 {/* Fast 1-Tap Methods: Passkey & Google */}
@@ -182,10 +236,16 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
                       <div class="signin-quick-block">
                         <Button id="passkey-signin" type="button" variant="outline" className="signin-passkey-btn">
                           <Fingerprint className="size-4" aria-hidden="true" />
-                          <span>Sign in with a passkey</span>
+                          <span id="passkey-btn-label">Sign in with a passkey</span>
                           <span class="signin-btn-hint">Face ID · Touch ID · Security key</span>
                         </Button>
-                        <p id="passkey-status" class="form-status" role="status" aria-live="polite"></p>
+                        <div class="signin-passkey-meta">
+                          <p id="passkey-status" class="form-status" role="status" aria-live="polite"></p>
+                          <label class="signin-autoprompt-toggle" id="passkey-autoprompt-wrap" hidden>
+                            <input type="checkbox" id="passkey-autoprompt" checked />
+                            <span>Auto-prompt passkey on this device</span>
+                          </label>
+                        </div>
                       </div>
                     )}
 
@@ -222,23 +282,26 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
                       />
                     </Field>
 
-                    <div class="signin-name-disclosure" id="signin-name-wrap">
-                      <div class="signin-name-head">
-                        <label for="signin-name">Full name</label>
-                        <span class="signin-name-badge">First sign-in only</span>
+                    <details class="signin-name-disclosure" id="signin-name-details" open>
+                      <summary class="signin-name-head">
+                        <span class="signin-name-label">Full name (first sign-in only)</span>
+                        <span class="signin-name-badge" id="signin-name-badge">First sign-in only</span>
+                      </summary>
+                      <div class="signin-name-body">
+                        <Input
+                          id="signin-name"
+                          name="name"
+                          autoComplete="name"
+                          aria-label="Full name (first sign-in only)"
+                          placeholder="Required on your first sign-in so an admin can verify your membership"
+                          minLength={2}
+                          maxLength={100}
+                        />
+                        <p class="signin-field-hint">
+                          Already signed in before? Leave your name blank—we’ll recognise your email automatically.
+                        </p>
                       </div>
-                      <Input
-                        id="signin-name"
-                        name="name"
-                        autoComplete="name"
-                        placeholder="Required on your first sign-in so an admin can verify your membership"
-                        minLength={2}
-                        maxLength={100}
-                      />
-                      <p class="signin-field-hint">
-                        Already signed in before? Leave your name blank—we’ll recognise your email automatically.
-                      </p>
-                    </div>
+                    </details>
 
                     <div class="signin-submit-row">
                       <Button type="submit" className="signin-submit-btn">
@@ -679,12 +742,39 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     plugins: [magicLinkClient(), passkeyClient()],
   });
 
+  const PASSKEY_ENROLLED_KEY = 'engage_passkey_enrolled';
+  const PASSKEY_AUTOPROMPT_KEY = 'engage_passkey_autoprompt';
+  const KNOWN_EMAIL_KEY = 'engage_known_member_email';
+
+  const signinShell = document.querySelector<HTMLElement>('.signin-shell');
+  const rawReturnAttr = signinShell?.dataset.returnTo || '/member/';
+  const safeCallbackURL =
+    rawReturnAttr.startsWith('/') && !rawReturnAttr.startsWith('//') && !rawReturnAttr.startsWith('/api/')
+      ? rawReturnAttr
+      : '/member/';
+
   const emailForm = document.querySelector<HTMLFormElement>('#email-signin-form');
+  const emailInput = document.querySelector<HTMLInputElement>('#signin-email');
+  const nameDetails = document.querySelector<HTMLDetailsElement>('#signin-name-details');
+  const nameBadge = document.querySelector<HTMLElement>('#signin-name-badge');
   const emailStatus = document.querySelector<HTMLElement>('#email-status');
   const emailStatusBox = document.querySelector<HTMLElement>('#email-status-box');
   const googleStatus = document.querySelector<HTMLElement>('#google-status');
   const passkeyStatus = document.querySelector<HTMLElement>('#passkey-status');
   const passkeyBtn = document.querySelector<HTMLButtonElement>('#passkey-signin');
+  const passkeyBtnLabel = document.querySelector<HTMLElement>('#passkey-btn-label');
+  const passkeyAutoWrap = document.querySelector<HTMLElement>('#passkey-autoprompt-wrap');
+  const passkeyAutoCheckbox = document.querySelector<HTMLInputElement>('#passkey-autoprompt');
+  const signinSubtitle = document.querySelector<HTMLElement>('#signin-card-subtitle');
+  const signinSpeedBadge = document.querySelector<HTMLElement>('#signin-speed-badge');
+
+  function completeSignInRedirect() {
+    if (safeCallbackURL && safeCallbackURL !== '/member/') {
+      location.href = safeCallbackURL;
+    } else {
+      location.reload();
+    }
+  }
 
   function setEmailMessage(message: string, tone: 'info' | 'success' | 'error' = 'info') {
     if (!emailStatus) return;
@@ -695,7 +785,8 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     }
   }
 
-  const errorCode = new URLSearchParams(location.search).get('error');
+  const searchParams = new URLSearchParams(location.search);
+  const errorCode = searchParams.get('error');
   if (errorCode) {
     if (errorCode === 'link') {
       setEmailMessage(
@@ -712,8 +803,119 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     }
   }
 
-  // Optional conditional WebAuthn autofill if supported by the browser
+  // Returning member personalization (Status-Quo & Activation Energy Reduction)
+  let hasEnrolledPasskeyOnDevice = false;
+  let autoPromptEnabled = true;
+  try {
+    hasEnrolledPasskeyOnDevice = localStorage.getItem(PASSKEY_ENROLLED_KEY) === 'true';
+    const storedAuto = localStorage.getItem(PASSKEY_AUTOPROMPT_KEY);
+    if (storedAuto === 'false') {
+      autoPromptEnabled = false;
+    }
+    const rememberedEmail = localStorage.getItem(KNOWN_EMAIL_KEY);
+    if (rememberedEmail && emailInput && !emailInput.value) {
+      emailInput.value = rememberedEmail;
+      if (nameDetails) {
+        nameDetails.open = false;
+      }
+      if (nameBadge) {
+        nameBadge.textContent = 'Optional for returning members';
+      }
+    }
+  } catch {
+    // Ignore localStorage restrictions
+  }
+
+  if (hasEnrolledPasskeyOnDevice) {
+    if (passkeyBtnLabel) {
+      passkeyBtnLabel.textContent = 'Sign in with your saved passkey';
+    }
+    if (signinSubtitle) {
+      signinSubtitle.textContent = 'Welcome back—use your saved device passkey for 1-tap access.';
+    }
+    if (signinSpeedBadge) {
+      signinSpeedBadge.textContent = '1-tap passkey ready';
+    }
+    if (passkeyAutoWrap && passkeyAutoCheckbox) {
+      passkeyAutoWrap.hidden = false;
+      passkeyAutoCheckbox.checked = autoPromptEnabled;
+      passkeyAutoCheckbox.addEventListener('change', () => {
+        try {
+          localStorage.setItem(PASSKEY_AUTOPROMPT_KEY, passkeyAutoCheckbox.checked ? 'true' : 'false');
+        } catch {
+          // Ignore
+        }
+      });
+    }
+  }
+
+  async function runPasskeySignIn(isAutoPrompt = false) {
+    if (!passkeyStatus || !passkeyBtn) return;
+    if (typeof window === 'undefined' || typeof window.PublicKeyCredential === 'undefined') {
+      if (!isAutoPrompt) {
+        passkeyStatus.textContent =
+          'This browser does not support passkeys. Please use an email sign-in link instead.';
+      }
+      return;
+    }
+    passkeyBtn.disabled = true;
+    passkeyStatus.textContent = isAutoPrompt
+      ? 'Prompting your saved device passkey…'
+      : 'Waiting for your device passkey…';
+    try {
+      const result = await authClient.signIn.passkey();
+      if (result.error) {
+        const errCode = 'code' in result.error ? result.error.code : undefined;
+        if (errCode === 'PASSKEY_NOT_FOUND') {
+          passkeyStatus.textContent =
+            'No Engage passkey matched that credential. Sign in with an email link first, then add a passkey in Account & Access.';
+        } else if (
+          errCode === 'AUTH_CANCELLED' ||
+          errCode === 'ERROR_CEREMONY_ABORTED'
+        ) {
+          passkeyStatus.textContent = isAutoPrompt
+            ? 'Auto-prompt dismissed. Click "Sign in with your saved passkey" when ready, or use an email link.'
+            : 'Passkey prompt cancelled. Click again or request an email sign-in link below.';
+        } else if (result.error.status === 503) {
+          passkeyStatus.textContent =
+            'Passkey verification requires a live authentication server. Use Local development sign-in below in local preview mode.';
+        } else {
+          passkeyStatus.textContent =
+            result.error.message || 'Could not sign in with a passkey. Try an email sign-in link below.';
+        }
+      } else {
+        try {
+          localStorage.setItem(PASSKEY_ENROLLED_KEY, 'true');
+        } catch {
+          // Ignore
+        }
+        passkeyStatus.textContent = 'Passkey verified. Signing you in…';
+        completeSignInRedirect();
+      }
+    } catch {
+      if (!isAutoPrompt) {
+        passkeyStatus.textContent =
+          'Could not complete passkey sign-in. Try an email sign-in link below.';
+      } else {
+        passkeyStatus.textContent = '';
+      }
+    } finally {
+      passkeyBtn.disabled = false;
+    }
+  }
+
+  // Automatic Passkey Prompting on Sign-In:
+  // 1. If this device has an enrolled Engage passkey and auto-prompt is enabled, trigger immediate WebAuthn modal prompt.
+  // 2. Otherwise, arm WebAuthn Conditional UI (`autoFill: true`) so focusing the email input surfaces the OS passkey sheet.
   if (
+    passkeyBtn &&
+    hasEnrolledPasskeyOnDevice &&
+    autoPromptEnabled &&
+    !errorCode &&
+    searchParams.get('noAutoPasskey') !== '1'
+  ) {
+    void runPasskeySignIn(true);
+  } else if (
     emailForm &&
     typeof window !== 'undefined' &&
     typeof window.PublicKeyCredential !== 'undefined' &&
@@ -726,7 +928,12 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
       })
       .then((res) => {
         if (res && !res.error && res.data?.session) {
-          location.reload();
+          try {
+            localStorage.setItem(PASSKEY_ENROLLED_KEY, 'true');
+          } catch {
+            // Ignore
+          }
+          completeSignInRedirect();
         }
       })
       .catch(() => {
@@ -734,45 +941,8 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
       });
   }
 
-  passkeyBtn?.addEventListener('click', async () => {
-    if (!passkeyStatus) return;
-    if (typeof window === 'undefined' || typeof window.PublicKeyCredential === 'undefined') {
-      passkeyStatus.textContent =
-        'This browser does not support passkeys. Please use an email sign-in link instead.';
-      return;
-    }
-    passkeyBtn.disabled = true;
-    passkeyStatus.textContent = 'Waiting for your device passkey…';
-    try {
-      const result = await authClient.signIn.passkey();
-      if (result.error) {
-        const errCode = 'code' in result.error ? result.error.code : undefined;
-        if (errCode === 'PASSKEY_NOT_FOUND') {
-          passkeyStatus.textContent =
-            'No Engage passkey matched that credential. Sign in with an email link first, then add a passkey in Account & Access.';
-        } else if (
-          errCode === 'AUTH_CANCELLED' ||
-          errCode === 'ERROR_CEREMONY_ABORTED'
-        ) {
-          passkeyStatus.textContent =
-            'Passkey prompt cancelled. Click again or request an email sign-in link below.';
-        } else if (result.error.status === 503) {
-          passkeyStatus.textContent =
-            'Passkey verification requires a live authentication server. Use Local development sign-in below in local preview mode.';
-        } else {
-          passkeyStatus.textContent =
-            result.error.message || 'Could not sign in with a passkey. Try an email sign-in link below.';
-        }
-      } else {
-        passkeyStatus.textContent = 'Passkey verified. Signing you in…';
-        location.reload();
-      }
-    } catch {
-      passkeyStatus.textContent =
-        'Could not complete passkey sign-in. Try an email sign-in link below.';
-    } finally {
-      passkeyBtn.disabled = false;
-    }
+  passkeyBtn?.addEventListener('click', () => {
+    void runPasskeySignIn(false);
   });
 
   emailForm?.addEventListener('submit', async (event) => {
@@ -788,8 +958,8 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
       const result = await authClient.signIn.magicLink({
         email: emailValue,
         name: String(data.get('name')).trim() || undefined,
-        callbackURL: '/member/',
-        errorCallbackURL: '/member/?error=link',
+        callbackURL: safeCallbackURL,
+        errorCallbackURL: `/member/?error=link&returnTo=${encodeURIComponent(safeCallbackURL)}`,
       });
       if (result.error) {
         if (result.error.code === 'NAME_REQUIRED') {
@@ -797,6 +967,9 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
             'Welcome! Because this is your first sign-in with this email, please enter your full name so an administrator can verify your Fusion membership.',
             'error',
           );
+          if (nameDetails) {
+            nameDetails.open = true;
+          }
           const nameInput = emailForm.querySelector<HTMLInputElement>('[name="name"]')!;
           nameInput.required = true;
           nameInput.focus();
@@ -806,8 +979,13 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
           setEmailMessage('Could not send sign-in link. Please try again shortly.', 'error');
         }
       } else {
+        try {
+          localStorage.setItem(KNOWN_EMAIL_KEY, emailValue);
+        } catch {
+          // Ignore
+        }
         setEmailMessage(
-          `Check ${emailValue} for your sign-in link (valid for 10 minutes, single use). Tip: once signed in, add a passkey for 1-tap access next time.`,
+          `Check ${emailValue} for your sign-in link (valid for 10 minutes, single use). Tip: once signed in, we’ll help you save a passkey for 1-tap access next time.`,
           'success',
         );
       }
@@ -824,8 +1002,8 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     try {
       const result = await authClient.signIn.social({
         provider: 'google',
-        callbackURL: '/member/',
-        errorCallbackURL: '/member/?error=google',
+        callbackURL: safeCallbackURL,
+        errorCallbackURL: `/member/?error=google&returnTo=${encodeURIComponent(safeCallbackURL)}`,
       });
       if (result.error) {
         status.textContent = 'Google sign-in is unavailable right now.';
@@ -845,7 +1023,7 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ role }),
     });
-    if (res.ok) location.reload();
+    if (res.ok) completeSignInRedirect();
   });
 </script>
 
@@ -883,6 +1061,47 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     display: grid;
     gap: 1.35rem;
     min-width: 0;
+  }
+
+  .signin-intent-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    padding: 0.9rem 1.15rem;
+    border-radius: 0.75rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+  }
+
+  .signin-intent-banner__body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .signin-intent-banner__text {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: var(--horizon-purple-deep);
+  }
+
+  .signin-intent-banner__back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+  }
+
+  .signin-intent-banner__back:hover {
+    text-decoration: underline;
   }
 
   .signin-hero {
@@ -965,6 +1184,27 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     gap: 0.25rem;
   }
 
+  .signin-passkey-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem 0.75rem;
+  }
+
+  .signin-autoprompt-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.92rem;
+    color: var(--horizon-muted);
+    cursor: pointer;
+  }
+
+  .signin-autoprompt-toggle input {
+    accent-color: var(--horizon-purple);
+  }
+
   .signin-quick-block :global(.signin-passkey-btn),
   .signin-quick-block :global(.signin-google-btn) {
     width: 100%;
@@ -1024,8 +1264,6 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
   }
 
   .signin-name-disclosure {
-    display: grid;
-    gap: 0.4rem;
     padding: 0.85rem 1rem;
     border-radius: 0.75rem;
     background: var(--horizon-lavender-soft);
@@ -1038,12 +1276,24 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
+    cursor: pointer;
+    list-style: none;
   }
 
-  .signin-name-head label {
+  .signin-name-head::-webkit-details-marker {
+    display: none;
+  }
+
+  .signin-name-label {
     font-size: 0.92rem;
     font-weight: 600;
     color: var(--horizon-purple-deep);
+  }
+
+  .signin-name-body {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
   }
 
   .signin-name-badge {

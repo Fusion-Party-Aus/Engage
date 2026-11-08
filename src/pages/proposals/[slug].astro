@@ -377,7 +377,12 @@ const initialsFor = (name: string) =>
                     {myVote ? 'Review or update vote →' : 'Cast your vote now →'}
                   </a>
                 ) : !user ? (
-                  <a href="/member/" class="next-action-btn is-primary">Sign in to vote →</a>
+                  <a
+                    href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#proposal-vote`)}&intent=vote&title=${encodeURIComponent(proposal.title)}`}
+                    class="next-action-btn is-primary"
+                  >
+                    Sign in to vote →
+                  </a>
                 ) : (
                   <a href="/member/" class="next-action-btn is-secondary">Check verification →</a>
                 )
@@ -386,6 +391,14 @@ const initialsFor = (name: string) =>
                   <a href={user?.canParticipate ? '#comment-form' : '#deliberation'} class="next-action-btn is-primary">
                     {user?.canParticipate ? 'Add your stance →' : `Read discussion (${comments.length}) →`}
                   </a>
+                  {!user && (
+                    <a
+                      href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#deliberation`)}&intent=deliberate&title=${encodeURIComponent(proposal.title)}`}
+                      class="next-action-btn is-secondary"
+                    >
+                      Sign in to contribute →
+                    </a>
+                  )}
                   {user?.canParticipate && (
                     <a href="#amendments-heading" class="next-action-btn is-secondary">
                       Propose amendment ({amendmentRows.length})
@@ -876,9 +889,18 @@ const initialsFor = (name: string) =>
                 <div class="participation-notice">
                   <div>
                     <strong>Have a perspective on this proposal?</strong>
-                    <p>Sign in as a verified Fusion member to contribute to the discussion or endorse feedback.</p>
+                    <p>
+                      {comments.length > 0
+                        ? `Join ${comments.length} member ${comments.length === 1 ? 'contribution' : 'contributions'}—sign in with a passkey or 1-click email link to add your stance or endorse feedback.`
+                        : 'Sign in with a passkey or 1-click email link to share the first member perspective on this proposal.'}
+                    </p>
                   </div>
-                  <Button href="/member/" size="sm">Sign in to participate</Button>
+                  <Button
+                    href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#deliberation`)}&intent=deliberate&title=${encodeURIComponent(proposal.title)}`}
+                    size="sm"
+                  >
+                    Sign in to participate
+                  </Button>
                 </div>
               )}
             </section>
@@ -1051,8 +1073,17 @@ const initialsFor = (name: string) =>
                     </div>
                   ) : (
                     <div class="rail-notice__row">
-                      <p>Sign in as a verified Fusion member to cast your formal ballot on this wording.</p>
-                      <Button href="/member/" size="sm">Sign in to vote</Button>
+                      <p>
+                        {votes.total > 0
+                          ? `Join ${votes.total} verified ${votes.total === 1 ? 'vote' : 'votes'} recorded on this revision—sign in with your passkey or email link to cast your ballot.`
+                          : 'Sign in with your passkey or email link as a verified Fusion member to cast your formal ballot on this wording.'}
+                      </p>
+                      <Button
+                        href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#proposal-vote`)}&intent=vote&title=${encodeURIComponent(proposal.title)}`}
+                        size="sm"
+                      >
+                        Sign in to vote
+                      </Button>
                     </div>
                   )}
                 </div>

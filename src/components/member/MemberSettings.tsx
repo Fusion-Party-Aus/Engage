@@ -337,6 +337,7 @@ function PasskeysSection() {
   const [supported, setSupported] = useState(true);
   const [adding, setAdding] = useState(false);
   const [newLabel, setNewLabel] = useState('');
+  const [autoPrompt, setAutoPrompt] = useState(true);
   const [message, setMessage] = useState('');
   const [failed, setFailed] = useState(false);
 
@@ -353,7 +354,15 @@ function PasskeysSection() {
         return;
       }
       const list = (await response.json()) as Passkey[];
-      setPasskeys(Array.isArray(list) ? list : []);
+      const items = Array.isArray(list) ? list : [];
+      setPasskeys(items);
+      try {
+        if (items.length > 0) {
+          localStorage.setItem('engage_passkey_enrolled', 'true');
+        }
+      } catch {
+        // Ignore storage restrictions
+      }
     } catch {
       setPasskeys([]);
     } finally {
@@ -364,8 +373,25 @@ function PasskeysSection() {
   useEffect(() => {
     setSupported(typeof window !== 'undefined' && typeof window.PublicKeyCredential !== 'undefined');
     setNewLabel(defaultPasskeyLabel());
+    try {
+      const storedAuto = localStorage.getItem('engage_passkey_autoprompt');
+      if (storedAuto === 'false') {
+        setAutoPrompt(false);
+      }
+    } catch {
+      // Ignore
+    }
     void loadPasskeys();
   }, []);
+
+  function toggleAutoPrompt(enabled: boolean) {
+    setAutoPrompt(enabled);
+    try {
+      localStorage.setItem('engage_passkey_autoprompt', enabled ? 'true' : 'false');
+    } catch {
+      // Ignore
+    }
+  }
 
   async function handleAddPasskey(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -554,6 +580,26 @@ function PasskeysSection() {
               </p>
             )}
           </form>
+
+          {supported && (
+            <>
+              <FieldSeparator />
+              <InfoRow
+                description="When enabled, visiting the sign-in screen on this browser automatically opens your passkey prompt."
+                label="Automatic passkey prompt"
+              >
+                <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-[var(--horizon-purple-deep)]">
+                  <input
+                    checked={autoPrompt}
+                    className="accent-[var(--horizon-purple)]"
+                    onChange={(event) => toggleAutoPrompt(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>Auto-prompt on sign-in</span>
+                </label>
+              </InfoRow>
+            </>
+          )}
         </FieldGroup>
       </CardContent>
       {message && (

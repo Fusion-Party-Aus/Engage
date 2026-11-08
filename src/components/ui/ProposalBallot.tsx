@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from './badge';
 import { Button } from './button';
@@ -45,6 +45,7 @@ export default function ProposalBallot({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [justVoted, setJustVoted] = useState(false);
 
   const interactive = open && canVote && !busy;
   const dirty =
@@ -55,6 +56,7 @@ export default function ProposalBallot({
     if (!selected || !canSubmit) return;
     setBusy(true);
     setError('');
+    setJustVoted(false);
     setMessage('Recording your vote…');
     try {
       const response = await fetch('/api/votes', {
@@ -69,6 +71,7 @@ export default function ProposalBallot({
       setSavedChoice(selected);
       setSavedReason(reason);
       if (result.votes) setTally(result.votes);
+      setJustVoted(true);
       setMessage('Your vote was recorded.');
     } catch (submitError) {
       setMessage('');
@@ -201,16 +204,48 @@ export default function ProposalBallot({
       )}
 
       {(message || error) && (
-        <p
+        <div
           aria-live="polite"
           className={cn(
-            'm-0 text-sm',
-            error ? 'font-medium text-destructive' : 'text-muted-foreground',
+            'rounded-lg border px-3.5 py-2.5 text-sm',
+            error
+              ? 'border-[var(--horizon-danger-ink)] bg-[var(--horizon-danger-bg)] font-medium text-[var(--horizon-danger-ink)]'
+              : justVoted
+                ? 'border-[var(--horizon-line)] bg-[var(--horizon-lavender-soft)] text-[var(--horizon-purple-deep)]'
+                : 'border-transparent px-0 py-0 text-muted-foreground',
           )}
           role={error ? 'alert' : 'status'}
         >
-          {error || message}
-        </p>
+          {error ? (
+            <p className="m-0">{error}</p>
+          ) : justVoted && savedChoice ? (
+            <div className="grid gap-1.5">
+              <p className="m-0 flex items-center gap-1.5 font-semibold text-[var(--horizon-success-ink)]">
+                <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+                <span>Vote recorded ({choiceLabel(savedChoice)}).</span>
+              </p>
+              <p className="m-0 text-xs text-[var(--horizon-muted)]">
+                Your ballot is bound to this wording snapshot. You can update your choice anytime while voting stays open.
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs font-semibold">
+                <a
+                  href="#deliberation"
+                  className="text-[var(--horizon-purple-deep)] hover:underline"
+                >
+                  Share your reasoning in discussion →
+                </a>
+                <a
+                  href="/member/"
+                  className="text-[var(--horizon-purple-deep)] hover:underline"
+                >
+                  Check remaining open ballots →
+                </a>
+              </div>
+            </div>
+          ) : (
+            <p className="m-0">{message}</p>
+          )}
+        </div>
       )}
 
       <Separator />

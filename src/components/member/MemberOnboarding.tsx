@@ -36,6 +36,9 @@ export interface MemberOnboardingProps {
 const DISMISS_STORAGE_KEY = 'engage_onboarding_dismissed_v1';
 const WALKTHROUGH_STORAGE_KEY = 'engage_onboarding_walkthrough_seen_v1';
 const PASSKEY_STORAGE_KEY = 'engage_passkey_enrolled';
+const PASSKEY_NUDGE_DISMISSED_KEY = 'engage_passkey_nudge_dismissed_v1';
+const PASSKEY_AUTOREG_ATTEMPTED_KEY = 'engage_passkey_autoreg_attempted_v1';
+const KNOWN_EMAIL_KEY = 'engage_known_member_email';
 
 const authClient = createAuthClient({
   plugins: [passkeyClient()],
@@ -59,9 +62,14 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
   const [passkeyFeedback, setPasskeyFeedback] = useState('');
   const [passkeyError, setPasskeyError] = useState(false);
   const [seenWalkthrough, setSeenWalkthrough] = useState(false);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
 
   useEffect(() => {
+    let localHasPasskey = Boolean((props.initialPasskeyCount ?? 0) > 0);
     try {
+      if (props.email) {
+        localStorage.setItem(KNOWN_EMAIL_KEY, props.email);
+      }
       if (localStorage.getItem(DISMISS_STORAGE_KEY) === 'true') {
         setDismissed(true);
       }
@@ -69,15 +77,21 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
         setSeenWalkthrough(true);
       }
       if (localStorage.getItem(PASSKEY_STORAGE_KEY) === 'true') {
+        localHasPasskey = true;
         setHasPasskey(true);
+      }
+      if (sessionStorage.getItem(PASSKEY_NUDGE_DISMISSED_KEY) === 'true') {
+        setNudgeDismissed(true);
       }
     } catch {
       // Ignore storage access errors
     }
 
-    setPasskeySupported(typeof window !== 'undefined' && typeof window.PublicKeyCredential !== 'undefined');
+    const supported =
+      typeof window !== 'undefined' && typeof window.PublicKeyCredential !== 'undefined';
+    setPasskeySupported(supported);
 
-    async function checkPasskeys() {
+    async function checkAndAutoUpgradePasskey() {
       try {
         const res = await fetch('/api/auth/passkey/list-user-passkeys', {
           method: 'GET',
@@ -93,14 +107,38 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
           } catch {
             // Ignore
           }
+          return;
+        }
+
+        // WebAuthn Conditional Create (`useAutoRegister: true`)
+        // Silently upgrades the member's session to a passkey when supported by the browser/OS
+        if (
+          supported &&
+          !localHasPasskey &&
+          sessionStorage.getItem(PASSKEY_AUTOREG_ATTEMPTED_KEY) !== 'true'
+        ) {
+          sessionStorage.setItem(PASSKEY_AUTOREG_ATTEMPTED_KEY, 'true');
+          const autoRes = await authClient.passkey.addPasskey({
+            name: defaultDevicePasskeyName(),
+            useAutoRegister: true,
+          });
+          if (autoRes && !autoRes.error) {
+            setHasPasskey(true);
+            setPasskeyFeedback('Passkey automatically saved for 1-tap sign-in next time.');
+            try {
+              localStorage.setItem(PASSKEY_STORAGE_KEY, 'true');
+            } catch {
+              // Ignore
+            }
+          }
         }
       } catch {
-        // Ignore on local dev sessions without DB backing
+        // Ignore on local dev sessions without DB backing or unsupported conditional create
       }
     }
 
-    void checkPasskeys();
-  }, []);
+    void checkAndAutoUpgradePasskey();
+  }, [props.email, props.initialPasskeyCount]);
 
   if (props.status === 'suspended' || dismissed) {
     return null;
@@ -214,6 +252,15 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
     }
   }
 
+  function handleDismissNudge() {
+    setNudgeDismissed(true);
+    try {
+      sessionStorage.setItem(PASSKEY_NUDGE_DISMISSED_KEY, 'true');
+    } catch {
+      // Ignore
+    }
+  }
+
   function markWalkthroughVisited() {
     setSeenWalkthrough(true);
     try {
@@ -281,6 +328,37 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
           </button>
         </div>
       </div>
+
+      {/* Post-Sign-In 1-Tap Passkey Upgrade Nudge (Peak-End & Friction Removal) */}
+      {!hasPasskey && passkeySupported && !nudgeDismissed && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--horizon-line)] bg-[var(--horizon-lavender)] px-5 py-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Fingerprint className="size-4 shrink-0 text-[var(--horizon-purple-deep)]" aria-hidden="true" />
+            <p className="m-0 text-xs leading-relaxed text-[var(--horizon-purple-deep)]">
+              <strong>Skip the email wait next time:</strong> Save a device passkey (Face ID, Touch ID, Windows Hello, or password manager) so Engage can prompt you automatically when you return.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              type="button"
+              disabled={enrollingPasskey}
+              onClick={enrollPasskeyNow}
+              className="text-xs"
+            >
+              <Fingerprint className="size-3.5" aria-hidden="true" />
+              {enrollingPasskey ? 'Waiting for device…' : 'Enable 1-tap passkey'}
+            </Button>
+            <button
+              type="button"
+              onClick={handleDismissNudge}
+              className="rounded px-2 py-1 text-xs font-semibold text-[var(--horizon-muted)] hover:text-[var(--horizon-purple-deep)]"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Checklist Grid */}
       <div className="grid divide-y border-b border-[var(--horizon-line)] md:grid-cols-2 md:divide-x md:divide-y-0 lg:grid-cols-4">
