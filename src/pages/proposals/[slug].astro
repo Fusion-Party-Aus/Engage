@@ -2,6 +2,7 @@
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
 import PortableText from '../../components/PortableText.astro';
+import { AlertCircle, Check, FileText, MessageCircle, PenLine, ThumbsUp } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -9,7 +10,6 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { NativeSelect } from '../../components/ui/native-select';
-import { Alert, AlertDescription } from '../../components/ui/alert';
 import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
@@ -32,7 +32,34 @@ if (!detail) {
 }
 
 const proposal = detail?.proposal;
-const revisions = proposal ? await db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray() : [];
+const [
+  revisions,
+  policyRecord,
+  branchEligibility,
+  branchElectorate,
+  ballotResult,
+  relatedProposals,
+  amendmentRows,
+] = proposal
+  ? await Promise.all([
+      db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray(),
+      db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
+      proposal.jurisdictionBranchId && user?.canParticipate
+        ? db.collection('branch_memberships').findOne({ memberId: user.memberId, branchId: proposal.jurisdictionBranchId, status: 'active' })
+        : Promise.resolve(null),
+      proposal.jurisdictionBranchId
+        ? db.collection('branches').findOne({ branchId: proposal.jurisdictionBranchId, recognised: true })
+        : Promise.resolve(null),
+      db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
+      db.collection('proposals')
+        .find({ space: proposal.space, proposalId: { $ne: proposal.proposalId } })
+        .sort({ updatedAt: -1 })
+        .limit(4)
+        .toArray(),
+      db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray(),
+    ])
+  : [[], null, null, null, null, [], []];
+
 const ballotRevision = proposal?.ballotRevisionId
   ? revisions.find((revision: any) => revision.revisionId === proposal.ballotRevisionId)
   : null;
@@ -41,18 +68,27 @@ const ballotRevisionLabel = proposal?.ballotRevisionId
       revisionId: String(proposal.ballotRevisionId),
       createdAt: ballotRevision?.createdAt ?? proposal.createdAt,
     })
-  : 'being prepared';
-const policyRecord = proposal ? await db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }) : null;
-const branchEligibility = proposal?.jurisdictionBranchId && user?.canParticipate
-  ? await db.collection('branch_memberships').findOne({ memberId: user.memberId, branchId: proposal.jurisdictionBranchId, status: 'active' })
-  : null;
-const branchElectorate = proposal?.jurisdictionBranchId
-  ? await db.collection('branches').findOne({ branchId: proposal.jurisdictionBranchId, recognised: true })
-  : null;
+  : 'Draft wording (not yet bound)';
+
+const relatedBranchIds = proposal
+  ? [...new Set([proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)))]
+  : [];
+const [relatedBranches, allAmendmentRevisions] = await Promise.all([
+  relatedBranchIds.length
+    ? db.collection('branches').find({ branchId: { $in: relatedBranchIds } }).toArray()
+    : Promise.resolve([]),
+  amendmentRows.length
+    ? db.collection('amendment_revisions')
+        .find({ amendmentId: { $in: amendmentRows.map((a: any) => a.amendmentId) } })
+        .sort({ createdAt: 1 })
+        .toArray()
+    : Promise.resolve([]),
+]);
+const branchNameFor = (branchId?: string) =>
+  branchId ? String(relatedBranches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
 const canVoteOnProposal = Boolean(user?.canParticipate && (!proposal?.jurisdictionBranchId || (branchEligibility && branchElectorate)));
-const amendmentRows = proposal ? await db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray() : [];
 for (const amendment of amendmentRows) {
-  const history = await db.collection('amendment_revisions').find({ amendmentId: amendment.amendmentId }).sort({ createdAt: 1 }).toArray();
+  const history = allAmendmentRevisions.filter((row: any) => row.amendmentId === amendment.amendmentId);
   amendment.revisionHistory = history;
   const current = history.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
@@ -61,25 +97,47 @@ const comments = detail?.comments ?? [];
 const myVote = detail?.myVote ?? null;
 const myReason = detail?.myReason ?? '';
 
-const stageLabel = (stage: ProposalStage) => {
-  if (stage === 'propose') return '1. Propose';
-  if (stage === 'deliberate') return '2. Deliberate';
-  if (stage === 'decide') return '3. Decide';
-  if (stage === 'implement') return '4. Implement';
+const stagePillLabel = (stage: ProposalStage) => {
+  if (stage === 'propose') return 'New idea';
+  if (stage === 'deliberate') return 'In discussion';
+  if (stage === 'decide') return 'Open vote';
+  if (stage === 'implement') return 'Implementation';
   return 'Archived';
 };
 
-const stageBadgeVariant = (stage: ProposalStage) => {
-  if (stage === 'propose') return 'warning' as const;
-  if (stage === 'deliberate') return 'secondary' as const;
-  if (stage === 'decide') return 'info' as const;
-  if (stage === 'implement') return 'success' as const;
-  return 'muted' as const;
+const stageStepLabel = (stage: ProposalStage) => {
+  if (stage === 'propose') return '1. Idea';
+  if (stage === 'deliberate') return '2. Discussion';
+  if (stage === 'decide') return '3. Voting';
+  if (stage === 'implement') return '4. Implementation';
+  return 'Archived';
+};
+
+const stageGuideText = (stage: ProposalStage) => {
+  if (stage === 'decide') {
+    return 'Formal member ballot is open on the bound wording revision. Substantive proposal wording is locked while members vote.';
+  }
+  if (stage === 'deliberate') {
+    return 'Open for member discussion, scrutiny, and formal wording amendments before a ballot is opened.';
+  }
+  if (stage === 'implement') {
+    return 'Ballot has closed. Recorded decisions undergo constitutional ratification before publication in the Policy Registry.';
+  }
+  return 'Initial idea stage. Open for early feedback and refinement before advancing to formal deliberation.';
 };
 
 const isImageAttachment = Boolean(
   proposal?.attachmentUrl && /\.(svg|png|webp|jpg|jpeg|gif)$/i.test(proposal.attachmentUrl),
 );
+const isRasterImageAttachment = Boolean(
+  proposal?.attachmentUrl && /\.(png|webp|jpg|jpeg|gif)$/i.test(proposal.attachmentUrl),
+);
+const inlineMarkdownImageMatch = proposal?.details
+  ? proposal.details.match(/(?:!\[[^\]]*\]|\[\![^\]]*\])\(((?:https?:\/\/|\/)[^\s)]+\.(?:png|webp|jpg|jpeg|gif))\)/i)
+  : null;
+const proposalSocialImage = isRasterImageAttachment
+  ? proposal?.attachmentUrl
+  : inlineMarkdownImageMatch?.[1];
 
 const stages: ProposalStage[] = ['propose', 'deliberate', 'decide', 'implement'];
 const currentStageIndex = proposal ? stages.indexOf(proposal.stage) : -1;
@@ -97,11 +155,103 @@ const votes = proposal?.votes ?? { approve: 0, abstain: 0, reject: 0, total: 0 }
 const isResolution = proposal
   ? proposal.kind === 'resolution' || proposal.proposalId.toUpperCase().startsWith('GOV-')
   : false;
+
+const ballotState = proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
+const eligibilityLabel = !user
+  ? 'Sign in to check eligibility'
+  : !user.canParticipate
+    ? 'Membership verification pending'
+    : proposal?.stage !== 'decide'
+      ? 'Ballot not currently open'
+      : canVoteOnProposal
+        ? proposal?.jurisdictionBranchId
+          ? `Eligible · ${branchNameFor(proposal.jurisdictionBranchId)}`
+          : 'Eligible · Verified member'
+        : 'Not eligible for this branch ballot';
+
+const policyStatusLabel = policyRecord
+  ? `${String(policyRecord.status ?? 'adopted')} · ${String(policyRecord.publicationStatus ?? 'unpublished')}`
+  : proposal?.stage === 'implement'
+    ? 'Pending ratification'
+    : 'Not yet adopted';
+
+const ballotResultLabel = ballotResult
+  ? `${String(ballotResult.result ?? 'Recorded')}${ballotResult.recordedAt ? ` · ${new Date(ballotResult.recordedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}` : ''}`
+  : 'Not yet recorded';
+
+const decisionChain = proposal
+  ? [
+      { label: 'Workflow stage', value: stageStepLabel(proposal.stage), href: '#proposal-brief', state: 'done' },
+      { label: 'Ballot wording', value: proposal.ballotRevisionId ? ballotRevisionLabel : 'Wording not yet locked', href: '#proposal-vote', state: proposal.ballotRevisionId ? 'done' : proposal.stage === 'decide' ? 'current' : 'pending' },
+      { label: 'Returning officer result', value: ballotResultLabel, href: ballotResult ? '#proposal-vote' : undefined, state: ballotResult ? 'done' : 'pending' },
+      {
+        label: 'Policy Registry',
+        value: policyStatusLabel,
+        href: policyRecord ? `/policies/${encodeURIComponent(String(policyRecord.policyId))}/` : undefined,
+        state: policyRecord?.publicationStatus === 'published' ? 'done' : policyRecord ? 'current' : 'pending',
+      },
+    ]
+  : [];
+
+const activityEvents = proposal
+  ? [
+      ...(policyRecord?.ratification?.ratifiedAt
+        ? [{
+            date: new Date(policyRecord.ratification.ratifiedAt),
+            actor: branchNameFor(policyRecord.ratification.authorityBranchId),
+            action: 'ratified policy record',
+            badge: String(policyRecord.publicationStatus ?? 'adopted'),
+            href: `/policies/${encodeURIComponent(String(policyRecord.policyId))}/`,
+          }]
+        : []),
+      ...(ballotResult?.recordedAt
+        ? [{
+            date: new Date(ballotResult.recordedAt),
+            actor: 'Ballot returning officer',
+            action: 'recorded ballot outcome',
+            badge: String(ballotResult.result ?? 'recorded'),
+            href: '#proposal-vote',
+          }]
+        : []),
+      ...amendmentRows.slice(-3).map((amendment: any) => ({
+        date: new Date(amendment.updatedAt ?? amendment.createdAt ?? proposal.updatedAt),
+        actor: amendment.authorName || 'Member',
+        action: 'submitted formal amendment',
+        badge: String(amendment.status ?? 'proposed'),
+        href: '#amendments-heading',
+      })),
+      ...revisions.slice(0, 3).map((revision: any, idx: number) => ({
+        date: new Date(revision.createdAt ?? proposal.updatedAt),
+        actor: proposal.authorName || 'Author',
+        action: revision.revisionId === proposal.ballotRevisionId ? 'bound ballot wording' : 'saved wording snapshot',
+        badge: revisionDisplayLabel({ revisionId: String(revision.revisionId), createdAt: revision.createdAt, ordinal: revisions.length - idx }),
+        href: '#revision-history-heading',
+      })),
+      {
+        date: new Date(proposal.createdAt),
+        actor: proposal.authorName || 'Fusion Working Group',
+        action: 'opened proposal record',
+        badge: proposal.proposalId,
+        href: '#proposal-brief',
+      },
+    ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 6)
+  : [];
+
+const initialsFor = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || 'M';
 ---
 <SiteLayout
   title={proposal ? `${proposal.title} · Engage` : 'Proposal not found · Engage'}
   description={proposal?.summary ?? 'Participatory proposal details, member deliberation, and voting.'}
   canonical={proposal ? `/proposals/${proposal.slug}/` : undefined}
+  image={proposalSocialImage}
+  imageAlt={proposal ? `${proposal.title} · Engage proposal` : undefined}
+  ogType="article"
 >
   <div class="page-wrap section-space proposal-detail-page">
     {!proposal ? (
@@ -114,136 +264,281 @@ const isResolution = proposal
       </Card>
     ) : (
       <>
-        <!-- Top Nav & Meta Bar -->
-        <div class="top-bar">
+        <!-- Top Navigation & Staff Bar -->
+        <div class="proposal-topbar">
           <nav class="breadcrumbs" aria-label="Breadcrumb">
-            <a href="/proposals/">Proposals</a>
-            <span aria-hidden="true">/</span>
+            <a href="/proposals/" class="back-link">← All proposals</a>
+            <span aria-hidden="true" class="crumb-sep">/</span>
             <a href={`/proposals/?space=${encodeURIComponent(proposal.space)}`}>
               {proposal.space}
             </a>
-            <span aria-hidden="true">/</span>
-            <span class="tabular" aria-current="page">{proposal.proposalId}</span>
+            <span aria-hidden="true" class="crumb-sep">/</span>
+            <span class="tabular crumb-id" aria-current="page">{proposal.proposalId}</span>
           </nav>
 
-
+          {user?.isStaff && (
+            <div class="staff-inline-bar">
+              <label for="staff-stage-select" class="staff-inline-label">Stage:</label>
+              <NativeSelect
+                id="staff-stage-select"
+                name="stage"
+                defaultValue={proposal.stage}
+                data-proposal-id={proposal.proposalId}
+                data-current-stage={proposal.stage}
+                data-vote-count={votes.total}
+              >
+                <option value="propose">Stage 1 · Idea</option>
+                <option value="deliberate">Stage 2 · Discussion</option>
+                <option value="decide">Stage 3 · Voting</option>
+                <option value="implement">Stage 4 · Implementation</option>
+                <option value="archived">Archived</option>
+              </NativeSelect>
+              <Button href={`/admin/proposals/${proposal.slug}/`} variant="outline" size="sm">
+                Admin workspace
+              </Button>
+              <span id="staff-stage-msg" class="tabular staff-msg" role="status" aria-live="polite"></span>
+            </div>
+          )}
         </div>
 
-        {user?.isStaff && (
-          <details class="staff-controls"><summary>Admin controls for this proposal</summary><div class="staff-bar">
-            <span>
-              <strong>Staff controls:</strong> Stage is <em>{stageLabel(proposal.stage)}</em>
-            </span>
-            <div class="staff-bar__actions">
-              <Field label="Change stage" htmlFor="staff-stage-select" className="staff-select-label">
-                <NativeSelect
-                  id="staff-stage-select"
-                  name="stage"
-                  defaultValue={proposal.stage}
-                  data-proposal-id={proposal.proposalId}
-                  data-current-stage={proposal.stage}
-                  data-vote-count={votes.total}
-                >
-                  <option value="propose">1. Propose</option>
-                  <option value="deliberate">2. Deliberate</option>
-                  <option value="decide">3. Decide (Voting)</option>
-                  <option value="implement">4. Implement</option>
-                  <option value="archived">Archived</option>
-                </NativeSelect>
-              </Field>
-              <Button href={`/admin/proposals/?edit=${encodeURIComponent(proposal.proposalId)}`} variant="outline" size="sm">
-                Edit in Admin
-              </Button>
-              <span id="staff-stage-msg" class="tabular" role="status" aria-live="polite"></span>
+        <!-- Proposal Hero Header: Topic -> Title -> Lead Summary -> Workflow -> Facts -->
+        <header id="proposal-brief" class="proposal-hero">
+          <div class="proposal-hero__top">
+            <div class="proposal-eyebrow">
+              <span class="proposal-eyebrow__id tabular">{proposal.proposalId}</span>
+              <span aria-hidden="true">·</span>
+              <a href={`/proposals/?space=${encodeURIComponent(proposal.space)}`} class="proposal-eyebrow__space">
+                {proposal.space}
+              </a>
+              <span aria-hidden="true">·</span>
+              <span class="proposal-eyebrow__kind">
+                {isResolution ? 'Governance resolution' : 'Policy proposal'}
+              </span>
             </div>
-          </div></details>
-        )}
 
-        <!-- Main Layout: 2 Columns on Desktop -->
-        <div class="proposal-layout">
-          <!-- Left Column: Content & Deliberation -->
-          <div class="proposal-main">
-            <header class="detail-header">
-              <div class="detail-header__meta">
-                <Badge variant={stageBadgeVariant(proposal.stage)}>
-                  {stageLabel(proposal.stage)}
-                </Badge>
-                <Badge variant="outline">
-                  {isResolution ? 'Governance Resolution' : 'Policy Proposal'}
-                </Badge>
-                <span class="space-pill">{proposal.space}</span>
-              </div>
+            <div class="proposal-hero__badges">
+              {proposal.stage === 'decide' && myVote && (
+                <span class="personal-vote-chip is-voted">✓ You have voted</span>
+              )}
+              {proposal.stage === 'decide' && !myVote && canVoteOnProposal && (
+                <a href="#proposal-vote" class="personal-vote-chip is-action">Needs your vote →</a>
+              )}
+              <span class:list={['stage-badge', `stage-badge--${proposal.stage}`]}>
+                {stagePillLabel(proposal.stage)}
+              </span>
+            </div>
+          </div>
 
-              <h1 class="detail-title">{proposal.title}</h1>
-              <p class="proposal-reading-guide">{proposal.stage === 'decide' ? 'Voting is open. Read the exact wording and any separate amendment ballot before deciding.' : proposal.stage === 'deliberate' ? 'This idea is open for discussion. Read it, share a concern, or suggest a wording change.' : proposal.stage === 'implement' ? 'The vote has concluded. This stage records decision processing, including authorisation and publication where they apply. Check official policy for adopted wording.' : 'This is an idea for members to consider. Its wording may change before any vote.'}</p>
-          <details class="proposal-process"><summary>Where this stands in the process</summary><nav class="lifecycle-stepper" aria-label="Proposal lifecycle progress">
-            {stages.map((stg, idx) => {
-              const isPast = currentStageIndex > idx;
-              const isCurrent = proposal.stage === stg;
-              return (
-                <div class:list={['stepper-step', { 'is-past': isPast, 'is-current': isCurrent }]}>
-                  <span class="stepper-marker">
-                    {isPast ? '✓' : idx + 1}
-                  </span>
-                  <span class="stepper-label">{stg === 'propose' ? 'Idea' : stg === 'deliberate' ? 'Discuss' : stg === 'decide' ? 'Vote' : 'Implement'}</span>
-                </div>
-              );
-            })}
-          </nav></details>
-              <nav class="reading-nav" aria-label="On this page"><a href="#outcomes-heading">The idea</a><a href="#deliberation">Discussion</a><a href="#amendments-heading">Wording changes</a><a href="#revision-history-heading">Earlier wording</a>{proposal.stage === 'decide' && <a href="#proposal-vote">Vote</a>}</nav>
+          <h1 class="proposal-hero__title">{proposal.title}</h1>
 
-              <div class="author-line">
-                <span>Authored by <strong>{proposal.authorName || 'Fusion Working Group'}</strong></span>
-                <span>·</span>
-                <span class="tabular">Updated {new Date(proposal.updatedAt).toLocaleDateString('en-AU', { dateStyle: 'medium' })}</span>
-              </div>
-            </header>
+          <p class="proposal-hero__summary">{proposal.summary}</p>
 
-            <!-- Asset Showcase (if proposal includes visual asset or document) -->
-            {proposal.attachmentUrl && (
-              <div class="asset-showcase">
-                {isImageAttachment ? (
-                  <div class="asset-frame">
-                    <img src={proposal.attachmentUrl} alt={`${proposal.title} supporting asset`} />
-                  </div>
-                ) : null}
-                <div class="asset-meta">
-                  <span class="asset-tag">{isImageAttachment ? 'Attached Asset' : 'Supporting Document'}</span>
-                  <h3>{isImageAttachment ? 'Supporting Asset & Specification' : 'Supporting Reference Document'}</h3>
-                  {proposal.attachmentDescription ? (
-                    <p>{proposal.attachmentDescription}</p>
-                  ) : (
-                    <p>Reference attachment and documentation supporting this proposal.</p>
+          <!-- Immediate Next Action Banner (Zero-Friction Entry Point) -->
+          <div class:list={[
+            'next-action-bar',
+            proposal.stage === 'decide' && myVote ? 'is-complete' : proposal.stage === 'decide' ? 'is-vote' : 'is-deliberate',
+          ]} role="region" aria-label="Your immediate next action">
+            <div class="next-action-bar__copy">
+              <span class="next-action-bar__kicker">
+                {proposal.stage === 'decide'
+                  ? myVote
+                    ? '✓ Action complete'
+                    : canVoteOnProposal
+                      ? 'Your immediate action · Takes ~30 seconds'
+                      : !user
+                        ? 'Your immediate action · Takes ~1 minute'
+                        : 'Ballot eligibility notice'
+                  : proposal.stage === 'deliberate' || proposal.stage === 'propose'
+                    ? 'Your immediate action · Takes ~1 minute'
+                    : 'Stage 4 · Implementation'}
+              </span>
+              <strong class="next-action-bar__title">
+                {proposal.stage === 'decide'
+                  ? myVote
+                    ? `You voted "${myVote[0]!.toUpperCase() + myVote.slice(1)}" on ${ballotRevisionLabel}. You can change your vote while the ballot is open.`
+                    : canVoteOnProposal
+                      ? `Cast your formal ballot (Approve, Abstain, or Reject) on ${ballotRevisionLabel}.`
+                      : !user
+                        ? 'Sign in with your verified Fusion membership to cast your formal ballot on this proposal.'
+                        : 'Verify your membership or branch eligibility to vote in this ballot.'
+                  : proposal.stage === 'deliberate' || proposal.stage === 'propose'
+                    ? user?.canParticipate
+                      ? 'Add your stance (Support, Concern, or Wording suggestion) or propose a formal amendment before voting opens.'
+                      : 'Sign in as a verified member to post a discussion stance or propose a wording amendment.'
+                    : policyRecord
+                      ? `Adopted into the Policy Registry (${String(policyRecord.policyId)}). Inspect the official policy record.`
+                      : 'Ballot has closed. Review the recorded vote breakdown and ratification status.'}
+              </strong>
+            </div>
+            <div class="next-action-bar__actions">
+              {proposal.stage === 'decide' ? (
+                canVoteOnProposal ? (
+                  <a href="#proposal-vote" class="next-action-btn is-primary">
+                    {myVote ? 'Review or update vote →' : 'Cast your vote now →'}
+                  </a>
+                ) : !user ? (
+                  <a href="/member/" class="next-action-btn is-primary">Sign in to vote →</a>
+                ) : (
+                  <a href="/member/" class="next-action-btn is-secondary">Check verification →</a>
+                )
+              ) : proposal.stage === 'deliberate' || proposal.stage === 'propose' ? (
+                <>
+                  <a href={user?.canParticipate ? '#comment-form' : '#deliberation'} class="next-action-btn is-primary">
+                    {user?.canParticipate ? 'Add your stance →' : `Read discussion (${comments.length}) →`}
+                  </a>
+                  {user?.canParticipate && (
+                    <a href="#amendments-heading" class="next-action-btn is-secondary">
+                      Propose amendment ({amendmentRows.length})
+                    </a>
                   )}
+                </>
+              ) : policyRecord ? (
+                <a href={`/policies/${encodeURIComponent(String(policyRecord.policyId))}/`} class="next-action-btn is-primary">
+                  Open policy record →
+                </a>
+              ) : (
+                <a href="#proposal-vote" class="next-action-btn is-secondary">
+                  View ballot tally →
+                </a>
+              )}
+            </div>
+          </div>
+
+          <!-- Clear 4-Step Lifecycle Progress Bar -->
+          <div class="workflow-banner" aria-label="Proposal workflow stage">
+            <ol class="workflow-steps">
+              {stages.map((stg, idx) => {
+                const isPast = currentStageIndex > idx;
+                const isCurrent = proposal.stage === stg;
+                return (
+                  <li class:list={['workflow-step', { 'is-past': isPast, 'is-current': isCurrent }]}>
+                    <span class="workflow-step__num tabular" aria-hidden="true">
+                      {isPast ? '✓' : idx + 1}
+                    </span>
+                    <span class="workflow-step__label">
+                      {stg === 'propose' ? 'Idea' : stg === 'deliberate' ? 'Discussion' : stg === 'decide' ? 'Voting' : 'Implementation'}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+            <p class="workflow-caption">{stageGuideText(proposal.stage)}</p>
+          </div>
+
+          <!-- Scannable Governance Facts Strip -->
+          <dl class="governance-facts">
+            <div class="governance-fact">
+              <dt>Proposed by</dt>
+              <dd>
+                <span class="fact-avatar" aria-hidden="true">{initialsFor(proposal.authorName || 'Fusion Working Group')}</span>
+                <strong>{proposal.authorName || 'Fusion Working Group'}</strong>
+              </dd>
+            </div>
+            <div class="governance-fact">
+              <dt>Applies to</dt>
+              <dd>
+                <strong>{branchNameFor(proposal.jurisdictionBranchId)}</strong>
+                <span class="fact-sub">Authority: {branchNameFor(proposal.governanceAuthorityBranchId)}</span>
+              </dd>
+            </div>
+            <div class="governance-fact">
+              <dt>Ballot wording</dt>
+              <dd>
+                <strong>{ballotRevisionLabel}</strong>
+                <span class="fact-sub tabular">
+                  {votes.total} {votes.total === 1 ? 'ballot cast' : 'ballots cast'} · {comments.length} {comments.length === 1 ? 'contribution' : 'contributions'}
+                </span>
+              </dd>
+            </div>
+            <div class="governance-fact">
+              <dt>Policy Registry</dt>
+              <dd>
+                {policyRecord ? (
+                  <a class="fact-link" href={`/policies/${encodeURIComponent(String(policyRecord.policyId))}/`}>
+                    {policyStatusLabel} →
+                  </a>
+                ) : (
+                  <strong>{policyStatusLabel}</strong>
+                )}
+                <span class="fact-sub">
+                  Updated <time class="tabular" datetime={new Date(proposal.updatedAt).toISOString()}>{new Date(proposal.updatedAt).toLocaleDateString('en-AU', { dateStyle: 'medium' })}</time>
+                </span>
+              </dd>
+            </div>
+          </dl>
+        </header>
+
+        <!-- Sticky Section Jump Navigation -->
+        <nav class="reading-nav" aria-label="Jump to proposal section">
+          <div class="reading-nav__links">
+            <a href="#proposal-brief" aria-current="location">Overview</a>
+            {proposal.outcomes.length > 0 && (
+              <a href="#outcomes-heading">
+                Key commitments <span class="nav-count tabular">{proposal.outcomes.length}</span>
+              </a>
+            )}
+            {(proposal.details || proposal.detailHtml) && (
+              <a href="#details-heading">Rationale</a>
+            )}
+            <a href="#amendments-heading">
+              Amendments <span class="nav-count tabular">{amendmentRows.length}</span>
+            </a>
+            <a href="#deliberation">
+              Discussion <span class="nav-count tabular">{comments.length}</span>
+            </a>
+            <a href="#revision-history-heading">
+              History <span class="nav-count tabular">{revisions.length}</span>
+            </a>
+          </div>
+          <a href="#proposal-vote" class="reading-nav__cta">
+            {proposal.stage === 'decide'
+              ? myVote
+                ? 'Review your vote →'
+                : 'Review & vote →'
+              : 'Ballot status →'}
+          </a>
+        </nav>
+
+        <!-- Two-Column Workspace: Primary Content + Contextual Ballot & Governance Sidebar -->
+        <div class="proposal-workspace">
+          <!-- Primary Reading & Participation Column -->
+          <div class="proposal-main">
+            {proposal.attachmentUrl && (
+              <section class="doc-card attachment-card" aria-label="Supporting attachment">
+                {isImageAttachment && (
+                  <a href={proposal.attachmentUrl} target="_blank" rel="noopener noreferrer" class="attachment-preview">
+                    <img src={proposal.attachmentUrl} alt={`${proposal.title} supporting asset`} loading="lazy" />
+                  </a>
+                )}
+                <div class="attachment-card__body">
+                  <div class="attachment-card__info">
+                    <div class="attachment-card__title">
+                      <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
+                      <strong>{isImageAttachment ? 'Supporting visual specification' : 'Supporting reference document'}</strong>
+                    </div>
+                    <p>{proposal.attachmentDescription || 'Reference specification and documentation attached to this proposal record.'}</p>
+                  </div>
                   <Button href={proposal.attachmentUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
-                    {isImageAttachment ? 'Download full asset ↗' : 'View attachment ↗'}
+                    {isImageAttachment ? 'Open full image ↗' : 'Open document ↗'}
                   </Button>
                 </div>
-              </div>
+              </section>
             )}
 
-            <!-- Core Statement as Editorial Lead -->
-            <div class="proposal-lead">
-              <p>{proposal.summary}</p>
-            </div>
-
-            <!-- Stage 4: Implementation Tracking Banner -->
             {(proposal.stage === 'implement' || proposal.implementationNote) && (
-              <section class="implementation-box" aria-labelledby="impl-heading">
-                <div class="implementation-box__head">
-                  <Badge variant="info">Stage 4 · Implement</Badge>
-                  <h2 id="impl-heading">Decision processing and adoption status</h2>
+              <section class="doc-card implementation-banner" aria-labelledby="impl-heading">
+                <div class="implementation-banner__head">
+                  <Badge variant="info">Stage 4 · Implementation</Badge>
+                  <h2 id="impl-heading">Decision processing &amp; ratification status</h2>
                 </div>
-                <div class="implementation-content">
-                  <p>
-                    {proposal.implementationNote || (policyRecord
-                      ? `This wording was formally adopted by ${policyRecord.ratification?.authorityBranchId ?? 'an authority not recorded'} and is recorded in the official policy library.`
-                      : 'The decision is being processed. Required authorisation and publication steps have not been recorded, so this wording is not official policy.')}
-                  </p>
-                </div>
+                <p>
+                  {proposal.implementationNote || (policyRecord
+                    ? `This wording was formally adopted by ${branchNameFor(policyRecord.ratification?.authorityBranchId)} and is recorded in the official policy registry.`
+                    : 'The decision is being processed. Required authorisation and publication steps have not been recorded, so this wording is not yet published as official policy.')}
+                </p>
                 {user?.isStaff && (
                   <details class="impl-edit-details">
-                    <summary>Update decision-processing note</summary>
+                    <summary>Update implementation &amp; ratification note</summary>
                     <form id="impl-note-form" data-proposal-id={proposal.proposalId}>
                       <Textarea
                         id="impl-note-text"
@@ -253,7 +548,7 @@ const isResolution = proposal
                         placeholder="Record authorisation, publication or rollout progress..."
                       />
                       <div class="impl-note-actions">
-                        <Button type="submit" size="sm" id="impl-note-btn">Save Note</Button>
+                        <Button type="submit" size="sm" id="impl-note-btn">Save note</Button>
                         <span id="impl-note-status" class="form-status" role="status"></span>
                       </div>
                     </form>
@@ -264,78 +559,293 @@ const isResolution = proposal
 
             <!-- Key Commitments -->
             {proposal.outcomes.length > 0 && (
-              <section class="content-section" aria-labelledby="outcomes-heading">
-                <h2 id="outcomes-heading">Key Commitments</h2>
-                <ul class="outcomes-list">
-                  {proposal.outcomes.map((item) => (
-                    <li>{item}</li>
+              <section class="doc-section" aria-labelledby="outcomes-heading">
+                <div class="doc-section__header">
+                  <div>
+                    <h2 id="outcomes-heading">Key commitments</h2>
+                    <p class="doc-section__sub">Specific actions and policy positions this proposal commits Fusion to adopt.</p>
+                  </div>
+                  <span class="doc-count tabular">{proposal.outcomes.length} {proposal.outcomes.length === 1 ? 'commitment' : 'commitments'}</span>
+                </div>
+
+                <ol class="commitments-list">
+                  {proposal.outcomes.map((item, idx) => (
+                    <li class="commitment-item">
+                      <span class="commitment-num tabular" aria-hidden="true">{String(idx + 1).padStart(2, '0')}</span>
+                      <p>{item}</p>
+                    </li>
                   ))}
-                </ul>
+                </ol>
               </section>
             )}
 
-            <!-- Detailed Rationale -->
+            <!-- Rationale & Context -->
             {(proposal.details || proposal.detailHtml) && (
-              <section class="content-section" aria-labelledby="details-heading">
-                <h2 id="details-heading">Rationale &amp; Context</h2>
-                <div class="details-body">
+              <section class="doc-section" aria-labelledby="details-heading">
+                <div class="doc-section__header">
+                  <div>
+                    <h2 id="details-heading">Rationale &amp; background</h2>
+                    <p class="doc-section__sub">Evidence, context, and implementation details supporting the proposal.</p>
+                  </div>
+                </div>
+                <div class="prose-content">
                   <PortableText value={proposal.details} html={proposal.detailHtml} />
                 </div>
               </section>
             )}
 
-            <!-- Deliberation (Discussion) Section -->
-            <section id="deliberation" class="deliberation-section" aria-labelledby="deliberate-heading">
-              <div class="deliberation-header">
+            <!-- Formal Amendments Section -->
+            <section class="doc-section" aria-labelledby="amendments-heading">
+              <div class="doc-section__header">
                 <div>
-                  <h2 id="deliberate-heading">Discussion</h2>
-                  <p>Read what others think, then share your view.</p>
+                  <div class="doc-title-row">
+                    <h2 id="amendments-heading">Formal amendments</h2>
+                    <span class="doc-count tabular">{amendmentRows.length}</span>
+                  </div>
+                  <p class="doc-section__sub">
+                    Structured wording changes recorded against a specific revision. Amendment endorsements do not cast your final proposal ballot.
+                  </p>
                 </div>
-                <Badge variant="muted" className="tabular">{comments.length}</Badge>
               </div>
 
-              <!-- Stance Filter Tabs -->
-              <div class="stance-filters" role="group" aria-label="Filter contributions by stance">
-                <Button type="button" variant="outline" size="sm" className="stance-filter-btn is-active" data-stance="all" aria-pressed="true">
-                  All ({stanceCounts.all})
-                </Button>
-                <Button type="button" variant="outline" size="sm" className="stance-filter-btn" data-stance="support" aria-pressed="false">
-                  Support ({stanceCounts.support})
-                </Button>
-                <Button type="button" variant="outline" size="sm" className="stance-filter-btn" data-stance="concern" aria-pressed="false">
-                  Concern ({stanceCounts.concern})
-                </Button>
-                <Button type="button" variant="outline" size="sm" className="stance-filter-btn" data-stance="amendment" aria-pressed="false">
-                  Wording suggestions ({stanceCounts.amendment})
-                </Button>
-                <Button type="button" variant="outline" size="sm" className="stance-filter-btn" data-stance="comment" aria-pressed="false">
-                  Comment ({stanceCounts.comment})
-                </Button>
+              {amendmentRows.length > 0 ? (
+                <div class="amendment-list">
+                  {amendmentRows.map((amendment: any, index: number) => {
+                    const base = revisions.find((revision: any) => revision.revisionId === amendment.baseRevisionId);
+                    const statusTone = ['endorsed', 'applied', 'accepted'].includes(String(amendment.status))
+                      ? 'success'
+                      : amendment.status === 'conflict'
+                        ? 'destructive'
+                        : amendment.status === 'voting'
+                          ? 'info'
+                          : 'warning';
+                    return (
+                      <article class="amendment-card">
+                        <div class="amendment-card__head">
+                          <div class="amendment-card__title">
+                            <span class="amendment-badge tabular">Amendment #{index + 1}</span>
+                            <div>
+                              <strong>{amendment.changes?.title ?? 'Proposed wording revision'}</strong>
+                              <p class="amendment-meta">
+                                Base revision <code>{String(amendment.baseRevisionId).slice(0, 8)}</code> · snapshot <code>{String(amendment.currentRevisionId ?? 'legacy').slice(0, 8)}</code>
+                                {amendment.rebasedFromRevisionId ? ` · rebased from ${String(amendment.rebasedFromRevisionId).slice(0, 8)}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant={statusTone}>{amendment.status}</Badge>
+                        </div>
+
+                        {amendment.conflicts?.length > 0 && (
+                          <p class="amendment-conflict" role="status">
+                            This amendment overlaps with wording changed since its base revision. An administrator must resolve the conflict before it can be applied.
+                          </p>
+                        )}
+
+                        <div class="amendment-card__body">
+                          {Object.entries(amendment.changes ?? {}).map(([field, value]: [string, any]) => (
+                            <details class="diff-drawer" open={amendmentRows.length === 1 && index === 0}>
+                              <summary>Compare proposed change to <code>{field}</code></summary>
+                              <div class="amendment-diff">
+                                <div class="diff-pane diff-pane--before">
+                                  <span class="diff-label">Current base wording</span>
+                                  <pre>{Array.isArray(base?.snapshot?.[field]) ? base.snapshot[field].join('\n') : String(base?.snapshot?.[field] ?? '')}</pre>
+                                </div>
+                                <div class="diff-pane diff-pane--after">
+                                  <span class="diff-label">Proposed replacement</span>
+                                  <pre>{Array.isArray(value) ? value.join('\n') : String(value ?? '')}</pre>
+                                </div>
+                              </div>
+                            </details>
+                          ))}
+
+                          {amendment.revisionHistory?.length > 1 && (
+                            <details class="diff-drawer">
+                              <summary>Amendment revision log ({amendment.revisionHistory.length} snapshots)</summary>
+                              <ol class="amendment-history-list">
+                                {amendment.revisionHistory.map((row: any) => (
+                                  <li>
+                                    <code>{String(row.revisionId).slice(0, 8)}</code> · {row.authorId === user?.memberId ? 'You' : 'Contributor'} · {new Date(row.createdAt).toLocaleDateString('en-AU')}
+                                  </li>
+                                ))}
+                              </ol>
+                            </details>
+                          )}
+
+                          {amendment.status === 'voting' && canVoteOnProposal && (
+                            <form class="amendment-vote-form" data-amendment-id={amendment.amendmentId} data-proposal-id={proposal.proposalId}>
+                              <div class="amendment-vote-form__info">
+                                <strong>Endorse or reject this amendment</strong>
+                                <p>Records support for adopting this wording revision. Separate from the main proposal ballot.</p>
+                              </div>
+                              <div class="amendment-vote-buttons">
+                                {['approve', 'abstain', 'reject'].map((choice) => (
+                                  <Button type="button" variant="outline" size="sm" data-choice={choice}>
+                                    {choice[0]!.toUpperCase() + choice.slice(1)}
+                                  </Button>
+                                ))}
+                              </div>
+                              <span role="status" aria-live="polite"></span>
+                            </form>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div class="empty-box">
+                  <p>No formal wording amendments have been filed against this proposal.</p>
+                </div>
+              )}
+
+              {user?.canParticipate && ['propose', 'deliberate'].includes(proposal.stage) && (
+                <details class="amendment-compose">
+                  <summary>+ Propose a formal wording amendment</summary>
+                  <div class="amendment-compose__body">
+                    <p>
+                      Records a formal amendment against the latest saved revision (<code>{String(revisions[0]?.revisionId ?? 'initial').slice(0, 8)}</code>). For general feedback, use the Member discussion section below.
+                    </p>
+                    <form id="amendment-form" class="grid gap-3" data-proposal-id={proposal.proposalId} data-revision-id={revisions[0]?.revisionId ?? ''}>
+                      <Field label="Proposed title (optional)" htmlFor="amendment-title">
+                        <Input id="amendment-title" name="title" maxLength={200} placeholder="Leave blank to keep current title" />
+                      </Field>
+                      <Field label="Replacement summary" hint="At least 10 characters" htmlFor="amendment-summary">
+                        <Textarea id="amendment-summary" name="summary" rows={3} minLength={10} maxLength={2000} placeholder="Draft the exact replacement summary wording..." required />
+                      </Field>
+                      <div class="form-actions">
+                        <Button type="submit" size="sm">Submit formal amendment</Button>
+                        <span class="amendment-compose-status" role="status" aria-live="polite"></span>
+                      </div>
+                    </form>
+                  </div>
+                </details>
+              )}
+            </section>
+
+            <!-- Member Deliberation / Discussion Section -->
+            <section id="deliberation" class="doc-section deliberation-section" aria-labelledby="deliberate-heading">
+              <div class="doc-section__header">
+                <div>
+                  <div class="doc-title-row">
+                    <h2 id="deliberate-heading">Member discussion</h2>
+                    <span class="doc-count tabular">{comments.length} {comments.length === 1 ? 'contribution' : 'contributions'}</span>
+                  </div>
+                  <p class="doc-section__sub">
+                    Deliberative perspectives from verified members. Discussion stances inform refinement and do not count as formal ballots.
+                  </p>
+                </div>
+
+                <!-- Stance Filter Pills -->
+                <div class="stance-filters" role="group" aria-label="Filter contributions by stance">
+                  <button type="button" class="stance-pill is-active" data-stance="all" aria-pressed="true">
+                    All <span class="tabular">{stanceCounts.all}</span>
+                  </button>
+                  <button type="button" class="stance-pill" data-stance="support" aria-pressed="false">
+                    <ThumbsUp aria-hidden="true" className="size-3.5" /> Support <span class="tabular">{stanceCounts.support}</span>
+                  </button>
+                  <button type="button" class="stance-pill" data-stance="concern" aria-pressed="false">
+                    <AlertCircle aria-hidden="true" className="size-3.5" /> Concern <span class="tabular">{stanceCounts.concern}</span>
+                  </button>
+                  <button type="button" class="stance-pill" data-stance="amendment" aria-pressed="false">
+                    <PenLine aria-hidden="true" className="size-3.5" /> Wording <span class="tabular">{stanceCounts.amendment}</span>
+                  </button>
+                  <button type="button" class="stance-pill" data-stance="comment" aria-pressed="false">
+                    <MessageCircle aria-hidden="true" className="size-3.5" /> Comment <span class="tabular">{stanceCounts.comment}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Contributions Thread -->
+              <div id="comments-list" class="comments-thread">
+                {comments.length === 0 ? (
+                  <div class="empty-box">
+                    <p>No member contributions yet. Share the first perspective below.</p>
+                  </div>
+                ) : (
+                  comments.map((c) => {
+                    const isAuthor = user && c.memberId === user.memberId;
+                    const canDelete = isAuthor || user?.isStaff;
+                    const hasEndorsed = user && c.upvotes.includes(user.memberId);
+                    return (
+                      <article class="comment-card" data-stance={c.stance} data-comment-id={c.commentId}>
+                        <span class="comment-avatar" aria-hidden="true">{initialsFor(c.authorName || 'Member')}</span>
+                        <div class="comment-box">
+                          <div class="comment-card__head">
+                            <div class="comment-author__meta">
+                              <strong class="author-name">{c.authorName}</strong>
+                              <Badge variant={c.stance === 'support' ? 'success' : c.stance === 'concern' ? 'destructive' : c.stance === 'amendment' ? 'warning' : 'muted'}>
+                                {c.stance === 'amendment' ? 'Wording suggestion' : c.stance[0]!.toUpperCase() + c.stance.slice(1)}
+                              </Badge>
+                              <time class="tabular comment-date" datetime={new Date(c.createdAt).toISOString()}>
+                                {new Date(c.createdAt).toLocaleDateString('en-AU', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                              </time>
+                            </div>
+
+                            <div class="comment-card__actions">
+                              <button
+                                type="button"
+                                class:list={['endorse-btn', { 'is-endorsed': hasEndorsed }]}
+                                data-endorse-id={c.commentId}
+                                disabled={!user?.canParticipate}
+                                title={user?.canParticipate ? 'Endorse contribution' : 'Sign in to endorse'}
+                              >
+                                <ThumbsUp aria-hidden="true" className="size-3" />
+                                <span>Endorse</span>
+                                <span class="endorse-count tabular">{c.upvotes.length}</span>
+                              </button>
+
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  class="delete-btn"
+                                  data-delete-comment={c.commentId}
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div class="comment-card__body">
+                            <p>{c.body}</p>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
               </div>
 
               <!-- Contribution Input Form -->
               {user?.canParticipate ? (
                 <form id="comment-form" class="comment-form" data-proposal-id={proposal.proposalId}>
-                  <div class="stance-radio-group">
-                    <label class="stance-label stance-label--support">
-                      <input type="radio" name="stance" value="support" class="size-4 accent-primary" />
-                      <span>✓ Support</span>
-                    </label>
-                    <label class="stance-label stance-label--concern">
-                      <input type="radio" name="stance" value="concern" class="size-4 accent-primary" />
-                      <span>! Concern</span>
-                    </label>
-                    <label class="stance-label stance-label--amendment">
-                      <input type="radio" name="stance" value="amendment" class="size-4 accent-primary" />
-                      <span>✎ Wording suggestion</span>
-                    </label>
-                    <label class="stance-label stance-label--comment">
-                      <input type="radio" name="stance" value="comment" class="size-4 accent-primary" checked />
-                      <span>💬 Comment</span>
-                    </label>
+                  <div class="comment-form__top">
+                    <span class="comment-form__label">Add your contribution</span>
+                    <div class="stance-radio-group" role="radiogroup" aria-label="Contribution stance">
+                      <label class="stance-label stance-label--support">
+                        <input type="radio" name="stance" value="support" />
+                        <span><Check aria-hidden="true" className="size-3.5" /> Support</span>
+                      </label>
+                      <label class="stance-label stance-label--concern">
+                        <input type="radio" name="stance" value="concern" />
+                        <span><AlertCircle aria-hidden="true" className="size-3.5" /> Concern</span>
+                      </label>
+                      <label class="stance-label stance-label--amendment">
+                        <input type="radio" name="stance" value="amendment" />
+                        <span><PenLine aria-hidden="true" className="size-3.5" /> Wording suggestion</span>
+                      </label>
+                      <label class="stance-label stance-label--comment">
+                        <input type="radio" name="stance" value="comment" checked />
+                        <span><MessageCircle aria-hidden="true" className="size-3.5" /> Comment</span>
+                      </label>
+                    </div>
                   </div>
 
-                  <Field label="Your contribution" htmlFor="comment-body-input">
+                  <Field label="Your contribution" htmlFor="comment-body-input" className="sr-only-label">
                     <Textarea
                       id="comment-body-input"
                       name="body"
@@ -343,153 +853,85 @@ const isResolution = proposal
                       minLength={3}
                       maxLength={4000}
                       rows={3}
-                      placeholder="Share constructive feedback, identify concerns, or suggest a wording change..."
+                      placeholder="Share constructive analysis, raise an implementation concern, or propose improved wording..."
                     />
                   </Field>
 
                   <div class="comment-form__actions">
-                    <Button type="submit" id="comment-submit-btn">
+                    <span id="comment-status-msg" class="tabular form-status" role="status" aria-live="polite"></span>
+                    <Button type="submit" size="sm" id="comment-submit-btn">
                       Post contribution
                     </Button>
-                    <span id="comment-status-msg" class="tabular form-status" role="status" aria-live="polite"></span>
                   </div>
                 </form>
               ) : user ? (
-                <Alert className="signin-nudge" variant="warning">
-                  <AlertDescription>
-                    <p>Awaiting administrator verification before posting.</p>
-                    <Button href="/member/" variant="outline" size="sm">Account status</Button>
-                  </AlertDescription>
-                </Alert>
+                <div class="participation-notice">
+                  <div>
+                    <strong>Membership verification pending</strong>
+                    <p>Your account is awaiting membership verification before posting contributions.</p>
+                  </div>
+                  <Button href="/member/" variant="outline" size="sm">Check status</Button>
+                </div>
               ) : (
-                <Alert className="signin-nudge">
-                  <AlertDescription>
-                    <p>Sign in as a verified member to contribute to deliberations.</p>
-                    <Button href="/member/" size="sm">Sign In</Button>
-                  </AlertDescription>
-                </Alert>
+                <div class="participation-notice">
+                  <div>
+                    <strong>Have a perspective on this proposal?</strong>
+                    <p>Sign in as a verified Fusion member to contribute to the discussion or endorse feedback.</p>
+                  </div>
+                  <Button href="/member/" size="sm">Sign in to participate</Button>
+                </div>
               )}
+            </section>
 
-              <!-- Contributions Feed -->
-              <div id="comments-list" class="comments-feed">
-                {comments.length === 0 ? (
-                  <p class="empty-feed">No contributions yet. Be the first to share your stance.</p>
-                ) : (
-                  comments.map((c) => {
-                    const isAuthor = user && c.memberId === user.memberId;
-                    const canDelete = isAuthor || user?.isStaff;
-                    const hasEndorsed = user && c.upvotes.includes(user.memberId);
-                    return (
-                      <Card className="comment-card" data-stance={c.stance} data-comment-id={c.commentId}>
-                        <div class="comment-card__head">
-                          <div class="comment-author">
-                            <span class="author-name">{c.authorName}</span>
-                            <Badge variant={c.stance === 'support' ? 'success' : c.stance === 'concern' ? 'destructive' : c.stance === 'amendment' ? 'warning' : 'muted'}>
-                              {c.stance}
-                            </Badge>
-                          </div>
-                          <time class="tabular" datetime={new Date(c.createdAt).toISOString()}>
-                            {new Date(c.createdAt).toLocaleDateString('en-AU', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </time>
-                        </div>
-
-                        <div class="comment-card__body">
-                          <p>{c.body}</p>
-                        </div>
-
-                        <div class="comment-card__actions">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className={`endorse-btn ${hasEndorsed ? 'is-endorsed' : ''}`}
-                            data-endorse-id={c.commentId}
-                            disabled={!user?.canParticipate}
-                            title={user?.canParticipate ? '+1 Endorse' : 'Sign in to endorse'}
-                          >
-                            <span class="endorse-icon">▲</span>
-                            <span class="endorse-text">Endorse</span>
-                            <span class="endorse-count tabular">{c.upvotes.length}</span>
-                          </Button>
-
-                          {canDelete && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="delete-btn"
-                              data-delete-comment={c.commentId}
-                            >
-                              Delete
-                            </Button>
-                          )}
-                        </div>
-                      </Card>
-                    );
-                  })
-                )}
+            <!-- Wording Revision Log & Provenance -->
+            <section class="doc-section audit-section" aria-labelledby="revision-history-heading">
+              <div class="doc-section__header">
+                <div>
+                  <div class="doc-title-row">
+                    <h2 id="revision-history-heading">Wording revision history &amp; provenance</h2>
+                    <span class="doc-count tabular">{revisions.length} {revisions.length === 1 ? 'snapshot' : 'snapshots'}</span>
+                  </div>
+                  <p class="doc-section__sub">
+                    Immutable snapshots of proposal wording and constitutional lineage. Every formal ballot is bound to a single revision ID.
+                  </p>
+                </div>
               </div>
-            </section>
-            <section class="content-section amendments-section" aria-labelledby="amendments-heading">
-              <h2 id="amendments-heading">Wording suggestions and formal amendments</h2>
-              <p>A wording suggestion is informal and needs no seconder. A formal amendment records a substantive change to the wording and, once seconding is implemented, will require one independent eligible seconder before its formal decision process. An amendment ballot is a separate decision; it does not approve the proposal or adopt the amendment.</p>
-              {amendmentRows.length ? <div class="amendment-list">{amendmentRows.map((amendment: any) => {
-                const base = revisions.find((revision: any) => revision.revisionId === amendment.baseRevisionId);
-                return <Card className="amendment-card">
-                  <div class="amendment-card__head"><strong>{amendment.changes?.title ?? 'Wording change'}</strong><Badge variant="outline">{amendment.status}</Badge></div>
-                  <p>Based on proposal revision <code>{String(amendment.baseRevisionId).slice(0, 8)}</code> · formal amendment revision <code>{String(amendment.currentRevisionId ?? 'legacy').slice(0,8)}</code>{amendment.rebasedFromRevisionId ? ` · rebased from ${String(amendment.rebasedFromRevisionId).slice(0,8)}` : ''}</p>
-                  {amendment.revisionHistory?.length > 1 && <details><summary>Formal amendment wording history ({amendment.revisionHistory.length} revisions)</summary><ol>{amendment.revisionHistory.map((row: any) => <li><code>{String(row.revisionId).slice(0,8)}</code> · {row.authorId === user?.memberId ? 'You' : 'Contributor'} · {new Date(row.createdAt).toLocaleDateString()}</li>)}</ol></details>}
-                  {Object.entries(amendment.changes ?? {}).map(([field, value]: [string, any]) => <details><summary>Compare {field}</summary><div class="amendment-diff"><div><strong>Current at base</strong><pre>{Array.isArray(base?.snapshot?.[field]) ? base.snapshot[field].join('\n') : String(base?.snapshot?.[field] ?? '')}</pre></div><div><strong>Suggested wording</strong><pre>{Array.isArray(value) ? value.join('\n') : String(value ?? '')}</pre></div></div></details>)}
-                  {amendment.conflicts?.length > 0 && <p role="status">This amendment overlaps with wording changed since its base revision. An administrator must resolve the conflict explicitly.</p>}
-                  {amendment.status === 'voting' && canVoteOnProposal && <form class="amendment-vote-form" data-amendment-id={amendment.amendmentId} data-proposal-id={proposal.proposalId}><strong>Separate amendment ballot</strong><p>These votes record endorsement of the recorded amendment revision. They do not approve the proposal or adopt policy.</p><div class="amendment-vote-buttons">{['approve','abstain','reject'].map((choice) => <Button type="button" variant="outline" data-choice={choice}>{choice[0]!.toUpperCase() + choice.slice(1)}</Button>)}</div><span role="status" aria-live="polite"></span></form>}
-                </Card>;
-              })}</div> : <p>No formal amendments have been recorded yet.</p>}
-              {user?.canParticipate && ['propose','deliberate'].includes(proposal.stage) && (
-                <details class="amendment-compose">
-                  <summary>Propose a formal amendment</summary>
-                  <p>This records a formal amendment against the latest saved revision, currently <code>{revisions[0]?.revisionId ?? 'not yet versioned'}</code>. Seconding is not yet operational; once implemented, one independent eligible seconder will be required before it can progress.</p>
-                  <form id="amendment-form" class="grid gap-4" data-proposal-id={proposal.proposalId} data-revision-id={revisions[0]?.revisionId ?? ''}>
-                    <Field label="Proposed title (optional)" htmlFor="amendment-title">
-                      <Input id="amendment-title" name="title" maxLength={200} placeholder="New title wording" />
-                    </Field>
-                    <Field label="Proposed summary" hint="At least 10 characters" htmlFor="amendment-summary">
-                      <Textarea id="amendment-summary" name="summary" rows={4} minLength={10} maxLength={2000} placeholder="Write the replacement summary" required />
-                    </Field>
-                    <div class="form-actions">
-                      <Button type="submit">Submit formal amendment</Button>
-                      <span class="amendment-compose-status" role="status" aria-live="polite"></span>
-                    </div>
-                  </form>
-                </details>
-              )}
-            </section>
 
-            {revisions.length > 0 && (
-              <section class="content-section revision-history" aria-labelledby="revision-history-heading">
-                <h2 id="revision-history-heading">Revision history</h2>
-                <p>Each entry is a saved wording snapshot. A proposal or amendment ballot is tied to the revision current when voting begins.</p>
-                <ol>
+              {revisions.length > 0 && (
+                <ol class="revision-list">
                   {revisions.map((revision, index) => {
                     const parent = revisions[index + 1];
                     const changed = parent ? Object.keys(revision.snapshot).flatMap((field) => {
-                      const before = parent.snapshot[field]; const after = revision.snapshot[field];
+                      const before = parent.snapshot[field];
+                      const after = revision.snapshot[field];
                       return JSON.stringify(before) === JSON.stringify(after) ? [] : [{ field, before, after }];
                     }) : [];
                     return (
-                      <li>
-                        <strong>{new Date(revision.createdAt).toLocaleString('en-AU')}</strong>
-                        <span>{revisionDisplayLabel({ revisionId: String(revision.revisionId), createdAt: revision.createdAt, ordinal: revisions.length - index })} · <code title={String(revision.revisionId)}>{String(revision.revisionId).slice(0, 8)}</code> · {changed.length ? `${changed.length} changed ${changed.length === 1 ? 'field' : 'fields'}` : parent ? 'No wording changes' : 'Initial wording'}</span>
+                      <li class="revision-row">
+                        <div class="revision-row__main">
+                          <div class="revision-row__title">
+                            <strong>{revisionDisplayLabel({ revisionId: String(revision.revisionId), createdAt: revision.createdAt, ordinal: revisions.length - index })}</strong>
+                            <code title={String(revision.revisionId)}>{String(revision.revisionId).slice(0, 8)}</code>
+                            {index === 0 && <Badge variant="muted">Latest</Badge>}
+                            {revision.revisionId === proposal.ballotRevisionId && <Badge variant="info">Bound ballot wording</Badge>}
+                          </div>
+                          <span class="revision-row__meta tabular">
+                            {new Date(revision.createdAt).toLocaleDateString('en-AU', { dateStyle: 'medium' })} · {changed.length ? `${changed.length} changed ${changed.length === 1 ? 'field' : 'fields'}` : parent ? 'No wording changes' : 'Initial wording snapshot'}
+                          </span>
+                        </div>
                         {changed.length > 0 && (
-                          <details>
-                            <summary>View wording changes</summary>
+                          <details class="diff-drawer">
+                            <summary>Inspect wording diff</summary>
                             {changed.map((change) => (
-                              <div class="revision-change">
-                                <h3>{change.field}</h3>
-                                <div><strong>Before</strong><pre>{Array.isArray(change.before) ? change.before.join('\n') : String(change.before ?? '')}</pre></div>
-                                <div><strong>After</strong><pre>{Array.isArray(change.after) ? change.after.join('\n') : String(change.after ?? '')}</pre></div>
+                              <div class="amendment-diff">
+                                <div class="diff-pane diff-pane--before">
+                                  <span class="diff-label">{change.field} (previous)</span>
+                                  <pre>{Array.isArray(change.before) ? change.before.join('\n') : String(change.before ?? '')}</pre>
+                                </div>
+                                <div class="diff-pane diff-pane--after">
+                                  <span class="diff-label">{change.field} (updated)</span>
+                                  <pre>{Array.isArray(change.after) ? change.after.join('\n') : String(change.after ?? '')}</pre>
+                                </div>
                               </div>
                             ))}
                           </details>
@@ -498,156 +940,216 @@ const isResolution = proposal
                     );
                   })}
                 </ol>
-              </section>
-            )}
+              )}
 
-            <!-- Policy Provenance or Resolution Context -->
-            {proposal.provenance && (
-              <section class="content-section provenance-section" aria-labelledby="provenance-heading">
-                <div class="provenance-header">
-                  <div>
-                    <h2 id="provenance-heading">
-                      {isResolution ? 'Resolution Context & Authority' : 'Policy Provenance & Prior Approval'}
-                    </h2>
-                    <p class="provenance-lead">
-                      {isResolution
-                        ? 'Constitutional authority, organizational precedents, and scrutiny notes from party records.'
-                        : 'Lineage and scrutiny details from party archives and published platform versions.'}
-                    </p>
+              {proposal.provenance && (
+                <div id="provenance-heading" class="provenance-box">
+                  <div class="provenance-box__head">
+                    <div>
+                      <h3>
+                        {isResolution ? 'Resolution Context & Constitutional Authority' : 'Policy Provenance & Prior Approval'}
+                      </h3>
+                      <p class="provenance-box__sub">
+                        {isResolution
+                          ? 'Constitutional authority, organizational precedents, and scrutiny notes from party records.'
+                          : 'Lineage and scrutiny details from party archives and published platform versions.'}
+                      </p>
+                    </div>
+                    <Badge variant="outline">{proposal.provenance.label}</Badge>
                   </div>
-                  <Badge variant="outline" className={`prov-badge prov-badge--${proposal.provenance.category || 'unverified'}`}>
-                    {proposal.provenance.label}
-                  </Badge>
+
+                  <p class="provenance-summary">{proposal.provenance.summary}</p>
+
+                  {proposal.provenance.uncertaintyNote && (
+                    <div class="provenance-callout">
+                      <strong>Scrutiny note:</strong> {proposal.provenance.uncertaintyNote}
+                    </div>
+                  )}
+
+                  <div class="provenance-columns">
+                    {proposal.provenance.lineage && proposal.provenance.lineage.length > 0 && (
+                      <div class="provenance-subblock">
+                        <h4>{isResolution ? 'Preceding documents & authorities' : 'Prior policy predecessors'}</h4>
+                        <ul class="provenance-links">
+                          {proposal.provenance.lineage.map((item) => (
+                            <li>
+                              {item.url ? (
+                                <a href={item.url} target="_blank" rel="noopener noreferrer" class="lineage-link">
+                                  {item.label} ↗
+                                </a>
+                              ) : (
+                                <span class="lineage-label">{item.label}</span>
+                              )}
+                              {item.description && <span class="lineage-desc"> — {item.description}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {proposal.provenance.valuesAlignment && proposal.provenance.valuesAlignment.length > 0 && (
+                      <div class="provenance-subblock">
+                        <h4>Values &amp; principles alignment</h4>
+                        <ul class="provenance-values">
+                          {proposal.provenance.valuesAlignment.map((val) => (
+                            <li>{val}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
-
-                <p class="provenance-summary">{proposal.provenance.summary}</p>
-
-                {proposal.provenance.uncertaintyNote && (
-                  <div class="provenance-callout">
-                    <strong>What is still uncertain:</strong> {proposal.provenance.uncertaintyNote}
-                  </div>
-                )}
-
-                {proposal.provenance.lineage && proposal.provenance.lineage.length > 0 && (
-                  <div class="provenance-subblock">
-                    <h3>{isResolution ? 'Preceding Documents & Authorities' : 'Prior Policy Predecessors'}</h3>
-                    <ul class="provenance-links">
-                      {proposal.provenance.lineage.map((item) => (
-                        <li>
-                          {item.url ? (
-                            <a href={item.url} target="_blank" rel="noopener noreferrer" class="lineage-link">
-                              {item.label} ↗
-                            </a>
-                          ) : (
-                            <span class="lineage-label">{item.label}</span>
-                          )}
-                          {item.description && <span class="lineage-desc"> — {item.description}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {proposal.provenance.valuesAlignment && proposal.provenance.valuesAlignment.length > 0 && (
-                  <div class="provenance-subblock">
-                    <h3>Values &amp; Principles Alignment</h3>
-                    <ul class="provenance-values">
-                      {proposal.provenance.valuesAlignment.map((val) => (
-                        <li>{val}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </section>
-            )}
-
+              )}
+            </section>
           </div>
 
-          <!-- Right Column: Decision / Voting Action Sidebar -->
-          <aside class="proposal-sidebar">
-            <section id="proposal-vote" class="sidebar-box decision-sidebar-card rounded-lg border border-border bg-card text-card-foreground">
-              <div class="decision-card-head">
+          <!-- Right Rail: Formal Member Ballot, Decision Chain & Activity -->
+          <aside class="proposal-rail" aria-label="Formal member ballot, decision chain, and related proposals">
+            <!-- 1. Formal Member Ballot Card -->
+            <section id="proposal-vote" class:list={['rail-card', 'rail-ballot', { 'is-open': proposal.stage === 'decide' }]}>
+              <div class="rail-card__head">
                 <div>
-                  <span class="decision-sub">
-                    {proposal.stage === 'decide' ? 'Stage 3 · Decision' : stageLabel(proposal.stage)}
-                  </span>
+                  <span class="rail-eyebrow">Formal governance vote</span>
                   <h3>Member Ballot</h3>
                 </div>
-                <Badge variant={proposal.stage === 'decide' ? 'success' : 'muted'}>
-                  {proposal.stage === 'decide' ? 'Open' : 'Closed'}
-                </Badge>
+                <span class:list={['stage-badge', proposal.stage === 'decide' ? 'stage-badge--decide' : 'stage-badge--muted']}>
+                  {ballotState}
+                </span>
               </div>
 
+              <dl class="rail-kv">
+                <div>
+                  <dt>Your status</dt>
+                  <dd>
+                    {myVote ? (
+                      <strong class="status-voted">You have voted ({myVote[0]!.toUpperCase() + myVote.slice(1)})</strong>
+                    ) : (
+                      <strong>{eligibilityLabel}</strong>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Bound wording</dt>
+                  <dd>{ballotRevisionLabel}</dd>
+                </div>
+                {ballotResult && (
+                  <div>
+                    <dt>Returning officer result</dt>
+                    <dd><strong>{ballotResultLabel}</strong></dd>
+                  </div>
+                )}
+              </dl>
+
               {proposal.stage === 'decide' && !canVoteOnProposal && (
-                <div class="sidebar-vote-wrapper">
+                <div class="rail-notice">
                   {user?.canParticipate && proposal.jurisdictionBranchId ? (
-                    <Alert className="sidebar-nudge"><AlertDescription><p>{branchElectorate ? 'This decision is for an authorised branch electorate. Current branch eligibility is not on file for your account.' : 'This branch electorate is not currently recognised or available for voting.'}</p></AlertDescription></Alert>
+                    <p>{branchElectorate ? 'This ballot is restricted to members of the authorised branch electorate.' : 'This branch electorate is not currently recognised for voting.'}</p>
                   ) : user ? (
-                    <Alert className="sidebar-nudge">
-                      <AlertDescription>
-                        <p>Your account is not currently eligible for this ballot. Check your membership status.</p>
-                        <Button href="/member/" variant="outline" size="sm">Account</Button>
-                      </AlertDescription>
-                    </Alert>
+                    <div class="rail-notice__row">
+                      <p>Your membership is awaiting verification before you can cast a formal ballot.</p>
+                      <Button href="/member/" variant="outline" size="sm">Account</Button>
+                    </div>
                   ) : (
-                    <Alert className="sidebar-nudge">
-                      <AlertDescription>
-                        <p>Verified party members vote on active decisions.</p>
-                        <Button href="/member/" size="sm">Sign in to vote</Button>
-                      </AlertDescription>
-                    </Alert>
+                    <div class="rail-notice__row">
+                      <p>Sign in as a verified Fusion member to cast your formal ballot on this wording.</p>
+                      <Button href="/member/" size="sm">Sign in to vote</Button>
+                    </div>
                   )}
                 </div>
               )}
 
               {proposal.stage === 'decide' || votes.total > 0 ? (
-                <ProposalBallot
-                  client:load
-                  proposalId={proposal.proposalId}
-                  initialChoice={myVote}
-                  initialReason={myReason}
-                  initialTally={votes}
-                  open={proposal.stage === 'decide'}
-                  canVote={canVoteOnProposal}
-                />
+                <div class="rail-ballot__widget">
+                  <ProposalBallot
+                    client:load
+                    proposalId={proposal.proposalId}
+                    initialChoice={myVote}
+                    initialReason={myReason}
+                    initialTally={votes}
+                    open={proposal.stage === 'decide'}
+                    canVote={canVoteOnProposal}
+                  />
+                </div>
               ) : (
-                <p class="m-0 text-sm text-muted-foreground">Voting has not opened for this proposal.</p>
+                <p class="rail-muted">
+                  Formal voting has not opened yet. Join the member discussion or propose a wording amendment while this proposal is in deliberation.
+                </p>
               )}
 
               <BallotPrivacyNotice />
-
-              {proposal.ballotRevisionId && (
-                <p class="ballot-revision">
-                  Wording: <span title={String(proposal.ballotRevisionId)}>{ballotRevisionLabel}</span>
-                </p>
-              )}
             </section>
 
-            <!-- Metadata info card -->
-            <Card className="sidebar-meta-card">
-              <div class="meta-row">
-                <span>Classification:</span>
-                <strong>{isResolution ? 'Governance Resolution' : 'Policy Proposal'}</strong>
+            <!-- 2. Decision & Ratification Chain -->
+            <section class="rail-card">
+              <div class="rail-card__head">
+                <h3>Decision &amp; Ratification Chain</h3>
+                <a class="rail-head__link" href="#revision-history-heading">Full log</a>
               </div>
-              <div class="meta-row">
-                <span>Working Group:</span>
-                <strong>{proposal.space}</strong>
+
+              <ol class="decision-chain">
+                {decisionChain.map((node, index) => (
+                  <li class:list={['decision-node', `is-${node.state}`]}>
+                    <span class="decision-node__marker tabular" aria-hidden="true">
+                      {node.state === 'done' ? '✓' : index + 1}
+                    </span>
+                    <div class="decision-node__body">
+                      <span>{node.label}</span>
+                      <strong>{node.value}</strong>
+                    </div>
+                    {node.href && <a class="decision-node__link" href={node.href}>View</a>}
+                  </li>
+                ))}
+              </ol>
+
+              <div class="rail-subhead">
+                <h4>Recent record activity</h4>
               </div>
-              <div class="meta-row">
-                <span>Identifier:</span>
-                <strong class="tabular">{proposal.proposalId}</strong>
-              </div>
-              <div class="meta-row">
-                <span>Lifecycle Stage:</span>
-                <strong>{stageLabel(proposal.stage)}</strong>
-              </div>
-              {proposal.provenance && (
-                <div class="meta-row">
-                  <span>{isResolution ? 'Authority / Context:' : 'Provenance:'}</span>
-                  <strong>{proposal.provenance.label}</strong>
+              <ol class="rail-activity-list">
+                {activityEvents.map((ev) => (
+                  <li class="rail-activity-item">
+                    <span class="rail-activity-dot" aria-hidden="true"></span>
+                    <div class="rail-activity-body">
+                      <p>
+                        <strong>{ev.actor}</strong> {ev.action}
+                      </p>
+                      <div class="rail-activity-meta">
+                        {ev.href ? (
+                          <a href={ev.href} class="rail-chip">{ev.badge}</a>
+                        ) : (
+                          <span class="rail-chip">{ev.badge}</span>
+                        )}
+                        <time class="tabular" datetime={ev.date.toISOString()}>
+                          {ev.date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </time>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+
+            <!-- 3. Related Proposals in Space -->
+            {relatedProposals.length > 0 && (
+              <section class="rail-card">
+                <div class="rail-card__head">
+                  <h3>More in {proposal.space}</h3>
+                  <a class="rail-head__link" href={`/proposals/?space=${encodeURIComponent(proposal.space)}`}>View all</a>
                 </div>
-              )}
-            </Card>
+                <div class="related-proposals">
+                  {relatedProposals.map((related: any) => (
+                    <a href={`/proposals/${related.slug}/`} class="related-item">
+                      <div class="related-item__top">
+                        <span class="related-id tabular">{related.proposalId}</span>
+                        <span class:list={['stage-badge', 'stage-badge--sm', `stage-badge--${related.stage}`]}>
+                          {stagePillLabel(related.stage)}
+                        </span>
+                      </div>
+                      <strong class="related-title">{related.title}</strong>
+                    </a>
+                  ))}
+                </div>
+              </section>
+            )}
           </aside>
         </div>
       </>
@@ -669,11 +1171,11 @@ const isResolution = proposal
 
       let confirmMsg = '';
       if (stage === 'decide') {
-        confirmMsg = `Open voting (Stage 3: Decide)? Once voting begins, substantive proposal content will be locked to protect ballot integrity.`;
+        confirmMsg = `Open voting (Stage 3: Voting)? Once voting begins, substantive proposal content will be locked to protect ballot integrity.`;
       } else if (currentStage === 'decide' && voteCount > 0) {
         confirmMsg = `This ballot currently has ${voteCount} member vote(s). Moving to "${stage}" will conclude or pause active voting. All cast votes will remain safely preserved. Proceed?`;
       } else if (stage === 'implement') {
-        confirmMsg = `Advance this proposal to Stage 4 (Implement)?`;
+        confirmMsg = `Advance this proposal to Stage 4 (Implementation)?`;
       } else if (stage === 'archived') {
         confirmMsg = `Archive this proposal? It will no longer be visible to general members.`;
       }
@@ -724,14 +1226,13 @@ const isResolution = proposal
         });
         if (!res.ok) throw new Error('Failed to save');
         implStatus.textContent = 'Saved!';
-        setTimeout(() => location.reload(), 500);
+        implBtn.disabled = false;
       } catch (err: any) {
         implStatus.textContent = err.message || 'Error';
         implBtn.disabled = false;
       }
     });
   }
-
 
   const amendmentForm = document.getElementById('amendment-form') as HTMLFormElement | null;
   amendmentForm?.addEventListener('submit', async (event) => {
@@ -747,10 +1248,18 @@ const isResolution = proposal
         const value = String(fd.get(field) ?? '').trim();
         if (value) changes[field] = value;
       }
-      const response = await fetch('/api/amendments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proposalId: amendmentForm.dataset.proposalId, baseRevisionId: amendmentForm.dataset.revisionId, changes }) });
+      const response = await fetch('/api/amendments', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          proposalId: amendmentForm.dataset.proposalId,
+          baseRevisionId: amendmentForm.dataset.revisionId,
+          changes,
+        }),
+      });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Could not submit the amendment.');
-      if (status) status.textContent = 'Amendment submitted. Reloading its status…';
+      if (status) status.textContent = 'Amendment submitted. Reloading…';
       location.reload();
     } catch (error) {
       if (status) status.textContent = error instanceof Error ? error.message : 'Could not submit the amendment.';
@@ -760,37 +1269,46 @@ const isResolution = proposal
 
   document.querySelectorAll<HTMLFormElement>('.amendment-vote-form').forEach((form) => {
     const status = form.querySelector<HTMLElement>('[role="status"]');
-    form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) => button.addEventListener('click', async () => {
-      if (status) status.textContent = 'Recording your endorsement…';
-      form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((item) => item.disabled = true);
-      try {
-        const response = await fetch('/api/votes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proposalId: form.dataset.proposalId, amendmentId: form.dataset.amendmentId, choice: button.dataset.choice }) });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.error || 'Could not record endorsement.');
-        if (status) status.textContent = 'Your endorsement vote was recorded.';
-      } catch (error) {
-        if (status) status.textContent = error instanceof Error ? error.message : 'Could not record endorsement.';
-        form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((item) => item.disabled = false);
-      }
-    }));
+    form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) =>
+      button.addEventListener('click', async () => {
+        if (status) status.textContent = 'Recording endorsement…';
+        form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((item) => (item.disabled = true));
+        try {
+          const response = await fetch('/api/votes', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              proposalId: form.dataset.proposalId,
+              amendmentId: form.dataset.amendmentId,
+              choice: button.dataset.choice,
+            }),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Could not record endorsement.');
+          if (status) status.textContent = 'Endorsement vote recorded.';
+        } catch (error) {
+          if (status) status.textContent = error instanceof Error ? error.message : 'Could not record endorsement.';
+          form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((item) => (item.disabled = false));
+        }
+      }),
+    );
   });
 
-
-
   // Stance tab filter
-  const filterBtns = document.querySelectorAll<HTMLButtonElement>('.stance-filter-btn');
+  const filterBtns = document.querySelectorAll<HTMLButtonElement>('.stance-pill');
   const commentCards = document.querySelectorAll<HTMLElement>('.comment-card');
 
   filterBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       const stance = btn.dataset.stance;
-      filterBtns.forEach((b) => b.classList.remove('is-active'));
-      btn.classList.add('is-active');
-      filterBtns.forEach((item) => item.setAttribute('aria-pressed', String(item === btn)));
+      filterBtns.forEach((b) => {
+        b.classList.toggle('is-active', b === btn);
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
 
       commentCards.forEach((card) => {
         if (stance === 'all' || card.dataset.stance === stance) {
-          card.style.display = 'flex';
+          card.style.display = 'grid';
         } else {
           card.style.display = 'none';
         }
@@ -798,18 +1316,28 @@ const isResolution = proposal
     });
   });
 
-  // Post comment / deliberation stance
+  const escapeHtmlClient = (value: string) =>
+    value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+
+  // Post comment / deliberation stance (optimistic instant append — no full page reload)
   const commentForm = document.getElementById('comment-form') as HTMLFormElement | null;
   const commentSubmitBtn = document.getElementById('comment-submit-btn') as HTMLButtonElement | null;
   const commentStatusMsg = document.getElementById('comment-status-msg');
+  const commentsList = document.getElementById('comments-list');
 
   if (commentForm && commentSubmitBtn && commentStatusMsg) {
     commentForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const proposalId = commentForm.dataset.proposalId;
       const formData = new FormData(commentForm);
-      const stance = formData.get('stance');
-      const body = formData.get('body');
+      const stance = String(formData.get('stance') ?? 'comment');
+      const body = String(formData.get('body') ?? '').trim();
+      if (body.length < 5) return;
 
       commentSubmitBtn.disabled = true;
       commentStatusMsg.textContent = 'Posting…';
@@ -823,10 +1351,53 @@ const isResolution = proposal
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to post');
 
-        commentStatusMsg.textContent = 'Posted!';
-        location.reload();
+        const created = data.comment ?? {
+          commentId: `cmt-${Date.now()}`,
+          authorName: 'You',
+          stance,
+          body,
+          createdAt: new Date().toISOString(),
+          upvotes: [],
+        };
+        const emptyBox = commentsList?.querySelector('.empty-box');
+        emptyBox?.remove();
+
+        const initials = String(created.authorName || 'M')
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((p: string) => p[0]?.toUpperCase() ?? '')
+          .join('') || 'M';
+        const stanceText =
+          stance === 'amendment'
+            ? 'Wording suggestion'
+            : stance[0]!.toUpperCase() + stance.slice(1);
+        const article = document.createElement('article');
+        article.className = 'comment-card';
+        article.dataset.stance = stance;
+        article.dataset.commentId = String(created.commentId);
+        article.innerHTML = `
+          <span class="comment-avatar" aria-hidden="true">${escapeHtmlClient(initials)}</span>
+          <div class="comment-box">
+            <div class="comment-card__head">
+              <div class="comment-author__meta">
+                <strong class="author-name">${escapeHtmlClient(String(created.authorName || 'Verified Member'))}</strong>
+                <span class="stage-badge stage-badge--sm stage-badge--deliberate">${escapeHtmlClient(stanceText)}</span>
+                <time class="tabular comment-date">Just now</time>
+              </div>
+            </div>
+            <div class="comment-card__body">
+              <p>${escapeHtmlClient(String(created.body ?? body))}</p>
+            </div>
+          </div>
+        `;
+        commentsList?.appendChild(article);
+        const textarea = document.getElementById('comment-body-input') as HTMLTextAreaElement | null;
+        if (textarea) textarea.value = '';
+        commentStatusMsg.textContent = 'Contribution posted!';
       } catch (err: any) {
         commentStatusMsg.textContent = err.message || 'Error';
+      } finally {
         commentSubmitBtn.disabled = false;
       }
     });
@@ -877,904 +1448,1653 @@ const isResolution = proposal
       }
     });
   });
+
+  // Highlight active section in sticky jump nav
+  const readingLinks = [...document.querySelectorAll<HTMLAnchorElement>('.reading-nav__links a[href^="#"]')];
+  const updateReadingHighlight = () => {
+    const hash = location.hash || '#proposal-brief';
+    for (const link of readingLinks) {
+      if (link.getAttribute('href') === hash) {
+        link.setAttribute('aria-current', 'location');
+      } else {
+        link.removeAttribute('aria-current');
+      }
+    }
+  };
+  window.addEventListener('hashchange', updateReadingHighlight);
+  updateReadingHighlight();
 </script>
 
 <style>
-  .reading-nav { display:flex; flex-wrap:wrap; gap:.35rem 1.2rem; padding:.85rem 0; margin:1rem 0; border-top:1px solid var(--horizon-line); border-bottom:1px solid var(--horizon-line); font-family:Outfit,sans-serif; font-weight:600; }
-  .reading-nav a { white-space:nowrap; text-underline-offset:.2em; }
-  .proposal-reading-guide { max-width:65ch; font-size:1.1rem; line-height:1.55; }
-  .proposal-process { margin:.6rem 0; }
-  .proposal-process summary { cursor:pointer; color:var(--horizon-muted); font-size:.9rem; }
   .proposal-detail-page {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-  @media (max-width: 600px) {
-    .proposal-detail-page { padding-top: 1.5rem; gap: 1rem; }
-    .top-bar { border-bottom: 0; }
-    .breadcrumbs > :not(:first-child) { display: none; }
-    .detail-header__meta .kind-pill, .detail-header__meta .space-pill { display: none; }
-    .proposal-reading-guide { font-size: 1rem; }
+    padding-top: 1.25rem;
+    padding-bottom: 4rem;
   }
 
-  .top-bar {
+  .not-found-box {
+    max-width: 34rem;
+    margin: 3rem auto;
+  }
+
+  /* Top Navigation & Staff Bar */
+  .proposal-topbar {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
     flex-wrap: wrap;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--horizon-line);
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1.15rem;
   }
 
   .breadcrumbs {
     display: flex;
-    gap: 0.5rem;
-    align-items: center;
     flex-wrap: wrap;
-    min-width: 0;
+    align-items: center;
+    gap: 0.45rem;
     font-size: 0.88rem;
     color: var(--horizon-muted);
-    overflow-wrap: anywhere;
   }
 
   .breadcrumbs a {
     color: var(--horizon-muted);
-    text-decoration: underline;
+    text-decoration: none;
+    font-weight: 500;
   }
 
   .breadcrumbs a:hover {
-    color: var(--horizon-focus);
+    color: var(--horizon-purple);
+    text-decoration: underline;
   }
 
-  .lifecycle-stepper {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-items: center;
-  }
-
-  .stepper-step {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.82rem;
-    color: var(--horizon-muted);
-  }
-
-  .stepper-step.is-current {
-    color: var(--horizon-purple-deep);
-    font-weight: 700;
-  }
-
-  .stepper-step.is-past {
-    color: var(--horizon-success-ink);
-  }
-
-  .stepper-marker {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    font-weight: 700;
-    background: var(--horizon-lavender);
-    border: 1px solid var(--horizon-line);
+  .breadcrumbs .back-link {
+    font-weight: 600;
     color: var(--horizon-purple);
   }
 
-  .stepper-step.is-current .stepper-marker {
+  .crumb-sep {
+    opacity: 0.45;
+  }
+
+  .crumb-id {
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+  }
+
+  .staff-inline-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    background: #f4f1fb;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    padding: 0.35rem 0.65rem;
+  }
+
+  .staff-inline-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .staff-msg {
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+
+  /* Hero Header: Topic -> Title -> Summary -> Workflow -> Facts */
+  .proposal-hero {
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 1rem;
+    padding: clamp(1.35rem, 2.5vw, 2rem);
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 10px rgba(29, 10, 73, 0.03);
+  }
+
+  .proposal-hero__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .proposal-eyebrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.92rem;
+    color: var(--horizon-muted);
+  }
+
+  .proposal-eyebrow__id {
+    font-weight: 700;
+    color: var(--horizon-purple);
+  }
+
+  .proposal-eyebrow__space {
+    color: var(--horizon-purple);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .proposal-eyebrow__space:hover {
+    text-decoration: underline;
+  }
+
+  .proposal-eyebrow__kind {
+    color: var(--horizon-muted);
+  }
+
+  .proposal-hero__badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .personal-vote-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.75rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .personal-vote-chip.is-voted {
+    background: var(--horizon-success-bg);
+    color: var(--horizon-success-ink);
+  }
+
+  .personal-vote-chip.is-action {
+    background: #f0f9f7;
+    color: #0e6f64;
+    border: 1px solid rgba(14, 111, 100, 0.25);
+  }
+
+  .personal-vote-chip.is-action:hover {
+    background: #e1f4f0;
+  }
+
+  .stage-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  .stage-badge--sm {
+    padding: 0.18rem 0.55rem;
+    font-size: 0.74rem;
+  }
+
+  .stage-badge--decide {
+    background: #e8f5ff;
+    color: #0b5cab;
+    border: 1px solid rgba(11, 92, 171, 0.22);
+  }
+
+  .stage-badge--deliberate {
+    background: #f2edfb;
+    color: var(--horizon-purple);
+    border: 1px solid rgba(38, 11, 89, 0.16);
+  }
+
+  .stage-badge--propose {
+    background: var(--horizon-warn-bg);
+    color: var(--horizon-warn-ink);
+    border: 1px solid rgba(122, 79, 0, 0.2);
+  }
+
+  .stage-badge--implement {
+    background: var(--horizon-success-bg);
+    color: var(--horizon-success-ink);
+    border: 1px solid rgba(20, 108, 67, 0.2);
+  }
+
+  .stage-badge--muted {
+    background: #f2eff8;
+    color: var(--horizon-muted);
+  }
+
+  .proposal-hero__title {
+    margin: 0 0 0.75rem;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(1.85rem, 3.2vw, 2.65rem);
+    font-weight: 650;
+    line-height: 1.14;
+    letter-spacing: -0.02em;
+    color: var(--horizon-purple-deep);
+  }
+
+  .proposal-hero__summary {
+    margin: 0 0 1.15rem;
+    font-size: clamp(1.04rem, 1.35vw, 1.16rem);
+    line-height: 1.6;
+    color: #2e2046;
+    max-width: 72ch;
+  }
+
+  /* Immediate Next Action Banner */
+  .next-action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+    border-radius: 0.85rem;
+    border: 1.5px solid rgba(38, 11, 89, 0.25);
+    background: linear-gradient(135deg, #f5f1fd 0%, #eef8f7 100%);
+  }
+
+  .next-action-bar.is-vote {
+    border-color: rgba(11, 92, 171, 0.32);
+    background: linear-gradient(135deg, #eef6ff 0%, #f4f1fd 100%);
+  }
+
+  .next-action-bar.is-complete {
+    border-color: rgba(20, 108, 67, 0.28);
+    background: #f1fbf6;
+  }
+
+  .next-action-bar__copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    flex: 1 1 24rem;
+  }
+
+  .next-action-bar__kicker {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--horizon-purple);
+    letter-spacing: 0.01em;
+  }
+
+  .next-action-bar.is-complete .next-action-bar__kicker {
+    color: var(--horizon-success-ink);
+  }
+
+  .next-action-bar__title {
+    font-size: 1rem;
+    font-weight: 650;
+    line-height: 1.4;
+    color: var(--horizon-purple-deep);
+  }
+
+  .next-action-bar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .next-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.6rem 1.15rem;
+    border-radius: 0.6rem;
+    font-size: 0.9rem;
+    font-weight: 650;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: transform 0.12s ease, background 0.15s ease;
+  }
+
+  .next-action-btn.is-primary {
     background: var(--horizon-purple);
-    color: var(--horizon-white);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(38, 11, 89, 0.18);
+  }
+
+  .next-action-btn.is-primary:hover {
+    background: var(--horizon-purple-deep);
+  }
+
+  .next-action-btn.is-secondary {
+    background: #ffffff;
+    color: var(--horizon-purple-deep);
+    border: 1px solid var(--horizon-line-strong);
+  }
+
+  .next-action-btn.is-secondary:hover {
+    background: #faf9fd;
     border-color: var(--horizon-purple);
   }
 
-  .stepper-step.is-past .stepper-marker {
-    background: var(--horizon-success-bg);
-    color: var(--horizon-success-ink);
-    border-color: #b7e8cb;
-  }
-
-  .stepper-label {
-    text-transform: capitalize;
-  }
-
-  .staff-bar {
+  /* 4-Step Workflow Banner */
+  .workflow-banner {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.65rem 1rem;
-    background: var(--horizon-lavender);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.45rem;
-    font-size: 0.85rem;
-    color: var(--horizon-purple-deep);
     flex-wrap: wrap;
-  }
-
-  .staff-bar__actions {
-    display: flex;
     align-items: center;
-    gap: 0.75rem;
+    justify-content: space-between;
+    gap: 0.85rem 1.5rem;
+    background: #f8f6fc;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.15rem;
   }
 
-  .staff-select-label {
+  .workflow-steps {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .workflow-step {
+    display: inline-flex;
     align-items: center;
     gap: 0.4rem;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--horizon-muted);
   }
 
-  .staff-select-label select {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.85rem;
-    background: var(--horizon-white);
-    border: 1px solid #8a7b99;
-    border-radius: 0.35rem;
+  .workflow-step__num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: rgba(38, 11, 89, 0.08);
+    color: var(--horizon-muted);
   }
 
-  /* 2-Column Responsive Layout */
-  .proposal-layout {
+  .workflow-step.is-past {
+    color: var(--horizon-purple);
+  }
+
+  .workflow-step.is-past .workflow-step__num {
+    background: var(--horizon-success-bg);
+    color: var(--horizon-success-ink);
+  }
+
+  .workflow-step.is-current {
+    background: var(--horizon-purple);
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  .workflow-step.is-current .workflow-step__num {
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+  }
+
+  .workflow-caption {
+    margin: 0;
+    font-size: 0.86rem;
+    color: var(--horizon-muted);
+    line-height: 1.45;
+  }
+
+  /* Scannable Governance Facts Strip */
+  .governance-facts {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 3rem;
-    align-items: start;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin: 0;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--horizon-line);
   }
 
-  @media (max-width: 960px) {
-    .proposal-layout {
-      grid-template-columns: 1fr;
-      gap: 2rem;
-    }
+  .governance-fact {
+    display: flex;
+    flex-direction: column;
+    gap: 0.22rem;
+    min-width: 0;
+  }
+
+  .governance-fact dt {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .governance-fact dd {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.92rem;
+    color: var(--horizon-purple-deep);
+  }
+
+  .governance-fact dd > strong {
+    font-weight: 650;
+    line-height: 1.35;
+  }
+
+  .governance-fact dd:first-of-type {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .fact-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 999px;
+    background: #ede8f8;
+    color: var(--horizon-purple);
+    font-size: 0.72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .fact-sub {
+    font-size: 0.8rem;
+    color: var(--horizon-muted);
+  }
+
+  .fact-link {
+    font-weight: 650;
+    color: var(--horizon-purple);
+    text-decoration: none;
+  }
+
+  .fact-link:hover {
+    text-decoration: underline;
+  }
+
+  /* Sticky Section Jump Navigation */
+  .reading-nav {
+    position: sticky;
+    top: 3.75rem;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    overflow-x: auto;
+  }
+
+  .reading-nav__links {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .reading-nav__links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .reading-nav__links a:hover {
+    color: var(--horizon-purple-deep);
+    background: #f5f2fc;
+  }
+
+  .reading-nav__links a[aria-current="location"] {
+    color: var(--horizon-purple-deep);
+    background: #efeaf9;
+  }
+
+  .nav-count {
+    font-size: 0.76rem;
+    padding: 0.08rem 0.42rem;
+    border-radius: 999px;
+    background: rgba(38, 11, 89, 0.08);
+    color: var(--horizon-purple);
+  }
+
+  .reading-nav__cta {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.42rem 0.9rem;
+    border-radius: 0.55rem;
+    background: var(--horizon-purple);
+    color: #ffffff;
+    font-size: 0.86rem;
+    font-weight: 650;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .reading-nav__cta:hover {
+    background: var(--horizon-purple-deep);
+  }
+
+  /* Two-Column Workspace */
+  .proposal-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 23rem;
+    gap: 1.75rem;
+    align-items: start;
   }
 
   .proposal-main {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: 1.5rem;
   }
 
-  .proposal-layout > *,
-  .detail-header {
-    min-width: 0;
+  /* Document Cards & Sections */
+  .doc-card,
+  .doc-section {
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 1rem;
+    padding: clamp(1.25rem, 2.2vw, 1.75rem);
   }
 
-  /* Header */
-  .detail-header {
+  .doc-section__header {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem 1.25rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .doc-title-row {
+    display: flex;
+    align-items: center;
     gap: 0.6rem;
   }
 
-  .detail-header__meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.82rem;
-  }
-
-  .stage-pill {
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 0.03em;
-  }
-
-  .stage-pill--propose { background: var(--horizon-warn-bg); color: var(--horizon-warn-ink); border: 1px solid #ebd49f; }
-  .stage-pill--deliberate { background: var(--horizon-lavender); color: var(--horizon-purple-deep); border: 1px solid var(--horizon-line); }
-  .stage-pill--decide { background: var(--horizon-voting-bg); color: var(--horizon-voting-ink); border: 1px solid #a3e7eb; }
-  .stage-pill--implement { background: var(--horizon-success-bg); color: var(--horizon-success-ink); border: 1px solid #b7e8cb; }
-  .stage-pill--archived { background: #f0f0f0; color: var(--horizon-muted); }
-
-  .kind-pill {
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-size: 0.72rem;
-    letter-spacing: 0.03em;
-  }
-  .kind-pill--policy {
-    background: var(--horizon-lavender);
-    color: var(--horizon-purple-deep);
-    border: 1px solid var(--horizon-line);
-  }
-  .kind-pill--resolution {
-    background: #eef2ff;
-    color: #3730a3;
-    border: 1px solid #c7d2fe;
-  }
-
-  /* Provenance Pills and Badges */
-  .prov-pill,
-  .prov-badge {
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-  }
-
-  .prov-pill--existing-repackaged,
-  .prov-badge--existing-repackaged {
-    background: #eafaf1;
-    color: #165a36;
-    border: 1px solid #c2eecf;
-  }
-
-  .prov-pill--materially-revised,
-  .prov-badge--materially-revised {
-    background: #fef9eb;
-    color: #8a5a00;
-    border: 1px solid #fae1a0;
-  }
-
-  .prov-pill--new-proposal,
-  .prov-badge--new-proposal {
-    background: #e6f9fa;
-    color: #006770;
-    border: 1px solid #b7edf0;
-  }
-
-  .prov-pill--party-governance,
-  .prov-badge--party-governance {
-    background: var(--horizon-lavender);
-    color: var(--horizon-purple-deep);
-    border: 1px solid var(--horizon-line);
-  }
-
-  .prov-pill--draft-derived,
-  .prov-badge--draft-derived {
-    background: #fef2f2;
-    color: #9b1c1c;
-    border: 1px solid #fed7d7;
-  }
-
-  .prov-pill--unverified,
-  .prov-badge--unverified {
-    background: var(--horizon-lavender-soft);
-    color: var(--horizon-purple-muted);
-    border: 1px solid var(--horizon-line);
-  }
-
-  .space-pill {
-    color: var(--horizon-muted);
-    font-weight: 500;
-  }
-
-  .id-pill {
-    margin-left: auto;
-    color: var(--horizon-muted);
-    font-weight: 600;
-    overflow-wrap: anywhere;
-  }
-
-  .detail-title {
-    font-size: clamp(1.9rem, 8.5vw, 3.25rem);
-    line-height: 1.1;
+  .doc-section__header h2 {
     margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(1.35rem, 2vw, 1.6rem);
+    font-weight: 650;
     color: var(--horizon-purple-deep);
-    overflow-wrap: anywhere;
   }
 
-  .author-line {
-    display: flex;
-    flex-wrap: wrap;
-    min-width: 0;
-    gap: 0.5rem;
+  .doc-section__sub {
+    margin: 0.25rem 0 0;
+    font-size: 0.9rem;
     color: var(--horizon-muted);
-    font-size: 0.92rem;
-    overflow-wrap: anywhere;
+    line-height: 1.5;
   }
 
-  /* Editorial Lead */
-  .proposal-lead p {
-    font-size: 1.25rem;
-    line-height: 1.6;
-    color: var(--horizon-purple-deep);
-    font-weight: 500;
-    margin: 0;
-  }
-
-  /* Asset Showcase (Refined Horizon Badge) */
-  .asset-showcase {
-    display: flex;
+  .doc-count {
+    display: inline-flex;
     align-items: center;
-    gap: 1.5rem;
-    padding: 1.25rem 1.5rem;
-    background: var(--horizon-lavender-soft);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: #f4f1fb;
+    color: var(--horizon-purple);
+    font-size: 0.8rem;
+    font-weight: 650;
   }
 
-  @media (max-width: 600px) {
-    .asset-showcase {
-      flex-direction: column;
-      align-items: flex-start;
-    }
+  /* Attachment Card */
+  .attachment-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background: #fcfbfe;
   }
 
-  .asset-frame {
-    width: 130px;
-    height: 130px;
-    flex-shrink: 0;
+  .attachment-preview {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--horizon-white);
+    max-height: 16rem;
+    padding: 1rem;
+    background: #ffffff;
     border: 1px solid var(--horizon-line);
-    border-radius: 0.5rem;
-    padding: 0.85rem;
-    box-shadow: 0 2px 6px rgba(50, 16, 90, 0.05);
+    border-radius: 0.75rem;
+    overflow: hidden;
   }
 
-  .asset-frame img {
-    max-width: 100%;
-    max-height: 100%;
+  .attachment-preview img {
+    max-height: 14rem;
+    width: auto;
     object-fit: contain;
   }
 
-  .asset-meta {
+  .attachment-card__body {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.35rem;
-  }
-
-  .asset-tag {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--horizon-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .asset-meta h3 {
-    margin: 0;
-    font-size: 1.15rem;
-    color: var(--horizon-purple-deep);
-  }
-
-  .asset-meta p {
-    margin: 0 0 0.5rem 0;
-    font-size: 0.9rem;
-    line-height: 1.45;
-    color: var(--horizon-muted);
-  }
-
-  /* Content Sections */
-  .content-section h2 {
-    font-size: 1.5rem;
-    margin-bottom: 0.75rem;
-    color: var(--horizon-purple-deep);
-  }
-
-  .outcomes-list {
-    margin: 0;
-    padding-left: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    font-size: 1.05rem;
-    line-height: 1.6;
-    color: var(--horizon-purple);
-  }
-
-  .details-body {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .revision-history ol { display: grid; gap: 0.75rem; padding-left: 1.25rem; }
-  .revision-history li { padding-left: 0.25rem; }
-  .revision-history li > span { display: block; color: var(--horizon-muted); font-size: 0.9rem; }
-  .revision-history details { margin-top: 0.45rem; }
-  .revision-history summary { min-height: 2.75rem; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
-  .revision-change { padding: 0.75rem; margin: 0.5rem 0; min-width: 0; background: var(--horizon-lavender-soft); border-radius: 0.5rem; }
-  .revision-change h3 { margin: 0 0 0.4rem; font-size: 1rem; text-transform: capitalize; }
-  .revision-change pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; background: var(--horizon-lavender-soft); padding: 0.65rem; border-radius: 0.35rem; margin: 0.25rem 0 0.5rem; }
-
-  /* Provenance Section */
-  .provenance-section {
-    background: var(--horizon-lavender-soft);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    padding: 1.5rem;
-    margin-top: 1.5rem;
-  }
-
-  .provenance-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 1rem;
-    margin-bottom: 0.75rem;
     flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
   }
 
-  .provenance-header h2 {
-    margin: 0;
-    font-size: 1.35rem;
+  .attachment-card__info {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .attachment-card__title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.95rem;
     color: var(--horizon-purple-deep);
   }
 
-  .provenance-lead {
-    margin: 0.2rem 0 0 0;
+  .attachment-card__info p {
+    margin: 0.25rem 0 0;
     font-size: 0.88rem;
     color: var(--horizon-muted);
   }
 
-  .provenance-summary {
-    margin: 0.5rem 0 1rem 0;
-    font-size: 1rem;
-    line-height: 1.6;
+  /* Implementation Banner */
+  .implementation-banner {
+    background: #f5f9ff;
+    border-color: rgba(11, 92, 171, 0.24);
+  }
+
+  .implementation-banner__head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .implementation-banner__head h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 650;
     color: var(--horizon-purple-deep);
-    font-weight: 500;
+  }
+
+  .implementation-banner p {
+    margin: 0;
+    font-size: 0.94rem;
+    line-height: 1.55;
+  }
+
+  .impl-edit-details {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(11, 92, 171, 0.16);
+  }
+
+  .impl-edit-details summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--horizon-purple);
+  }
+
+  .impl-edit-details form {
+    margin-top: 0.6rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .impl-note-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  /* Commitments List */
+  .commitments-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .commitment-item {
+    display: grid;
+    grid-template-columns: 2.2rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+    padding: 0.9rem 1rem;
+    background: #faf9fd;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+  }
+
+  .commitment-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 0.5rem;
+    background: #ede8f8;
+    color: var(--horizon-purple);
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .commitment-item p {
+    margin: 0.1rem 0 0;
+    font-size: 0.98rem;
+    line-height: 1.55;
+    color: var(--horizon-purple-deep);
+  }
+
+  /* Rationale & Prose */
+  .prose-content {
+    font-size: 1rem;
+    line-height: 1.7;
+    color: #26183c;
+    max-width: 70ch;
+  }
+
+  .prose-content :global(p) {
+    margin: 0 0 1rem;
+  }
+
+  .prose-content :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  /* Amendments */
+  .amendment-list {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .amendment-card {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.85rem;
+    padding: 1rem 1.15rem;
+    background: #fcfbfe;
+  }
+
+  .amendment-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .amendment-card__title {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .amendment-badge {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--horizon-purple);
+  }
+
+  .amendment-card__title strong {
+    font-size: 1rem;
+    color: var(--horizon-purple-deep);
+  }
+
+  .amendment-meta {
+    margin: 0.15rem 0 0;
+    font-size: 0.8rem;
+    color: var(--horizon-muted);
+  }
+
+  .amendment-conflict {
+    margin: 0.75rem 0 0;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.5rem;
+    background: var(--horizon-danger-bg);
+    color: var(--horizon-danger-ink);
+    font-size: 0.85rem;
+  }
+
+  .amendment-card__body {
+    margin-top: 0.75rem;
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .diff-drawer {
+    border-top: 1px solid var(--horizon-line);
+    padding-top: 0.6rem;
+  }
+
+  .diff-drawer summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--horizon-purple);
+  }
+
+  .amendment-diff {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.6rem;
+  }
+
+  .diff-pane {
+    padding: 0.75rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--horizon-line);
+    background: #ffffff;
+    overflow-x: auto;
+  }
+
+  .diff-pane--after {
+    background: #f4fbf8;
+    border-color: rgba(20, 108, 67, 0.22);
+  }
+
+  .diff-label {
+    display: block;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--horizon-muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .diff-pane pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: inherit;
+    font-size: 0.86rem;
+    line-height: 1.5;
+  }
+
+  .amendment-history-list {
+    margin: 0.5rem 0 0;
+    padding-left: 1.15rem;
+    font-size: 0.82rem;
+    color: var(--horizon-muted);
+  }
+
+  .amendment-vote-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 0.6rem;
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+  }
+
+  .amendment-vote-form__info strong {
+    display: block;
+    font-size: 0.88rem;
+  }
+
+  .amendment-vote-form__info p {
+    margin: 0.15rem 0 0;
+    font-size: 0.8rem;
+    color: var(--horizon-muted);
+  }
+
+  .amendment-vote-buttons {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .amendment-compose {
+    margin-top: 1rem;
+    border: 1px dashed var(--horizon-line-strong);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: #faf9fd;
+  }
+
+  .amendment-compose summary {
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 650;
+    color: var(--horizon-purple);
+  }
+
+  .amendment-compose__body {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .amendment-compose__body > p {
+    margin: 0 0 0.75rem;
+    font-size: 0.86rem;
+    color: var(--horizon-muted);
+  }
+
+  .form-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .empty-box {
+    padding: 1rem 1.15rem;
+    border-radius: 0.75rem;
+    background: #faf9fd;
+    border: 1px solid var(--horizon-line);
+  }
+
+  .empty-box p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--horizon-muted);
+  }
+
+  /* Member Discussion */
+  .stance-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .stance-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.32rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--horizon-line);
+    background: #faf9fd;
+    color: var(--horizon-muted);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .stance-pill:hover {
+    color: var(--horizon-purple-deep);
+    border-color: var(--horizon-line-strong);
+  }
+
+  .stance-pill.is-active {
+    background: var(--horizon-purple);
+    border-color: var(--horizon-purple);
+    color: #ffffff;
+  }
+
+  .comments-thread {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .comment-card {
+    display: grid;
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+  }
+
+  .comment-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    background: #ede8f8;
+    color: var(--horizon-purple);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .comment-box {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.85rem;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .comment-card__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.6rem 0.95rem;
+    background: #faf9fd;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .comment-author__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .author-name {
+    font-size: 0.88rem;
+    color: var(--horizon-purple-deep);
+  }
+
+  .comment-date {
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+
+  .comment-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .endorse-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.22rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--horizon-line);
+    background: #ffffff;
+    color: var(--horizon-muted);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .endorse-btn:hover:not(:disabled) {
+    border-color: var(--horizon-purple);
+    color: var(--horizon-purple);
+  }
+
+  .endorse-btn.is-endorsed {
+    background: #efeaf9;
+    border-color: var(--horizon-purple);
+    color: var(--horizon-purple);
+  }
+
+  .delete-btn {
+    border: 0;
+    background: transparent;
+    color: var(--horizon-danger-ink);
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .comment-card__body {
+    padding: 0.85rem 0.95rem;
+  }
+
+  .comment-card__body p {
+    margin: 0;
+    font-size: 0.94rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    color: var(--horizon-purple-deep);
+  }
+
+  /* Comment Composer */
+  .comment-form {
+    margin-top: 1.25rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.85rem;
+    background: #faf9fd;
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .comment-form__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+
+  .comment-form__label {
+    font-size: 0.9rem;
+    font-weight: 650;
+    color: var(--horizon-purple-deep);
+  }
+
+  .stance-radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .stance-label input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .stance-label span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--horizon-line);
+    background: #ffffff;
+    color: var(--horizon-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .stance-label input:checked + span {
+    background: var(--horizon-purple);
+    border-color: var(--horizon-purple);
+    color: #ffffff;
+  }
+
+  .sr-only-label :global([data-slot="field-label"]) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .comment-form__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+
+  .participation-notice {
+    margin-top: 1.15rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.85rem;
+    background: #faf9fd;
+  }
+
+  .participation-notice strong {
+    display: block;
+    font-size: 0.92rem;
+    color: var(--horizon-purple-deep);
+  }
+
+  .participation-notice p {
+    margin: 0.2rem 0 0;
+    font-size: 0.86rem;
+    color: var(--horizon-muted);
+  }
+
+  /* Wording Revision Log & Provenance */
+  .revision-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .revision-row {
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: #faf9fd;
+  }
+
+  .revision-row__main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .revision-row__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.9rem;
+  }
+
+  .revision-row__meta {
+    font-size: 0.8rem;
+    color: var(--horizon-muted);
+  }
+
+  .provenance-box {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .provenance-box__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .provenance-box__head h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 650;
+    color: var(--horizon-purple-deep);
+  }
+
+  .provenance-box__sub {
+    margin: 0.2rem 0 0;
+    font-size: 0.86rem;
+    color: var(--horizon-muted);
+  }
+
+  .provenance-summary {
+    margin: 0 0 0.9rem;
+    font-size: 0.94rem;
+    line-height: 1.6;
   }
 
   .provenance-callout {
+    padding: 0.75rem 0.95rem;
+    border-radius: 0.65rem;
     background: var(--horizon-warn-bg);
-    border: 1px solid #ebd49f;
-    border-radius: 0.5rem;
-    padding: 0.85rem 1rem;
-    margin-bottom: 1.25rem;
-    font-size: 0.92rem;
-    line-height: 1.55;
     color: var(--horizon-warn-ink);
+    font-size: 0.86rem;
+    margin-bottom: 1rem;
+  }
+
+  .provenance-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
   }
 
   .provenance-subblock {
-    margin-top: 1rem;
-    padding-top: 0.85rem;
-    border-top: 1px dashed var(--horizon-line);
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: #faf9fd;
   }
 
-  .provenance-subblock h3 {
-    font-size: 0.92rem;
+  .provenance-subblock h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.82rem;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--horizon-purple);
-    margin: 0 0 0.5rem 0;
+    color: var(--horizon-muted);
   }
 
   .provenance-links,
   .provenance-values {
     margin: 0;
-    padding-left: 1.25rem;
-    display: flex;
-    flex-direction: column;
+    padding-left: 1.1rem;
+    display: grid;
     gap: 0.35rem;
-    font-size: 0.92rem;
-    line-height: 1.55;
-    color: var(--horizon-purple);
+    font-size: 0.86rem;
   }
 
   .lineage-link {
-    color: var(--horizon-purple-deep);
     font-weight: 600;
-    text-decoration: underline;
-    text-decoration-color: var(--horizon-cyan);
-  }
-
-  .lineage-link:hover {
-    color: var(--horizon-cyan);
-  }
-
-  .lineage-label {
-    font-weight: 600;
-    color: var(--horizon-purple-deep);
+    color: var(--horizon-purple);
   }
 
   .lineage-desc {
     color: var(--horizon-muted);
   }
 
-  /* Implementation Box */
-  .implementation-box {
-    background: var(--horizon-success-bg);
-    border: 1px solid #b7e8cb;
-    border-radius: 0.75rem;
-    padding: 1.25rem 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    color: var(--horizon-success-ink);
-  }
-
-  .badge-stage4 {
-    font-size: 0.78rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .implementation-box h2 {
-    font-size: 1.3rem;
-    margin: 0;
-    color: var(--horizon-success-ink);
-  }
-
-  .implementation-content p {
-    font-size: 1rem;
-    line-height: 1.55;
-    margin: 0;
-  }
-
-  .impl-edit-details {
-    font-size: 0.88rem;
-  }
-
-  .impl-edit-details summary {
-    cursor: pointer;
-    font-weight: 600;
-  }
-
-  .impl-edit-details form {
-    margin-top: 0.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  /* Sidebar */
-  .proposal-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
+  /* Right Contextual Sidebar */
+  .proposal-rail {
     position: sticky;
-    top: 6rem;
-  }
-
-  .sidebar-box {
-    background: var(--horizon-white);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    padding: 1.5rem;
-    box-shadow: 0 1px 3px rgba(50, 16, 90, 0.05);
-  }
-
-  .decision-sidebar-card {
-    border-color: #a3e7eb;
-    background: #fafefe;
+    top: 4.5rem;
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 1.15rem;
   }
 
-  .decision-card-head {
+  .rail-card {
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 1rem;
+    padding: 1.2rem 1.25rem;
+    box-shadow: 0 2px 10px rgba(29, 10, 73, 0.03);
+  }
+
+  .rail-ballot.is-open {
+    border-color: rgba(38, 11, 89, 0.28);
+    box-shadow: 0 6px 20px rgba(29, 10, 73, 0.07);
+  }
+
+  .rail-card__head {
     display: flex;
-    justify-content: space-between;
     align-items: flex-start;
-  }
-
-  .decision-sub {
-    display: block;
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--horizon-muted);
-  }
-
-  .decision-card-head h3 {
-    margin: 0.2rem 0 0 0;
-    font-size: 1.3rem;
-    color: var(--horizon-purple-deep);
-  }
-
-  .ballot-revision {
-    margin: 0;
-    font-size: 0.78rem;
-    line-height: 1.4;
-    color: var(--horizon-muted);
-  }
-
-  .ballot-revision span {
-    color: var(--horizon-purple);
-    font-weight: 600;
-  }
-
-  .sidebar-vote-wrapper {
-    border-top: 1px solid var(--horizon-line);
-    padding-top: 1rem;
-  }
-
-  .sidebar-nudge {
-    font-size: 0.88rem;
-    color: var(--horizon-muted);
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .sidebar-meta-card {
-    background: var(--horizon-white);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    padding: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-    font-size: 0.88rem;
-  }
-
-  .meta-row {
-    display: flex;
     justify-content: space-between;
-    gap: 0.5rem;
-    color: var(--horizon-muted);
-  }
-
-  .meta-row strong {
-    color: var(--horizon-purple-deep);
-  }
-
-  /* Deliberation */
-  .deliberation-section {
-    border-top: 1px solid var(--horizon-line);
-    padding-top: 2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-  }
-
-  .deliberation-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-
-  .deliberation-header h2 {
-    font-size: 1.75rem;
-    margin: 0 0 0.25rem 0;
-    color: var(--horizon-purple-deep);
-  }
-
-  .deliberation-header p {
-    color: var(--horizon-muted);
-    font-size: 0.95rem;
-    margin: 0;
-  }
-
-  .stance-filters {
-    display: flex;
-    gap: 0.4rem;
-    overflow-x: auto;
-    padding-bottom: 0.25rem;
-  }
-
-  .stance-filter-btn {
-    min-height: 2.75rem;
-    padding: 0.55rem 0.85rem;
-    border-radius: 999px;
-    border: 1px solid var(--horizon-line);
-    background: var(--horizon-white);
-    color: var(--horizon-purple);
-    font-size: 0.82rem;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .stance-filter-btn.is-active {
-    background: var(--horizon-purple);
-    color: var(--horizon-white);
-    border-color: var(--horizon-purple);
-  }
-
-  .stance-filter-btn:focus-visible { outline:3px solid var(--horizon-focus); outline-offset:2px; }
-
-  .comment-form {
-    background: var(--horizon-lavender-soft);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    padding: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
-  }
-
-  .stance-radio-group {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .stance-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    min-height: 2.75rem;
-    padding: 0.55rem 0.75rem;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.35rem;
-    cursor: pointer;
-    font-size: 0.82rem;
-    font-weight: 600;
-    background: var(--horizon-white);
-  }
-
-  .stance-label--support { color: #12472b; }
-  .stance-label--concern { color: #593b06; }
-  .stance-label--amendment { color: #09474c; }
-  .stance-label--comment { color: var(--horizon-purple); }
-
-  .comment-form__actions {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .comments-feed {
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
-  }
-
-  .comment-card {
-    background: var(--horizon-white);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    padding: 1.15rem;
-    display: flex;
-    flex-direction: column;
     gap: 0.6rem;
-    box-shadow: 0 1px 3px rgba(50, 16, 90, 0.04);
+    margin-bottom: 0.85rem;
   }
 
-  .comment-card__head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.82rem;
-  }
-
-  .comment-author {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .author-name {
+  .rail-eyebrow {
+    display: block;
+    font-size: 0.74rem;
     font-weight: 700;
+    color: var(--horizon-muted);
+    margin-bottom: 0.1rem;
+  }
+
+  .rail-card__head h3 {
+    margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 650;
     color: var(--horizon-purple-deep);
   }
 
-  .stance-tag {
-    padding: 0.15rem 0.45rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-
-  .stance-tag--support { background: var(--horizon-success-bg); color: var(--horizon-success-ink); }
-  .stance-tag--concern { background: var(--horizon-warn-bg); color: var(--horizon-warn-ink); }
-  .stance-tag--amendment { background: var(--horizon-voting-bg); color: var(--horizon-voting-ink); }
-  .stance-tag--comment { background: var(--horizon-lavender); color: var(--horizon-purple); }
-
-  .comment-card__body p {
-    margin: 0;
-    font-size: 0.95rem;
-    line-height: 1.55;
-    color: var(--horizon-purple);
-    white-space: pre-wrap;
-  }
-
-  .comment-card__actions {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    border-top: 1px solid var(--horizon-line);
-    padding-top: 0.5rem;
-  }
-
-  .comment-form textarea,
-  .comment-card__body,
-  .details-body {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  @media (max-width: 600px) {
-    .lifecycle-stepper {
-      gap: 0.5rem;
-    }
-    .id-pill {
-      margin-left: 0;
-    }
-    .comment-form { padding: 0.85rem; }
-    .comment-form__actions { align-items: stretch; flex-direction: column; }
-    .comment-form__actions [data-slot="button"] { width: 100%; min-height: 2.75rem; }
-    .comment-card { padding: 0.85rem; }
-    .comment-card__head { align-items: flex-start; gap: 0.5rem; }
-    .comment-author { align-items: flex-start; flex-wrap: wrap; }
-    .comment-card__actions { flex-wrap: wrap; }
-    .stance-filter-btn { flex: 0 0 auto; }
-  }
-
-  .endorse-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    min-height: 2.75rem;
-    padding: 0.55rem 0.75rem;
-    border-radius: 0.35rem;
-    font-size: 0.78rem;
-    font-weight: 600;
-    background: var(--horizon-lavender-soft);
-    border: 1px solid var(--horizon-line);
-    color: var(--horizon-purple);
-    cursor: pointer;
-  }
-
-  .endorse-btn.is-endorsed {
-    background: var(--horizon-voting-bg);
-    border-color: #a3e7eb;
-    color: var(--horizon-voting-ink);
-    font-weight: 700;
-  }
-
-  .delete-btn {
-    background: none;
-    border: 0;
-    color: var(--horizon-danger-ink);
+  .rail-head__link {
     font-size: 0.8rem;
-    cursor: pointer;
-    margin-left: auto;
+    font-weight: 600;
+    color: var(--horizon-purple);
+    text-decoration: none;
+  }
+
+  .rail-head__link:hover {
     text-decoration: underline;
   }
 
-  .signin-nudge, .empty-feed {
-    background: var(--horizon-lavender-soft);
+  .rail-kv {
+    margin: 0 0 0.9rem;
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem 0.85rem;
+    background: #faf9fd;
     border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    padding: 1.25rem;
-    color: var(--horizon-muted);
-    font-size: 0.95rem;
+    border-radius: 0.7rem;
   }
 
-  .signin-nudge {
+  .rail-kv > div {
     display: flex;
+    align-items: baseline;
     justify-content: space-between;
+    gap: 0.65rem;
+    font-size: 0.82rem;
+  }
+
+  .rail-kv dt {
+    color: var(--horizon-muted);
+    font-weight: 500;
+  }
+
+  .rail-kv dd {
+    margin: 0;
+    text-align: right;
+    color: var(--horizon-purple-deep);
+  }
+
+  .status-voted {
+    color: var(--horizon-success-ink);
+  }
+
+  .rail-notice {
+    margin-bottom: 0.9rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: 0.7rem;
+    background: #f5f2fc;
+    border: 1px solid var(--horizon-line);
+  }
+
+  .rail-notice p {
+    margin: 0;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: var(--horizon-purple-deep);
+  }
+
+  .rail-notice__row {
+    display: flex;
     align-items: center;
-    gap: 1rem;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+
+  .rail-ballot__widget {
+    margin-bottom: 0.75rem;
+  }
+
+  .rail-muted {
+    margin: 0 0 0.75rem;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--horizon-muted);
+  }
+
+  /* Decision Chain */
+  .decision-chain {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .decision-node {
+    display: grid;
+    grid-template-columns: 1.45rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.6rem;
+    background: #faf9fd;
+    border: 1px solid var(--horizon-line);
+  }
+
+  .decision-node__marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: #ebe6f6;
+    color: var(--horizon-muted);
+  }
+
+  .decision-node.is-done .decision-node__marker {
+    background: var(--horizon-success-bg);
+    color: var(--horizon-success-ink);
+  }
+
+  .decision-node.is-current .decision-node__marker {
+    background: var(--horizon-purple);
+    color: #ffffff;
+  }
+
+  .decision-node__body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .decision-node__body span {
+    font-size: 0.74rem;
+    color: var(--horizon-muted);
+  }
+
+  .decision-node__body strong {
+    font-size: 0.82rem;
+    color: var(--horizon-purple-deep);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .decision-node__link {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--horizon-purple);
+    text-decoration: none;
+  }
+
+  .rail-subhead {
+    margin: 1rem 0 0.55rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .rail-subhead h4 {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--horizon-muted);
+  }
+
+  .rail-activity-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .rail-activity-item {
+    display: grid;
+    grid-template-columns: 0.5rem minmax(0, 1fr);
+    gap: 0.55rem;
+    align-items: start;
+  }
+
+  .rail-activity-dot {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: var(--horizon-purple);
+    margin-top: 0.38rem;
+    opacity: 0.55;
+  }
+
+  .rail-activity-body p {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: var(--horizon-purple-deep);
+  }
+
+  .rail-activity-meta {
+    margin-top: 0.2rem;
+    display: flex;
     flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.74rem;
+    color: var(--horizon-muted);
   }
 
-  .not-found-box {
-    text-align: center;
-    padding: 4rem 1rem;
+  .rail-chip {
+    display: inline-flex;
+    padding: 0.08rem 0.42rem;
+    border-radius: 0.35rem;
+    background: #f2eff8;
+    color: var(--horizon-purple);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-decoration: none;
   }
 
-  .proposal-detail-page { max-width:84rem; gap:1rem; }
-  .top-bar { border:0; padding:0; }
-  .proposal-layout { grid-template-columns:minmax(0,1fr) 20rem; gap:2rem; }
-  .detail-header { background:#fff; border:1px solid var(--horizon-line); border-radius:.7rem; padding:1.5rem 1.7rem; }
-  .detail-title { font:700 clamp(2rem,3.2vw,3.3rem)/1.08 Outfit,sans-serif; letter-spacing:-.03em; }
-  .proposal-reading-guide { font-size:1rem; }
-  .reading-nav { gap:1.2rem; margin:1rem 0 0; padding:.8rem 0 0; border-bottom:0; }
-  .reading-nav a { text-decoration:none; font-size:.9rem; }
-  .reading-nav a:hover { text-decoration:underline; }
-  .proposal-main { min-width:0; }
-  .content-section,.deliberation-section,.revision-history,.amendment-section { background:#fff; border:1px solid var(--horizon-line); border-radius:.7rem; padding:1.5rem; margin-bottom:1rem; }
-  .content-section h2,.deliberation-header h2 { font:700 1.4rem/1.2 Outfit,sans-serif; }
-  .sidebar-box,.sidebar-meta-card { border:1px solid var(--horizon-line); border-radius:.7rem; background:#fff; box-shadow:0 3px 12px #20104a0d; }
-  .decision-card-head h3 { font:700 1.2rem/1.2 Outfit,sans-serif; }
-  .staff-controls { background:#fff; border:1px solid var(--horizon-line); border-radius:.6rem; }
-  .staff-controls>summary { cursor:pointer; padding:.7rem 1rem; font-weight:700; }
-  .staff-controls .staff-bar { border:0; border-top:1px solid var(--horizon-line); border-radius:0; }
-  @media(max-width:960px){.proposal-layout{grid-template-columns:1fr}.proposal-sidebar .sidebar-meta-card{display:none}}
-  @media(max-width:600px){.detail-header,.content-section,.deliberation-section,.revision-history,.amendment-section{padding:1rem}.proposal-sidebar{position:static}}
+  /* Related Proposals */
+  .related-proposals {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .related-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.65rem;
+    border: 1px solid var(--horizon-line);
+    background: #faf9fd;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .related-item:hover {
+    background: #f3effb;
+    border-color: var(--horizon-line-strong);
+  }
+
+  .related-item__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .related-id {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--horizon-muted);
+  }
+
+  .related-title {
+    font-size: 0.86rem;
+    line-height: 1.35;
+    color: var(--horizon-purple-deep);
+  }
+
+  @media (max-width: 1024px) {
+    .governance-facts {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .proposal-workspace {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .proposal-rail {
+      position: static;
+      order: -1;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .governance-facts {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .amendment-diff {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .reading-nav__cta {
+      display: none;
+    }
+  }
 </style>

@@ -11,6 +11,8 @@ const policy = await db.collection('policy_registry').findOne({ policyId, public
 if (!policy) Astro.response.status = 404;
 const branch = policy?.jurisdictionBranchId ? await db.collection('branches').findOne({ branchId: policy.jurisdictionBranchId }) : null;
 const authority = policy?.governanceAuthorityBranchId ? await db.collection('branches').findOne({ branchId: policy.governanceAuthorityBranchId }) : null;
+const sourceProposal = policy?.proposalId ? await db.collection('proposals').findOne({ proposalId: policy.proposalId }) : null;
+const sourceResult = policy?.proposalId ? await db.collection('ballot_results').findOne({ proposalId: policy.proposalId }) : null;
 const revisions = policy?.revisionIds ?? [policy?.revisionId].filter(Boolean);
 const statusLabel = policy?.publicationStatus === 'published' ? 'Published policy' : policy?.publicationStatus === 'withdrawn' ? 'Withdrawn from publication' : 'Superseded policy';
 const statusVariant = policy?.publicationStatus === 'published' ? 'success' : policy?.publicationStatus === 'withdrawn' ? 'warning' : 'destructive';
@@ -60,6 +62,8 @@ const statusVariant = policy?.publicationStatus === 'published' ? 'success' : po
           <summary>Governance record and provenance</summary>
           <dl>
             <dt>Policy identifier</dt><dd><code>{policy.policyId}</code></dd>
+            <dt>Source proposal</dt><dd>{sourceProposal ? <a href={`/proposals/${sourceProposal.slug}/`}>{sourceProposal.title}</a> : 'Not recorded'}</dd>
+            <dt>Ballot result</dt><dd>{sourceResult ? `${String(sourceResult.result)}${sourceResult.recordedAt ? ` · ${new Date(sourceResult.recordedAt).toLocaleDateString('en-AU', { dateStyle: 'long' })}` : ''}` : 'Not recorded'}</dd>
             <dt>Ratifying authority</dt><dd>{authority?.name ?? policy.ratification?.authorityBranchId ?? 'Not recorded'}</dd>
             <dt>Decision event</dt><dd>{policy.ratification?.decisionEventId ?? 'Not recorded'}</dd>
             <dt>Ratified</dt><dd>{policy.ratification?.ratifiedAt ? new Date(policy.ratification.ratifiedAt).toLocaleDateString('en-AU', { dateStyle: 'long' }) : 'Date not recorded'}</dd>

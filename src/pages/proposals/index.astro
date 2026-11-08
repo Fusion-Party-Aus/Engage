@@ -1,15 +1,22 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
-import ProposalStageNav from '../../components/ui/ProposalStageNav';
-import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
 import { Badge } from '../../components/ui/badge';
+import {
+  CheckCircle2,
+  MessageSquare,
+  Plus,
+  Search,
+  Vote,
+  X,
+} from 'lucide-react';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { listProposals, normalizeStage } from '../../lib/store.ts';
+import { listOutstandingDecisions, listProposals, normalizeStage } from '../../lib/store.ts';
+import { PROPOSAL_VOTES, proposalBallotId } from '../../lib/vote-storage.ts';
+import { getSiteConfig } from '../../lib/site-config.ts';
 import type { ProposalStage } from '../../lib/types.ts';
 
 export const prerender = false;
@@ -20,45 +27,119 @@ const [db, user] = await Promise.all([
   getDatabase(env),
   getSessionUser(Astro.request, env),
 ]);
+const siteConfig = await getSiteConfig(db, env);
 
 const initialQuery = (Astro.url.searchParams.get('q') ?? '').trim();
 const initialSpace = (Astro.url.searchParams.get('space') ?? Astro.url.searchParams.get('category') ?? 'all').trim();
 const initialBranch = (Astro.url.searchParams.get('branch') ?? 'all').trim();
+const initialFocus = (Astro.url.searchParams.get('focus') ?? 'all').trim();
+const initialSort = (Astro.url.searchParams.get('sort') ?? 'priority').trim();
 const branches = (await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()).map(({ branchId, name }) => ({ branchId, name }));
 const rawStage = (Astro.url.searchParams.get('stage') ?? Astro.url.searchParams.get('status') ?? 'all').trim();
 const initialStage = rawStage === 'all' ? 'all' : normalizeStage(rawStage);
 
-const allProposals = await listProposals(db, {
-  includeArchived: Boolean(user?.isStaff),
-  user,
-  search: initialQuery,
-  space: initialSpace,
-  stage: initialStage,
-  branch: initialBranch,
-});
-const visibleProposals = initialStage === 'all'
-  ? [...allProposals].sort((a, b) => {
-      const priority = { decide: 0, deliberate: 1, propose: 2, implement: 3, archived: 4 };
-      return priority[a.stage] - priority[b.stage] || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    })
-  : allProposals;
+const [allAvailableProposals, myOutstandingVotes, myVotesRaw] = await Promise.all([
+  listProposals(db, {
+    includeArchived: Boolean(user?.isStaff),
+    user,
+  }),
+  user?.canParticipate ? listOutstandingDecisions(db, user.memberId, user) : Promise.resolve([]),
+  user
+    ? db
+        .collection(PROPOSAL_VOTES)
+        .find({ memberId: user.memberId })
+        .project({ proposalId: 1, ballotId: 1 })
+        .toArray()
+    : Promise.resolve([]),
+]);
 
-const pageSize = 12;
+const baseProposals = allAvailableProposals.filter((p) => p.stage !== 'archived');
+
+const queryLower = initialQuery.toLowerCase();
+const rawProposals = allAvailableProposals.filter((p) => {
+  if (initialSpace && initialSpace !== 'all' && p.space !== initialSpace) return false;
+  if (initialStage && initialStage !== 'all' && p.stage !== initialStage) return false;
+  if (
+    initialBranch &&
+    initialBranch !== 'all' &&
+    ![p.originatingBranchId, p.governanceAuthorityBranchId, p.jurisdictionBranchId].includes(initialBranch)
+  ) {
+    return false;
+  }
+  if (queryLower) {
+    const haystack = `${p.proposalId} ${p.title} ${p.space} ${p.summary} ${p.details}`.toLowerCase();
+    if (!haystack.includes(queryLower)) return false;
+  }
+  return true;
+});
+
+const outstandingIds = new Set(myOutstandingVotes.map((item) => item.proposalId));
+const votedProposalIds = new Set(
+  myVotesRaw
+    .filter((v: any) => v.proposalId && v.ballotId === proposalBallotId(String(v.proposalId)))
+    .map((v: any) => String(v.proposalId)),
+);
+
+const focusFiltered = rawProposals.filter((proposal) => {
+  if (initialFocus === 'needs-vote') {
+    return outstandingIds.has(proposal.proposalId);
+  }
+  if (initialFocus === 'discussion') {
+    return proposal.stage === 'deliberate';
+  }
+  if (initialFocus === 'recent') {
+    return true;
+  }
+  return true;
+});
+
+const effectiveSort = initialFocus === 'recent' && initialSort === 'priority' ? 'recent' : initialSort;
+
+const visibleProposals = [...focusFiltered].sort((a, b) => {
+  if (effectiveSort === 'recent') {
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  }
+  if (effectiveSort === 'ballots') {
+    return b.votes.total - a.votes.total || b.commentCount - a.commentCount;
+  }
+  if (effectiveSort === 'contributions') {
+    return b.commentCount - a.commentCount || b.votes.total - a.votes.total;
+  }
+  const priority = { decide: 0, deliberate: 1, propose: 2, implement: 3, archived: 4 };
+  return (
+    priority[a.stage] - priority[b.stage] ||
+    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+});
+
+const pageSize = 15;
 const requestedPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
 const pageCount = Math.max(1, Math.ceil(visibleProposals.length / pageSize));
 const currentPage = Number.isFinite(requestedPage) ? Math.min(Math.max(requestedPage, 1), pageCount) : 1;
 const pageProposals = visibleProposals.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-const pageUrl = (page: number) => {
+
+const buildFilterUrl = (overrides: Record<string, string | null>) => {
   const params = new URLSearchParams(Astro.url.searchParams);
-  params.set('page', String(page));
-  return `/proposals/?${params.toString()}`;
+  for (const [k, v] of Object.entries(overrides)) {
+    if (
+      !v ||
+      v === 'all' ||
+      (k === 'sort' && v === 'priority') ||
+      (k === 'page' && v === '1')
+    ) {
+      params.delete(k);
+    } else {
+      params.set(k, v);
+    }
+  }
+  const qs = params.toString();
+  return `/proposals/${qs ? `?${qs}` : ''}`;
 };
 
-// All spaces for filter dropdown
-const baseProposals = await listProposals(db, { includeArchived: false, user });
+const pageUrl = (page: number) => buildFilterUrl({ page: String(page) });
+
 const spaces = [...new Set(baseProposals.map((p) => p.space))].sort();
 
-// Counts per stage
 const stageCounts = {
   all: baseProposals.length,
   propose: baseProposals.filter((p) => p.stage === 'propose').length,
@@ -66,6 +147,47 @@ const stageCounts = {
   decide: baseProposals.filter((p) => p.stage === 'decide').length,
   implement: baseProposals.filter((p) => p.stage === 'implement').length,
 };
+
+const stageTabs: Array<{
+  id: 'all' | ProposalStage;
+  label: string;
+  count: number;
+  description: string;
+}> = [
+  {
+    id: 'all',
+    label: 'All',
+    count: stageCounts.all,
+    description: 'All public proposals across every governance stage.',
+  },
+  {
+    id: 'propose',
+    label: 'Ideas',
+    count: stageCounts.propose,
+    description: 'Early-stage ideas submitted for initial feedback.',
+  },
+  {
+    id: 'deliberate',
+    label: 'Discussion',
+    count: stageCounts.deliberate,
+    description: 'Proposals open for member contributions and wording amendments.',
+  },
+  {
+    id: 'decide',
+    label: 'Voting',
+    count: stageCounts.decide,
+    description: 'Proposals with an active ballot bound to a frozen wording revision.',
+  },
+  {
+    id: 'implement',
+    label: 'Implementation',
+    count: stageCounts.implement,
+    description: 'Decisions being processed for ratification and policy publication.',
+  },
+];
+
+const activeStageMeta =
+  stageTabs.find((tab) => tab.id === initialStage) ?? stageTabs[0]!;
 
 const stageVariant = (s: ProposalStage) => {
   if (s === 'propose') return 'warning' as const;
@@ -79,578 +201,846 @@ const stageLabel = (s: ProposalStage) => {
   if (s === 'propose') return 'New idea';
   if (s === 'deliberate') return 'In discussion';
   if (s === 'decide') return 'Open vote';
-  if (s === 'implement') return 'Implement';
+  if (s === 'implement') return 'Implementation';
   return 'Archived';
 };
+
+const hasActiveFilters =
+  Boolean(initialQuery) ||
+  initialSpace !== 'all' ||
+  initialBranch !== 'all' ||
+  initialStage !== 'all' ||
+  initialFocus !== 'all' ||
+  initialSort !== 'priority';
 ---
 <SiteLayout
-  title="Proposals & Participatory Decisions · Engage"
+  title="Browse proposals · Engage"
   description="Browse proposals across all stages: explore ideas, join discussions, see open votes, and follow decisions after the vote."
   canonical="/proposals/"
 >
   <div class="page-wrap section-space proposals-page">
-    <header class="proposals-header">
-      <div>
-        <h1>Browse proposals</h1>
-        <p>Explore ideas, join discussions, or read an open ballot.</p>
-      </div>
-      {user?.canParticipate ? (
-        <Button href="/proposals/new/">Suggest an idea</Button>
-      ) : user ? (
-        <Button href="/member/" variant="outline">Verify account to propose</Button>
-      ) : (
-        <Button href="/member/" variant="outline">Member sign in</Button>
-      )}
-    </header>
+    <div class="proposals-surface">
+      <!-- Top Header -->
+      <header class="proposals-top">
+        <div class="proposals-top__heading">
+          <h1>Browse proposals</h1>
+          <span class="proposals-total tabular">{baseProposals.length} proposals</span>
+        </div>
+        <div class="proposals-top__actions">
+          <Button href={siteConfig.primaryCtaHref || '/proposals/new/'} size="sm">
+            <Plus className="size-4" aria-hidden="true" />
+            {siteConfig.primaryCtaLabel || 'Suggest an idea'}
+          </Button>
+        </div>
+      </header>
 
-    <ProposalStageNav active={initialStage === 'archived' ? 'all' : initialStage} space={initialSpace} counts={stageCounts} />
+      <!-- Workflow Tabs & Personal Relevance Shortcuts -->
+      <div class="workflow-bar">
+        <div class="workflow-tabs-row">
+          <nav class="workflow-tabs" aria-label="Filter proposals by workflow stage">
+            {stageTabs.map((tab) => {
+              const isCurrent = initialStage === tab.id && initialFocus === 'all';
+              return (
+                <a
+                  href={buildFilterUrl({ stage: tab.id, focus: null, page: '1' })}
+                  class:list={['workflow-tab', { 'is-active': isCurrent }]}
+                  aria-current={isCurrent ? 'page' : undefined}
+                >
+                  <span>{tab.label}</span>
+                  <span class="workflow-tab__count tabular">{tab.count}</span>
+                </a>
+              );
+            })}
+          </nav>
 
-    <form class="filter-bar" role="search" method="get" action="/proposals/">
-      {initialStage !== 'all' && <input type="hidden" name="stage" value={initialStage} />}
-
-      <Field label="Search" htmlFor="proposal-search">
-        <Input
-          id="proposal-search"
-          name="q"
-          type="search"
-          defaultValue={initialQuery}
-          placeholder="Search by title, keyword, ID (e.g. Horizon, housing, voting)"
-          autoComplete="off"
-        />
-      </Field>
-
-      <Field label="Topic" htmlFor="proposal-space">
-        <NativeSelect id="proposal-space" name="space" defaultValue={initialSpace}>
-          <option value="all">All spaces ({spaces.length})</option>
-          {spaces.map((sp) => <option value={sp}>{sp}</option>)}
-        </NativeSelect>
-      </Field>
-
-      <Field label="Decision-making branch" htmlFor="proposal-branch">
-        <NativeSelect id="proposal-branch" name="branch" defaultValue={initialBranch}>
-          <option value="all">All branches</option>
-          {branches.map((branch) => <option value={branch.branchId}>{branch.name}</option>)}
-        </NativeSelect>
-      </Field>
-
-      <div class="filter-bar__actions">
-        <Button type="submit">Filter</Button>
-        {(initialQuery || initialSpace !== 'all' || initialBranch !== 'all' || initialStage !== 'all') && (
-          <Button href="/proposals/" variant="outline">Reset</Button>
-        )}
-      </div>
-    </form>
-
-    <p class="results-count">{visibleProposals.length} proposal{visibleProposals.length === 1 ? '' : 's'}</p>
-    <details class="terms-help">
-      <summary>What do these terms mean?</summary>
-      <dl>
-        <dt>Proposal</dt><dd>An idea or wording change submitted for Fusion members to consider.</dd>
-        <dt>Deliberation</dt><dd>Discussion before a decision, where members share support, concerns and suggested changes.</dd>
-        <dt>Wording suggestion</dt><dd>An informal contribution during discussion. It needs no seconder.</dd>
-        <dt>Formal amendment</dt><dd>A proposed substantive change to recorded wording. It is decided separately from the proposal and will require one independent eligible seconder once seconding is implemented.</dd>
-        <dt>Amendment ballot</dt><dd>A separate vote on a recorded amendment revision where the process requires one.</dd>
-        <dt>Ballot</dt><dd>A vote on wording frozen to a particular revision.</dd>
-        <dt>Ratification</dt><dd>Formal adoption by an authorised party authority after a successful ballot. Publication is a separate action.</dd>
-      </dl>
-    </details>
-
-    {visibleProposals.length === 0 ? (
-      <Card>
-        <CardContent className="grid justify-items-center gap-3 py-12 text-center">
-          <h2>No proposals found</h2>
-          <p>No proposals match your current filter criteria.</p>
-          <Button href="/proposals/" variant="outline">Browse all proposals</Button>
-        </CardContent>
-      </Card>
-    ) : (
-      <div class="proposals-grid">
-        {pageProposals.map((item) => (
-          <Card className="proposal-card" data-stage={item.stage}>
-            <div class="proposal-card__meta">
-              <Badge variant={stageVariant(item.stage)}>{stageLabel(item.stage)}</Badge>
-              <span class="space-pill">{item.space}</span>
-              {item.jurisdictionBranchId && <span class="space-pill">{branches.find((branch) => branch.branchId === item.jurisdictionBranchId)?.name ?? 'Branch scoped'}</span>}
-            </div>
-
-            <h2 class="proposal-card__title">
-              <a href={`/proposals/${item.slug}/`}>{item.title}</a>
-            </h2>
-
-            <p class="proposal-card__summary">{item.summary}</p>
-
-            <div class="proposal-card__footer">
-              <div class="proposal-card__stats">
-                <Badge variant="muted" title="Deliberation contributions">
-                  <strong class="tabular">{item.commentCount}</strong> {item.commentCount === 1 ? 'stance' : 'stances'}
-                </Badge>
-
-                {item.stage === 'decide' && (
-                  <Badge variant="info">
-                    <strong class="tabular">{item.votes.total}</strong> {item.votes.total === 1 ? 'vote' : 'votes'}
-                  </Badge>
-                )}
-                {item.stage === 'implement' && (
-                  <Badge variant="success">
-                    Ballot result · {item.votes.approve} approve votes
-                  </Badge>
-                )}
-              </div>
-
-              <a class="proposal-card__link" href={`/proposals/${item.slug}/`}>
-                {item.stage === 'decide' ? 'Review the ballot →' : item.stage === 'deliberate' ? 'Join discussions →' : item.stage === 'implement' ? 'See decision progress →' : 'Read the idea →'}
+          <div class="personal-shortcuts" role="group" aria-label="Quick focus filters">
+            {user?.canParticipate && (
+              <a
+                href={buildFilterUrl({
+                  focus: initialFocus === 'needs-vote' ? null : 'needs-vote',
+                  stage: 'decide',
+                  page: '1',
+                })}
+                class:list={['shortcut-pill', { 'is-active': initialFocus === 'needs-vote' }]}
+              >
+                Needs your vote
+                <span class="tabular">{myOutstandingVotes.length}</span>
               </a>
-            </div>
-          </Card>
-        ))}
-      </div>
-    )}
+            )}
+            <a
+              href={buildFilterUrl({
+                focus: initialFocus === 'discussion' ? null : 'discussion',
+                stage: 'deliberate',
+                page: '1',
+              })}
+              class:list={['shortcut-pill', { 'is-active': initialFocus === 'discussion' }]}
+            >
+              Join the discussion
+              <span class="tabular">{stageCounts.deliberate}</span>
+            </a>
+            <a
+              href={buildFilterUrl({
+                focus: initialFocus === 'recent' ? null : 'recent',
+                sort: 'recent',
+                page: '1',
+              })}
+              class:list={['shortcut-pill', { 'is-active': initialFocus === 'recent' || effectiveSort === 'recent' }]}
+            >
+              Recently updated
+            </a>
+          </div>
+        </div>
 
-    {pageCount > 1 && (
-      <nav class="pagination" aria-label="Proposal pages">
-        <Button href={pageUrl(currentPage - 1)} variant="outline" size="sm" aria-disabled={currentPage === 1} tabIndex={currentPage === 1 ? -1 : undefined}>Previous</Button>
-        <span>Page {currentPage} of {pageCount}</span>
-        <Button href={pageUrl(currentPage + 1)} variant="outline" size="sm" aria-disabled={currentPage === pageCount} tabIndex={currentPage === pageCount ? -1 : undefined}>Next</Button>
-      </nav>
-    )}
+        <p class="workflow-caption">{activeStageMeta.description}</p>
+      </div>
+
+      <!-- Search & Quiet Secondary Filters -->
+      <form id="proposals-filter-form" class="search-controls" role="search" method="get" action="/proposals/">
+        {initialStage !== 'all' && <input type="hidden" name="stage" value={initialStage} />}
+        {initialFocus !== 'all' && <input type="hidden" name="focus" value={initialFocus} />}
+
+        <div class="search-row">
+          <label for="proposal-search" class="sr-only">Search proposals by title, topic or ID</label>
+          <Search className="search-row__icon size-4" aria-hidden="true" />
+          <Input
+            id="proposal-search"
+            name="q"
+            type="search"
+            defaultValue={initialQuery}
+            placeholder="Search proposals by title, topic or ID..."
+            autoComplete="off"
+            className="search-row__input"
+          />
+          {initialQuery && (
+            <a href={buildFilterUrl({ q: null, page: '1' })} class="search-row__clear" aria-label="Clear search">
+              <X className="size-4" aria-hidden="true" />
+            </a>
+          )}
+        </div>
+
+        <div class="secondary-filters-row">
+          <div class="quiet-filters">
+            <div class="quiet-select-wrap">
+              <label for="proposal-stage-select" class="sr-only">Stage</label>
+              <NativeSelect
+                id="proposal-stage-select"
+                name="stage"
+                defaultValue={initialStage}
+                data-auto-submit
+              >
+                <option value="all">All stages</option>
+                <option value="propose">Ideas ({stageCounts.propose})</option>
+                <option value="deliberate">Discussion ({stageCounts.deliberate})</option>
+                <option value="decide">Voting ({stageCounts.decide})</option>
+                <option value="implement">Implementation ({stageCounts.implement})</option>
+              </NativeSelect>
+            </div>
+
+            <div class="quiet-select-wrap">
+              <label for="proposal-space" class="sr-only">Space</label>
+              <NativeSelect
+                id="proposal-space"
+                name="space"
+                defaultValue={initialSpace}
+                data-auto-submit
+              >
+                <option value="all">All spaces ({spaces.length})</option>
+                {spaces.map((sp) => (
+                  <option value={sp}>{sp}</option>
+                ))}
+              </NativeSelect>
+            </div>
+
+            <div class="quiet-select-wrap">
+              <label for="proposal-branch" class="sr-only">Branch</label>
+              <NativeSelect
+                id="proposal-branch"
+                name="branch"
+                defaultValue={initialBranch}
+                data-auto-submit
+              >
+                <option value="all">All branches</option>
+                {branches.map((branch) => (
+                  <option value={branch.branchId}>{branch.name}</option>
+                ))}
+              </NativeSelect>
+            </div>
+
+            {hasActiveFilters && (
+              <a href="/proposals/" class="clear-filters-link">
+                <X className="size-3.5" aria-hidden="true" />
+                Clear filters
+              </a>
+            )}
+          </div>
+
+          <div class="results-and-sort">
+            <span class="results-count tabular" id="live-results-count">
+              Showing {pageProposals.length} of {visibleProposals.length} proposal{visibleProposals.length === 1 ? '' : 's'}
+            </span>
+
+            <div class="quiet-select-wrap">
+              <label for="proposal-sort" class="sr-only">Sort proposals</label>
+              <NativeSelect
+                id="proposal-sort"
+                name="sort"
+                defaultValue={effectiveSort}
+                data-auto-submit
+              >
+                <option value="priority">Sort: Stage priority</option>
+                <option value="recent">Sort: Recently updated</option>
+                <option value="ballots">Sort: Ballots cast</option>
+                <option value="contributions">Sort: Contributions</option>
+              </NativeSelect>
+            </div>
+
+            <noscript>
+              <Button type="submit" size="sm" variant="outline">Apply</Button>
+            </noscript>
+          </div>
+        </div>
+      </form>
+
+      <!-- Spacious Proposal List -->
+      {visibleProposals.length === 0 ? (
+        <div class="empty-register">
+          <h2>No proposals match these filters</h2>
+          <p>Try clearing your search query or switching back to all workflow stages.</p>
+          <Button href="/proposals/" variant="outline" size="sm">Clear filters</Button>
+        </div>
+      ) : (
+        <div class="proposal-list" role="list" id="proposal-list">
+          {pageProposals.map((item) => {
+            const branchName = item.jurisdictionBranchId
+              ? branches.find((branch) => branch.branchId === item.jurisdictionBranchId)?.name ?? null
+              : null;
+            const hasVoted = votedProposalIds.has(item.proposalId);
+            const needsVote = outstandingIds.has(item.proposalId);
+
+            const actionLabel =
+              item.stage === 'decide'
+                ? hasVoted
+                  ? 'Review ballot →'
+                  : 'Review & vote →'
+                : item.stage === 'deliberate'
+                  ? 'Join discussion →'
+                  : item.stage === 'implement'
+                    ? 'Implementation status →'
+                    : 'Read idea →';
+
+            return (
+              <article
+                class="proposal-item"
+                data-stage={item.stage}
+                data-search={`${item.proposalId} ${item.title} ${item.space} ${item.summary}`.toLowerCase()}
+                role="listitem"
+              >
+                <!-- Line 1: Topic Context (left) + Stage Pill (right) -->
+                <div class="proposal-item__eyebrow">
+                  <div class="proposal-item__context">
+                    <span class="proposal-item__id tabular">{item.proposalId}</span>
+                    <span aria-hidden="true">·</span>
+                    <a
+                      class="proposal-item__space"
+                      href={buildFilterUrl({ space: item.space, page: '1' })}
+                    >
+                      {item.space}
+                    </a>
+                    {branchName && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span class="proposal-item__branch">{branchName}</span>
+                      </>
+                    )}
+                  </div>
+
+                  <Badge variant={stageVariant(item.stage)}>{stageLabel(item.stage)}</Badge>
+                </div>
+
+                <!-- Line 2: Prominent Visual Anchor Title -->
+                <h2 class="proposal-item__title">
+                  <a href={`/proposals/${item.slug}/`}>{item.title}</a>
+                </h2>
+
+                <!-- Line 3: Clear Description -->
+                <p class="proposal-item__summary">{item.summary}</p>
+
+                <!-- Line 4: Meaningful Participation Metadata (left) + Action Link (right) -->
+                <div class="proposal-item__footer">
+                  <div class="proposal-item__participation tabular">
+                    <span class="participation-stat">
+                      <MessageSquare className="size-3.5" aria-hidden="true" />
+                      {item.commentCount} {item.commentCount === 1 ? 'contribution' : 'contributions'}
+                    </span>
+
+                    {(item.stage === 'decide' || item.votes.total > 0) && (
+                      <>
+                        <span class="participation-dot" aria-hidden="true">·</span>
+                        <span class="participation-stat is-ballot">
+                          <Vote className="size-3.5" aria-hidden="true" />
+                          Formal ballot · {item.votes.total} {item.votes.total === 1 ? 'ballot cast' : 'ballots cast'}
+                        </span>
+                      </>
+                    )}
+
+                    {hasVoted && (
+                      <>
+                        <span class="participation-dot" aria-hidden="true">·</span>
+                        <span class="participation-personal is-voted">
+                          <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                          You have voted
+                        </span>
+                      </>
+                    )}
+
+                    {!hasVoted && needsVote && (
+                      <>
+                        <span class="participation-dot" aria-hidden="true">·</span>
+                        <span class="participation-personal is-needs-vote">
+                          Needs your vote
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  <a class="proposal-item__cta" href={`/proposals/${item.slug}/`}>
+                    {actionLabel}
+                  </a>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      <!-- Bottom Pagination Bar -->
+      <footer class="proposals-bottom">
+        <span class="results-count tabular">
+          Showing {pageProposals.length} of {visibleProposals.length} proposal{visibleProposals.length === 1 ? '' : 's'}
+        </span>
+
+        {pageCount > 1 && (
+          <nav class="pagination" aria-label="Proposal pages">
+            <Button
+              href={pageUrl(currentPage - 1)}
+              variant="outline"
+              size="sm"
+              aria-disabled={currentPage === 1}
+              tabIndex={currentPage === 1 ? -1 : undefined}
+            >
+              ← Previous
+            </Button>
+            <span class="tabular">Page {currentPage} of {pageCount}</span>
+            <Button
+              href={pageUrl(currentPage + 1)}
+              variant="outline"
+              size="sm"
+              aria-disabled={currentPage === pageCount}
+              tabIndex={currentPage === pageCount ? -1 : undefined}
+            >
+              Next →
+            </Button>
+          </nav>
+        )}
+      </footer>
+    </div>
   </div>
 </SiteLayout>
 
+<script>
+  const form = document.querySelector<HTMLFormElement>('#proposals-filter-form');
+  const searchInput = document.querySelector<HTMLInputElement>('#proposal-search');
+  const items = Array.from(document.querySelectorAll<HTMLElement>('.proposal-item'));
+  const liveCount = document.querySelector<HTMLElement>('#live-results-count');
+
+  // Auto-submit quiet dropdown filters on change
+  document.querySelectorAll<HTMLSelectElement>('[data-auto-submit]').forEach((select) => {
+    select.addEventListener('change', () => {
+      form?.requestSubmit();
+    });
+  });
+
+  // Immediate client-side filtering on the current page, plus debounced URL sync
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  searchInput?.addEventListener('input', () => {
+    const query = searchInput.value.trim().toLowerCase();
+    let matched = 0;
+    for (const item of items) {
+      const hay = item.dataset.search ?? '';
+      const show = !query || hay.includes(query);
+      item.hidden = !show;
+      if (show) matched += 1;
+    }
+    if (liveCount && query) {
+      liveCount.textContent = `Showing ${matched} matching on this page (press Enter to search all)`;
+    }
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      if (searchInput.value.trim() !== (new URLSearchParams(location.search).get('q') ?? '').trim()) {
+        form?.requestSubmit();
+      }
+    }, 550);
+  });
+</script>
+
 <style>
   .proposals-page {
+    max-width: 68rem;
+    padding-top: 1.5rem;
+    padding-bottom: 4rem;
+  }
+
+  .proposals-surface {
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.9rem;
+    padding: clamp(1.25rem, 3vw, 2.25rem);
+    box-shadow: 0 2px 8px rgba(29, 10, 73, 0.04);
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: 1.35rem;
   }
 
-  .proposals-header {
+  /* Header */
+  .proposals-top {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 1.5rem;
     flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem 1.25rem;
   }
 
-  .proposals-header > div { min-width: 0; }
-
-  @media (max-width: 640px) {
-    .proposals-header > div { width: 100%; flex: 1 1 100%; }
-  }
-
-  .proposals-header h1 {
-    font-size: clamp(2.2rem, 3.5vw, 3rem);
-    line-height: 1.15;
-    margin-bottom: 0.5rem;
-    color: var(--horizon-purple-deep);
-    overflow-wrap: anywhere;
-  }
-
-  .proposals-header p {
-    color: var(--horizon-muted);
-    font-size: 1.1rem;
-    max-width: 65ch;
-  }
-
-  .stage-tabs {
+  .proposals-top__heading {
     display: flex;
-    gap: 0.6rem;
-    overflow-x: auto;
-    scrollbar-width: thin;
-    overscroll-behavior-inline: contain;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--horizon-line);
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.65rem 1rem;
   }
 
-  .stage-tab {
+  .proposals-top h1 {
+    margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(1.85rem, 3vw, 2.35rem);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    color: var(--horizon-ink);
+  }
+
+  .proposals-total {
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--horizon-muted);
+  }
+
+  /* Workflow Tabs */
+  .workflow-bar {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .workflow-tabs-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    border-bottom: 1px solid var(--horizon-line);
+    padding-bottom: 0.1rem;
+  }
+
+  .workflow-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 1.15rem;
+  }
+
+  .workflow-tab {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.55rem 1.1rem;
-    border-radius: 999px;
-    font-size: 0.95rem;
+    gap: 0.42rem;
+    padding: 0.45rem 0.1rem 0.6rem;
+    margin-bottom: -2px;
+    border-bottom: 2px solid transparent;
+    font-size: 0.9rem;
     font-weight: 600;
-    color: var(--horizon-purple);
-    background: var(--horizon-white);
-    border: 1px solid var(--horizon-line);
+    color: var(--horizon-muted);
     text-decoration: none;
-    transition: all 0.15s ease;
     white-space: nowrap;
   }
 
-  .stage-tab:hover {
-    color: var(--horizon-purple-deep);
-    border-color: var(--horizon-purple);
-    background: var(--horizon-lavender-soft);
+  .workflow-tab:hover {
+    color: var(--horizon-ink);
   }
 
-  .stage-tab.is-active {
-    color: var(--horizon-white);
-    background: var(--horizon-purple);
-    border-color: var(--horizon-purple);
+  .workflow-tab.is-active {
+    color: var(--horizon-purple-deep);
+    border-bottom-color: var(--horizon-purple);
   }
 
-  .stage-tab .badge {
-    background: var(--horizon-lavender);
-    color: var(--horizon-purple-deep);
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.8rem;
+  .workflow-tab__count {
+    font-size: 0.76rem;
     font-weight: 700;
-  }
-
-  .stage-tab.is-active .badge {
-    background: rgba(255, 255, 255, 0.2);
-    color: var(--horizon-white);
-  }
-
-  .filter-bar {
-    display: grid;
-    grid-template-columns: 2fr 1fr auto;
-    gap: 1rem;
-    align-items: end;
-    background: var(--horizon-lavender-soft);
-    padding: 1.25rem 1.5rem;
-    border-radius: 0.75rem;
-    border: 1px solid var(--horizon-line);
-    min-width: 0;
-  }
-
-  .filter-bar [data-slot="field"] { min-width: 0; }
-
-  @media (max-width: 380px) {
-    .proposals-header h1 { font-size: 2rem; }
-    .filter-bar { padding: 1rem; }
-  }
-
-  @media (max-width: 768px) {
-    .filter-bar {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .filter-bar__actions {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .stage-explainer {
+    padding: 0.08rem 0.45rem;
+    border-radius: 999px;
     background: var(--horizon-lavender);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    padding: 1rem 1.35rem;
-    font-size: 1rem;
-    line-height: 1.6;
-    color: var(--horizon-purple);
-  }
-
-  .stage-explainer strong {
     color: var(--horizon-purple-deep);
   }
 
-  .proposals-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.25rem;
-  }
-
-  .proposal-card {
+  .personal-shortcuts {
     display: flex;
-    flex-direction: column;
-    background: var(--horizon-white);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    padding: 1.35rem;
-    box-shadow: 0 1px 3px rgba(50, 16, 90, 0.05);
-    transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
-  }
-
-  .proposal-card:hover {
-    border-color: var(--horizon-purple);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(50, 16, 90, 0.08);
-  }
-
-  .proposal-card__meta {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
     flex-wrap: wrap;
-    margin-bottom: 0.75rem;
-    font-size: 0.82rem;
-  }
-
-  .stage-pill {
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    font-size: 0.75rem;
-  }
-
-  .stage-pill--propose {
-    background: var(--horizon-warn-bg);
-    color: var(--horizon-warn-ink);
-    border: 1px solid #ebd49f;
-  }
-
-  .stage-pill--deliberate {
-    background: var(--horizon-lavender);
-    color: var(--horizon-purple-deep);
-    border: 1px solid var(--horizon-line);
-  }
-
-  .stage-pill--decide {
-    background: var(--horizon-voting-bg);
-    color: var(--horizon-voting-ink);
-    border: 1px solid #a3e7eb;
-  }
-
-  .stage-pill--implement {
-    background: var(--horizon-success-bg);
-    color: var(--horizon-success-ink);
-    border: 1px solid #b7e8cb;
-  }
-
-  .stage-pill--archived {
-    background: #f0f0f0;
-    color: var(--horizon-muted);
-  }
-
-  .prov-pill {
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    max-width: 240px;
-  }
-
-  .prov-pill--existing-repackaged {
-    background: #eafaf1;
-    color: #165a36;
-    border: 1px solid #c2eecf;
-  }
-
-  .prov-pill--materially-revised {
-    background: #fef9eb;
-    color: #8a5a00;
-    border: 1px solid #fae1a0;
-  }
-
-  .prov-pill--new-proposal {
-    background: #e6f9fa;
-    color: #006770;
-    border: 1px solid #b7edf0;
-  }
-
-  .prov-pill--party-governance {
-    background: var(--horizon-lavender);
-    color: var(--horizon-purple-deep);
-    border: 1px solid var(--horizon-line);
-  }
-
-  .prov-pill--draft-derived {
-    background: #fef2f2;
-    color: #9b1c1c;
-    border: 1px solid #fed7d7;
-  }
-
-  .prov-pill--unverified {
-    background: var(--horizon-lavender-soft);
-    color: var(--horizon-purple-muted);
-    border: 1px solid var(--horizon-line);
-  }
-
-  .space-pill {
-    color: var(--horizon-muted);
-    font-weight: 500;
-  }
-
-  .id-pill {
-    margin-left: auto;
-    color: var(--horizon-muted);
-    font-weight: 600;
-    font-size: 0.8rem;
-  }
-
-  .proposal-card__title {
-    font-size: 1.25rem;
-    line-height: 1.35;
-    margin: 0 0 0.5rem 0;
-  }
-
-  .proposal-card__title a {
-    color: var(--horizon-purple-deep);
-    text-decoration: none;
-    font-weight: 700;
-  }
-
-  .proposal-card__title a:hover {
-    color: var(--horizon-focus);
-    text-decoration: underline;
-  }
-
-  .proposal-card__summary {
-    color: var(--horizon-muted);
-    font-size: 0.95rem;
-    line-height: 1.55;
-    margin: 0 0 1.25rem 0;
-    flex-grow: 1;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .proposal-card__footer {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    gap: 0.75rem;
-    border-top: 1px solid var(--horizon-line);
-    padding-top: 0.85rem;
-    font-size: 0.88rem;
+    gap: 0.4rem;
+    padding-bottom: 0.4rem;
   }
 
-  .proposal-card__stats {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .stat-badge {
+  .shortcut-pill {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    padding: 0.24rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--horizon-line);
+    background: var(--horizon-lavender-soft);
+    color: var(--horizon-muted);
+    font-size: 0.76rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .shortcut-pill:hover {
+    border-color: #b7a2df;
+    color: var(--horizon-purple-deep);
+  }
+
+  .shortcut-pill.is-active {
+    background: var(--horizon-purple);
+    border-color: var(--horizon-purple);
+    color: #ffffff;
+  }
+
+  .workflow-caption {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--horizon-muted);
+  }
+
+  /* Search & Secondary Filters */
+  .search-controls {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .search-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-row__icon {
+    position: absolute;
+    left: 1rem;
+    color: var(--horizon-muted);
+    pointer-events: none;
+  }
+
+  .search-row :global(.search-row__input) {
+    width: 100%;
+    height: 2.85rem;
+    padding-left: 2.65rem;
+    padding-right: 2.5rem;
+    border-radius: 999px;
+    border-color: #cfc6e0;
+    background: var(--horizon-lavender-soft);
+    font-size: 0.94rem;
+  }
+
+  .search-row :global(.search-row__input:focus) {
+    background: #ffffff;
+  }
+
+  .search-row__clear {
+    position: absolute;
+    right: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--horizon-muted);
+  }
+
+  .secondary-filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem 1rem;
+  }
+
+  .quiet-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .quiet-select-wrap :global(select) {
+    height: 2.1rem;
+    padding: 0 1.9rem 0 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--horizon-line);
+    background-color: var(--horizon-surface);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--horizon-ink);
+    cursor: pointer;
+  }
+
+  .quiet-select-wrap :global(select:hover) {
+    background-color: var(--horizon-lavender-soft);
+    border-color: #b7a2df;
+  }
+
+  .clear-filters-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+  }
+
+  .clear-filters-link:hover {
+    text-decoration: underline;
+  }
+
+  .results-and-sort {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .results-count {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--horizon-muted);
+  }
+
+  /* Spacious Full-Width Proposal Rows (Matching Low-Fi Mockup) */
+  .proposal-list {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .proposal-item {
+    display: grid;
+    gap: 0.45rem;
+    padding: 1.45rem 0.25rem;
+    border-bottom: 1px solid var(--horizon-line);
+    transition: background-color 120ms ease;
+  }
+
+  .proposal-item__eyebrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .proposal-item__context {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.84rem;
+    color: var(--horizon-muted);
+  }
+
+  .proposal-item__id {
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .proposal-item__space {
+    color: var(--horizon-muted);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .proposal-item__space:hover {
+    color: var(--horizon-purple-deep);
+    text-decoration: underline;
+  }
+
+  .proposal-item__branch {
+    color: var(--horizon-muted);
+  }
+
+  /* Prominent Visual Anchor Title */
+  .proposal-item__title {
+    margin: 0.1rem 0 0;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(1.18rem, 1.8vw, 1.32rem);
+    font-weight: 700;
+    line-height: 1.28;
+    letter-spacing: -0.015em;
+  }
+
+  .proposal-item__title a {
+    color: var(--horizon-ink);
+    text-decoration: none;
+  }
+
+  .proposal-item__title a:hover {
     color: var(--horizon-purple);
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  /* Context Summary */
+  .proposal-item__summary {
+    margin: 0.1rem 0 0.35rem;
+    font-size: 0.96rem;
+    line-height: 1.52;
+    color: var(--horizon-muted);
+    max-width: 78ch;
+  }
+
+  /* Bottom Participation + Right-Aligned Action Row */
+  .proposal-item__footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem 1.25rem;
+    margin-top: 0.15rem;
+  }
+
+  .proposal-item__participation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.84rem;
+    color: var(--horizon-muted);
+  }
+
+  .participation-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .participation-stat.is-ballot {
+    color: var(--horizon-ink);
     font-weight: 500;
   }
 
-  .vote-badge--active {
-    background: var(--horizon-voting-bg);
-    color: var(--horizon-voting-ink);
-    border: 1px solid #a3e7eb;
-    padding: 0.15rem 0.55rem;
-    border-radius: 999px;
-    font-weight: 700;
-    font-size: 0.78rem;
+  .participation-dot {
+    color: #b4a7c9;
   }
 
-  .vote-badge--implementation {
-    background: var(--horizon-lavender-soft);
-    color: var(--horizon-ink);
-    padding: 0.15rem 0.55rem;
-    border-radius: 999px;
-    font-weight: 700;
-    font-size: 0.78rem;
+  .participation-personal {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    font-weight: 600;
   }
 
-  .proposal-card__link {
+  .participation-personal.is-voted {
+    color: var(--horizon-success-ink);
+  }
+
+  .participation-personal.is-needs-vote {
     color: var(--horizon-purple-deep);
+  }
+
+  .proposal-item__cta {
+    font-size: 0.9rem;
     font-weight: 700;
-    text-decoration: underline;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
     white-space: nowrap;
   }
 
-  .proposal-card__link:hover {
-    color: var(--horizon-focus);
+  .proposal-item__cta:hover {
+    color: var(--horizon-purple);
+    text-decoration: underline;
   }
 
-  .submit-section {
-    background: var(--horizon-white);
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    padding: 2.25rem;
-    margin-top: 2rem;
-    box-shadow: 0 1px 3px rgba(50, 16, 90, 0.05);
-  }
-
-  .submit-section h2 {
-    font-size: 1.85rem;
-    margin-bottom: 0.5rem;
-    color: var(--horizon-purple-deep);
-  }
-
-  .submit-section p {
-    color: var(--horizon-muted);
-    margin-bottom: 1.5rem;
-    max-width: 65ch;
-    font-size: 1.05rem;
-  }
-
-  .submit-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-  }
-
-  .form-grid {
+  /* Empty State & Bottom Bar */
+  .empty-register {
+    padding: 3rem 1.5rem;
+    text-align: center;
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    justify-items: center;
+    gap: 0.6rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .empty-register h2 {
+    margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.4rem;
+  }
+
+  .empty-register p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--horizon-muted);
+  }
+
+  .proposals-bottom {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
     gap: 1rem;
+    padding-top: 0.25rem;
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .pagination a[aria-disabled="true"] {
+    opacity: 0.4;
+    pointer-events: none;
   }
 
   @media (max-width: 640px) {
-    .form-grid {
-      grid-template-columns: 1fr;
+    .proposals-surface {
+      padding: 1.15rem 1rem;
+    }
+
+    .secondary-filters-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .results-and-sort {
+      justify-content: space-between;
+    }
+
+    .proposal-item {
+      padding: 1.2rem 0;
+    }
+
+    .proposal-item__footer {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
     }
   }
-
-  .form-actions {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 4rem 1rem;
-    background: var(--horizon-white);
-    border-radius: 0.75rem;
-    border: 1px solid var(--horizon-line);
-  }
-
-  .empty-state h2 {
-    font-size: 1.65rem;
-    margin-bottom: 0.5rem;
-    color: var(--horizon-purple-deep);
-  }
-
-  .empty-state p {
-    color: var(--horizon-muted);
-    margin-bottom: 1.5rem;
-    font-size: 1.05rem;
-  }
-
-  .pagination { display:flex; justify-content:center; align-items:center; gap:1.2rem; padding:1rem; font-size:.9rem; font-weight:700; }
-  .pagination a[aria-disabled="true"] { opacity:.4; pointer-events:none; }
-  .proposals-page { gap:1.2rem; }
-  .proposals-header { align-items:center; }
-  .proposals-header h1 { font:700 clamp(2.2rem,3.6vw,3.2rem)/1.05 Outfit,sans-serif; margin:0 0 .4rem; }
-  .proposals-header p { margin:0; font-size:1rem; }
-  .stage-tabs { gap:1.35rem; padding:0; border-bottom:1px solid var(--horizon-line); }
-  .stage-tab,.stage-tab:hover,.stage-tab.is-active { padding:.7rem .1rem; border:0; border-radius:0; background:none; color:var(--horizon-purple); }
-  .stage-tab.is-active { box-shadow:inset 0 -3px var(--horizon-purple); }
-  .stage-tab .badge,.stage-tab.is-active .badge { background:var(--horizon-lavender); color:var(--horizon-purple); }
-  .filter-bar { background:transparent; border:0; border-radius:0; padding:0; grid-template-columns:2fr 1fr 1fr auto; }
-  .results-count { margin:0; font-size:.9rem; font-weight:700; }
-  .terms-help { align-self:stretch; font-size:.86rem; border-top:1px solid var(--horizon-line); border-bottom:1px solid var(--horizon-line); padding:.6rem 0; }
-  .terms-help summary { cursor:pointer; font-weight:700; }
-  .terms-help dl { display:grid; grid-template-columns:max-content 1fr; gap:.35rem 1rem; margin:.75rem 0 0; }
-  .terms-help dt { font-weight:700; }
-  .terms-help dd { margin:0; color:var(--horizon-muted); }
-  .proposals-grid { display:grid; grid-template-columns:1fr; gap:.55rem; }
-  .proposal-card { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.15rem 1.25rem; padding:1rem 1.3rem; background:#fff; border:1px solid var(--horizon-line); border-radius:.65rem; box-shadow:0 2px 7px #20104a0a; }
-  .proposal-card:hover { border-color:#9b8ad0; box-shadow:0 6px 18px #20104a14; }
-  .proposal-card__meta { grid-column:1; grid-row:1; }
-  .proposal-card__title { grid-column:1; grid-row:2; margin:0; font:700 1.13rem/1.25 Outfit,sans-serif; }
-  .proposal-card__summary { grid-column:1; grid-row:3; margin:.1rem 0 0; max-width:44ch; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; font-size:.9rem; }
-  .proposal-card__footer { grid-column:2; grid-row:1 / 4; display:grid; justify-items:end; gap:.45rem; align-self:center; }
-  .proposal-card__link { font-weight:700; font-size:.85rem; }
-  .submit-section { max-width:52rem; margin-inline:auto; background:#fff; border:1px solid var(--horizon-line); border-radius:.8rem; padding:2rem; }
-  @media(max-width:850px){.filter-bar{grid-template-columns:1fr 1fr}.filter-bar [data-slot="field"]:first-child{grid-column:1/-1}}
-  @media(max-width:600px){.proposal-card{display:block}.proposal-card__footer{display:flex;justify-content:space-between;align-items:center;margin-top:.7rem}.proposal-card__stats{display:none}.submit-section{padding:1.1rem}.filter-bar{grid-template-columns:1fr}.filter-bar .field:first-child{grid-column:auto}}
 </style>
