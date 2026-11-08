@@ -1,19 +1,31 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
-import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import {
   ArrowRight,
   BookOpen,
+  CheckCircle2,
+  Clock,
+  Code2,
   Compass,
-  Lightbulb,
+  Database,
+  FileText,
+  Gavel,
+  GitBranch,
+  HardDrive,
+  Layers,
+  Lock,
   MessageSquare,
+  Plus,
+  Server,
+  ShieldCheck,
   Vote,
 } from 'lucide-react';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { listProposals } from '../../lib/store.ts';
+import { getSiteConfig } from '../../lib/site-config.ts';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -23,867 +35,1060 @@ const [db, user] = await Promise.all([
   getDatabase(env),
   getSessionUser(Astro.request, env),
 ]);
+const siteConfig = await getSiteConfig(db, env);
 
-const [openVotes, discussions, recentProposals, publishedPolicies] = await Promise.all([
-  listProposals(db, { user, stage: 'decide' }),
-  listProposals(db, { user, stage: 'deliberate' }),
+const [recentProposals, publishedPolicies] = await Promise.all([
   listProposals(db, { user }),
-  db.collection('policy_registry')
+  db
+    .collection('policy_registry')
     .find({ publicationStatus: 'published' })
     .sort({ publishedAt: -1, ratifiedAt: -1 })
     .limit(1)
     .toArray(),
 ]);
+const openVotes = recentProposals.filter((p) => p.stage === 'decide');
+const discussions = recentProposals.filter((p) => p.stage === 'deliberate');
 
-const currentProposal =
-  recentProposals.find((proposal) => proposal.stage === 'propose') ??
-  recentProposals.find((proposal) => proposal.stage === 'deliberate') ??
-  recentProposals[0];
-const discussionProposal =
-  discussions.find((proposal) => proposal.proposalId !== currentProposal?.proposalId) ??
-  discussions[0];
-const openVote =
-  openVotes.find(
-    (proposal) =>
-      proposal.proposalId !== currentProposal?.proposalId &&
-      proposal.proposalId !== discussionProposal?.proposalId,
-  ) ?? openVotes[0];
+const primaryCtaLabel = siteConfig.primaryCtaLabel || 'Suggest an idea';
+const primaryCtaHref = siteConfig.primaryCtaHref || '/proposals/new/';
 
-const live = {
-  idea: currentProposal
-    ? { title: currentProposal.title, href: `/proposals/${currentProposal.slug}/` }
-    : null,
-  discussion: discussionProposal
-    ? { title: discussionProposal.title, href: `/proposals/${discussionProposal.slug}/` }
-    : null,
-  vote: openVote
-    ? { title: openVote.title, href: `/proposals/${openVote.slug}/` }
-    : null,
-  policy: publishedPolicies[0]
-    ? {
-        title: publishedPolicies[0].title,
-        href: `/policies/${encodeURIComponent(publishedPolicies[0].policyId)}/`,
-      }
-    : null,
-};
-
-const stages = [
+const walkthroughSteps = [
   {
-    title: 'Propose',
-    who: 'Members submit',
-    body: 'A proposal sets out what would change, who it affects and why it matters. Members can put one forward; anyone can read it and follow its stage.',
+    step: '01',
+    stage: '1. Propose',
+    duration: '15 sec',
+    who: 'Verified members submit · Anyone can read',
+    title: 'An idea is placed on the public record',
+    body: 'A member submits a clear title, summary, topic space, key commitments, and supporting rationale or images. Engage saves an immutable starting wording revision.',
     href: '/proposals/?stage=propose',
-    action: 'Browse proposals',
+    linkLabel: 'Browse new ideas',
   },
   {
-    title: 'Deliberate',
-    who: 'Members contribute',
-    body: 'Members discuss the idea, raise concerns and suggest wording changes. A wording suggestion is informal and needs no seconder. A formal amendment is recorded against the wording and, once seconding is implemented, will require one independent eligible seconder before it progresses.',
+    step: '02',
+    stage: '2. Deliberate',
+    duration: '15 sec',
+    who: 'Verified members contribute · Publicly readable',
+    title: 'Members debate and file wording amendments',
+    body: 'Members post structured stances (Support, Concern, Wording suggestion, or Comment), endorse constructive feedback, or file formal amendments against a specific base revision.',
     href: '/proposals/?stage=deliberate',
-    action: 'Join discussions',
+    linkLabel: `Join ${discussions.length} active discussions`,
   },
   {
-    title: 'Decide',
-    who: 'Eligibility applies',
-    body: 'Eligible members vote on the exact wording. A proposal ballot and any amendment ballot are separate decisions, and the ballot page states who can vote.',
+    step: '03',
+    stage: '3. Decide',
+    duration: '15 sec',
+    who: 'Eligible verified members vote',
+    title: 'A ballot opens on a frozen wording snapshot',
+    body: 'When a ballot opens, it is cryptographically bound to a specific wording revision ID. Later edits cannot alter what voters saw. Proposal ballots and amendment ballots are decided separately.',
     href: '/proposals/?stage=decide',
-    action: 'See open votes',
+    linkLabel: `See ${openVotes.length} open ballots`,
   },
   {
-    title: 'Implement',
-    who: 'Everyone can follow',
-    body: 'The decision is processed here. Required authorisation and publication steps occur where they apply, and subsequent progress can be tracked. Being at this stage does not by itself adopt or publish policy.',
-    href: '/proposals/?stage=implement',
-    action: 'See decision progress',
-  },
-];
-
-const pathways = [
-  {
-    title: 'Browse proposals',
-    who: 'Anyone',
-    body: 'Read proposals at every stage, from new ideas to decisions being processed after the vote.',
-    href: '/proposals/',
-    action: 'Browse proposals',
-    icon: Compass,
-    liveLabel: 'Current proposal',
-    live: live.idea,
-    empty: 'No public proposals yet. Check back soon.',
-  },
-  {
-    title: 'Join discussions',
-    who: 'Members',
-    body: 'Share support, concerns or an informal wording suggestion while an idea is open for discussion.',
-    href: '/proposals/?stage=deliberate',
-    action: 'Join discussions',
-    icon: MessageSquare,
-    liveLabel: 'In discussion',
-    live: live.discussion,
-    empty: 'No discussions are open right now.',
-  },
-  {
-    title: 'See open votes',
-    who: 'Eligibility applies',
-    body: 'Read the exact wording and check the ballot’s eligibility before you vote.',
-    href: '/proposals/?stage=decide',
-    action: 'See open votes',
-    icon: Vote,
-    liveLabel: 'Open ballot',
-    live: live.vote,
-    empty: 'No ballots are open right now.',
-  },
-  {
-    title: 'Policy registry',
-    who: 'Anyone',
-    body: 'Engage’s registry holds only wording formally adopted and authorised for publication. It is not yet populated in this release; proposals here are not ratified policy.',
+    step: '04',
+    stage: '4. Implement & Ratify',
+    duration: '15 sec',
+    who: 'Authorised party governance · Public registry',
+    title: 'Formal ratification and authorised policy publication',
+    body: 'A successful member ballot does not automatically publish policy. An authorised party body records formal ratification, and a national administrator authorises publication into the Policy Registry.',
     href: '/policies/',
-    action: 'Open the policy registry',
-    icon: BookOpen,
-    liveLabel: 'Recently published',
-    live: live.policy,
-    empty: 'Engage does not yet hold official policy records. This does not mean Fusion has no adopted policy: those policies remain available through the party’s official channels.',
+    linkLabel: 'Open Policy Registry',
   },
 ];
 
-const details: Array<{ title: string; body: string; link?: { href: string; label: string } }> = [
+const publicAccessItems = [
   {
-    title: 'Wording suggestions, formal amendments and amendment ballots',
-    body: 'A wording suggestion is an informal contribution during deliberation and needs no seconder. A formal amendment is a proposed substantive change to recorded wording. An amendment ballot is a separate vote on the recorded amendment revision where the applicable process requires one.',
+    title: 'Proposal register & full wording',
+    detail: `Browse all ${recentProposals.length} public proposals across every stage, including summaries, commitments, and rationales.`,
+    href: '/proposals/',
   },
   {
-    title: 'Seconding formal motions',
-    body: 'Under the governance design for the upcoming lifecycle, every formal motion requires one independent eligible seconder, including new policy proposals, formal amendments and repeal proposals. The author cannot second their own motion. A seconder supports formal consideration, not necessarily approval. Minor editorial corrections need not restart seconding; material changes to formally seconded wording require renewed seconding. Seconding is not yet operational.',
+    title: 'Deliberation threads & stances',
+    detail: 'Read member support, implementation concerns, and informal wording suggestions on public proposals.',
+    href: '/proposals/?stage=deliberate',
   },
   {
-    title: 'Proposal ballots and amendment ballots are separate',
-    body: 'A proposal ballot decides whether the proposal wording should proceed. An amendment ballot decides whether a specific amendment revision should be endorsed. Each is tied to its own saved revision, and one does not automatically change the other.',
+    title: 'Immutable wording revisions & diffs',
+    detail: 'Inspect every saved wording snapshot, SHA-256 content hash, and side-by-side formal amendment comparison.',
+    href: '/proposals/',
   },
   {
-    title: 'Who can vote',
-    body: 'Voting requires a verified membership and, where a ballot is scoped to a branch, active membership of that branch. Signing in alone does not grant voting rights. The ballot page states the eligibility that applies.',
-    link: { href: '/member/', label: 'Check your account' },
+    title: 'Aggregate ballot tallies & outcomes',
+    detail: 'See approve, abstain, and reject totals plus recorded returning-officer outcomes (individual member ballot choices are never public).',
+    href: '/proposals/?stage=decide',
   },
   {
-    title: 'The wording is frozen for a ballot',
-    body: 'When a ballot opens, it is bound to a specific wording revision. Later edits do not change what voters saw or how their votes are counted. Earlier revisions remain available so the change can be audited.',
+    title: 'Official Policy Registry & Branch directory',
+    detail: 'Examine formally ratified and published party policies, provenance lineage, and recognised branches.',
+    href: '/policies/',
   },
   {
-    title: 'Current scope and limits',
-    body: 'This page describes what Engage supports today. Seconding formal motions, automatic ratification and timed ballots are not yet implemented. Seconding will be described as available only after the lifecycle implementation and its tests are complete.',
+    title: 'Public JSON API v1 & OpenAPI 3.1 schema',
+    detail: 'Machine-readable endpoints for policies, versions, categories, and branches.',
+    href: '/api/v1/policies',
+  },
+];
+
+const memberAccessItems = [
+  {
+    title: 'Suggest a new policy idea or resolution',
+    detail: 'Submit a new proposal into Stage 1 (Propose) with commitments, rationale, and supporting attachments.',
+  },
+  {
+    title: 'Post deliberation stances & endorse feedback',
+    detail: 'Contribute Support, Concern, Wording suggestions, or Comments, and endorse helpful member contributions.',
+  },
+  {
+    title: 'Propose formal wording amendments',
+    detail: 'Submit a structured replacement diff against the current proposal revision during Propose or Deliberate.',
+  },
+  {
+    title: 'Vote in eligible party-wide & branch ballots',
+    detail: 'Cast or update your Approve, Abstain, or Reject ballot when verified and eligible for the ballot’s jurisdiction.',
+  },
+  {
+    title: 'My Engage personal governance dashboard',
+    detail: 'Track your outstanding ballots, catch-up digest since your last visit, and personal voting & contribution log.',
+  },
+];
+
+const underDevelopmentItems = [
+  {
+    status: 'Under development',
+    title: 'Independent seconder workflow for formal motions',
+    detail: 'Under the upcoming governance lifecycle, formal policy proposals, substantive amendments, and repeal motions will require one independent eligible seconder before advancing (authors cannot second their own motion).',
+  },
+  {
+    status: siteConfig.publicPulsePollEnabled ? 'Enabled (30-day evaluation)' : 'Planned after member review',
+    title: 'Public pulse poll vs. binding member ballot',
+    detail: 'Following the initial member review period, Engage will trial a non-binding public Agree/Disagree pulse indicator alongside the binding verified-member ballot so the party can compare general public sentiment with formal member decisions.',
+  },
+  {
+    status: 'Intentional release state',
+    title: 'Official Policy Registry population',
+    detail: publishedPolicies.length > 0
+      ? `${publishedPolicies.length} ratified policy record(s) published in the registry.`
+      : 'Engage’s Policy Registry holds only wording formally ratified and authorised for publication inside Engage. Existing party policies remain on fusionparty.org.au until formally migrated.',
+  },
+  {
+    status: 'Roadmap',
+    title: 'Scheduled ballot windows & privacy-preserving traffic analytics',
+    detail: 'Automated opening/closing timestamps for ballots and aggregate, cookie-free page traffic reporting for governance organisers.',
+  },
+];
+
+const sourceMaterialLinks = [
+  {
+    label: 'Live Proposal Register & Provenance Records',
+    description: 'Every seeded proposal cites its prior policy predecessor, constitutional authority, or working-group lineage.',
+    href: '/proposals/',
+    cta: 'Inspect proposals →',
+  },
+  {
+    label: 'Public Governance API v1 (/api/v1/policies)',
+    description: 'Read-only JSON feed of published policies, version histories, and branch records with canonical Link headers.',
+    href: '/api/v1/policies',
+    cta: 'Open JSON endpoint →',
+  },
+  {
+    label: 'OpenAPI 3.1 Specification (/api/v1/openapi.json)',
+    description: 'Complete machine-readable contract for external verifiers, researchers, and civic tech integrations.',
+    href: '/api/v1/openapi.json',
+    cta: 'View OpenAPI spec →',
+  },
+  {
+    label: 'Engage Source Repository & Architecture Docs',
+    description: 'Container definitions, database schemas, deterministic ballot migration scripts, and governance ADRs.',
+    href: siteConfig.repoUrl || 'https://github.com/Fusion-Party-Aus/Engage',
+    cta: 'Examine source repository ↗',
+    external: true,
+  },
+];
+
+const governanceRules = [
+  {
+    title: 'Wording suggestions vs. formal amendments vs. amendment ballots',
+    body: 'A wording suggestion is an informal comment posted during deliberation and needs no seconder. A formal amendment is a structured diff recorded against a specific base revision ID. An amendment ballot is a separate vote on whether to endorse that amendment revision; it does not cast your vote on the main proposal.',
+  },
+  {
+    title: 'Ballot wording is frozen to an immutable revision',
+    body: 'When a ballot enters Stage 3 (Decide), it is bound to a single immutable wording revision (`ballotRevisionId`). Substantive text is locked once voting begins or votes are cast. Earlier revisions remain visible in the revision log so anyone can audit what changed.',
+  },
+  {
+    title: 'A successful ballot is not automatic policy adoption',
+    body: 'Engage separates member voting from constitutional ratification and publication. After a successful ballot is recorded by the returning officer, the wording moves to Stage 4 (Implement) and only appears in the Policy Registry after formal ratification and administrator publication.',
+  },
+  {
+    title: 'Branch jurisdiction and electorate eligibility',
+    body: 'Every proposal records its originating branch, governance authority, and jurisdiction separately. Branch-scoped ballots check active membership in that recognised branch electorate; party-wide ballots are open to all verified Fusion members.',
   },
 ];
 ---
 <SiteLayout
-  title="How Engage works · Fusion Party Australia"
-  description="A plain-language guide to how ideas move through Engage: propose, deliberate, decide and implement, and how a successful vote can become adopted policy."
+  title="How Engage works · 60-Second Guide & Governance Reference"
+  description="A 60-second factual walkthrough of Engage, backed by a one-page explanation of what is publicly accessible, what requires membership, what remains under development, source material links, and Docker backup & handover continuity."
+  canonical="/how-it-works/"
 >
-  <div class="page-wrap section-space how-page">
-    <header class="how-hero">
-      <div class="how-hero__copy">
-        <h1>How an idea becomes a decision.</h1>
-        <p class="how-hero__lead">
-          Engage is Fusion Party Australia’s place to explore ideas, discuss proposed changes, vote when eligible, and explore the policy registry. You can read everything public without an account.
+  <div class="page-wrap section-space how-workspace">
+    <!-- Top Hero Header -->
+    <header class="how-header">
+      <div class="how-header__main">
+        <div class="how-header__badges">
+          <Badge variant="info">60-Second Walkthrough</Badge>
+          <Badge variant="outline">One-Page Governance &amp; Operations Reference</Badge>
+        </div>
+        <h1>How Engage works.</h1>
+        <p class="how-header__lead">
+          Engage is Fusion Party Australia’s participatory governance platform. Ideas are proposed by members, refined through transparent deliberation and formal amendments, voted on against frozen wording revisions, and ratified into official policy.
         </p>
-        <p class="how-hero__in-short">
-          <strong>In short:</strong> an idea is discussed, voted on when eligible, and only becomes adopted policy after formal ratification and authorised publication.
-        </p>
-        <div class="how-hero__actions">
-          <Button href="/proposals/">Browse proposals <ArrowRight aria-hidden="true" className="size-4" /></Button>
-          <Button href="/policies/" variant="outline">Policy registry</Button>
-        </div>
-      </div>
-
-      <Card className="how-legend">
-        <CardContent className="grid gap-4 p-6">
-          <div>
-            <h2>Read freely. Take part when you are ready.</h2>
-          </div>
-          <ul class="how-legend__list">
-            <li>
-              <Compass aria-hidden="true" className="size-4" />
-              <div><strong>Anyone</strong><span>Read public proposals and the policy registry.</span></div>
-            </li>
-            <li>
-              <MessageSquare aria-hidden="true" className="size-4" />
-              <div><strong>Members</strong><span>Join discussions and suggest wording changes.</span></div>
-            </li>
-            <li>
-              <Vote aria-hidden="true" className="size-4" />
-              <div><strong>Eligible members</strong><span>Vote in the ballots they qualify for.</span></div>
-            </li>
-          </ul>
-        </CardContent>
-      </Card>
-    </header>
-
-    <nav class="how-nav" aria-label="On this page">
-      <a href="#process">The four stages</a>
-      <a href="#actions">What you can do</a>
-      <a href="#details">The details</a>
-    </nav>
-
-    <section id="process" class="how-section" aria-labelledby="process-heading">
-      <div class="section-head">
-        <div>
-          <h2 id="process-heading">Four stages, one recorded path.</h2>
-        </div>
-        <p class="section-head__note">Every proposal follows the same four stages. The wording and the decision record are kept at each step.</p>
-      </div>
-
-      <ol class="stage-list">
-        {stages.map((stage, index) => (
-          <li class="stage">
-            <span class="stage__number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-            <div class="stage__body">
-              <div class="stage__head">
-                <h3>{stage.title}</h3>
-                <Badge variant="outline">{stage.who}</Badge>
-              </div>
-              <p>{stage.body}</p>
-              <Button href={stage.href} variant="link" className="h-auto gap-1.5 px-0">
-                {stage.action} <ArrowRight aria-hidden="true" className="size-4" />
-              </Button>
-            </div>
-          </li>
-        ))}
-      </ol>
-
-      <Card className="after-vote">
-        <div class="after-vote__inner">
-          <div class="after-vote__copy">
-            <div class="after-vote__eyebrow">
-              <Badge variant="warning">Not automatic</Badge>
-              <span>After the vote</span>
-            </div>
-            <h3>A successful ballot is not adopted policy.</h3>
-            <p>A proposal ballot decides the wording. It does not ratify or publish policy. After the vote, the decision is processed through the steps below where they apply.</p>
-            <Button href="/policies/" variant="outline">Policy registry <ArrowRight aria-hidden="true" className="size-4" /></Button>
-          </div>
-          <ol class="after-vote__steps">
-            <li>
-              <span aria-hidden="true">01</span>
-              <div><strong>Formal ratification</strong><p>An authorised party authority records the adopted wording and the decision event.</p></div>
-            </li>
-            <li>
-              <span aria-hidden="true">02</span>
-              <div><strong>Authorised publication</strong><p>Only then does the exact wording appear in the policy registry.</p></div>
-            </li>
-          </ol>
-        </div>
-      </Card>
-    </section>
-
-    <section id="actions" class="how-section" aria-labelledby="actions-heading">
-      <div class="section-head">
-        <div>
-          <h2 id="actions-heading">Start with what you need.</h2>
-        </div>
-        <p class="section-head__note">Some actions require a verified membership; voting also depends on the ballot.</p>
-      </div>
-
-      <div class="pathway-grid">
-        {pathways.map((pathway) => {
-          const Icon = pathway.icon;
-          return (
-            <Card className="pathway">
-              <div class="pathway__inner">
-                <div class="pathway__top">
-                  <span class="pathway__icon"><Icon aria-hidden="true" /></span>
-                  <Badge variant="outline">{pathway.who}</Badge>
-                </div>
-                <h3>{pathway.title}</h3>
-                <p>{pathway.body}</p>
-                {pathway.live ? (
-                  <p class="pathway__live">
-                    <span>{pathway.liveLabel}</span>
-                    <a href={pathway.live.href}>{pathway.live.title}</a>
-                  </p>
-                ) : (
-                  <p class="pathway__empty">{pathway.empty}</p>
-                )}
-                <Button href={pathway.href} variant="outline" className="mt-auto w-fit gap-1.5">
-                  {pathway.action} <ArrowRight aria-hidden="true" className="size-4" />
-                </Button>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-
-      <Card className="idea-cta">
-        <div class="idea-cta__inner">
-          <div>
-            <h3>Have an idea? Members can put a proposal forward.</h3>
-            <p>Start with the change you want to see. You can refine the wording as members respond.</p>
-          </div>
-          <Button href={user?.canParticipate ? '/proposals/new/' : '/member/'}>
-            {user?.canParticipate ? 'Suggest an idea' : user ? 'Check your account' : 'Sign in to suggest an idea'}
-            <Lightbulb aria-hidden="true" className="size-4" />
+        <div class="how-header__actions">
+          <Button href={primaryCtaHref}>
+            <Plus className="size-4" aria-hidden="true" />
+            {primaryCtaLabel}
+          </Button>
+          <Button href="/proposals/" variant="outline">
+            Browse {recentProposals.length} proposals
+          </Button>
+          <Button href="/policies/" variant="ghost">
+            Policy registry →
           </Button>
         </div>
-      </Card>
+      </div>
+
+      <aside class="how-summary-box" aria-label="At a glance">
+        <h2>In 3 sentences</h2>
+        <ol>
+          <li><strong>Anyone</strong> can read public proposals, deliberation threads, revision histories, ballot tallies, and the JSON API without an account.</li>
+          <li><strong>Verified members</strong> can suggest ideas, post deliberation stances, file formal amendments, and vote in ballots they qualify for.</li>
+          <li><strong>No vote auto-publishes policy:</strong> every ballot is bound to an immutable wording revision and requires formal ratification before entering the Policy Registry.</li>
+        </ol>
+      </aside>
+    </header>
+
+    <!-- Sticky Jump Bar -->
+    <nav class="how-jump-nav" aria-label="On this page">
+      <a href="#walkthrough">1. 60-Second Walkthrough</a>
+      <a href="#access-matrix">2. Public vs. Member Access</a>
+      <a href="#roadmap">3. Under Development</a>
+      <a href="#source-material">4. Source Material &amp; API</a>
+      <a href="#operations">5. Backup &amp; Handover Strategy</a>
+      <a href="#rules">6. Exact Governance Rules</a>
+    </nav>
+
+    <!-- SECTION 1: 60-Second Factual Walkthrough -->
+    <section id="walkthrough" class="how-section" aria-labelledby="walkthrough-heading">
+      <div class="section-bar">
+        <div>
+          <span class="section-kicker"><Clock className="size-3.5" aria-hidden="true" /> Part 1 · 60-Second Factual Walkthrough</span>
+          <h2 id="walkthrough-heading">Four stages, one auditable record.</h2>
+        </div>
+        <p class="section-bar__note">
+          Every proposal moves through the same four stages. Wording snapshots and decision events are preserved at each step.
+        </p>
+      </div>
+
+      <div class="walkthrough-grid">
+        {walkthroughSteps.map((item) => (
+          <article class="walkthrough-card">
+            <div class="walkthrough-card__top">
+              <span class="walkthrough-step tabular">{item.step}</span>
+              <Badge variant="outline">{item.stage}</Badge>
+              <span class="walkthrough-time tabular">{item.duration}</span>
+            </div>
+            <h3>{item.title}</h3>
+            <p class="walkthrough-who">{item.who}</p>
+            <p class="walkthrough-body">{item.body}</p>
+            <a href={item.href} class="walkthrough-link">
+              {item.linkLabel} <ArrowRight className="size-3.5" aria-hidden="true" />
+            </a>
+          </article>
+        ))}
+      </div>
     </section>
 
-    <section id="details" class="how-section" aria-labelledby="details-heading">
-      <div class="details-layout">
-        <div class="details-intro">
-          <h2 id="details-heading">When you need the exact rule.</h2>
-          <p>These distinctions keep the wording, the vote and the final policy record clear. Open a topic for the detail.</p>
+    <!-- SECTION 2: One-Page Breakdown: Publicly Accessible vs. Requires Membership -->
+    <section id="access-matrix" class="how-section" aria-labelledby="access-heading">
+      <div class="section-bar">
+        <div>
+          <span class="section-kicker"><ShieldCheck className="size-3.5" aria-hidden="true" /> Part 2 · Access &amp; Permissions Matrix</span>
+          <h2 id="access-heading">What is publicly accessible vs. what requires membership.</h2>
         </div>
-        <div class="details-list">
-          {details.map((detail) => (
-            <details class="detail">
-              <summary>
-                <span>{detail.title}</span>
-                <span class="detail__mark" aria-hidden="true">+</span>
-              </summary>
-              <div class="detail__body">
-                <p>{detail.body}{' '}
-                  {detail.link && <a href={detail.link.href}>{detail.link.label}</a>}
-                </p>
+        <p class="section-bar__note">
+          Engage defaults to public transparency for governance records while restricting participation and voting to verified Fusion members.
+        </p>
+      </div>
+
+      <div class="matrix-two-col">
+        <div class="matrix-panel">
+          <div class="matrix-panel__head">
+            <div class="matrix-panel__title">
+              <Compass className="size-5 text-primary" aria-hidden="true" />
+              <h3>Publicly accessible (No account required)</h3>
+            </div>
+            <Badge variant="success">Open to everyone</Badge>
+          </div>
+          <ul class="matrix-list">
+            {publicAccessItems.map((item) => (
+              <li>
+                <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
+                <div>
+                  <strong><a href={item.href}>{item.title}</a></strong>
+                  <p>{item.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="matrix-panel is-member">
+          <div class="matrix-panel__head">
+            <div class="matrix-panel__title">
+              <Vote className="size-5 text-primary" aria-hidden="true" />
+              <h3>Requires verified Fusion membership</h3>
+            </div>
+            <Badge variant="info">Verified members</Badge>
+          </div>
+          <ul class="matrix-list">
+            {memberAccessItems.map((item) => (
+              <li>
+                <Lock className="size-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div class="matrix-panel__footer">
+            <Button href={user ? '/member/' : '/member/'} size="sm">
+              {user ? 'Open My Engage' : 'Sign in or verify membership'}
+            </Button>
+            <Button href={primaryCtaHref} variant="outline" size="sm">
+              {primaryCtaLabel}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 3 & 4: What Remains Under Development + Where to Examine Source Material -->
+    <div class="how-split-sections">
+      <section id="roadmap" class="how-section" aria-labelledby="roadmap-heading">
+        <div class="section-bar is-compact">
+          <div>
+            <span class="section-kicker"><Layers className="size-3.5" aria-hidden="true" /> Part 3 · Roadmap &amp; Scope</span>
+            <h2 id="roadmap-heading">What remains under development.</h2>
+          </div>
+        </div>
+
+        <div class="roadmap-list">
+          {underDevelopmentItems.map((item) => (
+            <article class="roadmap-item">
+              <div class="roadmap-item__head">
+                <strong>{item.title}</strong>
+                <Badge variant="warning">{item.status}</Badge>
               </div>
-            </details>
+              <p>{item.detail}</p>
+            </article>
           ))}
         </div>
+      </section>
+
+      <section id="source-material" class="how-section" aria-labelledby="source-heading">
+        <div class="section-bar is-compact">
+          <div>
+            <span class="section-kicker"><Code2 className="size-3.5" aria-hidden="true" /> Part 4 · Verifiable Source Material</span>
+            <h2 id="source-heading">Where to examine the source material.</h2>
+          </div>
+        </div>
+
+        <div class="source-list">
+          {sourceMaterialLinks.map((item) => (
+            <article class="source-card">
+              <div>
+                <h3>
+                  <a
+                    href={item.href}
+                    target={item.external ? '_blank' : undefined}
+                    rel={item.external ? 'noopener noreferrer' : undefined}
+                  >
+                    {item.label}
+                  </a>
+                </h3>
+                <p>{item.description}</p>
+              </div>
+              <a
+                href={item.href}
+                target={item.external ? '_blank' : undefined}
+                rel={item.external ? 'noopener noreferrer' : undefined}
+                class="source-card__cta"
+              >
+                {item.cta}
+              </a>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+
+    <!-- SECTION 5: Backup, Containerisation & Handover Strategy -->
+    <section id="operations" class="how-section" aria-labelledby="operations-heading">
+      <div class="section-bar">
+        <div>
+          <span class="section-kicker"><Server className="size-3.5" aria-hidden="true" /> Part 5 · Operational Continuity, Backups &amp; Handover</span>
+          <h2 id="operations-heading">How Engage is backed up and handed over if a maintainer leaves.</h2>
+        </div>
+        <p class="section-bar__note">
+          Engage is engineered with zero proprietary lock-in so any party system administrator can back up, restore, or transfer the platform in minutes.
+        </p>
+      </div>
+
+      <div class="ops-grid">
+        <article class="ops-card">
+          <div class="ops-card__head">
+            <HardDrive className="size-5 text-primary" aria-hidden="true" />
+            <h3>1. Self-contained Docker architecture</h3>
+          </div>
+          <p>{siteConfig.backupSummary}</p>
+          <ul class="ops-checklist">
+            <li><strong>Application container:</strong> Stateless Astro standalone Node server built from the root <code>Dockerfile</code>.</li>
+            <li><strong>Database container:</strong> Single-node MongoDB 8.0 replica set (required for multi-document ACID vote transactions) persisted in the <code>mongo_data</code> volume.</li>
+            <li><strong>No external lock-in:</strong> Runs on any Linux host, VPS, NUC, or Coolify instance with Docker Compose.</li>
+          </ul>
+        </article>
+
+        <article class="ops-card">
+          <div class="ops-card__head">
+            <Database className="size-5 text-primary" aria-hidden="true" />
+            <h3>2. Automated backup &amp; restore drill</h3>
+          </div>
+          <p>
+            Logical database backups use <code>mongodump --archive --gzip</code> and can be verified into an isolated restore-drill database without touching production records:
+          </p>
+          <pre class="ops-code"><code># 1. Create compressed backup archive + SHA-256 checksum
+mongodump --uri="$MONGODB_URI" --db=engage_production \
+  --archive=/backups/engage-$(date +%F).archive.gz --gzip
+
+# 2. Verify restore into an isolated drill database
+scripts/restore-preview.sh /backups/engage-YYYY-MM-DD.archive.gz</code></pre>
+        </article>
+
+        <article class="ops-card">
+          <div class="ops-card__head">
+            <GitBranch className="size-5 text-primary" aria-hidden="true" />
+            <h3>3. Maintainer handover checklist</h3>
+          </div>
+          <p>{siteConfig.handoverSummary}</p>
+          <ol class="ops-steps">
+            <li><strong>Repository &amp; docs:</strong> Clone <code>Fusion-Party-Aus/Engage</code>; review <code>docs/operations.md</code> and <code>docs/engage-release-handover-2026-11-08.md</code>.</li>
+            <li><strong>Environment secrets:</strong> Transfer the <code>.env</code> secrets (<code>MONGODB_URI</code>, <code>SESSION_SECRET</code>, <code>BETTER_AUTH_SECRET</code>, OAuth/Resend keys) via the party’s password manager.</li>
+            <li><strong>Admin role delegation:</strong> Grant the incoming maintainer’s verified account the <code>administrator</code> role in <a href="/admin/members/">/admin/members/</a> and update platform settings in <a href="/admin/settings/">/admin/settings/</a>.</li>
+          </ol>
+        </article>
       </div>
     </section>
 
-    <section class="how-close" aria-labelledby="close-heading">
-      <div>
-        <h2 id="close-heading">Participation is optional. Start where you are.</h2>
-        <p>Read what interests you. Sign in when you want to contribute or vote.</p>
+    <!-- SECTION 6: Detailed Governance Rules -->
+    <section id="rules" class="how-section" aria-labelledby="rules-heading">
+      <div class="section-bar">
+        <div>
+          <span class="section-kicker"><Gavel className="size-3.5" aria-hidden="true" /> Part 6 · Governance Safeguards</span>
+          <h2 id="rules-heading">When you need the exact rule.</h2>
+        </div>
+        <p class="section-bar__note">
+          These safeguards keep proposal wording, member ballots, and the official policy registry distinct and auditable.
+        </p>
       </div>
-      <div class="how-close__actions">
-        <Button href="/proposals/">Browse proposals <ArrowRight aria-hidden="true" className="size-4" /></Button>
-        <Button href="/member/" variant="outline" className="border-white/50 bg-transparent text-white hover:bg-white hover:text-[#250a57]">
-          Sign in or get started
-        </Button>
+
+      <div class="rules-accordion">
+        {governanceRules.map((rule, idx) => (
+          <details class="rule-item" open={idx === 0}>
+            <summary>
+              <span>{rule.title}</span>
+              <span class="rule-item__mark" aria-hidden="true">+</span>
+            </summary>
+            <div class="rule-item__body">
+              <p>{rule.body}</p>
+            </div>
+          </details>
+        ))}
       </div>
     </section>
   </div>
 </SiteLayout>
 
 <style>
-  .how-page {
-    max-width: 84rem;
-  }
-
-  .how-page p {
-    text-wrap: pretty;
-  }
-
-  .how-page :global([data-slot="button"]) {
-    min-height: 2.75rem;
-  }
-
-  /* Hero */
-  .how-hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
-    gap: clamp(2rem, 5vw, 4.5rem);
-    align-items: start;
-    padding-bottom: 2.5rem;
-  }
-  .how-hero h1 {
-    max-width: 15ch;
-    margin: 0 0 1.25rem;
-    font: 600 clamp(2.7rem, 5.4vw, 4.6rem)/1.02 Newsreader, Georgia, serif;
-    letter-spacing: -0.035em;
-    color: var(--horizon-purple);
-  }
-  .how-hero__lead {
-    max-width: 60ch;
-    margin: 0;
-    font-size: 1.12rem;
-    line-height: 1.6;
-    color: var(--horizon-muted);
-  }
-  .how-hero__in-short {
-    max-width: 62ch;
-    margin: 1.1rem 0 0;
-    padding-left: 0.9rem;
-    border-left: 3px solid var(--horizon-accent);
-    font-size: 1rem;
-    line-height: 1.55;
-    color: var(--horizon-purple-deep);
-  }
-  .how-hero__actions {
+  .how-workspace {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-top: 1.6rem;
+    flex-direction: column;
+    gap: 2.25rem;
+    padding-top: 1.5rem;
+    padding-bottom: 4rem;
   }
-  .how-legend {
-    padding: 0;
-    border: 1px solid var(--horizon-line);
-    background: var(--horizon-lavender-soft);
-  }
-  .how-legend h2 {
-    margin: 0;
-    font: 600 1.6rem/1.15 Newsreader, Georgia, serif;
-    color: var(--horizon-purple);
-  }
-  .how-legend__list {
+
+  .how-header {
     display: grid;
-    gap: 1rem;
-    margin: 0.25rem 0 0;
-    padding: 0;
-    list-style: none;
-  }
-  .how-legend__list li {
-    display: grid;
-    grid-template-columns: 1.25rem 1fr;
-    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1.2fr) minmax(19rem, 0.8fr);
+    gap: 2rem;
     align-items: start;
   }
-  .how-legend__list svg {
-    width: 1.15rem;
-    height: 1.15rem;
-    margin-top: 0.15rem;
-    color: var(--horizon-purple);
-  }
-  .how-legend__list strong {
-    display: block;
-    font-size: 0.94rem;
-    color: var(--horizon-purple-deep);
-  }
-  .how-legend__list span {
-    display: block;
-    margin-top: 0.1rem;
-    font-size: 0.9rem;
-    line-height: 1.45;
-    color: var(--horizon-muted);
+
+  .how-header__main {
+    display: grid;
+    gap: 0.9rem;
   }
 
-  /* Section nav */
-  .how-nav {
+  .how-header__badges {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.2rem 1.5rem;
-    padding: 0.35rem 0;
-    border-top: 1px solid var(--horizon-line);
-    border-bottom: 1px solid var(--horizon-line);
-    font-size: 0.86rem;
-    font-weight: 700;
-  }
-  .how-nav a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.75rem;
-    padding: 0.25rem 0;
-    color: var(--horizon-purple);
-    text-decoration: none;
-  }
-  .how-nav a:hover {
-    text-decoration: underline;
-    text-underline-offset: 0.25em;
-  }
-  .how-nav a:focus-visible {
-    outline: 3px solid var(--horizon-focus);
-    outline-offset: 3px;
-    border-radius: 0.2rem;
+    gap: 0.45rem;
   }
 
-  /* Shared section rhythm */
-  .how-section {
-    padding-top: clamp(2.8rem, 5vw, 4.5rem);
-    scroll-margin-top: 1.5rem;
-  }
-  .section-head {
-    display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(16rem, 0.95fr);
-    gap: 1.5rem 3rem;
-    align-items: end;
-    margin-bottom: 2rem;
-  }
-  .section-head h2,
-  .details-intro h2,
-  .how-close h2 {
+  .how-header h1 {
     margin: 0;
-    font: 600 clamp(1.9rem, 3.4vw, 2.8rem)/1.08 Newsreader, Georgia, serif;
+    font: 600 clamp(2.4rem, 4.5vw, 3.6rem)/1.04 Newsreader, Georgia, serif;
     letter-spacing: -0.03em;
-    color: var(--horizon-purple);
-  }
-  .section-head__note {
-    max-width: 52ch;
-    margin: 0 0 0.3rem;
-    font-size: 0.98rem;
-    line-height: 1.55;
-    color: var(--horizon-muted);
+    color: var(--horizon-ink);
   }
 
-  /* Four stages */
-  .stage-list {
+  .how-header__lead {
     margin: 0;
-    padding: 0;
-    list-style: none;
-    border-top: 1px solid var(--horizon-line);
-  }
-  .stage {
-    display: grid;
-    grid-template-columns: 4.5rem minmax(0, 1fr);
-    gap: 1.5rem;
-    padding: 1.4rem 0;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-  .stage__number {
-    font: 600 2.2rem/1 Newsreader, Georgia, serif;
-    color: #8e77c4;
-    font-variant-numeric: tabular-nums;
-  }
-  .stage__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.6rem 0.9rem;
-  }
-  .stage__head h3 {
-    margin: 0;
-    font: 700 1.3rem/1.2 Outfit, sans-serif;
-    color: var(--horizon-purple-deep);
-  }
-  .stage__body {
-    min-width: 0;
-  }
-  .stage__body p {
-    max-width: 72ch;
-    margin: 0.45rem 0 0.55rem;
+    font-size: 1.05rem;
     line-height: 1.6;
     color: var(--horizon-muted);
+    max-width: 64ch;
   }
 
-  /* After the vote */
-  .after-vote {
-    margin-top: 1.5rem;
-    padding: 0;
-    border: 1px solid var(--horizon-line);
-    background: var(--horizon-lavender-soft);
-  }
-  .after-vote__inner {
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(16rem, 0.9fr);
-    gap: clamp(1.5rem, 3vw, 2.5rem);
-    padding: clamp(1.5rem, 3vw, 2.5rem);
-  }
-  .after-vote__eyebrow {
+  .how-header__actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.6rem;
-    margin-bottom: 0.8rem;
+    margin-top: 0.25rem;
   }
-  .after-vote__eyebrow > span {
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--horizon-muted);
-  }
-  .after-vote h3 {
-    max-width: 24ch;
-    margin: 0;
-    font: 600 clamp(1.5rem, 2.6vw, 2rem)/1.15 Newsreader, Georgia, serif;
-    color: var(--horizon-purple);
-  }
-  .after-vote__copy > p {
-    max-width: 58ch;
-    margin: 0.75rem 0 1.15rem;
-    line-height: 1.6;
-    color: var(--horizon-muted);
-  }
-  .after-vote__steps {
+
+  .how-summary-box {
+    padding: 1.25rem 1.35rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: var(--horizon-lavender-soft);
     display: grid;
-    gap: 0;
+    gap: 0.65rem;
+  }
+
+  .how-summary-box h2 {
     margin: 0;
-    padding: 0;
-    list-style: none;
-    border-top: 1px solid var(--horizon-line);
-  }
-  .after-vote__steps li {
-    display: grid;
-    grid-template-columns: 2rem 1fr;
-    gap: 0.8rem;
-    padding: 0.9rem 0;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-  .after-vote__steps li > span {
-    font: 700 0.8rem/1.4 Outfit, sans-serif;
-    color: var(--horizon-purple);
-    font-variant-numeric: tabular-nums;
-  }
-  .after-vote__steps strong {
-    display: block;
-    font-size: 0.96rem;
+    font: 700 1rem/1.2 Outfit, sans-serif;
     color: var(--horizon-purple-deep);
   }
-  .after-vote__steps p {
-    margin: 0.2rem 0 0;
-    font-size: 0.9rem;
+
+  .how-summary-box ol {
+    margin: 0;
+    padding-left: 1.15rem;
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.84rem;
     line-height: 1.5;
     color: var(--horizon-muted);
   }
 
-  /* Task pathways */
-  .pathway-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-  }
-  .pathway {
-    padding: 0;
-    border: 1px solid var(--horizon-line);
-    background: #fff;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-  .pathway:hover {
-    border-color: #9b8ad0;
-    box-shadow: 0 8px 22px #20104a10;
-  }
-  .pathway__inner {
-    display: flex;
-    flex-direction: column;
-    gap: 0.7rem;
-    min-width: 0;
-    height: 100%;
-    padding: 1.4rem;
-  }
-  .pathway__top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-  .pathway__icon {
-    display: grid;
-    place-items: center;
-    width: 2.4rem;
-    height: 2.4rem;
-    border-radius: 0.5rem;
-    background: var(--horizon-lavender);
-    color: var(--horizon-purple);
-  }
-  .pathway__icon svg {
-    width: 1.2rem;
-    height: 1.2rem;
-  }
-  .pathway h3 {
-    margin: 0;
-    font: 700 1.15rem/1.25 Outfit, sans-serif;
-    color: var(--horizon-purple-deep);
-  }
-  .pathway__inner > p {
-    margin: 0;
-    font-size: 0.94rem;
-    line-height: 1.55;
-    color: var(--horizon-muted);
-  }
-  .pathway__live,
-  .pathway__empty {
-    margin-top: auto;
-    padding-top: 0.8rem;
-    border-top: 1px solid var(--horizon-line);
-    font-size: 0.86rem;
-  }
-  .pathway__live {
-    display: grid;
-    gap: 0.2rem;
-    color: var(--horizon-muted);
-  }
-  .pathway__live > span {
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--horizon-purple);
-  }
-  .pathway__live a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.75rem;
-    font-weight: 600;
-    color: var(--horizon-purple-deep);
-    text-decoration-thickness: 1px;
-    text-underline-offset: 0.18em;
-    overflow-wrap: anywhere;
-  }
-  .pathway__live a:hover {
-    text-decoration-thickness: 2px;
-  }
-  .pathway__live a:focus-visible {
-    outline: 3px solid var(--horizon-focus);
-    outline-offset: 3px;
-    border-radius: 0.2rem;
-  }
-  .pathway__empty {
-    color: var(--horizon-muted);
+  .how-summary-box strong {
+    color: var(--horizon-ink);
   }
 
-  .idea-cta {
-    margin-top: 1rem;
-    padding: 0;
-    border: 1px solid var(--horizon-line);
-    background: var(--horizon-lavender-soft);
-  }
-  .idea-cta__inner {
+  /* Sticky Jump Nav */
+  .how-jump-nav {
+    position: sticky;
+    top: 4.25rem;
+    z-index: 20;
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
-    padding: clamp(1.4rem, 3vw, 2rem);
-  }
-  .idea-cta__inner > div {
-    max-width: 60ch;
-  }
-  .idea-cta h3 {
-    margin: 0;
-    font: 700 1.3rem/1.25 Outfit, sans-serif;
-    color: var(--horizon-purple-deep);
-  }
-  .idea-cta p {
-    margin: 0.4rem 0 0;
-    line-height: 1.55;
-    color: var(--horizon-muted);
+    gap: 0.25rem 1.25rem;
+    padding: 0.55rem 1rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.6rem;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    font-size: 0.82rem;
+    font-weight: 700;
   }
 
-  /* Layered detail */
-  .details-layout {
+  .how-jump-nav a {
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+    padding: 0.2rem 0;
+    white-space: nowrap;
+  }
+
+  .how-jump-nav a:hover {
+    color: var(--horizon-purple);
+    text-decoration: underline;
+  }
+
+  .how-section {
     display: grid;
-    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-    gap: clamp(1.5rem, 4vw, 4rem);
-    align-items: start;
+    gap: 1.15rem;
+    scroll-margin-top: 8.5rem;
   }
-  .details-intro {
-    position: sticky;
-    top: 1.5rem;
-    max-width: 30rem;
-  }
-  .details-intro > p:last-child {
-    margin: 1rem 0 0;
-    line-height: 1.6;
-    color: var(--horizon-muted);
-  }
-  .details-list {
-    border-top: 1px solid var(--horizon-line);
-  }
-  .detail {
+
+  .section-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem 2rem;
+    padding-bottom: 0.85rem;
     border-bottom: 1px solid var(--horizon-line);
   }
-  .detail summary {
+
+  .section-bar.is-compact {
+    margin-bottom: 0.1rem;
+  }
+
+  .section-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--horizon-purple);
+    margin-bottom: 0.25rem;
+  }
+
+  .section-bar h2 {
+    margin: 0;
+    font: 600 clamp(1.55rem, 2.6vw, 2.1rem)/1.12 Newsreader, Georgia, serif;
+    color: var(--horizon-ink);
+  }
+
+  .section-bar__note {
+    margin: 0;
+    max-width: 50ch;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--horizon-muted);
+  }
+
+  /* 4-Stage Walkthrough Cards */
+  .walkthrough-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .walkthrough-card {
+    padding: 1.15rem;
+    border-right: 1px solid var(--horizon-line);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .walkthrough-card:last-child {
+    border-right: 0;
+  }
+
+  .walkthrough-card__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  .walkthrough-step {
+    font: 600 1.4rem/1 Newsreader, Georgia, serif;
+    color: var(--horizon-purple);
+  }
+
+  .walkthrough-time {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .walkthrough-card h3 {
+    margin: 0.15rem 0 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .walkthrough-who {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+  }
+
+  .walkthrough-body {
+    margin: 0;
+    font-size: 0.83rem;
+    line-height: 1.5;
+    color: var(--horizon-muted);
+    flex: 1;
+  }
+
+  .walkthrough-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+  }
+
+  .walkthrough-link:hover {
+    text-decoration: underline;
+  }
+
+  /* Access Matrix */
+  .matrix-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .matrix-panel {
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .matrix-panel + .matrix-panel {
+    border-left: 1px solid var(--horizon-line);
+  }
+
+  .matrix-panel.is-member {
+    background: #faf9fe;
+  }
+
+  .matrix-panel__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .matrix-panel__title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .matrix-panel__title h3 {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .matrix-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .matrix-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+
+  .matrix-list strong {
+    display: block;
+    font-size: 0.88rem;
+    color: var(--horizon-ink);
+  }
+
+  .matrix-list strong a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .matrix-list strong a:hover {
+    color: var(--horizon-purple);
+    text-decoration: underline;
+  }
+
+  .matrix-list p {
+    margin: 0.12rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--horizon-muted);
+  }
+
+  .matrix-panel__footer {
+    margin-top: auto;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--horizon-line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* Split Roadmap & Source Material */
+  .how-split-sections {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  .roadmap-list,
+  .source-list {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .roadmap-item,
+  .source-card {
+    padding: 1rem 1.15rem;
+    border-bottom: 1px solid var(--horizon-line);
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .roadmap-item:last-child,
+  .source-card:last-child {
+    border-bottom: 0;
+  }
+
+  .roadmap-item__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .roadmap-item strong,
+  .source-card h3 {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .source-card h3 a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .source-card h3 a:hover {
+    color: var(--horizon-purple);
+    text-decoration: underline;
+  }
+
+  .roadmap-item p,
+  .source-card p {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.48;
+    color: var(--horizon-muted);
+  }
+
+  .source-card__cta {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+    margin-top: 0.15rem;
+  }
+
+  .source-card__cta:hover {
+    text-decoration: underline;
+  }
+
+  /* Operations & Handover Grid */
+  .ops-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .ops-card {
+    padding: 1.2rem;
+    border-right: 1px solid var(--horizon-line);
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .ops-card:last-child {
+    border-right: 0;
+  }
+
+  .ops-card__head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .ops-card h3 {
+    margin: 0;
+    font-size: 0.96rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .ops-card p {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--horizon-muted);
+  }
+
+  .ops-checklist,
+  .ops-steps {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--horizon-muted);
+  }
+
+  .ops-checklist strong,
+  .ops-steps strong {
+    color: var(--horizon-ink);
+  }
+
+  .ops-code {
+    margin: 0;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: #1d0a49;
+    color: #efe9ff;
+    font-size: 0.74rem;
+    line-height: 1.45;
+    overflow-x: auto;
+  }
+
+  /* Rules Accordion */
+  .rules-accordion {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .rule-item {
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .rule-item:last-child {
+    border-bottom: 0;
+  }
+
+  .rule-item summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    min-height: 3.5rem;
-    padding: 0.9rem 0;
+    padding: 0.9rem 1.15rem;
     cursor: pointer;
     list-style: none;
+    font-size: 0.92rem;
     font-weight: 700;
-    color: var(--horizon-purple-deep);
+    color: var(--horizon-ink);
   }
-  .detail summary::-webkit-details-marker {
+
+  .rule-item summary::-webkit-details-marker {
     display: none;
   }
-  .detail summary:focus-visible {
-    outline: 3px solid var(--horizon-focus);
-    outline-offset: 3px;
+
+  .rule-item summary:hover {
+    background: var(--horizon-surface);
   }
-  .detail summary:hover {
+
+  .rule-item__mark {
+    font-size: 1.2rem;
     color: var(--horizon-purple);
   }
-  .detail__mark {
-    flex: 0 0 auto;
-    font-size: 1.35rem;
-    font-weight: 400;
-    line-height: 1;
-    color: var(--horizon-purple);
-    transition: transform 0.15s ease;
-  }
-  .detail[open] .detail__mark {
+
+  .rule-item[open] .rule-item__mark {
     transform: rotate(45deg);
   }
-  .detail__body {
-    max-width: 68ch;
-    padding: 0 0 1.1rem;
+
+  .rule-item__body {
+    padding: 0 1.15rem 1rem;
   }
-  .detail__body p {
+
+  .rule-item__body p {
     margin: 0;
-    line-height: 1.6;
+    max-width: 78ch;
+    font-size: 0.86rem;
+    line-height: 1.55;
     color: var(--horizon-muted);
   }
-  .detail__body a {
-    color: var(--horizon-purple);
-    font-weight: 600;
-  }
 
-  /* Close */
-  .how-close {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
-    margin-top: clamp(3rem, 6vw, 5rem);
-    padding: clamp(1.8rem, 4vw, 3.2rem);
-    border-radius: 0.85rem;
-    background: var(--horizon-purple);
-    color: #fff;
-  }
-  .how-close h2 {
-    max-width: 24ch;
-    color: #fff;
-  }
-  .how-close p {
-    max-width: 52ch;
-    margin: 0.7rem 0 0;
-    color: #e7def4;
-    line-height: 1.55;
-  }
-  .how-close__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-  }
-
-  @media (max-width: 980px) {
-    .how-hero,
-    .section-head,
-    .after-vote__inner,
-    .details-layout {
+  @media (max-width: 1024px) {
+    .how-header,
+    .matrix-two-col,
+    .how-split-sections,
+    .ops-grid {
       grid-template-columns: 1fr;
     }
-    .details-intro {
-      position: static;
+
+    .matrix-panel + .matrix-panel {
+      border-left: 0;
+      border-top: 1px solid var(--horizon-line);
     }
-    .how-hero h1 {
-      max-width: 18ch;
+
+    .ops-card {
+      border-right: 0;
+      border-bottom: 1px solid var(--horizon-line);
+    }
+
+    .ops-card:last-child {
+      border-bottom: 0;
+    }
+
+    .walkthrough-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .walkthrough-card:nth-child(2) {
+      border-right: 0;
+    }
+
+    .walkthrough-card:nth-child(1),
+    .walkthrough-card:nth-child(2) {
+      border-bottom: 1px solid var(--horizon-line);
     }
   }
 
-  @media (max-width: 760px) {
-    .pathway-grid {
+  @media (max-width: 640px) {
+    .walkthrough-grid {
       grid-template-columns: 1fr;
     }
-    .how-close {
-      align-items: flex-start;
-    }
-    .stage {
-      grid-template-columns: 2.8rem minmax(0, 1fr);
-      gap: 1rem;
-    }
-    .stage__number {
-      font-size: 1.6rem;
-    }
-  }
 
-  @media (max-width: 520px) {
-    .how-hero__actions,
-    .how-close__actions {
-      display: grid;
+    .walkthrough-card {
+      border-right: 0;
+      border-bottom: 1px solid var(--horizon-line);
     }
-    .how-hero__actions :global([data-slot="button"]),
-    .how-close__actions :global([data-slot="button"]) {
-      width: 100%;
+
+    .walkthrough-card:last-child {
+      border-bottom: 0;
     }
   }
 </style>

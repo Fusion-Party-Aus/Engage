@@ -1,112 +1,948 @@
 ---
 import SiteLayout from '../layouts/SiteLayout.astro';
-import FeatureGrid from '../components/site/FeatureGrid.astro';
 import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
+import {
+  ArrowRight,
+  BookOpen,
+  CheckCircle2,
+  Compass,
+  Gavel,
+  Layers,
+  MessageSquare,
+  Plus,
+  Vote,
+} from 'lucide-react';
 import { getSessionUser } from '../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../lib/db.ts';
 import { listOutstandingDecisions, listProposals } from '../lib/store.ts';
+import { getSiteConfig } from '../lib/site-config.ts';
+import type { ProposalStage } from '../lib/types.ts';
 
 export const prerender = false;
 const authError = Astro.url.searchParams.get('error');
 if (authError) return Astro.redirect(`/member/?error=${encodeURIComponent(authError)}`);
+
 const env = runtimeEnv(Astro.locals);
 const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
-const proposals = await listProposals(db, { includeArchived: false, user });
+const siteConfig = await getSiteConfig(db, env);
+const [proposals, publishedPolicyCount, mine] = await Promise.all([
+  listProposals(db, { includeArchived: false, user }),
+  db.collection('policy_registry').countDocuments({ publicationStatus: 'published' }),
+  user?.canParticipate ? listOutstandingDecisions(db, user.memberId, user) : Promise.resolve([]),
+]);
 const votes = proposals.filter((p) => p.stage === 'decide');
 const discussions = proposals.filter((p) => p.stage === 'deliberate');
-const mine = user?.canParticipate ? await listOutstandingDecisions(db, user.memberId, user) : [];
-const branch = user?.activeBranchIds?.length ? proposals.filter((p) => user.activeBranchIds?.includes(p.originatingBranchId ?? '')) : [];
-const publishedPolicyCount = await db.collection('policy_registry').countDocuments({ publicationStatus: 'published' });
+const ideas = proposals.filter((p) => p.stage === 'propose');
+const implementing = proposals.filter((p) => p.stage === 'implement');
+const branch = user?.activeBranchIds?.length
+  ? proposals.filter((p) => user.activeBranchIds?.includes(p.originatingBranchId ?? ''))
+  : [];
 const registryAvailable = publishedPolicyCount > 0;
----
-<SiteLayout title="Engage · Fusion Party Australia" description="Explore Fusion's ideas, take part when you choose, and follow proposals and official policy." canonical="/">
-  {user ? (
-    <div class="page-wrap section-space journey-home member-home">
-      <header class="journey-hero">
+const primaryCtaLabel = siteConfig.primaryCtaLabel || 'Suggest an idea';
+const primaryCtaHref = siteConfig.primaryCtaHref || '/proposals/new/';
 
-        <h1>Welcome back{user.name ? `, ${user.name.split(' ')[0]}` : ''}.</h1>
-        <p>Your votes, discussions and branch activity are here.</p>
+const featuredProposals = [...proposals]
+  .sort((a, b) => {
+    const priority: Record<ProposalStage, number> = {
+      decide: 0,
+      deliberate: 1,
+      propose: 2,
+      implement: 3,
+      archived: 4,
+    };
+    return priority[a.stage] - priority[b.stage] || b.votes.total - a.votes.total;
+  })
+  .slice(0, 6);
+
+const stageLabel = (s: ProposalStage) => {
+  if (s === 'propose') return 'Propose';
+  if (s === 'deliberate') return 'Deliberate';
+  if (s === 'decide') return 'Open vote';
+  if (s === 'implement') return 'Implement';
+  return 'Archived';
+};
+
+const stageVariant = (s: ProposalStage) => {
+  if (s === 'propose') return 'warning' as const;
+  if (s === 'deliberate') return 'secondary' as const;
+  if (s === 'decide') return 'info' as const;
+  if (s === 'implement') return 'success' as const;
+  return 'muted' as const;
+};
+---
+<SiteLayout
+  title="Engage · Fusion Party Australia"
+  description="Explore Fusion's ideas, suggest proposals, join member deliberations, and follow bound ballots and official policy."
+  canonical="/"
+>
+  {user ? (
+    <div class="page-wrap section-space member-home-workspace">
+      <header class="member-welcome-bar">
+        <div class="member-welcome-bar__copy">
+          <h1>Welcome back{user.name ? `, ${user.name.split(' ')[0]}` : ''}.</h1>
+          <p>Put forward a new idea, weigh in on active deliberations, or cast your ballot on open decisions.</p>
+        </div>
+        <div class="member-welcome-bar__actions">
+          <Button href={primaryCtaHref}>
+            <Plus className="size-4" aria-hidden="true" />
+            {primaryCtaLabel}
+          </Button>
+          <Button href="/proposals/" variant="outline">Browse all proposals</Button>
+          <Button href="/member/" variant="ghost">My Engage →</Button>
+        </div>
       </header>
-      <div class="home-summary" aria-label="Your Engage at a glance"><a href="/member/#awaiting-heading"><svg class="nav-icon" aria-hidden="true"><use href="#icon-vote" /></svg><strong>{mine.length}</strong><span>Votes for you</span></a><a href="/proposals/?stage=deliberate"><svg class="nav-icon" aria-hidden="true"><use href="#icon-files" /></svg><strong>{discussions.length}</strong><span>Discussions</span></a><a href="/member/#proposals-heading"><svg class="nav-icon" aria-hidden="true"><use href="#icon-home" /></svg><strong>{branch.length}</strong><span>Branch ideas</span></a></div>
-      {!user.canParticipate && <Alert variant="warning" className="journey-notice"><AlertTitle>Your membership is being checked</AlertTitle><AlertDescription>You can read everything public now. Voting and contributions become available once your membership is verified and you are eligible for the relevant ballot. <a href="/member/">View account status →</a></AlertDescription></Alert>}
-      <section class="journey-section" aria-labelledby="your-votes"><div class="journey-heading"><div><h2 id="your-votes">Votes for you</h2><p>Ballots you can vote on, with the exact wording on each page.</p></div><a href="/proposals/?stage=decide">See all open votes →</a></div>{mine.length ? <div class="journey-list">{mine.slice(0, 4).map((p) => <article><span class="journey-tag">Open vote</span><h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3><p>{p.summary}</p><a href={`/proposals/${p.slug}/`}>Read and vote →</a></article>)}</div> : <p class="journey-empty">No votes need your attention.</p>}</section>
-      <section class="journey-section" aria-labelledby="discussions"><div class="journey-heading"><div><h2 id="discussions">Join discussions</h2><p>Read, respond or suggest a wording change.</p></div><a href="/proposals/?stage=deliberate">Join discussions →</a></div><div class="journey-list">{discussions.slice(0, 3).map((p) => <article><span class="journey-tag">{p.space}</span><h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3><p>{p.summary}</p><a href={`/proposals/${p.slug}/`}>Read and contribute →</a></article>)}</div></section>
-      <section class="journey-next"><div><h2>Your participation</h2><p>Find your activity, account status and branch memberships in one place.</p><a href="/member/">Go to My Engage →</a></div><div><h2>Your branch</h2><p>{branch.length ? `${branch.length} visible proposals originate in your branches.` : 'Browse proposals from your branch and across Fusion.'}</p><a href={user.activeBranchIds?.[0] ? `/proposals/?branch=${encodeURIComponent(user.activeBranchIds[0])}` : '/branches/'}>Explore branch activity →</a></div><div><h2>Have an idea?</h2><p>Start with the change you want to see. You can refine the wording as members respond.</p><a href="/proposals/new/">Suggest an idea →</a></div></section>
+
+      {!user.canParticipate && (
+        <Alert variant="warning">
+          <AlertTitle>Your membership is being verified</AlertTitle>
+          <AlertDescription>
+            You can read every public proposal and revision now. Suggesting ideas, posting stances, and voting unlock once your Fusion membership is verified. <a href="/member/">View account status →</a>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <!-- 4-Cell Member Strip -->
+      <div class="home-pipeline-strip" aria-label="Your Engage at a glance">
+        <a href={primaryCtaHref} class="home-pipeline-cell is-highlight">
+          <span class="home-pipeline-cell__label"><Plus className="size-3.5" aria-hidden="true" />Have an idea?</span>
+          <div class="home-pipeline-cell__bottom">
+            <strong class="home-pipeline-cell__value">{primaryCtaLabel}</strong>
+            <span class="home-pipeline-cell__hint">Start Stage 1</span>
+          </div>
+        </a>
+        <a href="/proposals/?stage=decide" class="home-pipeline-cell">
+          <span class="home-pipeline-cell__label"><Vote className="size-3.5" aria-hidden="true" />Votes for you</span>
+          <div class="home-pipeline-cell__bottom">
+            <strong class="home-pipeline-cell__value tabular">{mine.length}</strong>
+            <span class="home-pipeline-cell__hint">{votes.length} open total</span>
+          </div>
+        </a>
+        <a href="/proposals/?stage=deliberate" class="home-pipeline-cell">
+          <span class="home-pipeline-cell__label"><MessageSquare className="size-3.5" aria-hidden="true" />In discussion</span>
+          <div class="home-pipeline-cell__bottom">
+            <strong class="home-pipeline-cell__value tabular">{discussions.length}</strong>
+            <span class="home-pipeline-cell__hint">Open for stances</span>
+          </div>
+        </a>
+        <a href={user.activeBranchIds?.[0] ? `/proposals/?branch=${encodeURIComponent(user.activeBranchIds[0])}` : '/branches/'} class="home-pipeline-cell">
+          <span class="home-pipeline-cell__label"><Layers className="size-3.5" aria-hidden="true" />Branch activity</span>
+          <div class="home-pipeline-cell__bottom">
+            <strong class="home-pipeline-cell__value tabular">{branch.length}</strong>
+            <span class="home-pipeline-cell__hint">In your branches</span>
+          </div>
+        </a>
+      </div>
+
+      <div class="home-workspace-grid">
+        <div class="home-workspace-main">
+          <!-- Open Votes Queue -->
+          <section class="home-block" aria-labelledby="your-votes">
+            <div class="home-block__head">
+              <div>
+                <h2 id="your-votes">Open ballots for you</h2>
+                <p>Ballots you are eligible to vote on, bound to an exact wording revision.</p>
+              </div>
+              <a href="/proposals/?stage=decide" class="home-block__link">All {votes.length} open votes →</a>
+            </div>
+            {mine.length ? (
+              <div class="home-issue-list">
+                {mine.slice(0, 5).map((p) => (
+                  <article class="home-issue-row">
+                    <div class="home-issue-row__main">
+                      <div class="home-issue-row__meta">
+                        <span class="tabular home-issue-id">{p.proposalId}</span>
+                        <Badge variant="info">Open vote</Badge>
+                        <span class="home-topic-chip">{p.space}</span>
+                      </div>
+                      <h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3>
+                      <p>{p.summary}</p>
+                    </div>
+                    <Button href={`/proposals/${p.slug}/#proposal-vote`} size="sm" variant="outline">
+                      Read &amp; vote →
+                    </Button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p class="home-empty-note">You have no outstanding ballots requiring your vote right now.</p>
+            )}
+          </section>
+
+          <!-- Open Deliberations -->
+          <section class="home-block" aria-labelledby="discussions">
+            <div class="home-block__head">
+              <div>
+                <h2 id="discussions">Open for deliberation &amp; amendments</h2>
+                <p>Share support, raise implementation concerns, or propose wording changes before a ballot opens.</p>
+              </div>
+              <a href="/proposals/?stage=deliberate" class="home-block__link">All {discussions.length} discussions →</a>
+            </div>
+            <div class="home-issue-list">
+              {discussions.slice(0, 4).map((p) => (
+                <article class="home-issue-row">
+                  <div class="home-issue-row__main">
+                    <div class="home-issue-row__meta">
+                      <span class="tabular home-issue-id">{p.proposalId}</span>
+                      <Badge variant="secondary">2. Deliberate</Badge>
+                      <span class="home-topic-chip">{p.space}</span>
+                      <span class="tabular home-stat-inline">{p.commentCount} stances</span>
+                    </div>
+                    <h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3>
+                    <p>{p.summary}</p>
+                  </div>
+                  <Button href={`/proposals/${p.slug}/#deliberation`} size="sm" variant="ghost">
+                    Contribute →
+                  </Button>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <aside class="home-workspace-rail" aria-label="Quick navigation and governance guide">
+          <div class="rail-box is-featured">
+            <h2>Put an idea on the record</h2>
+            <p>Start with the change you want to see, the topic space, and key commitments. Members will help refine the wording during deliberation.</p>
+            <Button href={primaryCtaHref} className="w-full justify-center">
+              <Plus className="size-4" aria-hidden="true" />
+              {primaryCtaLabel}
+            </Button>
+          </div>
+
+          <div class="rail-box">
+            <h2>60-second walkthrough</h2>
+            <ol class="rail-steps">
+              <li><strong>1. Propose:</strong> Member submits an idea and rationale.</li>
+              <li><strong>2. Deliberate:</strong> Members debate and file amendments.</li>
+              <li><strong>3. Decide:</strong> Eligible members vote on frozen wording.</li>
+              <li><strong>4. Implement:</strong> Ratified and published to the registry.</li>
+            </ol>
+            <a href="/how-it-works/" class="rail-link">Read the full 1-page guide →</a>
+          </div>
+
+          <div class="rail-box">
+            <h2>Your workspaces</h2>
+            <ul class="rail-nav-list">
+              <li><a href="/member/">My Engage activity &amp; log →</a></li>
+              <li><a href="/branches/">Branches &amp; state sites →</a></li>
+              <li><a href="/policies/">Official policy registry →</a></li>
+            </ul>
+          </div>
+        </aside>
+      </div>
     </div>
   ) : (
     <>
-      <section class="journey-visitor-hero"><div class="page-wrap journey-hero-grid"><div><h1>Help shape what Fusion does next.</h1><p>Engage is where members share ideas, discuss proposed changes and vote on decisions. Anyone can browse what is being considered. {registryAvailable ? 'Published official policy is available in the policy registry.' : 'The policy registry is not yet populated with official records; proposals here are not ratified policy.'}</p><div class="journey-actions"><Button href="/proposals/">Browse proposals</Button><Button href="/policies/" variant="outline">{registryAvailable ? 'Read official policy' : 'About the policy registry'}</Button></div></div><img src="/melbourne-station.webp" alt="People moving through a sunlit Melbourne train station" width="640" height="460" /></div></section>
-      <div class="page-wrap section-space journey-home"><FeatureGrid
-        id="happening"
-        eyebrow="On Engage"
-        title="See what is happening"
-        intro="Open votes, active discussions and the official policy record."
-        action={{ href: '/proposals/', label: 'Browse all proposals' }}
-        features={[
-          {
-            icon: 'vote',
-            title: `${votes.length} open votes`,
-            description: 'Read the wording before you decide.',
-            href: '/proposals/?stage=decide',
-            cta: 'See open votes',
-          },
-          {
-            icon: 'files',
-            title: `${discussions.length} discussions`,
-            description: 'Read the discussion and suggested changes.',
-            href: '/proposals/?stage=deliberate',
-            cta: 'Join discussions',
-          },
-          {
-            icon: 'book',
-            title: 'Policy registry',
-            description: registryAvailable
-              ? 'Read formally adopted and published policy.'
-              : 'Official policy records are not yet available in Engage. Proposals here are not ratified policy.',
-            href: '/policies/',
-            cta: registryAvailable ? 'Read official policy' : 'About the policy registry',
-          },
-        ]}
-      /><section class="journey-section journey-invite"><h2>Want to take part?</h2><p>Members can suggest ideas and join discussions. Voting depends on the ballot and your membership.</p><Button href="/member/">Sign in or get started</Button><Button href="/how-it-works/" variant="link">How Engage works →</Button></section></div>
+      <section class="visitor-hero">
+        <div class="page-wrap visitor-hero__grid">
+          <div class="visitor-hero__content">
+            <h1>Help shape what Fusion does next.</h1>
+            <p>
+              Engage is where Fusion members propose ideas, deliberate on policy wording, and vote on bound revisions. Anyone can inspect every proposal, revision, and ballot tally publicly.
+            </p>
+            <div class="visitor-hero__actions">
+              <Button href={primaryCtaHref} size="lg" className="hero-star-btn">
+                <Plus className="size-4" aria-hidden="true" />
+                {primaryCtaLabel}
+              </Button>
+              <Button href="/proposals/" size="lg" variant="outline" className="hero-outline-btn">
+                Browse {proposals.length} proposals
+              </Button>
+              <Button href="/how-it-works/" size="lg" variant="ghost" className="hero-ghost-btn">
+                60-second walkthrough →
+              </Button>
+            </div>
+          </div>
+          <div class="visitor-hero__visual">
+            <img
+              src="/melbourne-station.webp"
+              alt="People moving through a sunlit Melbourne train station"
+              width="640"
+              height="460"
+            />
+          </div>
+        </div>
+      </section>
+
+      <div class="page-wrap section-space visitor-workspace">
+        <!-- 4-Stage Governance Pipeline Strip -->
+        <section aria-labelledby="pipeline-heading" class="pipeline-overview">
+          <div class="pipeline-overview__head">
+            <div>
+              <h2 id="pipeline-heading">How an idea becomes policy</h2>
+              <p>Every proposal follows four stages from initial idea to party adoption.</p>
+            </div>
+            <a href="/how-it-works/" class="home-block__link">More Detail →</a>
+          </div>
+
+          <div class="home-pipeline-strip">
+            <a href={primaryCtaHref} class="home-pipeline-cell is-highlight">
+              <span class="home-pipeline-cell__label"><Plus className="size-3.5" aria-hidden="true" />Stage 1 · Propose</span>
+              <div class="home-pipeline-cell__bottom">
+                <strong class="home-pipeline-cell__value">{primaryCtaLabel}</strong>
+                <span class="home-pipeline-cell__hint tabular">{ideas.length} draft ideas</span>
+              </div>
+              <p class="home-pipeline-cell__desc">Members put forward an idea, key commitments, and supporting evidence.</p>
+            </a>
+
+            <a href="/proposals/?stage=deliberate" class="home-pipeline-cell">
+              <span class="home-pipeline-cell__label"><MessageSquare className="size-3.5" aria-hidden="true" />Stage 2 · Deliberate</span>
+              <div class="home-pipeline-cell__bottom">
+                <strong class="home-pipeline-cell__value tabular">{discussions.length} active</strong>
+                <span class="home-pipeline-cell__hint">In discussion</span>
+              </div>
+              <p class="home-pipeline-cell__desc">Members post support, concerns, wording suggestions, and formal amendments.</p>
+            </a>
+
+            <a href="/proposals/?stage=decide" class="home-pipeline-cell">
+              <span class="home-pipeline-cell__label"><Gavel className="size-3.5" aria-hidden="true" />Stage 3 · Decide</span>
+              <div class="home-pipeline-cell__bottom">
+                <strong class="home-pipeline-cell__value tabular">{votes.length} open</strong>
+                <span class="home-pipeline-cell__hint">Member ballots</span>
+              </div>
+              <p class="home-pipeline-cell__desc">Eligible verified members vote on an immutable bound wording snapshot.</p>
+            </a>
+
+            <a href="/policies/" class="home-pipeline-cell">
+              <span class="home-pipeline-cell__label"><BookOpen className="size-3.5" aria-hidden="true" />Stage 4 · Implement</span>
+              <div class="home-pipeline-cell__bottom">
+                <strong class="home-pipeline-cell__value tabular">{implementing.length} processing</strong>
+                <span class="home-pipeline-cell__hint">{registryAvailable ? `${publishedPolicyCount} published` : 'Policy registry'}</span>
+              </div>
+              <p class="home-pipeline-cell__desc">Successful ballots proceed to formal party ratification and registry publication.</p>
+            </a>
+          </div>
+        </section>
+
+        <!-- 2-Column Live Register Preview + Public/Member Access Summary -->
+        <div class="home-workspace-grid">
+          <section class="home-workspace-main" aria-labelledby="active-proposals-heading">
+            <div class="home-block__head">
+              <div>
+                <h2 id="active-proposals-heading">Active proposals &amp; open ballots</h2>
+                <p>Inspect live proposals, read member deliberations, and examine revision histories.</p>
+              </div>
+              <Button href="/proposals/" variant="outline" size="sm">
+                View all {proposals.length} proposals <ArrowRight className="size-3.5" aria-hidden="true" />
+              </Button>
+            </div>
+
+            <div class="home-issue-list">
+              {featuredProposals.map((item) => (
+                <article class="home-issue-row">
+                  <div class="home-issue-row__main">
+                    <div class="home-issue-row__meta">
+                      <span class="tabular home-issue-id">{item.proposalId}</span>
+                      <Badge variant={stageVariant(item.stage)}>{stageLabel(item.stage)}</Badge>
+                      <a class="home-topic-chip" href={`/proposals/?space=${encodeURIComponent(item.space)}`}>{item.space}</a>
+                      <span class="tabular home-stat-inline">
+                        {item.commentCount} {item.commentCount === 1 ? 'stance' : 'stances'} · {item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'}
+                      </span>
+                    </div>
+                    <h3><a href={`/proposals/${item.slug}/`}>{item.title}</a></h3>
+                    <p>{item.summary}</p>
+                  </div>
+                  <a class="home-issue-cta" href={`/proposals/${item.slug}/`}>
+                    {item.stage === 'decide' ? 'Inspect ballot →' : 'Read record →'}
+                  </a>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <aside class="home-workspace-rail" aria-label="Public access and membership summary">
+            <div class="rail-box is-featured">
+              <h2>Have an idea for Fusion?</h2>
+              <p>Put a policy proposal or governance motion on the record for members to deliberate and refine.</p>
+              <Button href={primaryCtaHref} className="w-full justify-center">
+                <Plus className="size-4" aria-hidden="true" />
+                {primaryCtaLabel}
+              </Button>
+              <Button href="/member/" variant="outline" size="sm" className="w-full justify-center">
+                Member sign in
+              </Button>
+            </div>
+
+            <div class="rail-box">
+              <h2>What is public vs. member-only?</h2>
+              <ul class="access-summary-list">
+                <li>
+                  <Compass className="size-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
+                  <div>
+                    <strong>Publicly accessible</strong>
+                    <span>All public proposals, deliberation threads, revision diffs, ballot tallies, branches, and the JSON API (<code>/api/v1/policies</code>).</span>
+                  </div>
+                </li>
+                <li>
+                  <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
+                  <div>
+                    <strong>Verified members</strong>
+                    <span>Suggest new ideas, post deliberation stances, endorse contributions, file formal amendments, and vote in eligible ballots.</span>
+                  </div>
+                </li>
+              </ul>
+              <a href="/how-it-works/#access-matrix" class="rail-link">Full access &amp; source guide →</a>
+            </div>
+          </aside>
+        </div>
+      </div>
     </>
   )}
 </SiteLayout>
-<style>
-.journey-home{max-width:1180px}.journey-hero h1,.journey-visitor-hero h1{max-width:13ch;font-size:clamp(2.8rem,6vw,5.5rem);line-height:1.04}.journey-hero p,.journey-visitor-hero p{max-width:62ch;font-size:1.15rem}.journey-visitor-hero{background:var(--horizon-purple);color:var(--horizon-white);padding:clamp(3rem,7vw,7rem) 0}.journey-hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:3rem;align-items:center}.journey-hero-grid img{width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;border-radius:var(--horizon-radius-surface,.85rem)}.journey-actions{display:flex;flex-wrap:wrap;gap:1rem;margin-top:2rem}.journey-section{margin:3.5rem 0}.journey-heading{display:flex;justify-content:space-between;align-items:end;gap:1.5rem;margin-bottom:1.5rem}.journey-heading h2{font-size:clamp(2rem,4vw,3rem);margin:.3rem 0}.journey-heading p{margin:.3rem 0;max-width:60ch}.journey-list,.journey-next{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}.journey-list article{display:block;padding:1.5rem 0;border-top:1px solid var(--horizon-line);color:var(--horizon-purple)}.journey-list h3,.journey-next h3{font-size:1.5rem;margin:.6rem 0}.journey-list p,.journey-next p{line-height:1.5}.journey-tag{font:700 .75rem Outfit,sans-serif;text-transform:uppercase;letter-spacing:.09em}.journey-notice,.journey-empty,.journey-invite{padding:1.5rem;background:var(--horizon-lavender-soft);border-radius:.85rem}.journey-invite{display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}.journey-invite p{flex-basis:100%}@media(max-width:760px){.journey-hero-grid,.journey-list,.journey-next{grid-template-columns:1fr}.journey-hero-grid img{max-height:260px}.journey-heading{display:block}.journey-visitor-hero{padding:3rem 0}}
 
-.journey-visitor-hero { position:relative; overflow:hidden; background:radial-gradient(ellipse at 65% 0%,#6335a0 0%,transparent 55%),#2c0b61; padding:0; }
-.journey-hero-grid { width:min(100%,var(--content-width)); margin-inline:auto; grid-template-columns:1fr 1fr; min-height:29rem; gap:1rem; }
-.journey-hero-grid>div { padding:clamp(2.2rem,5vw,5rem) 1.5rem; position:relative; z-index:1; }
-.journey-hero-grid h1 { color:#fff; font:700 clamp(2.7rem,4.7vw,4.7rem)/1.02 Outfit,sans-serif; max-width:11ch; margin:0 0 1.25rem; }
-.journey-hero-grid p { max-width:47ch; font-size:1.08rem; line-height:1.55; }
-.journey-hero-grid img { width:100%; height:100%; max-height:none; aspect-ratio:auto; object-fit:cover; border-radius:0; clip-path:polygon(20% 0,100% 0,100% 100%,0 100%); }
-.journey-actions [data-variant="outline"] { border-color:#fff; color:#fff; background:transparent; }
-.journey-actions [data-variant="outline"]:hover { color:#250a57; background:#fff; }
-.journey-home { max-width:84rem; }
-.journey-home>.journey-section:first-child { margin-top:.5rem; }
-.journey-section { margin:2.3rem 0; }
-.journey-heading h2 { font-size:clamp(1.5rem,2vw,2rem); }
-.journey-next { gap:1rem; }
-.journey-next :global(a) { display:grid; gap:.35rem; padding:.35rem; text-decoration:none; }
-.journey-next :global([data-slot="card"]):hover { border-color:#8e77c4; box-shadow:0 8px 20px #260b5914; }
-.journey-next :global(a) .nav-icon { width:2rem; height:2rem; color:#6237bf; }
-.journey-next h3 { font-size:1.2rem; }
-.journey-next strong { color:#4223a3; }
-.member-home .journey-hero { margin:-3.5rem calc((100vw - min(100vw - 3rem,var(--content-width)))/-2) 1.5rem; padding:2.4rem max(1.5rem,calc((100vw - var(--content-width))/2)); color:#fff; background:linear-gradient(112deg,#271060 38%,#54288b 72%,#214773 100%); }
-.member-home .journey-hero h1 { max-width:none; font:700 clamp(2rem,3vw,3rem)/1.1 Outfit,sans-serif; margin:0 0 .25rem; }
-.member-home .journey-hero p { margin:0; }
-.member-home .journey-hero h1,.member-home .journey-hero p { color:#fff; }
-.home-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:.8rem; margin-top:-3.2rem; position:relative; }
-.home-summary a { display:grid; gap:.2rem; padding:1.1rem 1.25rem; border:1px solid var(--horizon-line); border-radius:.65rem; background:#fff; text-decoration:none; }
-.home-summary .nav-icon { color:#5633c0; width:1.55rem; height:1.55rem; }
-.home-summary strong { font-size:1.55rem; line-height:1.1; }
-.home-summary span { font-size:.85rem; }
-.member-home .journey-list { grid-template-columns:1fr; gap:0; background:#fff; border:1px solid var(--horizon-line); border-radius:.7rem; padding:0 1.15rem; }
-.member-home .journey-list article { display:grid; grid-template-columns:7rem minmax(0,1fr) auto; align-items:center; gap:1rem; padding:.9rem 0; border-top:0; border-bottom:1px solid var(--horizon-line); }
-.member-home .journey-list article:last-child { border:0; }
-.member-home .journey-list article h3 { font-size:1rem; margin:0; }
-.member-home .journey-list article p { display:none; }
-.member-home .journey-list article>a { font-weight:700; white-space:nowrap; }
-@media(max-width:760px){.journey-hero-grid{grid-template-columns:1fr}.journey-hero-grid>div{padding:2.5rem 1rem}.journey-hero-grid img{height:15rem;clip-path:none}.home-summary{grid-template-columns:repeat(3,1fr)}.member-home .journey-hero{margin:-2rem -1rem 1.5rem;padding:2rem 1rem 4rem}.member-home .journey-list article{grid-template-columns:1fr;gap:.25rem}.member-home .journey-list article>a{white-space:normal}}
+<style>
+  .visitor-hero {
+    background:
+      radial-gradient(ellipse at 65% 0%, #6335a0 0%, transparent 55%),
+      #260b59;
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  }
+
+  .visitor-hero__grid {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    align-items: center;
+    gap: 2rem;
+    min-height: 26rem;
+  }
+
+  .visitor-hero__content {
+    padding: clamp(2.5rem, 5vw, 4.25rem) 0;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .visitor-hero__badge {
+    display: inline-flex;
+    width: fit-content;
+    padding: 0.28rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(5, 212, 229, 0.14);
+    border: 1px solid rgba(5, 212, 229, 0.42);
+    color: #8cf3fc;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .visitor-hero__content h1 {
+    margin: 0;
+    color: #ffffff;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(2.5rem, 4.5vw, 4rem);
+    font-weight: 600;
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+    max-width: 15ch;
+  }
+
+  .visitor-hero__content p {
+    margin: 0;
+    color: #dfd6f2;
+    font-size: 1.05rem;
+    line-height: 1.55;
+    max-width: 56ch;
+  }
+
+  .visitor-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+    margin-top: 0.5rem;
+  }
+
+  .visitor-hero__actions :global(.hero-star-btn) {
+    background: #05d4e5;
+    color: #19073d;
+    font-weight: 700;
+  }
+
+  .visitor-hero__actions :global(.hero-star-btn:hover) {
+    background: #5ce7f2;
+    color: #19073d;
+  }
+
+  .visitor-hero__actions :global(.hero-outline-btn) {
+    border-color: rgba(255, 255, 255, 0.45);
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .visitor-hero__actions :global(.hero-outline-btn:hover) {
+    background: #ffffff;
+    color: #240a59;
+  }
+
+  .visitor-hero__actions :global(.hero-ghost-btn) {
+    color: #dfd6f2;
+  }
+
+  .visitor-hero__actions :global(.hero-ghost-btn:hover) {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+
+  .visitor-hero__visual {
+    height: 100%;
+    display: flex;
+    align-items: stretch;
+  }
+
+  .visitor-hero__visual img {
+    width: 100%;
+    height: 100%;
+    max-height: 26rem;
+    object-fit: cover;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+  }
+
+  .visitor-workspace,
+  .member-home-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-top: 1.75rem;
+    padding-bottom: 3.5rem;
+  }
+
+  .member-welcome-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+    padding-bottom: 1.15rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .member-welcome-bar__copy h1 {
+    margin: 0 0 0.25rem;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(2rem, 3.2vw, 2.6rem);
+    line-height: 1.08;
+    color: var(--horizon-ink);
+  }
+
+  .member-welcome-bar__copy p {
+    margin: 0;
+    font-size: 0.96rem;
+    color: var(--horizon-muted);
+  }
+
+  .member-welcome-bar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .pipeline-overview {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .pipeline-overview__head,
+  .home-block__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem 1.25rem;
+  }
+
+  .pipeline-overview__head h2,
+  .home-block__head h2 {
+    margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(1.45rem, 2.2vw, 1.8rem);
+    font-weight: 600;
+    color: var(--horizon-ink);
+  }
+
+  .pipeline-overview__head p,
+  .home-block__head p {
+    margin: 0.2rem 0 0;
+    font-size: 0.88rem;
+    color: var(--horizon-muted);
+  }
+
+  .home-block__link {
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .home-block__link:hover {
+    text-decoration: underline;
+  }
+
+  /* 4-Cell Pipeline Strip */
+  .home-pipeline-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.7rem;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .home-pipeline-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 1rem 1.15rem;
+    border-right: 1px solid var(--horizon-line);
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 120ms ease;
+  }
+
+  .home-pipeline-cell:last-child {
+    border-right: 0;
+  }
+
+  .home-pipeline-cell:hover {
+    background: var(--horizon-surface);
+  }
+
+  .home-pipeline-cell.is-highlight {
+    background: var(--horizon-lavender-soft);
+  }
+
+  .home-pipeline-cell.is-highlight:hover {
+    background: var(--horizon-lavender);
+  }
+
+  .home-pipeline-cell__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+  }
+
+  .home-pipeline-cell__bottom {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .home-pipeline-cell__value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .home-pipeline-cell__hint {
+    font-size: 0.74rem;
+    color: var(--horizon-muted);
+  }
+
+  .home-pipeline-cell__desc {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--horizon-muted);
+  }
+
+  /* 2-Column Workspace Grid */
+  .home-workspace-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: #ffffff;
+    overflow: hidden;
+    align-items: start;
+  }
+
+  .home-workspace-main {
+    min-width: 0;
+    border-right: 1px solid var(--horizon-line);
+    padding: 1.25rem;
+    display: grid;
+    gap: 1.75rem;
+  }
+
+  .home-block {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .home-block + .home-block {
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .home-issue-list {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.6rem;
+    overflow: hidden;
+  }
+
+  .home-issue-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--horizon-line);
+    background: #ffffff;
+  }
+
+  .home-issue-row:last-child {
+    border-bottom: 0;
+  }
+
+  .home-issue-row:hover {
+    background: #fafbff;
+  }
+
+  .home-issue-row__main {
+    min-width: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .home-issue-row__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.74rem;
+  }
+
+  .home-issue-id {
+    font-weight: 700;
+    color: var(--horizon-muted);
+  }
+
+  .home-topic-chip {
+    padding: 0.08rem 0.42rem;
+    border-radius: 0.28rem;
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-line);
+    color: var(--horizon-ink);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .home-stat-inline {
+    color: var(--horizon-muted);
+  }
+
+  .home-issue-row h3 {
+    margin: 0;
+    font-size: 0.96rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .home-issue-row h3 a {
+    color: var(--horizon-ink);
+    text-decoration: none;
+  }
+
+  .home-issue-row h3 a:hover {
+    color: var(--horizon-purple);
+    text-decoration: underline;
+  }
+
+  .home-issue-row p {
+    margin: 0;
+    font-size: 0.83rem;
+    line-height: 1.45;
+    color: var(--horizon-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .home-issue-cta {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .home-issue-cta:hover {
+    text-decoration: underline;
+  }
+
+  .home-empty-note {
+    margin: 0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-line);
+    font-size: 0.85rem;
+    color: var(--horizon-muted);
+  }
+
+  /* Right Rail */
+  .home-workspace-rail {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rail-box {
+    padding: 1.15rem;
+    border-bottom: 1px solid var(--horizon-line);
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .rail-box:last-child {
+    border-bottom: 0;
+  }
+
+  .rail-box.is-featured {
+    background: var(--horizon-lavender-soft);
+  }
+
+  .rail-box h2 {
+    margin: 0;
+    font-family: Outfit, sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .rail-box p {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--horizon-muted);
+  }
+
+  .rail-steps {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--horizon-muted);
+  }
+
+  .rail-steps strong {
+    color: var(--horizon-ink);
+  }
+
+  .access-summary-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .access-summary-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+
+  .access-summary-list strong {
+    display: block;
+    color: var(--horizon-ink);
+  }
+
+  .access-summary-list span {
+    color: var(--horizon-muted);
+  }
+
+  .rail-link {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+  }
+
+  .rail-link:hover {
+    text-decoration: underline;
+  }
+
+  .rail-nav-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .rail-nav-list a {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+    text-decoration: none;
+  }
+
+  .rail-nav-list a:hover {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 1024px) {
+    .home-workspace-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .home-workspace-main {
+      border-right: 0;
+      border-bottom: 1px solid var(--horizon-line);
+    }
+
+    .home-pipeline-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .home-pipeline-cell:nth-child(2) {
+      border-right: 0;
+    }
+
+    .home-pipeline-cell:nth-child(1),
+    .home-pipeline-cell:nth-child(2) {
+      border-bottom: 1px solid var(--horizon-line);
+    }
+  }
+
+  @media (max-width: 760px) {
+    .visitor-hero__grid {
+      grid-template-columns: 1fr;
+    }
+
+    .visitor-hero__visual img {
+      max-height: 15rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .home-pipeline-strip {
+      grid-template-columns: 1fr;
+    }
+
+    .home-pipeline-cell {
+      border-right: 0;
+      border-bottom: 1px solid var(--horizon-line);
+    }
+
+    .home-pipeline-cell:last-child {
+      border-bottom: 0;
+    }
+
+    .home-issue-row {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
