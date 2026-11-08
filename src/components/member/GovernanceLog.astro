@@ -56,7 +56,7 @@ const badgeVariant = (badge?: string) => {
               </div>
               <div class="log-meta">
                 {item.badge && <Badge variant={badgeVariant(item.badge)}>{item.badge}</Badge>}
-                <time class="tabular" datetime={item.date.toISOString()}>{formatDate(item.date)}</time>
+                <time class="tabular" datetime={item.date.toISOString()} data-date-style="long">{formatDate(item.date)}</time>
               </div>
             </div>
           </li>

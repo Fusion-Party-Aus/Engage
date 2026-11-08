@@ -125,6 +125,7 @@ const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organ
   </body>
 </html>
 <script>
+  import '../scripts/local-time.ts';
   document.querySelectorAll<HTMLButtonElement>('[data-signout]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       btn.disabled = true;

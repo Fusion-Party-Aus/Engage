@@ -61,7 +61,7 @@ const formatDate = (value: Date | string) =>
               </h3>
               {group.items.length > 1 && <Badge variant="muted">{group.items.length}</Badge>}
             </div>
-            <time class="catchup-date tabular" datetime={group.lastDate.toISOString()}>{formatDate(group.lastDate)}</time>
+            <time class="catchup-date tabular" datetime={group.lastDate.toISOString()} data-date-style="short">{formatDate(group.lastDate)}</time>
           </div>
 
           <ul class="catchup-items">
@@ -143,7 +143,7 @@ const formatDate = (value: Date | string) =>
                     </h3>
                     {group.items.length > 1 && <Badge variant="muted">{group.items.length}</Badge>}
                   </div>
-                  <time class="catchup-date tabular" datetime={group.lastDate.toISOString()}>{formatDate(group.lastDate)}</time>
+                  <time class="catchup-date tabular" datetime={group.lastDate.toISOString()} data-date-style="short">{formatDate(group.lastDate)}</time>
                 </div>
                 <ul class="catchup-items">
                   {group.items.slice(0, 2).map((item) => {
