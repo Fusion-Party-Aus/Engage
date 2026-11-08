@@ -1,0 +1,429 @@
+---
+/**
+ * Route-aware navigation skeleton overlay + top progress bar.
+ * Shown immediately when a user clicks an internal link or submits a filter form,
+ * eliminating perceived navigation latency between server-rendered pages.
+ */
+---
+<div id="nav-progress-bar" class="nav-progress-bar" aria-hidden="true"></div>
+
+<div id="nav-skeleton-overlay" class="nav-skeleton-overlay" aria-hidden="true" hidden>
+  <div class="page-wrap section-space">
+    <!-- Variant 1: Proposal Detail Workspace Skeleton (/proposals/[slug]) -->
+    <div class="skel-template" data-skel-variant="detail" hidden>
+      <div class="skel-crumbs">
+        <span class="skel-block skel-w-28 skel-h-4"></span>
+        <span class="skel-block skel-w-40 skel-h-4"></span>
+      </div>
+
+      <div class="skel-hero-card">
+        <div class="skel-row-between">
+          <span class="skel-block skel-w-56 skel-h-4"></span>
+          <span class="skel-pill skel-w-24 skel-h-7"></span>
+        </div>
+        <div class="skel-block skel-w-3-4 skel-h-10 skel-mt-3"></div>
+        <div class="skel-block skel-w-full skel-h-5 skel-mt-3"></div>
+        <div class="skel-block skel-w-2-3 skel-h-5 skel-mt-2"></div>
+
+        <!-- Immediate Next Action Banner Skeleton -->
+        <div class="skel-action-banner skel-mt-4">
+          <div class="skel-col">
+            <span class="skel-block skel-w-44 skel-h-4"></span>
+            <span class="skel-block skel-w-80 skel-h-5 skel-mt-2"></span>
+          </div>
+          <span class="skel-btn skel-w-40 skel-h-10"></span>
+        </div>
+
+        <div class="skel-facts-grid skel-mt-4">
+          <div class="skel-fact"><span class="skel-block skel-w-20 skel-h-3"></span><span class="skel-block skel-w-36 skel-h-5 skel-mt-2"></span></div>
+          <div class="skel-fact"><span class="skel-block skel-w-20 skel-h-3"></span><span class="skel-block skel-w-32 skel-h-5 skel-mt-2"></span></div>
+          <div class="skel-fact"><span class="skel-block skel-w-24 skel-h-3"></span><span class="skel-block skel-w-40 skel-h-5 skel-mt-2"></span></div>
+          <div class="skel-fact"><span class="skel-block skel-w-24 skel-h-3"></span><span class="skel-block skel-w-32 skel-h-5 skel-mt-2"></span></div>
+        </div>
+      </div>
+
+      <div class="skel-two-col skel-mt-4">
+        <div class="skel-main-col">
+          <div class="skel-doc-card">
+            <span class="skel-block skel-w-48 skel-h-7"></span>
+            <div class="skel-commitment skel-mt-4"></div>
+            <div class="skel-commitment skel-mt-3"></div>
+            <div class="skel-commitment skel-mt-3"></div>
+          </div>
+          <div class="skel-doc-card skel-mt-4">
+            <span class="skel-block skel-w-56 skel-h-7"></span>
+            <div class="skel-block skel-w-full skel-h-4 skel-mt-4"></div>
+            <div class="skel-block skel-w-full skel-h-4 skel-mt-2"></div>
+            <div class="skel-block skel-w-3-4 skel-h-4 skel-mt-2"></div>
+          </div>
+        </div>
+        <div class="skel-rail-col">
+          <div class="skel-doc-card">
+            <div class="skel-row-between">
+              <span class="skel-block skel-w-36 skel-h-6"></span>
+              <span class="skel-pill skel-w-20 skel-h-6"></span>
+            </div>
+            <div class="skel-block skel-w-full skel-h-16 skel-mt-3"></div>
+            <div class="skel-block skel-w-full skel-h-10 skel-mt-3"></div>
+            <div class="skel-block skel-w-full skel-h-10 skel-mt-3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Variant 2: Proposals / Policies / Changelog List Skeleton -->
+    <div class="skel-template" data-skel-variant="list" hidden>
+      <div class="skel-list-surface">
+        <div class="skel-row-between">
+          <span class="skel-block skel-w-64 skel-h-10"></span>
+          <span class="skel-pill skel-w-36 skel-h-9"></span>
+        </div>
+
+        <div class="skel-tabs-row skel-mt-4">
+          <span class="skel-pill skel-w-20 skel-h-7"></span>
+          <span class="skel-pill skel-w-24 skel-h-7"></span>
+          <span class="skel-pill skel-w-28 skel-h-7"></span>
+          <span class="skel-pill skel-w-24 skel-h-7"></span>
+          <span class="skel-pill skel-w-32 skel-h-7"></span>
+        </div>
+
+        <div class="skel-search-bar skel-mt-4"></div>
+
+        <div class="skel-rows skel-mt-4">
+          {[1, 2, 3, 4].map(() => (
+            <div class="skel-list-row">
+              <div class="skel-row-between">
+                <span class="skel-block skel-w-56 skel-h-4"></span>
+                <span class="skel-pill skel-w-24 skel-h-6"></span>
+              </div>
+              <span class="skel-block skel-w-2-3 skel-h-7 skel-mt-2"></span>
+              <span class="skel-block skel-w-full skel-h-4 skel-mt-2"></span>
+              <div class="skel-row-between skel-mt-3">
+                <span class="skel-block skel-w-48 skel-h-4"></span>
+                <span class="skel-block skel-w-28 skel-h-4"></span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <!-- Variant 3: Dashboard / General Page Skeleton -->
+    <div class="skel-template" data-skel-variant="default" hidden>
+      <div class="skel-hero-card">
+        <span class="skel-pill skel-w-36 skel-h-6"></span>
+        <span class="skel-block skel-w-2-3 skel-h-10 skel-mt-3"></span>
+        <span class="skel-block skel-w-full skel-h-5 skel-mt-3"></span>
+      </div>
+      <div class="skel-grid-3 skel-mt-4">
+        <div class="skel-doc-card"><span class="skel-block skel-w-32 skel-h-5"></span><span class="skel-block skel-w-full skel-h-20 skel-mt-3"></span></div>
+        <div class="skel-doc-card"><span class="skel-block skel-w-36 skel-h-5"></span><span class="skel-block skel-w-full skel-h-20 skel-mt-3"></span></div>
+        <div class="skel-doc-card"><span class="skel-block skel-w-28 skel-h-5"></span><span class="skel-block skel-w-full skel-h-20 skel-mt-3"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const progressBar = document.getElementById('nav-progress-bar');
+  const overlay = document.getElementById('nav-skeleton-overlay');
+  const mainContent = document.getElementById('main-content');
+  const templates = document.querySelectorAll<HTMLElement>('[data-skel-variant]');
+
+  let skeletonTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function chooseVariant(pathname: string): 'detail' | 'list' | 'default' {
+    if (
+      (/^\/proposals\/[^/]+\/?$/.test(pathname) && !pathname.startsWith('/proposals/new')) ||
+      /^\/policies\/[^/]+\/?$/.test(pathname) ||
+      /^\/admin\/proposals\/[^/]+\/?$/.test(pathname)
+    ) {
+      return 'detail';
+    }
+    if (
+      pathname === '/proposals' ||
+      pathname === '/proposals/' ||
+      pathname === '/policies' ||
+      pathname === '/policies/' ||
+      pathname === '/changelog' ||
+      pathname === '/changelog/' ||
+      pathname.startsWith('/admin/proposals') ||
+      pathname.startsWith('/admin/policies')
+    ) {
+      return 'list';
+    }
+    return 'default';
+  }
+
+  function startNavigationFeedback(targetUrl: URL) {
+    if (!progressBar || !overlay) return;
+    progressBar.classList.add('is-active');
+
+    const variant = chooseVariant(targetUrl.pathname);
+    templates.forEach((tpl) => {
+      tpl.hidden = tpl.dataset.skelVariant !== variant;
+    });
+
+    if (skeletonTimer) clearTimeout(skeletonTimer);
+    // Show skeleton after 45ms so cached instant transitions don't flicker,
+    // while any server round-trip immediately shows a structured page skeleton.
+    skeletonTimer = setTimeout(() => {
+      overlay.hidden = false;
+      overlay.setAttribute('aria-busy', 'true');
+      if (mainContent) mainContent.classList.add('is-navigating-out');
+    }, 45);
+  }
+
+  function resetNavigationFeedback() {
+    if (skeletonTimer) clearTimeout(skeletonTimer);
+    if (progressBar) progressBar.classList.remove('is-active');
+    if (overlay) {
+      overlay.hidden = true;
+      overlay.removeAttribute('aria-busy');
+    }
+    if (mainContent) mainContent.classList.remove('is-navigating-out');
+  }
+
+  // Intercept internal link clicks
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = (event.target as Element | null)?.closest?.('a') as HTMLAnchorElement | null;
+    if (!anchor || !anchor.href) return;
+    if (anchor.target && anchor.target !== '_self') return;
+    if (anchor.hasAttribute('download')) return;
+
+    let url: URL;
+    try {
+      url = new URL(anchor.href, location.origin);
+    } catch {
+      return;
+    }
+    if (url.origin !== location.origin) return;
+    // Ignore same-page hash jumps
+    if (url.pathname === location.pathname && url.search === location.search) return;
+
+    startNavigationFeedback(url);
+  });
+
+  // Intercept GET filter form submissions (e.g. /proposals/ stage/space/branch filters)
+  document.addEventListener('submit', (event) => {
+    if (event.defaultPrevented) return;
+    const form = event.target as HTMLFormElement | null;
+    if (!form || (form.method && form.method.toLowerCase() !== 'get')) return;
+    try {
+      const url = new URL(form.action || location.href, location.origin);
+      startNavigationFeedback(url);
+    } catch {
+      // Ignore
+    }
+  });
+
+  // Reset if restored from back/forward cache
+  window.addEventListener('pageshow', () => {
+    resetNavigationFeedback();
+  });
+</script>
+
+<style>
+  @keyframes nav-progress-indeterminate {
+    0% {
+      transform: translateX(-100%) scaleX(0.2);
+    }
+    50% {
+      transform: translateX(0%) scaleX(0.6);
+    }
+    100% {
+      transform: translateX(100%) scaleX(0.9);
+    }
+  }
+
+  @keyframes skel-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  .nav-progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    overflow: hidden;
+    background: rgba(5, 212, 229, 0.18);
+    transition: opacity 120ms ease;
+  }
+
+  .nav-progress-bar::after {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--horizon-purple), var(--horizon-accent), var(--horizon-purple));
+    transform-origin: left center;
+  }
+
+  .nav-progress-bar.is-active {
+    opacity: 1;
+  }
+
+  .nav-progress-bar.is-active::after {
+    animation: nav-progress-indeterminate 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  :global(#main-content.is-navigating-out) {
+    display: none;
+  }
+
+  .nav-skeleton-overlay {
+    min-height: 72vh;
+  }
+
+  .skel-block,
+  .skel-pill,
+  .skel-btn,
+  .skel-search-bar,
+  .skel-commitment {
+    display: block;
+    background: linear-gradient(90deg, #ede9f7 25%, #f6f4fc 50%, #ede9f7 75%);
+    background-size: 200% 100%;
+    animation: skel-shimmer 1.35s ease-in-out infinite;
+    border-radius: 0.45rem;
+  }
+
+  .skel-pill {
+    border-radius: 999px;
+  }
+
+  .skel-btn {
+    border-radius: 0.6rem;
+  }
+
+  .skel-crumbs {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+
+  .skel-hero-card,
+  .skel-doc-card,
+  .skel-list-surface {
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 1rem;
+    padding: clamp(1.25rem, 2.5vw, 2rem);
+  }
+
+  .skel-action-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-radius: 0.85rem;
+    border: 1px solid var(--horizon-line);
+    background: #f8f6fc;
+  }
+
+  .skel-facts-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .skel-two-col {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 23rem;
+    gap: 1.75rem;
+  }
+
+  .skel-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: 1.25rem;
+  }
+
+  .skel-commitment {
+    height: 3.5rem;
+    border-radius: 0.75rem;
+  }
+
+  .skel-tabs-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .skel-search-bar {
+    height: 2.85rem;
+    border-radius: 999px;
+  }
+
+  .skel-list-row {
+    padding: 1.35rem 0.25rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .skel-row-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .skel-col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Sizing utilities */
+  .skel-h-3 { height: 0.75rem; }
+  .skel-h-4 { height: 1rem; }
+  .skel-h-5 { height: 1.25rem; }
+  .skel-h-6 { height: 1.5rem; }
+  .skel-h-7 { height: 1.75rem; }
+  .skel-h-9 { height: 2.25rem; }
+  .skel-h-10 { height: 2.55rem; }
+  .skel-h-16 { height: 4rem; }
+  .skel-h-20 { height: 5rem; }
+
+  .skel-w-20 { width: 5rem; }
+  .skel-w-24 { width: 6rem; }
+  .skel-w-28 { width: 7rem; }
+  .skel-w-32 { width: 8rem; }
+  .skel-w-36 { width: 9rem; }
+  .skel-w-40 { width: 10rem; }
+  .skel-w-44 { width: 11rem; }
+  .skel-w-48 { width: 12rem; }
+  .skel-w-56 { width: 14rem; }
+  .skel-w-64 { width: 16rem; }
+  .skel-w-80 { width: 20rem; max-width: 100%; }
+  .skel-w-2-3 { width: 66%; }
+  .skel-w-3-4 { width: 75%; }
+  .skel-w-full { width: 100%; }
+
+  .skel-mt-2 { margin-top: 0.5rem; }
+  .skel-mt-3 { margin-top: 0.75rem; }
+  .skel-mt-4 { margin-top: 1.15rem; }
+
+  @media (max-width: 1024px) {
+    .skel-facts-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .skel-two-col {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

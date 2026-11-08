@@ -1,5 +1,21 @@
 [
   {
+    "hash": "4360ce9",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ui",
+    "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
+  },
+  {
+    "hash": "99f0153",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "changelog",
+    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
+  },
+  {
     "hash": "71a6351",
     "date": "2026-11-09",
     "type": "perf",

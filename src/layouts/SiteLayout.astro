@@ -8,6 +8,7 @@ import '@fontsource/outfit/latin-700.css';
 import '../styles/global.css';
 import SiteHeader from '../components/site/SiteHeader.astro';
 import SiteFooter from '../components/site/SiteFooter.astro';
+import PageSkeleton from '../components/site/PageSkeleton.astro';
 import { getSessionUser } from '../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../lib/db.ts';
 import { resolvePublicOrigin, trustedCanonical } from '../lib/public-origin.ts';
@@ -113,6 +114,8 @@ const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organ
     </svg>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <SiteHeader user={user} path={path} siteConfig={siteConfig} />
+
+    <PageSkeleton />
 
     <main id="main-content">
       <slot />
