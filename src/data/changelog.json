@@ -1,6 +1,14 @@
 [
   {
-    "hash": "4360ce9",
+    "hash": "b133b5a",
+    "date": "2026-11-09",
+    "type": "docs",
+    "category": "docs",
+    "scope": "audit",
+    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
+  },
+  {
+    "hash": "3098b44",
     "date": "2026-11-09",
     "type": "feat",
     "category": "feature",

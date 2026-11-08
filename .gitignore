@@ -15,3 +15,8 @@ playwright-report/
 
 corpus/
 national-neon-site/
+docs/screenshots/
+scripts/corpus-*.mjs
+scripts/reclaim-extract.mjs
+scripts/reconcile-*
+
