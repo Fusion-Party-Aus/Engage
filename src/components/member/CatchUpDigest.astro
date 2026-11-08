@@ -1,0 +1,409 @@
+---
+import { ArrowRight, BookOpen, FilePenLine, Gavel, MessageCircle } from 'lucide-react';
+import type { MemberCatchUpGroup, MemberCatchUpKind } from '../../lib/member-activity.ts';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
+
+interface Props {
+  groups: MemberCatchUpGroup[];
+  total: number;
+  sinceLabel: string;
+  hasLastVisit: boolean;
+  idPrefix?: string;
+}
+
+const { groups, total, sinceLabel, hasLastVisit, idPrefix = 'catchup' } = Astro.props;
+const headingId = `${idPrefix}-heading`;
+const groupId = (proposalId: string) => `${idPrefix}-${proposalId}`;
+const icons = {
+  discussion: MessageCircle,
+  amendment: FilePenLine,
+  decision: Gavel,
+  policy: BookOpen,
+} satisfies Record<MemberCatchUpKind, unknown>;
+const visibleGroups = groups.slice(0, 4);
+const remainingGroups = groups.slice(4);
+
+const formatDate = (value: Date | string) =>
+  new Date(value).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+  });
+---
+
+<Card className="catchup-card" aria-labelledby={headingId}>
+  <div class="catchup-head">
+    <div>
+      <h2 id={headingId}>{hasLastVisit ? 'Since your last visit' : 'Recent activity on followed proposals'}</h2>
+      <p class="catchup-lead">
+        Activity on proposals you follow, vote on, or authored. {sinceLabel}
+      </p>
+    </div>
+    <Badge variant={total ? 'secondary' : 'muted'}>
+      {`${total}\u00A0${total === 1 ? 'update' : 'updates'}`}
+    </Badge>
+  </div>
+
+  {visibleGroups.length === 0 ? (
+    <div class="catchup-empty">
+      <p>Nothing new on the proposals you follow.</p>
+      <span>Discussion, wording changes and recorded decisions will collect here between visits.</span>
+    </div>
+  ) : (
+    <div class="catchup-groups">
+      {visibleGroups.map((group) => (
+        <section class="catchup-group" aria-labelledby={groupId(group.proposalId)}>
+          <div class="catchup-group__head">
+            <div class="catchup-group__title">
+              <h3 id={groupId(group.proposalId)}>
+                {group.href ? <a href={group.href}>{group.title}</a> : group.title}
+              </h3>
+              {group.items.length > 1 && <Badge variant="muted">{group.items.length}</Badge>}
+            </div>
+            <time class="catchup-date tabular" datetime={group.lastDate.toISOString()}>{formatDate(group.lastDate)}</time>
+          </div>
+
+          <ul class="catchup-items">
+            {group.items.slice(0, 3).map((item) => {
+              const Icon = icons[item.kind];
+              const showTarget = item.target && item.target !== group.title;
+              return (
+                <li class="catchup-item">
+                  <span class="catchup-icon" aria-hidden="true"><Icon className="size-3.5" /></span>
+                  <div class="catchup-item__body">
+                    <p class="catchup-item__line">
+                      <strong>{item.actor}</strong> {item.action}
+                      {showTarget && (
+                        <>
+                          {' '}
+                          {item.href ? <a href={item.href}>{item.target}</a> : <span>{item.target}</span>}
+                        </>
+                      )}
+                      {item.badge && <Badge variant="outline">{item.badge}</Badge>}
+                    </p>
+                    {item.summary && <p class="catchup-summary">{item.summary}</p>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {group.items.length > 3 && (
+            <details class="catchup-more">
+              <summary>Show {group.items.length - 3} more update{group.items.length - 3 === 1 ? '' : 's'} on this proposal</summary>
+              <ul class="catchup-items">
+                {group.items.slice(3).map((item) => {
+                  const Icon = icons[item.kind];
+                  const showTarget = item.target && item.target !== group.title;
+                  return (
+                    <li class="catchup-item">
+                      <span class="catchup-icon" aria-hidden="true"><Icon className="size-3.5" /></span>
+                      <div class="catchup-item__body">
+                        <p class="catchup-item__line">
+                          <strong>{item.actor}</strong> {item.action}
+                          {showTarget && (
+                            <>
+                              {' '}
+                              {item.href ? <a href={item.href}>{item.target}</a> : <span>{item.target}</span>}
+                            </>
+                          )}
+                          {item.badge && <Badge variant="outline">{item.badge}</Badge>}
+                        </p>
+                        {item.summary && <p class="catchup-summary">{item.summary}</p>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+          )}
+
+          {group.href && (
+            <div class="catchup-group__footer">
+              <Button href={group.href} variant="ghost" size="sm">
+                Review proposal
+                <ArrowRight aria-hidden="true" />
+              </Button>
+            </div>
+          )}
+        </section>
+      ))}
+
+      {remainingGroups.length > 0 && (
+        <details class="catchup-more catchup-more--groups">
+          <summary>Show {remainingGroups.length} more proposal{remainingGroups.length === 1 ? '' : 's'} with updates</summary>
+          <div class="catchup-groups">
+            {remainingGroups.map((group) => (
+              <section class="catchup-group" aria-labelledby={`${idPrefix}-more-${group.proposalId}`}>
+                <div class="catchup-group__head">
+                  <div class="catchup-group__title">
+                    <h3 id={`${idPrefix}-more-${group.proposalId}`}>
+                      {group.href ? <a href={group.href}>{group.title}</a> : group.title}
+                    </h3>
+                    {group.items.length > 1 && <Badge variant="muted">{group.items.length}</Badge>}
+                  </div>
+                  <time class="catchup-date tabular" datetime={group.lastDate.toISOString()}>{formatDate(group.lastDate)}</time>
+                </div>
+                <ul class="catchup-items">
+                  {group.items.slice(0, 2).map((item) => {
+                    const Icon = icons[item.kind];
+                    const showTarget = item.target && item.target !== group.title;
+                    return (
+                      <li class="catchup-item">
+                        <span class="catchup-icon" aria-hidden="true"><Icon className="size-3.5" /></span>
+                        <div class="catchup-item__body">
+                          <p class="catchup-item__line">
+                            <strong>{item.actor}</strong> {item.action}
+                            {showTarget && (
+                              <>
+                                {' '}
+                                {item.href ? <a href={item.href}>{item.target}</a> : <span>{item.target}</span>}
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  )}
+</Card>
+
+<style>
+  .catchup-card {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .catchup-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem 0.85rem;
+    border-bottom: 1px solid var(--horizon-line);
+    background: var(--horizon-surface);
+  }
+
+  .catchup-head > div {
+    max-width: 62ch;
+  }
+
+  .catchup-head h2 {
+    margin: 0;
+    color: var(--horizon-ink);
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.3rem;
+    line-height: 1.2;
+  }
+
+  .catchup-lead {
+    margin: 0.25rem 0 0;
+    color: var(--horizon-muted);
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
+
+  .catchup-empty {
+    padding: 1.5rem;
+    color: var(--horizon-muted);
+  }
+
+  .catchup-empty p {
+    margin: 0;
+    color: var(--horizon-purple-deep);
+    font-weight: 600;
+  }
+
+  .catchup-empty span {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.86rem;
+  }
+
+  .catchup-groups {
+    display: grid;
+  }
+
+  .catchup-group {
+    padding: 1.15rem 1.5rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .catchup-group:last-child {
+    border-bottom: 0;
+  }
+
+  .catchup-group__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .catchup-group__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .catchup-group h3 {
+    margin: 0;
+    color: var(--horizon-purple-deep);
+    font-family: var(--font-outfit);
+    font-size: 0.98rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .catchup-group h3 a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .catchup-group h3 a:hover {
+    text-decoration: underline;
+  }
+
+  .catchup-date {
+    color: var(--horizon-muted);
+    font-size: 0.76rem;
+  }
+
+  .catchup-items {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .catchup-item {
+    display: grid;
+    grid-template-columns: 1.6rem minmax(0, 1fr);
+    align-items: start;
+    gap: 0.55rem;
+  }
+
+  .catchup-icon {
+    display: grid;
+    width: 1.6rem;
+    height: 1.6rem;
+    place-items: center;
+    border: 1px solid var(--horizon-line);
+    border-radius: 999px;
+    background: var(--horizon-lavender-soft);
+    color: var(--horizon-purple);
+  }
+
+  .catchup-item__body {
+    min-width: 0;
+  }
+
+  .catchup-item__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    margin: 0;
+    color: var(--horizon-muted);
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  .catchup-item__line strong {
+    color: var(--horizon-purple-deep);
+    font-weight: 600;
+  }
+
+  .catchup-item__line a {
+    color: var(--horizon-purple-deep);
+    font-weight: 600;
+    text-underline-offset: 0.16em;
+  }
+
+  .catchup-summary {
+    margin: 0.15rem 0 0;
+    color: var(--horizon-muted);
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .catchup-group__footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.35rem;
+  }
+
+  .catchup-more {
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .catchup-more--groups {
+    border-top: 0;
+  }
+
+  .catchup-group > .catchup-more {
+    margin-top: 0.6rem;
+  }
+
+  .catchup-more > summary {
+    display: flex;
+    align-items: center;
+    min-height: 2.6rem;
+    padding: 0.55rem 1.5rem;
+    color: var(--horizon-purple);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    list-style: none;
+  }
+
+  .catchup-group > .catchup-more > summary {
+    padding-inline: 0;
+  }
+
+  .catchup-more > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .catchup-more > summary::after {
+    content: '+';
+    margin-left: auto;
+    font-size: 1rem;
+  }
+
+  .catchup-more[open] > summary::after {
+    content: '−';
+  }
+
+  .catchup-more > summary:focus-visible {
+    outline: 3px solid var(--horizon-focus);
+    outline-offset: -2px;
+  }
+
+  @media (max-width: 700px) {
+    .catchup-head {
+      padding: 1.15rem 1rem;
+    }
+
+    .catchup-group {
+      padding: 1rem;
+    }
+
+    .catchup-item {
+      grid-template-columns: 1.5rem minmax(0, 1fr);
+    }
+  }
+</style>

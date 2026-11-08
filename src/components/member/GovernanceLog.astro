@@ -1,0 +1,197 @@
+---
+import { BookOpen, FilePenLine, Gavel } from 'lucide-react';
+import type { MemberCatchUpItem } from '../../lib/member-activity.ts';
+import { Badge } from '../ui/badge';
+import { Card } from '../ui/card';
+
+interface Props {
+  items: MemberCatchUpItem[];
+}
+
+const { items } = Astro.props;
+const icons = {
+  amendment: FilePenLine,
+  decision: Gavel,
+  policy: BookOpen,
+} as const;
+
+const formatDate = (value: Date | string) =>
+  new Date(value).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+const badgeVariant = (badge?: string) => {
+  if (!badge) return 'muted' as const;
+  if (['Success', 'Successful', 'Endorsed', 'Accepted', 'Applied', 'Ratified', 'Published'].includes(badge)) return 'success' as const;
+  if (['Unsuccessful', 'Not endorsed', 'Withdrawn', 'Superseded'].includes(badge)) return 'warning' as const;
+  if (badge === 'Ballot open' || badge === 'Proposed') return 'info' as const;
+  return 'outline' as const;
+};
+---
+
+<Card className="governance-log" aria-labelledby="governance-log-heading">
+  <div class="log-head">
+    <div>
+      <h2 id="governance-log-heading">Decisions &amp; wording changes</h2>
+      <p class="log-lead">Recorded ballot outcomes, amendment milestones, and policy publication events on proposals you follow.</p>
+    </div>
+    <Badge variant="muted">{items.length}</Badge>
+  </div>
+
+  {items.length === 0 ? (
+    <p class="log-empty">No ballot results, amendment milestones or policy events are recorded for your proposals yet.</p>
+  ) : (
+    <ol class="log-list">
+      {items.map((item) => {
+        const Icon = icons[item.kind as keyof typeof icons] ?? Gavel;
+        return (
+          <li class="log-item">
+            <span class="log-marker" aria-hidden="true"><Icon className="size-3.5" /></span>
+            <div class="log-body">
+              <div class="log-line">
+                <strong>{item.actor}</strong>
+                <span>{item.action}</span>
+                {item.href ? <a href={item.href}>{item.target}</a> : <span>{item.target}</span>}
+              </div>
+              <div class="log-meta">
+                {item.badge && <Badge variant={badgeVariant(item.badge)}>{item.badge}</Badge>}
+                <time class="tabular" datetime={item.date.toISOString()}>{formatDate(item.date)}</time>
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  )}
+</Card>
+
+<style>
+  .governance-log {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .log-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem 0.85rem;
+    border-bottom: 1px solid var(--horizon-line);
+    background: var(--horizon-surface);
+  }
+
+  .log-head > div {
+    max-width: 62ch;
+  }
+
+  .log-head h2 {
+    margin: 0;
+    color: var(--horizon-ink);
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.3rem;
+    line-height: 1.2;
+  }
+
+  .log-lead {
+    margin: 0.25rem 0 0;
+    color: var(--horizon-muted);
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
+
+  .log-empty {
+    margin: 0;
+    padding: 1.5rem;
+    color: var(--horizon-muted);
+    font-size: 0.92rem;
+  }
+
+  .log-list {
+    position: relative;
+    display: grid;
+    gap: 1.1rem;
+    margin: 0;
+    padding: 1.35rem 1.5rem;
+    list-style: none;
+  }
+
+  .log-list::before {
+    content: '';
+    position: absolute;
+    top: 1.75rem;
+    bottom: 1.75rem;
+    left: 2.35rem;
+    width: 1px;
+    background: var(--horizon-line);
+  }
+
+  .log-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.7rem minmax(0, 1fr);
+    gap: 0.9rem;
+  }
+
+  .log-marker {
+    z-index: 1;
+    display: grid;
+    width: 1.7rem;
+    height: 1.7rem;
+    place-items: center;
+    border: 1px solid var(--horizon-line);
+    border-radius: 999px;
+    background: var(--horizon-white);
+    color: var(--horizon-purple);
+  }
+
+  .log-body {
+    min-width: 0;
+  }
+
+  .log-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--horizon-muted);
+    font-size: 0.88rem;
+    line-height: 1.45;
+  }
+
+  .log-line strong {
+    color: var(--horizon-purple-deep);
+    font-weight: 600;
+  }
+
+  .log-line a {
+    color: var(--horizon-purple-deep);
+    font-weight: 600;
+  }
+
+  .log-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.3rem;
+    color: var(--horizon-muted);
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 700px) {
+    .log-head {
+      padding: 1.15rem 1rem;
+    }
+
+    .log-list {
+      padding: 1.1rem 1rem;
+    }
+
+    .log-list::before {
+      left: 1.85rem;
+    }
+  }
+</style>

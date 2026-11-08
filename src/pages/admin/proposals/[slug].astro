@@ -1,0 +1,1351 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import {
+  ArrowLeft,
+  BookOpen,
+  Calendar,
+  CheckCircle2,
+  FileText,
+  Gavel,
+  GitBranch,
+  Layers,
+  ListChecks,
+  Lock,
+  MessageSquare,
+  ShieldCheck,
+  Tag,
+  User,
+} from 'lucide-react';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { getProposalDetail } from '../../../lib/store.ts';
+import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
+import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
+import PortableText from '../../../components/PortableText.astro';
+import ActivityTimeline from '../../../components/blocks/timeline-3';
+import { Button } from '../../../components/ui/button';
+import { Badge } from '../../../components/ui/badge';
+import { Input } from '../../../components/ui/input';
+import { NativeSelect } from '../../../components/ui/native-select';
+import { Textarea } from '../../../components/ui/textarea';
+import Field from '../../../components/admin/Field.astro';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+import type { ProposalStage } from '../../../lib/types.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/', 302);
+if (!user.isStaff && !user.isBranchAdmin) Astro.response.status = 403;
+
+const db = await getDatabase(env);
+const slug = Astro.params.slug ?? '';
+let detail = user.isStaff || user.isBranchAdmin ? await getProposalDetail(db, slug, user) : null;
+let forbidden = false;
+if (detail && !user.isStaff && !user.isAdmin) {
+  const allowed = Boolean(
+    detail.proposal.originatingBranchId &&
+      (user.branchAdminIds ?? []).includes(detail.proposal.originatingBranchId),
+  );
+  if (!allowed) {
+    forbidden = true;
+    detail = null;
+  }
+}
+if (!detail) Astro.response.status = forbidden ? 403 : 404;
+
+const proposal = detail?.proposal;
+const comments = detail?.comments ?? [];
+const revisions = proposal
+  ? await db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray()
+  : [];
+const ballotRevision = proposal?.ballotRevisionId
+  ? revisions.find((revision: any) => revision.revisionId === proposal.ballotRevisionId)
+  : null;
+const ballotRevisionLabel = proposal?.ballotRevisionId
+  ? revisionDisplayLabel({
+      revisionId: String(proposal.ballotRevisionId),
+      createdAt: ballotRevision?.createdAt ?? proposal.createdAt,
+    })
+  : 'Unbound draft';
+const amendmentRows = proposal
+  ? await db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray()
+  : [];
+for (const amendment of amendmentRows) {
+  amendment.revisionHistory = await db.collection('amendment_revisions').find({ amendmentId: amendment.amendmentId }).sort({ createdAt: 1 }).toArray();
+  const current = amendment.revisionHistory.find((row: any) => row.revisionId === amendment.currentRevisionId);
+  if (current) amendment.changes = current.snapshot;
+}
+const [ballotResult, policy, relatedProposals, branches] = proposal
+  ? await Promise.all([
+      db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
+      db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
+      db.collection('proposals').find({ space: proposal.space, proposalId: { $ne: proposal.proposalId } }).limit(4).toArray(),
+      db.collection('branches').find({}).sort({ name: 1 }).toArray(),
+    ])
+  : [null, null, [], []];
+
+const branchNameFor = (branchId?: string) =>
+  branchId ? String(branches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
+
+const unresolvedAmendments = amendmentRows.filter((amendment: any) =>
+  ['proposed', 'conflict', 'stale', 'ready', 'endorsed', 'voting'].includes(String(amendment.status)),
+).length;
+
+const stageLabel = (stage: string) =>
+  stage === 'decide' ? '3. Decide' : stage === 'deliberate' ? '2. Deliberate' : stage === 'implement' ? '4. Implement' : stage === 'archived' ? 'Archived' : '1. Propose';
+
+const stageTone = (stage: string) =>
+  stage === 'decide' ? 'warning' : stage === 'implement' ? 'success' : stage === 'deliberate' ? 'info' : stage === 'archived' ? 'outline' : 'muted';
+
+const stageOptions: Array<[ProposalStage, string]> = [
+  ['propose', '1. Propose (Intake)'],
+  ['deliberate', '2. Deliberate (Discussion)'],
+  ['decide', '3. Decide (Voting)'],
+  ['implement', '4. Implement (Decision processing)'],
+  ['archived', 'Archived'],
+];
+
+const notRecorded = 'Not recorded';
+const canManageProposal = Boolean(
+  user.isStaff ||
+    user.isAdmin ||
+    (proposal?.originatingBranchId && (user.branchAdminIds ?? []).includes(proposal.originatingBranchId)),
+);
+const canManageBallot = Boolean(
+  user.isAdmin ||
+    (user.isBranchAdmin &&
+      proposal?.governanceAuthorityBranchId &&
+      proposal.governanceAuthorityBranchId === proposal.jurisdictionBranchId &&
+      (user.branchAdminIds ?? []).includes(proposal.governanceAuthorityBranchId)),
+);
+
+const ballotState = proposal?.stage === 'decide'
+  ? ballotResult
+    ? 'Outcome recorded'
+    : 'Voting open'
+  : (proposal?.votes.total ?? 0) > 0
+    ? 'Voting closed'
+    : 'Not yet open';
+
+const policyState = policy
+  ? `${String(policy.status ?? 'adopted')} · ${String(policy.publicationStatus ?? 'unpublished')}`
+  : proposal?.stage === 'implement'
+    ? 'No adoption record'
+    : 'Not yet adopted';
+
+const publicUrl = proposal ? `/proposals/${proposal.slug}/` : '/proposals/';
+const pct = (value: number) =>
+  proposal?.votes.total ? Math.round((value / proposal.votes.total) * 100) : 0;
+const formatDate = (value: unknown) =>
+  value ? new Date(String(value)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : notRecorded;
+
+const adminChain = proposal
+  ? [
+      { label: 'Proposal', value: stageLabel(proposal.stage), state: 'done', href: '#record-decision' },
+      { label: 'Ballot wording', value: proposal.ballotRevisionId ? ballotState : 'Wording not bound', state: proposal.ballotRevisionId ? 'done' : 'pending', href: '#record-decision' },
+      { label: 'Decision outcome', value: ballotResult ? `${String(ballotResult.result)}${ballotResult.recordedAt ? ` · ${formatDate(ballotResult.recordedAt)}` : ''}` : 'Not recorded', state: ballotResult ? 'done' : 'pending', href: '#record-decision' },
+      {
+        label: 'Policy registry',
+        value: policyState,
+        state: policy?.publicationStatus === 'published' ? 'done' : policy ? 'current' : 'pending',
+        href: policy ? `/policies/${encodeURIComponent(String(policy.policyId))}/` : '#record-decision',
+      },
+    ]
+  : [];
+
+const participantNames = [
+  ...(proposal?.authorName ? [proposal.authorName] : []),
+  ...comments.map((c) => c.authorName),
+].filter(Boolean);
+const uniqueParticipants = [...new Set(participantNames)];
+
+const initialsFor = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || 'M';
+
+const activityEvents: ActivityTimelineEvent[] = proposal
+  ? [
+      {
+        id: `created-${proposal.proposalId}`,
+        date: new Date(proposal.createdAt),
+        actor: proposal.authorName || 'A member',
+        action: 'submitted',
+        target: proposal.title,
+        href: publicUrl,
+        kind: 'proposal',
+        badge: 'Proposal created',
+      },
+      ...revisions
+        .filter((revision: any) => revision.provenance !== 'legacy-backfill')
+        .map((revision: any) => ({
+          id: `revision-${revision.revisionId}`,
+          date: new Date(revision.createdAt),
+          actor: revision.authorId === user.memberId ? 'You' : 'A member',
+          action: 'saved wording revision',
+          target: proposal.title,
+          href: `${publicUrl}#revision-history-heading`,
+          kind: 'governance' as const,
+          badge: 'Wording revision',
+        })),
+      ...comments.map((comment) => ({
+        id: `comment-${comment.commentId}`,
+        date: new Date(comment.createdAt),
+        actor: comment.authorName,
+        action: 'contributed to',
+        target: proposal.title,
+        href: `${publicUrl}#deliberation`,
+        kind: 'contribution' as const,
+        badge: `Stance: ${comment.stance}`,
+      })),
+      ...amendmentRows.flatMap((amendment: any) => {
+        const milestones: Array<[unknown, string, string]> = [
+          [amendment.createdAt, 'proposed an amendment', 'Proposed'],
+          [amendment.ballotOpenedAt, 'opened an amendment ballot', 'Ballot open'],
+          [amendment.ballotDecision?.decidedAt, 'decided the amendment ballot', String(amendment.ballotDecision?.result ?? 'Recorded')],
+          [amendment.formalApproval?.approvedAt, 'formally accepted an amendment', 'Accepted'],
+          [amendment.appliedAt, 'applied an amendment', 'Applied'],
+        ];
+        return milestones
+          .filter(([date]) => Boolean(date))
+          .map(([date, action, badge]) => ({
+            id: `amendment-${amendment.amendmentId}-${badge}`,
+            date: new Date(String(date)),
+            actor: 'Administration',
+            action,
+            target: proposal.title,
+            href: `${publicUrl}#amendments-heading`,
+            kind: 'amendment' as const,
+            badge,
+          }));
+      }),
+      ...(ballotResult
+        ? [{
+            id: `result-${proposal.proposalId}`,
+            date: new Date(ballotResult.recordedAt),
+            actor: 'Administration',
+            action: 'recorded the ballot result',
+            target: proposal.title,
+            href: publicUrl,
+            kind: 'governance' as const,
+            badge: String(ballotResult.result),
+          }]
+        : []),
+      ...(policy
+        ? [
+            policy.ratification?.ratifiedAt && {
+              id: `ratified-${policy.policyId}`,
+              date: new Date(policy.ratification.ratifiedAt),
+              actor: 'Administration',
+              action: 'ratified',
+              target: policy.title,
+              href: `/policies/${encodeURIComponent(String(policy.policyId))}/`,
+              kind: 'governance' as const,
+              badge: 'Ratified',
+            },
+            policy.publishedAt && {
+              id: `published-${policy.policyId}`,
+              date: new Date(policy.publishedAt),
+              actor: 'Administration',
+              action: 'published',
+              target: policy.title,
+              href: `/policies/${encodeURIComponent(String(policy.policyId))}/`,
+              kind: 'governance' as const,
+              badge: 'Published',
+            },
+          ].filter(Boolean)
+        : []),
+    ]
+  : [];
+const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelineEvent[]);
+---
+
+<AdminLayout
+  title={proposal ? proposal.title : 'Proposal not found'}
+  description={proposal?.summary ?? 'Proposal record unavailable.'}
+  section="proposals"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+  hideIntro
+>
+  {!proposal ? (
+    <Alert variant="destructive">
+      <ShieldCheck />
+      <AlertTitle>Proposal not found</AlertTitle>
+      <AlertDescription>
+        <p class="m-0">The record could not be found or is outside your delegated branch scope.</p>
+        <Button className="mt-3" href="/admin/proposals/" variant="outline" size="sm">Back to proposals</Button>
+      </AlertDescription>
+    </Alert>
+  ) : (
+    <div class="admin-project-page">
+      <!-- Top Navigation & Action Toolbar -->
+      <div class="admin-record-toolbar">
+        <a class="admin-back-link" href="/admin/proposals/"><ArrowLeft aria-hidden="true" />Proposal register</a>
+        <div class="admin-record-toolbar__actions">
+          {canManageProposal && (
+            <div class="inline-stage-control">
+              <label for="admin-stage-select" class="sr-only">Lifecycle stage</label>
+              <NativeSelect
+                id="admin-stage-select"
+                defaultValue={proposal.stage}
+                data-quick-proposal-id={proposal.proposalId}
+                data-current-stage={proposal.stage}
+                data-vote-count={proposal.votes.total}
+                data-title={proposal.title}
+              >
+                {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+              </NativeSelect>
+            </div>
+          )}
+          {canManageProposal && (
+            <Button href={`/admin/proposals/?edit=${encodeURIComponent(proposal.proposalId)}#create-policy`} variant="outline" size="sm">
+              Edit wording &amp; metadata
+            </Button>
+          )}
+          <Button href={publicUrl} variant="outline" size="sm"><FileText />Public view</Button>
+        </div>
+      </div>
+
+      <!-- Header -->
+      <header class="project-header">
+        <div class="project-header__badges">
+          <span class="tabular project-id">{proposal.proposalId}</span>
+          <Badge variant={stageTone(proposal.stage)}>{stageLabel(proposal.stage)}</Badge>
+          <Badge variant="outline">{proposal.kind === 'resolution' || proposal.proposalId.startsWith('GOV-') ? 'Governance resolution' : 'Policy proposal'}</Badge>
+          <Badge variant="muted">{proposal.space}</Badge>
+        </div>
+        <h1>{proposal.title}</h1>
+      </header>
+
+      <!-- Project Detail 1: 4-Column Hairline Stat Strip -->
+      <div class="project-detail-strip" aria-label="Proposal operational metrics">
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><Layers aria-hidden="true" />Lifecycle stage</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value">{stageLabel(proposal.stage)}</strong>
+            <span class="project-stat-cell__hint">{ballotState}</span>
+          </div>
+        </div>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><Gavel aria-hidden="true" />Ballot tally</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{proposal.votes.total} votes</strong>
+            <span class="project-stat-cell__hint tabular">{proposal.votes.approve} approve · {proposal.votes.reject} reject</span>
+          </div>
+        </div>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><CheckCircle2 aria-hidden="true" />Amendments</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{amendmentRows.length - unresolvedAmendments}/{amendmentRows.length}</strong>
+            <span class="project-stat-cell__hint tabular">{unresolvedAmendments} open for review</span>
+          </div>
+        </div>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><FileText aria-hidden="true" />Wording revisions</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{revisions.length}</strong>
+            <span class="project-stat-cell__hint">{proposal.ballotRevisionId ? 'Bound to ballot' : 'Unbound draft'}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Project Detail 1: Flat 2-Column Workspace Grid with Vertical Hairline -->
+      <div class="project-workspace-grid">
+        <!-- Main Column -->
+        <div class="project-workspace-main">
+          <!-- Proposal Brief & Files (Project Brief + Project Files pattern) -->
+          <section class="project-brief-section" aria-labelledby="brief-heading">
+            <div class="project-section-head">
+              <h2 id="brief-heading">Proposal brief</h2>
+              <Badge variant={proposal.ballotRevisionId ? 'success' : 'warning'}>
+                {proposal.ballotRevisionId ? `Bound: ${ballotRevisionLabel}` : 'Wording not bound'}
+              </Badge>
+            </div>
+            <p class="project-brief-copy">{proposal.summary}</p>
+
+            {(proposal.outcomes.length > 0 || proposal.details || proposal.detailHtml) && (
+              <details class="project-wording-disclosure">
+                <summary>Inspect full commitments &amp; rationale ({proposal.outcomes.length} commitments)</summary>
+                <div class="project-wording-disclosure__body">
+                  {proposal.outcomes.length > 0 && (
+                    <div>
+                      <h3>Key commitments</h3>
+                      <ul class="admin-record-list">
+                        {proposal.outcomes.map((item) => <li>{item}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {(proposal.details || proposal.detailHtml) && (
+                    <div>
+                      <h3>Rationale &amp; context</h3>
+                      <div class="typeset typeset-notes max-w-[65ch]">
+                        <PortableText value={proposal.details} html={proposal.detailHtml} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
+
+            <!-- Linked Governance Artifacts Cards (Project Files grid pattern) -->
+            <div class="project-files-section">
+              <h3 class="project-subhead">Governance records &amp; snapshots</h3>
+              <div class="project-files-grid">
+                <a href={`${publicUrl}#revision-history-heading`} class="project-file-card">
+                  <span class="project-file-card__icon"><FileText aria-hidden="true" /></span>
+                  <div class="project-file-card__meta">
+                    <strong>{ballotRevisionLabel}</strong>
+                    <span>{revisions.length} saved snapshot{revisions.length === 1 ? '' : 's'}</span>
+                  </div>
+                </a>
+
+                {proposal.attachmentUrl && (
+                  <a href={proposal.attachmentUrl} target="_blank" rel="noopener noreferrer" class="project-file-card">
+                    <span class="project-file-card__icon"><FileText aria-hidden="true" /></span>
+                    <div class="project-file-card__meta">
+                      <strong>Supporting specification ↗</strong>
+                      <span>{proposal.attachmentDescription || 'Attached reference file'}</span>
+                    </div>
+                  </a>
+                )}
+
+                {policy ? (
+                  <a href={`/policies/${encodeURIComponent(String(policy.policyId))}/`} class="project-file-card">
+                    <span class="project-file-card__icon"><BookOpen aria-hidden="true" /></span>
+                    <div class="project-file-card__meta">
+                      <strong>Policy {policy.policyId}</strong>
+                      <span>{policyState}</span>
+                    </div>
+                  </a>
+                ) : (
+                  <div class="project-file-card is-static">
+                    <span class="project-file-card__icon"><BookOpen aria-hidden="true" /></span>
+                    <div class="project-file-card__meta">
+                      <strong>Policy registry</strong>
+                      <span>{policyState}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <!-- Underline Section Tabs (Timeline / Tasks / Issues / Activity pattern) -->
+          <nav class="project-tabs admin-section-nav" aria-label="Proposal workspace views">
+            <a href="#record-decision" class="project-tab is-active">
+              Decision &amp; Ballot
+            </a>
+            <a href="#record-amendments" class="project-tab">
+              Amendments <span class="project-tab__count tabular">{amendmentRows.length}</span>
+            </a>
+            <a href="#record-discussion" class="project-tab">
+              Discussion <span class="project-tab__count tabular">{comments.length}</span>
+            </a>
+            <a href="#record-activity" class="project-tab">
+              Activity <span class="project-tab__count tabular">{activityEvents.length}</span>
+            </a>
+          </nav>
+
+          <!-- Tab 1: Decision & Ballot Controls (Inline forms!) -->
+          <section id="record-decision" class="admin-record-section" aria-labelledby="record-decision-heading">
+            <div class="project-panel-head">
+              <div>
+                <h2 id="record-decision-heading">Decision chain &amp; ballot administration</h2>
+                <p>Ballot wording binding, outcome recording, ratification, and publication are separate auditable actions.</p>
+              </div>
+              <Badge variant={ballotResult ? (ballotResult.result === 'successful' ? 'success' : 'warning') : proposal.stage === 'decide' ? 'info' : 'muted'}>
+                {ballotResult ? String(ballotResult.result) : ballotState}
+              </Badge>
+            </div>
+
+            <div class="project-panel-body">
+              <ol class="admin-chain" aria-label="Governance decision chain">
+                {adminChain.map((node, index) => (
+                  <li class:list={[`is-${node.state}`]}>
+                    <a href={node.href}>
+                      <span class="admin-chain__marker tabular" aria-hidden="true">{node.state === 'done' ? '✓' : index + 1}</span>
+                      <span class="admin-chain__copy">
+                        <span>{node.label}</span>
+                        <strong>{node.value}</strong>
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+
+              {proposal.votes.total > 0 ? (
+                <div class="admin-tally" aria-label="Recorded ballot tally">
+                  <div class="admin-tally__bar" aria-hidden="true">
+                    <span style={`width:${pct(proposal.votes.approve)}%;background:var(--horizon-success-ink)`}></span>
+                    <span style={`width:${pct(proposal.votes.abstain)}%;background:#8a6100`}></span>
+                    <span style={`width:${pct(proposal.votes.reject)}%;background:var(--horizon-danger-ink)`}></span>
+                  </div>
+                  <div class="admin-tally__legend">
+                    <span><strong class="tabular">{proposal.votes.approve}</strong> approve ({pct(proposal.votes.approve)}%)</span>
+                    <span><strong class="tabular">{proposal.votes.abstain}</strong> abstain ({pct(proposal.votes.abstain)}%)</span>
+                    <span><strong class="tabular">{proposal.votes.reject}</strong> reject ({pct(proposal.votes.reject)}%)</span>
+                    <span><strong class="tabular">{proposal.votes.total}</strong> total verified votes</span>
+                  </div>
+                </div>
+              ) : (
+                <p class="admin-inline-note">No member votes have been recorded for this ballot yet.</p>
+              )}
+
+              <dl class="admin-property-grid">
+                <div><dt>Bound ballot wording</dt><dd>{proposal.ballotRevisionId ? ballotRevisionLabel : 'Needs binding before outcome'}</dd></div>
+                <div><dt>Recorded outcome</dt><dd>{ballotResult ? `${ballotResult.result} · ${formatDate(ballotResult.recordedAt)}` : 'Not recorded'}</dd></div>
+                <div><dt>Decision event ref</dt><dd>{ballotResult?.decisionEventId ?? 'Not recorded'}</dd></div>
+                <div><dt>Policy registry state</dt><dd>{policyState}</dd></div>
+              </dl>
+
+              <!-- Inline Ballot Wording Binding Form -->
+              {canManageBallot && proposal.stage === 'decide' && !proposal.ballotRevisionId && (
+                <div class="admin-action-box">
+                  <div class="admin-action-box__head">
+                    <Lock className="size-4" aria-hidden="true" />
+                    <strong>Bind ballot wording revision</strong>
+                  </div>
+                  <p class="admin-inline-note">
+                    Select the exact wording snapshot that member votes apply to. Engage records your decision event reference and audit reason.
+                  </p>
+                  {revisions.length > 0 ? (
+                    <form class="ballot-bind-form grid gap-3" data-proposal-id={proposal.proposalId}>
+                      <div class="admin-form-grid">
+                        <Field label="Wording revision" htmlFor={`bind-revision-${proposal.proposalId}`}>
+                          <NativeSelect defaultValue="" id={`bind-revision-${proposal.proposalId}`} name="revisionId" required>
+                            <option value="">Choose reviewed revision</option>
+                            {revisions.map((revision: any) => (
+                              <option value={revision.revisionId}>
+                                {revisionDisplayLabel({ revisionId: String(revision.revisionId), createdAt: revision.createdAt })} · ref {String(revision.revisionId).slice(0, 12)}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        </Field>
+                        <Field label="Review decision event reference" htmlFor={`bind-event-${proposal.proposalId}`}>
+                          <Input id={`bind-event-${proposal.proposalId}`} name="decisionEventId" required maxLength={200} placeholder="e.g. NEC-2026-11-BIND" />
+                        </Field>
+                      </div>
+                      <Field label="Reason and evidence reviewed" htmlFor={`bind-reason-${proposal.proposalId}`}>
+                        <Textarea id={`bind-reason-${proposal.proposalId}`} name="reason" rows={2} required maxLength={1000} placeholder="Confirm wording snapshot verified against member notice..." />
+                      </Field>
+                      <div class="admin-actions">
+                        <Button size="sm" type="submit">Bind reviewed wording</Button>
+                        <span class="admin-status" role="status" aria-live="polite"></span>
+                      </div>
+                    </form>
+                  ) : (
+                    <p class="admin-inline-note">No saved proposal revision is available to bind.</p>
+                  )}
+                </div>
+              )}
+
+              <!-- Inline Ballot Outcome Form -->
+              {canManageBallot && proposal.stage === 'decide' && (
+                <div class="admin-action-box">
+                  <div class="admin-action-box__head">
+                    <Gavel className="size-4" aria-hidden="true" />
+                    <strong>Record formal ballot outcome</strong>
+                  </div>
+                  <p class="admin-inline-note">
+                    Apply the organisation&apos;s constitutional rules to record the ballot result against frozen revision <code>{proposal.ballotRevisionId ? String(proposal.ballotRevisionId).slice(0, 12) : 'unbound'}</code>.
+                  </p>
+                  <form class="ballot-result-form grid gap-3" data-proposal-id={proposal.proposalId}>
+                    <div class="admin-form-grid">
+                      <Field label="Outcome" htmlFor={`ballot-result-${proposal.proposalId}`}>
+                        <NativeSelect defaultValue={ballotResult?.result ?? ''} id={`ballot-result-${proposal.proposalId}`} name="result" required>
+                          <option value="">Choose outcome</option>
+                          <option value="successful">Successful</option>
+                          <option value="unsuccessful">Unsuccessful</option>
+                          <option value="inconclusive">Inconclusive</option>
+                        </NativeSelect>
+                      </Field>
+                      <Field label="Decision event reference" htmlFor={`ballot-event-${proposal.proposalId}`}>
+                        <Input id={`ballot-event-${proposal.proposalId}`} name="decisionEventId" defaultValue={ballotResult?.decisionEventId ?? ''} required maxLength={200} placeholder="e.g. BALLOT-2026-11" />
+                      </Field>
+                    </div>
+                    <div class="admin-actions">
+                      <Button size="sm" type="submit" disabled={!proposal.ballotRevisionId}>Record ballot outcome</Button>
+                      <span class="admin-status" role="status" aria-live="polite"></span>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {!canManageBallot && (
+                <p class="admin-inline-note">
+                  Ballot binding and outcome controls require national administrator access, or delegated branch authority where governance authority and jurisdiction match your branch.
+                </p>
+              )}
+            </div>
+          </section>
+
+          <!-- Tab 2: Amendments Management (Inline forms!) -->
+          <section id="record-amendments" class="admin-record-section" aria-labelledby="record-amendments-heading">
+            <div class="project-panel-head">
+              <div>
+                <h2 id="record-amendments-heading">Formal amendments register</h2>
+                <p>Resolve conflicts, open separate amendment endorsement ballots, or record formal acceptance.</p>
+              </div>
+              <Badge variant={unresolvedAmendments ? 'warning' : 'muted'}>{amendmentRows.length} recorded</Badge>
+            </div>
+
+            <div class="project-panel-body">
+              {amendmentRows.length === 0 ? (
+                <p class="admin-inline-note">No formal amendments have been submitted for this proposal.</p>
+              ) : (
+                <div class="admin-record-stack">
+                  {amendmentRows.map((amendment: any, idx: number) => (
+                    <article class="admin-amendment-row" data-amendment-id={amendment.amendmentId}>
+                      <div class="admin-amendment-row__head">
+                        <h3>#{idx + 1} · {amendment.changes?.title ?? 'Proposed wording change'}</h3>
+                        <Badge variant={['endorsed', 'applied', 'accepted'].includes(String(amendment.status)) ? 'success' : amendment.status === 'conflict' ? 'destructive' : 'warning'}>
+                          {String(amendment.status)}
+                        </Badge>
+                      </div>
+                      <p class="admin-inline-note">
+                        Base revision <code>{String(amendment.baseRevisionId).slice(0, 8)}</code>
+                        {' · '}amendment revision <code>{String(amendment.currentRevisionId ?? 'legacy').slice(0, 8)}</code>
+                        {amendment.conflicts?.length ? ` · overlapping fields: ${amendment.conflicts.join(', ')}` : ''}
+                      </p>
+
+                      {['proposed', 'stale', 'conflict'].includes(amendment.status) && canManageProposal && (
+                        <details class="admin-subform-disclosure">
+                          <summary>Resolve or review amendment</summary>
+                          <form class="amendment-resolve-form mt-3 grid gap-3" data-amendment-id={amendment.amendmentId} data-conflict={String(amendment.status === 'conflict')}>
+                            <div class="admin-form-grid">
+                              <Field label="Review outcome" htmlFor={`amendment-outcome-${amendment.amendmentId}`}>
+                                <NativeSelect defaultValue="ready" id={`amendment-outcome-${amendment.amendmentId}`} name="outcome">
+                                  <option value="ready">Mark ready for endorsement ballot</option>
+                                  <option value="rejected">Reject</option>
+                                  <option value="withdrawn">Withdraw</option>
+                                </NativeSelect>
+                              </Field>
+                              <Field label="Reason" htmlFor={`amendment-reason-${amendment.amendmentId}`}>
+                                <Textarea id={`amendment-reason-${amendment.amendmentId}`} name="reason" rows={2} required maxLength={1000} />
+                              </Field>
+                            </div>
+                            {amendment.status === 'conflict' && (
+                              <div class="grid gap-3">
+                                <p class="admin-inline-note">Enter replacement wording for overlapping fields to resolve the conflict:</p>
+                                {Object.entries(amendment.changes ?? {}).map(([field, value]: [string, any]) => (
+                                  <Field label={field} htmlFor={`amendment-field-${amendment.amendmentId}-${field}`}>
+                                    <Textarea id={`amendment-field-${amendment.amendmentId}-${field}`} data-change-field={field} rows={3} defaultValue={Array.isArray(value) ? value.join('\n') : String(value ?? '')} />
+                                  </Field>
+                                ))}
+                              </div>
+                            )}
+                            <div class="admin-actions">
+                              <Button variant="outline" size="sm" type="submit">Save resolution</Button>
+                              <span class="admin-status" role="status" aria-live="polite"></span>
+                            </div>
+                          </form>
+                        </details>
+                      )}
+
+                      {['proposed', 'ready'].includes(amendment.status) && proposal.stage === 'decide' && proposal.ballotRevisionId === amendment.baseRevisionId && canManageBallot && (
+                        <form class="amendment-open-form grid gap-2 pt-2" data-amendment-id={amendment.amendmentId}>
+                          <div class="admin-actions">
+                            <Button variant="outline" size="sm" type="submit">Open amendment endorsement ballot</Button>
+                            <span class="admin-status" role="status" aria-live="polite"></span>
+                          </div>
+                        </form>
+                      )}
+
+                      {amendment.status === 'voting' && canManageBallot && (
+                        <form class="amendment-close-form grid gap-3 pt-2" data-amendment-id={amendment.amendmentId}>
+                          <div class="admin-form-grid">
+                            <Field label="Endorsement result" htmlFor={`amendment-result-${amendment.amendmentId}`}>
+                              <NativeSelect defaultValue="" id={`amendment-result-${amendment.amendmentId}`} name="result" required>
+                                <option value="">Choose result</option>
+                                <option value="endorsed">Endorsed</option>
+                                <option value="not-endorsed">Not endorsed</option>
+                                <option value="inconclusive">Inconclusive</option>
+                              </NativeSelect>
+                            </Field>
+                            <Field label="Ballot event reference" htmlFor={`amendment-event-${amendment.amendmentId}`}>
+                              <Input id={`amendment-event-${amendment.amendmentId}`} name="decisionEventId" required maxLength={200} />
+                            </Field>
+                          </div>
+                          <div class="admin-actions">
+                            <Button variant="outline" size="sm" type="submit">Close amendment ballot</Button>
+                            <span class="admin-status" role="status" aria-live="polite"></span>
+                          </div>
+                        </form>
+                      )}
+
+                      {amendment.status === 'endorsed' && canManageBallot && (
+                        <form class="amendment-approve-form grid gap-3 pt-2" data-amendment-id={amendment.amendmentId}>
+                          <Field label="Formal approval event reference" htmlFor={`amendment-approve-${amendment.amendmentId}`}>
+                            <Input id={`amendment-approve-${amendment.amendmentId}`} name="decisionEventId" required maxLength={200} />
+                          </Field>
+                          <div class="admin-actions">
+                            <Button variant="outline" size="sm" type="submit">Record formal approval</Button>
+                            <span class="admin-status" role="status" aria-live="polite"></span>
+                          </div>
+                        </form>
+                      )}
+
+                      {amendment.status === 'accepted' && canManageBallot && (
+                        <form class="amendment-apply-form grid gap-2 pt-2" data-amendment-id={amendment.amendmentId}>
+                          <div class="admin-actions">
+                            <Button variant="outline" size="sm" type="submit">Apply amendment as new proposal revision</Button>
+                            <span class="admin-status" role="status" aria-live="polite"></span>
+                          </div>
+                        </form>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <!-- Tab 3: Discussion -->
+          <section id="record-discussion" class="admin-record-section" aria-labelledby="record-discussion-heading">
+            <div class="project-panel-head">
+              <div>
+                <h2 id="record-discussion-heading">Member deliberation log</h2>
+                <p>Informal stances and wording suggestions posted by verified members.</p>
+              </div>
+              <Button href={`${publicUrl}#deliberation`} variant="outline" size="sm"><MessageSquare />Open public thread</Button>
+            </div>
+            <div class="project-panel-body">
+              {comments.length === 0 ? (
+                <p class="admin-inline-note">No member contributions are recorded.</p>
+              ) : (
+                <ol class="admin-record-comments">
+                  {comments.map((comment) => (
+                    <li>
+                      <div class="admin-record-comment__head">
+                        <strong>{comment.authorName}</strong>
+                        <Badge variant={comment.stance === 'support' ? 'success' : comment.stance === 'concern' ? 'destructive' : comment.stance === 'amendment' ? 'warning' : 'muted'}>
+                          {comment.stance}
+                        </Badge>
+                        <time class="tabular" datetime={new Date(comment.createdAt).toISOString()}>{formatDate(comment.createdAt)}</time>
+                      </div>
+                      <p>{comment.body}</p>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </section>
+
+          <!-- Tab 4: Activity & Audit History -->
+          <section id="record-activity" class="admin-record-section" aria-labelledby="record-activity-heading">
+            <div class="project-panel-head">
+              <div>
+                <h2 id="record-activity-heading">Activity &amp; audit timeline</h2>
+                <p>Chronological log of persisted proposal, revision, amendment, ballot, and policy events.</p>
+              </div>
+              <Badge variant="muted" className="tabular">{activityEvents.length}</Badge>
+            </div>
+            <div class="project-panel-body">
+              <ActivityTimeline
+                client:load
+                groups={activityTimeline}
+                filters={[
+                  { id: 'all', label: 'All' },
+                  { id: 'proposal', label: 'Proposal' },
+                  { id: 'contribution', label: 'Contributions' },
+                  { id: 'amendment', label: 'Amendments' },
+                  { id: 'governance', label: 'Governance' },
+                ]}
+                emptyMessage="No activity is recorded for this proposal."
+              />
+            </div>
+          </section>
+        </div>
+
+        <!-- Right Contextual Rail (Project Detail 1 right rail: Attributes, Contributors, Schedule, Notes) -->
+        <aside class="project-workspace-rail" aria-label="Proposal metadata, participants, and linked records">
+          <!-- 1. Top Properties (Label, Author/PIC, Authority) -->
+          <div class="project-rail-block">
+            <dl class="project-rail-props">
+              <div>
+                <dt><Tag className="size-3.5" aria-hidden="true" />Classification</dt>
+                <dd><Badge variant="outline">{proposal.kind === 'resolution' || proposal.proposalId.startsWith('GOV-') ? 'Resolution' : 'Policy'}</Badge></dd>
+              </div>
+              <div>
+                <dt><User className="size-3.5" aria-hidden="true" />Sponsor / Author</dt>
+                <dd>{proposal.authorName || 'Fusion Working Group'}</dd>
+              </div>
+              <div>
+                <dt><GitBranch className="size-3.5" aria-hidden="true" />Originating branch</dt>
+                <dd>{branchNameFor(proposal.originatingBranchId)}</dd>
+              </div>
+              <div>
+                <dt><ShieldCheck className="size-3.5" aria-hidden="true" />Authority</dt>
+                <dd>{branchNameFor(proposal.governanceAuthorityBranchId)}</dd>
+              </div>
+              <div>
+                <dt><Layers className="size-3.5" aria-hidden="true" />Jurisdiction</dt>
+                <dd>{branchNameFor(proposal.jurisdictionBranchId)}</dd>
+              </div>
+              <div>
+                <dt><BookOpen className="size-3.5" aria-hidden="true" />Publication scope</dt>
+                <dd>{proposal.publicationScope ?? 'Not specified'}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <!-- 2. Contributors / Participants (Project Detail 1 Contributors block) -->
+          <div class="project-rail-block">
+            <h3>
+              <span>Participants</span>
+              <span class="tabular text-xs font-normal text-muted-foreground">{uniqueParticipants.length}</span>
+            </h3>
+            <div class="participant-avatars">
+              {uniqueParticipants.slice(0, 8).map((name) => (
+                <span class="participant-avatar" title={name}>{initialsFor(name)}</span>
+              ))}
+              {uniqueParticipants.length > 8 && (
+                <span class="participant-more tabular">+{uniqueParticipants.length - 8}</span>
+              )}
+            </div>
+          </div>
+
+          <!-- 3. Governance Dates (Project Detail 1 Schedule block) -->
+          <div class="project-rail-block">
+            <h3>Record dates</h3>
+            <dl class="project-rail-props">
+              <div>
+                <dt><Calendar className="size-3.5" aria-hidden="true" />Created</dt>
+                <dd class="tabular">{formatDate(proposal.createdAt)}</dd>
+              </div>
+              <div>
+                <dt><Calendar className="size-3.5" aria-hidden="true" />Last updated</dt>
+                <dd class="tabular">{formatDate(proposal.updatedAt)}</dd>
+              </div>
+              {ballotResult?.recordedAt && (
+                <div>
+                  <dt><Gavel className="size-3.5" aria-hidden="true" />Outcome recorded</dt>
+                  <dd class="tabular">{formatDate(ballotResult.recordedAt)}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+
+          <!-- 4. Notes & Related Records (Project Detail 1 Notes block) -->
+          <div class="project-rail-block">
+            <h3>Governance notes &amp; related</h3>
+            <div class="project-rail-notes">
+              {proposal.provenance && (
+                <div class="project-rail-note">
+                  <span class="project-rail-note__icon"><ShieldCheck aria-hidden="true" /></span>
+                  <div class="project-rail-note__body">
+                    <div class="project-rail-note__head">
+                      <strong>{proposal.provenance.label}</strong>
+                    </div>
+                    <p>{proposal.provenance.summary}</p>
+                  </div>
+                </div>
+              )}
+
+              {proposal.implementationNote && (
+                <div class="project-rail-note">
+                  <span class="project-rail-note__icon"><ListChecks aria-hidden="true" /></span>
+                  <div class="project-rail-note__body">
+                    <div class="project-rail-note__head">
+                      <strong>Implementation note</strong>
+                    </div>
+                    <p>{proposal.implementationNote}</p>
+                  </div>
+                </div>
+              )}
+
+              {relatedProposals.map((related: any) => (
+                <a href={`/admin/proposals/${related.slug}/`} class="project-rail-note">
+                  <span class="project-rail-note__icon"><FileText aria-hidden="true" /></span>
+                  <div class="project-rail-note__body">
+                    <div class="project-rail-note__head">
+                      <strong>{related.title}</strong>
+                      <span class="tabular">{related.proposalId}</span>
+                    </div>
+                    <p>{stageLabel(related.stage)} · {related.space}</p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  )}
+</AdminLayout>
+
+<script>
+  // Tab navigation for the 4 operational views
+  const sectionNav = document.querySelector<HTMLElement>('.admin-section-nav');
+  if (sectionNav) {
+    const links = [...sectionNav.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')];
+    const sections = [...document.querySelectorAll<HTMLElement>('.project-workspace-main > .admin-record-section')];
+    const activate = () => {
+      const hash = decodeURIComponent(location.hash.slice(1));
+      const target = hash ? document.getElementById(hash) : null;
+      const section = target?.closest<HTMLElement>('.admin-record-section');
+      const activeId = section?.id ?? 'record-decision';
+      for (const panel of sections) panel.hidden = panel.id !== activeId;
+      for (const link of links) {
+        const active = link.getAttribute('href') === `#${activeId}`;
+        link.classList.toggle('is-active', active);
+        if (active) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      }
+      if (target && section && location.hash) requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
+    };
+    for (const link of links) link.addEventListener('click', () => setTimeout(activate, 0));
+    window.addEventListener('hashchange', activate);
+    activate();
+  }
+
+  // Inline stage switcher
+  document.querySelectorAll<HTMLSelectElement>('[data-quick-proposal-id]').forEach((select) => {
+    select.addEventListener('change', async () => {
+      const proposalId = select.dataset.quickProposalId;
+      const title = select.dataset.title || proposalId;
+      const currentStage = select.dataset.currentStage || select.value;
+      const voteCount = parseInt(select.dataset.voteCount || '0', 10);
+      const newStage = select.value;
+      if (!proposalId || currentStage === newStage) return;
+
+      let confirmMsg = '';
+      if (newStage === 'decide') {
+        confirmMsg = `Open ballot for "${title}" (Stage 3: Decide)? Once voting begins, substantive content will be locked to protect ballot integrity.`;
+      } else if (currentStage === 'decide' && voteCount > 0) {
+        confirmMsg = `This proposal currently has ${voteCount} member vote(s). Moving it to "${newStage}" will conclude or pause active voting. All cast votes will remain safely preserved. Proceed?`;
+      } else if (newStage === 'implement') {
+        confirmMsg = `Move "${title}" to Stage 4 · Implement? This starts delivery tracking after a successful ballot; formal ratification and publication remain separate.`;
+      } else if (newStage === 'archived') {
+        confirmMsg = `Archive "${title}"? It will no longer be visible to general members.`;
+      }
+
+      if (confirmMsg && !confirm(confirmMsg)) {
+        select.value = currentStage;
+        return;
+      }
+
+      select.disabled = true;
+      try {
+        const res = await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ stage: newStage }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to update stage');
+        location.reload();
+      } catch (err: any) {
+        alert(err.message || 'Failed to update stage');
+        select.value = currentStage;
+      } finally {
+        select.disabled = false;
+      }
+    });
+  });
+
+  // Inline ballot result form
+  document.querySelectorAll<HTMLFormElement>('.ballot-result-form').forEach((form) =>
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      const status = form.querySelector<HTMLElement>('[role="status"]');
+      if (button) button.disabled = true;
+      try {
+        const fields = new FormData(form);
+        const body = {
+          proposalId: form.dataset.proposalId,
+          result: fields.get('result'),
+          decisionEventId: fields.get('decisionEventId'),
+        };
+        const response = await fetch('/api/admin/ballots/result', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Could not record ballot result.');
+        if (status) status.textContent = 'Outcome recorded.';
+        location.reload();
+      } catch (error) {
+        if (status) status.textContent = error instanceof Error ? error.message : 'Could not record ballot result.';
+        if (button) button.disabled = false;
+      }
+    }),
+  );
+
+  // Inline ballot bind form
+  document.querySelectorAll<HTMLFormElement>('.ballot-bind-form').forEach((form) =>
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const fields = new FormData(form);
+      const revisionId = String(fields.get('revisionId') ?? '');
+      if (!confirm(`Bind this ballot and its existing votes to wording revision ${revisionId.slice(0, 12)}?`)) return;
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      const status = form.querySelector<HTMLElement>('[role="status"]');
+      if (button) button.disabled = true;
+      try {
+        const response = await fetch('/api/admin/ballots/bind', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            proposalId: form.dataset.proposalId,
+            revisionId,
+            decisionEventId: fields.get('decisionEventId'),
+            reason: fields.get('reason'),
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Could not bind reviewed ballot wording.');
+        if (status) status.textContent = 'Wording revision bound.';
+        location.reload();
+      } catch (error) {
+        if (status) status.textContent = error instanceof Error ? error.message : 'Could not bind reviewed ballot wording.';
+        if (button) button.disabled = false;
+      }
+    }),
+  );
+
+  // Inline amendment forms
+  const amendmentActions: Array<[string, string, (form: HTMLFormElement) => Record<string, unknown>]> = [
+    ['.amendment-open-form', '/api/admin/amendments/open-ballot', (form) => ({ amendmentId: form.dataset.amendmentId })],
+    [
+      '.amendment-resolve-form',
+      '/api/admin/amendments/resolve',
+      (form) => {
+        const fields = new FormData(form);
+        const changes: Record<string, unknown> = {};
+        form.querySelectorAll<HTMLTextAreaElement>('[data-change-field]').forEach((input) => {
+          const key = input.dataset.changeField!;
+          const current = input.value;
+          changes[key] = key === 'outcomes' ? current.split('\n').map((line) => line.trim()).filter(Boolean) : current;
+        });
+        return {
+          amendmentId: form.dataset.amendmentId,
+          outcome: fields.get('outcome'),
+          reason: fields.get('reason'),
+          ...(Object.keys(changes).length ? { changes } : {}),
+        };
+      },
+    ],
+    ['.amendment-close-form', '/api/admin/amendments/close-ballot', (form) => ({ amendmentId: form.dataset.amendmentId, ...Object.fromEntries(new FormData(form).entries()) })],
+    ['.amendment-approve-form', '/api/admin/amendments/accept', (form) => ({ amendmentId: form.dataset.amendmentId, ...Object.fromEntries(new FormData(form).entries()) })],
+    ['.amendment-apply-form', '/api/admin/amendments/apply', (form) => ({ amendmentId: form.dataset.amendmentId })],
+  ];
+  for (const [selector, endpoint, buildBody] of amendmentActions) {
+    document.querySelectorAll<HTMLFormElement>(selector).forEach((form) =>
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+        const status = form.querySelector<HTMLElement>('[role="status"]');
+        const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+        if (endpoint.endsWith('/apply') && !confirm('Apply this formally approved amendment as a new proposal revision?')) return;
+        if (button) button.disabled = true;
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(buildBody(form)),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Could not update amendment.');
+          if (status) status.textContent = 'Saved.';
+          location.reload();
+        } catch (error) {
+          if (status) status.textContent = error instanceof Error ? error.message : 'Could not update amendment.';
+          if (button) button.disabled = false;
+        }
+      }),
+    );
+  }
+</script>
+
+<style>
+  .admin-project-page {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .inline-stage-control {
+    min-width: 12.5rem;
+  }
+
+  .project-header {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .project-header__badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .project-id {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--horizon-muted);
+  }
+
+  .project-header h1 {
+    margin: 0;
+    font-family: var(--font-newsreader), Georgia, serif;
+    font-size: clamp(1.75rem, 2.6vw, 2.35rem);
+    font-weight: 600;
+    line-height: 1.14;
+    letter-spacing: -0.02em;
+    color: var(--horizon-ink);
+  }
+
+  .project-brief-section {
+    display: grid;
+    gap: 0.9rem;
+    padding-top: 0.25rem;
+  }
+
+  .project-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .project-section-head h2 {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .project-brief-copy {
+    margin: 0;
+    font-size: 0.96rem;
+    line-height: 1.62;
+    color: var(--horizon-ink);
+    max-width: 72ch;
+  }
+
+  .project-wording-disclosure {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.5rem;
+    background: var(--horizon-surface);
+    padding: 0.65rem 0.9rem;
+  }
+
+  .project-wording-disclosure summary {
+    cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--horizon-ink);
+  }
+
+  .project-wording-disclosure__body {
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--horizon-line);
+    display: grid;
+    gap: 1rem;
+  }
+
+  .project-wording-disclosure__body h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+
+  /* Project Files Grid (from project-detail1) */
+  .project-files-section {
+    display: grid;
+    gap: 0.55rem;
+    padding-top: 0.35rem;
+  }
+
+  .project-subhead {
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--horizon-muted);
+  }
+
+  .project-files-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 0.65rem;
+  }
+
+  .project-file-card {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--horizon-line);
+    background: var(--horizon-white);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 120ms ease;
+  }
+
+  a.project-file-card:hover {
+    border-color: var(--horizon-ink);
+  }
+
+  .project-file-card__icon {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    place-items: center;
+    border-radius: 0.4rem;
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-line);
+    color: var(--horizon-ink);
+    flex-shrink: 0;
+  }
+
+  .project-file-card__icon svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .project-file-card__meta {
+    min-width: 0;
+    display: grid;
+    gap: 0.1rem;
+  }
+
+  .project-file-card__meta strong {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--horizon-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .project-file-card__meta span {
+    font-size: 0.74rem;
+    color: var(--horizon-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Tab Panels */
+  .project-workspace-main > [hidden] {
+    display: none !important;
+  }
+
+  .admin-record-section {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .project-panel-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .project-panel-head h2 {
+    margin: 0;
+    font-family: var(--font-newsreader), Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--horizon-ink);
+  }
+
+  .project-panel-head p {
+    margin: 0.2rem 0 0;
+    font-size: 0.85rem;
+    color: var(--horizon-muted);
+  }
+
+  .project-panel-body {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .admin-action-box {
+    padding: 1rem 1.1rem;
+    border-radius: 0.55rem;
+    border: 1px solid var(--horizon-line);
+    background: var(--horizon-surface);
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .admin-action-box__head {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.9rem;
+    color: var(--horizon-ink);
+  }
+
+  .admin-subform-disclosure {
+    margin-top: 0.4rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.45rem;
+    border: 1px solid var(--horizon-line);
+    background: var(--horizon-white);
+  }
+
+  .admin-subform-disclosure summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--horizon-ink);
+  }
+
+  .participant-avatars {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .participant-avatar {
+    display: inline-grid;
+    width: 1.9rem;
+    height: 1.9rem;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-line);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .participant-more {
+    display: inline-grid;
+    height: 1.9rem;
+    padding-inline: 0.5rem;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--horizon-surface);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+</style>

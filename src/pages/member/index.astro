@@ -1,14 +1,19 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import LegalAcceptanceGate from '../../components/legal/LegalAcceptanceGate.astro';
-import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { Badge } from '../../components/ui/badge';
 import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
 import MemberSettings from '../../components/member/MemberSettings';
+import ActivityTimeline from '../../components/blocks/timeline-3';
+import AttentionQueue from '../../components/member/AttentionQueue.astro';
+import CatchUpDigest from '../../components/member/CatchUpDigest.astro';
+import GovernanceLog from '../../components/member/GovernanceLog.astro';
+import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
+import { buildMemberCatchUp, listMemberActivityStream, type MemberCatchUpGroup } from '../../lib/member-activity.ts';
 import {
   devLoginEnabled,
   emailLoginConfigured,
@@ -28,19 +33,89 @@ const [db, user] = await Promise.all([
 ]);
 
 const activity = user ? await listUserActivity(db, user.memberId) : null;
+const memberTimelineEvents: ActivityTimelineEvent[] = user
+  ? await listMemberActivityStream(db, user.memberId)
+  : [];
+const memberTimeline = buildActivityTimeline(memberTimelineEvents);
+const memberTimelineCount = memberTimelineEvents.length;
 const awaitingDecision = user?.canParticipate ? await listOutstandingDecisions(db, user.memberId, user) : [];
 const memberBranches = user?.activeBranchIds?.length
   ? await db.collection('branches').find({ branchId: { $in: user.activeBranchIds }, recognised: true }).sort({ name: 1 }).toArray()
   : [];
-const branchProposals = memberBranches.length ? await listProposals(db, { user }) : [];
+const visibleProposals = user ? await listProposals(db, { user }) : [];
+const deliberationOpportunities = visibleProposals
+  .filter((proposal) => proposal.stage === 'deliberate')
+  .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
 const branchPriority = { decide: 0, deliberate: 1, propose: 2, implement: 3, archived: 4 };
+
+const now = new Date();
+const LAST_SEEN_COOKIE = 'engage_member_last_seen';
+const rawLastSeen = Astro.cookies.get(LAST_SEEN_COOKIE)?.value;
+const parsedLastSeen = rawLastSeen ? new Date(rawLastSeen) : null;
+const lastSeen =
+  parsedLastSeen && !Number.isNaN(parsedLastSeen.getTime()) && parsedLastSeen <= now
+    ? parsedLastSeen
+    : null;
+const catchUpSince = lastSeen ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+const allCatchUpGroups: MemberCatchUpGroup[] = user
+  ? await buildMemberCatchUp(db, user.memberId, new Date(0), user)
+  : [];
+const catchUpGroups = allCatchUpGroups
+  .map((group) => {
+    const items = group.items.filter((item) => item.date >= catchUpSince);
+    return items.length
+      ? { ...group, items, lastDate: items[0]!.date }
+      : null;
+  })
+  .filter((group): group is MemberCatchUpGroup => Boolean(group));
+const catchUpTotal = catchUpGroups.reduce((total, group) => total + group.items.length, 0);
+const governanceChanges = allCatchUpGroups
+  .flatMap((group) => group.items)
+  .filter((item) => ['decision', 'policy', 'amendment'].includes(item.kind))
+  .sort((left, right) => right.date.getTime() - left.date.getTime())
+  .slice(0, 10);
+
+if (user && (!lastSeen || now.getTime() - lastSeen.getTime() > 30 * 60 * 1000)) {
+  Astro.cookies.set(LAST_SEEN_COOKIE, now.toISOString(), {
+    path: '/member',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: Astro.url.protocol === 'https:',
+    maxAge: 60 * 60 * 24 * 180,
+  });
+}
+
+const branchNameById = new Map(memberBranches.map((branch: any) => [branch.branchId, String(branch.name)]));
+const outstandingItems = awaitingDecision.map((proposal) => ({
+  proposalId: proposal.proposalId,
+  slug: proposal.slug,
+  title: proposal.title,
+  space: proposal.space,
+  branchName: proposal.jurisdictionBranchId ? branchNameById.get(proposal.jurisdictionBranchId) : undefined,
+}));
+const ballotScopes = [...new Set(outstandingItems.map((item) => item.branchName ?? 'All verified members'))];
+const eligibilityNote =
+  ballotScopes.length === 0
+    ? 'Open ballots appear here when you are eligible.'
+    : ballotScopes.length === 1
+      ? ballotScopes[0] === 'All verified members'
+        ? 'Eligible across all open party-wide ballots.'
+        : `Open to ${ballotScopes[0]} members.`
+      : 'Includes party-wide and branch-scoped ballots.';
+
+const catchUpSinceLabel = lastSeen
+  ? `Updates since ${lastSeen.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}.`
+  : 'Showing updates from the last seven days.';
+
 const branchActivity = memberBranches.map((branch: any) => ({
   branch,
-  proposals: branchProposals
+  proposals: visibleProposals
     .filter((proposal) => [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branch.branchId))
     .sort((a, b) => branchPriority[a.stage] - branchPriority[b.stage] || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, 3),
+    .slice(0, 4),
 }));
+
 const emailAvailable = emailLoginConfigured(env);
 const googleAvailable = googleLoginConfigured(env);
 const devLoginAvailable = devLoginEnabled(env);
@@ -140,142 +215,285 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
       </>
     ) : (
       <>
-        <header class="account-header">
-          <div>
-            <h1>{memberView === 'activity' ? 'Activity' : memberView === 'account' ? 'My account' : 'My Engage'}</h1>
-            <p>{user.email}</p>
+        <header class="member-header">
+          <div class="member-header__main">
+            <div class="member-header__title-row">
+              <h1>{memberView === 'activity' ? 'Activity & Governance Log' : memberView === 'account' ? 'My Account' : 'My Engage'}</h1>
+              <Badge variant={user.status === 'verified' ? 'success' : user.status === 'suspended' ? 'destructive' : 'warning'}>
+                {user.status === 'verified' ? 'Verified member' : user.status === 'suspended' ? 'Suspended' : 'Verification pending'}
+              </Badge>
+              {memberBranches.map((branch: any) => (
+                <Badge variant="outline">{branch.name}</Badge>
+              ))}
+            </div>
+            <p class="member-identity">
+              {user.name || user.email} · {user.email}
+            </p>
           </div>
-          <div class="account-header__actions">
+
+          <div class="member-header__actions">
             {user.isStaff && (
-              <Button href="/admin/" variant="outline">
-                Review admin tasks →
+              <Button href="/admin/" variant="outline" size="sm">
+                Admin workspace
               </Button>
             )}
-            <Button href="/proposals/?stage=decide">
-              See open votes →
+            {user.canParticipate && (
+              <Button href="/proposals/new/" variant="outline" size="sm">
+                Suggest an idea
+              </Button>
+            )}
+            <Button href="/proposals/?stage=decide" size="sm">
+              Browse ballots ({awaitingDecision.length})
             </Button>
           </div>
         </header>
 
-        <div class="member-overview" aria-label="Your participation at a glance"><a href="#awaiting-heading"><svg class="nav-icon" aria-hidden="true"><use href="#icon-vote" /></svg><strong>{awaitingDecision.length}</strong><span>Votes for you</span></a><a href="/member/?view=activity#comments-heading"><svg class="nav-icon" aria-hidden="true"><use href="#icon-files" /></svg><strong>{activity?.comments.length ?? 0}</strong><span>Contributions</span></a><a href="/member/#proposals-heading"><svg class="nav-icon" aria-hidden="true"><use href="#icon-home" /></svg><strong>{activity?.proposals.length ?? 0}</strong><span>Your ideas</span></a></div>
-        <nav class="account-shortcuts" aria-label="My Engage sections"><Button href="/member/" variant={memberView === 'overview' ? 'secondary' : 'ghost'} size="sm" aria-current={memberView === 'overview' ? 'page' : undefined}>Overview</Button><Button href="/member/?view=activity" variant={memberView === 'activity' ? 'secondary' : 'ghost'} size="sm" aria-current={memberView === 'activity' ? 'page' : undefined}>Activity</Button><Button href="/member/?view=account" variant={memberView === 'account' ? 'secondary' : 'ghost'} size="sm" aria-current={memberView === 'account' ? 'page' : undefined}>My account</Button></nav>
-
-        <Alert className="status-banner" variant={user.status === 'verified' ? 'success' : user.status === 'suspended' ? 'destructive' : 'warning'}>
-          <AlertDescription>
-            {user.status === 'verified' ? (
-              <>
-                <strong>Membership verified.</strong> You can suggest ideas and join discussions. Voting also depends on the eligibility rules for each ballot.
-              </>
-            ) : user.status === 'suspended' ? (
-              <>
-                <strong>Participation suspended.</strong> Please contact a party administrator
-                regarding your membership status.
-              </>
-            ) : (
-              <>
-                <strong>Membership verification pending.</strong> You can browse all proposals and decisions while
-                an administrator confirms your Fusion Party membership. Make sure your full name
-                below matches your party membership record.
-              </>
-            )}
-          </AlertDescription>
-        </Alert>
+        {user.status !== 'verified' && (
+          <Alert className="status-banner" variant={user.status === 'suspended' ? 'destructive' : 'warning'}>
+            <AlertDescription>
+              {user.status === 'suspended' ? (
+                <>
+                  <strong>Participation suspended.</strong> Please contact a party administrator regarding your membership status.
+                </>
+              ) : (
+                <>
+                  <strong>Membership verification pending.</strong> You can browse all proposals and decisions while an administrator confirms your Fusion Party membership.
+                </>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
 
         <LegalAcceptanceGate />
 
-        <Card className="account-section overview-only" aria-labelledby="awaiting-heading">
-          <h2 id="awaiting-heading">Votes for you ({awaitingDecision.length})</h2>
-          {!user.canParticipate ? <p class="muted-note">Your membership must be verified before you can vote.</p> : awaitingDecision.length === 0 ? <p class="muted-note">You’re up to date on open decisions.</p> : (
-            <><ul class="activity-list">{awaitingDecision.slice(0, 5).map((p) => <li class="activity-row"><div><a class="activity-title" href={`/proposals/${p.slug}/`}>{p.title}</a><span class="activity-sub">{p.space}</span></div><Button href={`/proposals/${p.slug}/`} size="sm">Review &amp; vote</Button></li>)}</ul>{awaitingDecision.length > 5 && <details class="more-votes"><summary>Show {awaitingDecision.length - 5} more votes</summary><ul class="activity-list">{awaitingDecision.slice(5).map((p) => <li class="activity-row"><div><a class="activity-title" href={`/proposals/${p.slug}/`}>{p.title}</a><span class="activity-sub">{p.space}</span></div><Button href={`/proposals/${p.slug}/`} size="sm" variant="outline">Review</Button></li>)}</ul></details>}</>
-          )}
-        </Card>
+        <!-- Top 4-Cell Hairline Metric Strip -->
+        <div class="member-stat-strip" aria-label="Your participation summary">
+          <a href="#awaiting-heading" class="member-stat">
+            <span class="member-stat__label">Open votes for you</span>
+            <div class="member-stat__bottom">
+              <strong class="member-stat__value tabular">{awaitingDecision.length}</strong>
+              <span class="member-stat__hint">Eligible unvoted ballots</span>
+            </div>
+          </a>
+          <a href="#opportunities-heading" class="member-stat">
+            <span class="member-stat__label">Open for deliberation</span>
+            <div class="member-stat__bottom">
+              <strong class="member-stat__value tabular">{deliberationOpportunities.length}</strong>
+              <span class="member-stat__hint">Active discussions</span>
+            </div>
+          </a>
+          <a href="#catchup-heading" class="member-stat">
+            <span class="member-stat__label">Catch-up updates</span>
+            <div class="member-stat__bottom">
+              <strong class="member-stat__value tabular">{catchUpTotal}</strong>
+              <span class="member-stat__hint">{lastSeen ? 'Since last visit' : 'Last 7 days'}</span>
+            </div>
+          </a>
+          <a href="/member/?view=activity#activity-heading" class="member-stat">
+            <span class="member-stat__label">Your contributions</span>
+            <div class="member-stat__bottom">
+              <strong class="member-stat__value tabular">{(activity?.votes.length ?? 0) + (activity?.comments.length ?? 0) + (activity?.proposals.length ?? 0)}</strong>
+              <span class="member-stat__hint tabular">{activity?.votes.length ?? 0} votes · {activity?.comments.length ?? 0} stances</span>
+            </div>
+          </a>
+        </div>
 
-        {branchActivity.length > 0 && <Card className="account-section overview-only" aria-labelledby="branch-activity-heading">
-          <h2 id="branch-activity-heading">Activity in your branches</h2>
-          {branchActivity.map(({ branch, proposals }) => <section class="branch-activity" aria-labelledby={`branch-activity-${branch.branchId}`}>
-            <div class="branch-activity__heading"><h3 id={`branch-activity-${branch.branchId}`}>{branch.name}</h3><a href={`/proposals/?branch=${encodeURIComponent(branch.branchId)}`}>All branch activity →</a></div>
-            {proposals.length ? <ul class="activity-list">{proposals.map((proposal) => <li class="activity-row"><div><a class="activity-title" href={`/proposals/${proposal.slug}/`}>{proposal.title}</a><span class="activity-sub">{proposal.stage === 'decide' ? 'Open vote' : proposal.stage === 'deliberate' ? 'In discussion' : proposal.stage === 'implement' ? 'Implement' : 'New idea'}</span></div><Button href={`/proposals/${proposal.slug}/`} size="sm" variant="outline">View</Button></li>)}</ul> : <p class="muted-note">No current proposals involve this branch.</p>}
-          </section>)}
-        </Card>}
+        <!-- Underline Workspace Tabs -->
+        <nav class="member-tabs" aria-label="My Engage sections">
+          <a href="/member/" class="member-tab" aria-current={memberView === 'overview' ? 'page' : undefined}>
+            Overview
+          </a>
+          <a href="/member/?view=activity" class="member-tab" aria-current={memberView === 'activity' ? 'page' : undefined}>
+            Activity &amp; Log
+            <span class="member-tab__count tabular">{memberTimelineCount}</span>
+          </a>
+          <a href="/member/?view=account" class="member-tab" aria-current={memberView === 'account' ? 'page' : undefined}>
+            Account &amp; Access
+          </a>
+        </nav>
 
-        {activity?.proposals && activity.proposals.length > 0 && (
-          <Card className="account-section overview-only" aria-labelledby="proposals-heading">
-          <h2 id="proposals-heading">Ideas you started ({activity.proposals.length})</h2>
-            <ul class="activity-list">
-              {activity.proposals.map((p) => (
-                <li class="activity-row">
-                  <div>
-                    <a class="activity-title" href={`/proposals/${p.slug}/`}>
-                      {p.title}
-                    </a>
-                    <span class="activity-sub">
-                      {p.space} · {p.stage === 'decide' ? 'Open vote' : p.stage === 'deliberate' ? 'In discussion' : p.stage === 'implement' ? 'Implement' : 'New idea'}
-                    </span>
+        <!-- VIEW 1: OVERVIEW (Outstanding votes, Participation opportunities, Catch-up, Status changes) -->
+        <div class="overview-only member-overview-grid">
+          <!-- Left Column: Actionable Queues -->
+          <div class="member-col-main">
+            <!-- 1. Open Ballots Queue -->
+            <AttentionQueue
+              items={outstandingItems}
+              canParticipate={Boolean(user.canParticipate)}
+              eligibilityNote={eligibilityNote}
+            />
+
+            <!-- 2. Relevant Participation Opportunities (Deliberation & Amendments) -->
+            <section class="member-panel" aria-labelledby="opportunities-heading">
+              <div class="member-panel__head">
+                <div>
+                  <div class="member-panel__title-row">
+                    <h2 id="opportunities-heading">Open for deliberation &amp; amendments</h2>
+                    <Badge variant="secondary" className="tabular">{deliberationOpportunities.length}</Badge>
                   </div>
-                  <Button href={`/proposals/${p.slug}/`} size="sm" variant="outline">
-                    View
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
+                  <p>Proposals currently in Stage 2 (Deliberate) where your stance or wording suggestion can shape the final ballot.</p>
+                </div>
+                <Button href="/proposals/?stage=deliberate" variant="ghost" size="sm">All discussions</Button>
+              </div>
 
-        <Card className="account-section activity-only" aria-labelledby="votes-heading">
-          <h2 id="votes-heading">Your recorded votes ({activity?.votes.length ?? 0})</h2>
-          {!activity?.votes.length ? (
-            <p class="muted-note">
-              You have not voted on any decisions yet. Visit{' '}
-              <a href="/proposals/?stage=decide">See open votes</a> to participate.
-            </p>
-          ) : (
-            <ul class="activity-list">
-              {activity.votes.map((v) => (
-                <li class="activity-row">
-                  <div>
-                    <a class="activity-title" href={`/proposals/${v.proposalSlug}/`}>
-                      {v.proposalTitle}
-                    </a>
-                    <span class="activity-sub">
-                      Updated{' '}
-                      {new Date(v.updatedAt).toLocaleDateString('en-AU', { dateStyle: 'medium' })}
-                      {v.reason ? ` · Reason: "${v.reason}"` : ''}
-                    </span>
-                  </div>
-                  <Badge variant={v.choice === 'approve' ? 'success' : v.choice === 'abstain' ? 'info' : 'destructive'}>
-                    Voted: {v.choice.toUpperCase()}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+              {deliberationOpportunities.length === 0 ? (
+                <p class="member-panel__empty">No proposals are currently in active deliberation.</p>
+              ) : (
+                <>
+                  <ul class="opportunity-list">
+                    {deliberationOpportunities.slice(0, 6).map((item) => (
+                      <li class="opportunity-row">
+                        <div class="opportunity-row__body">
+                          <div class="opportunity-row__meta">
+                            <span class="tabular opportunity-id">{item.proposalId}</span>
+                            <span class="opportunity-space">{item.space}</span>
+                            <span class="tabular opportunity-count">{item.commentCount} {item.commentCount === 1 ? 'stance' : 'stances'}</span>
+                          </div>
+                          <a class="opportunity-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
+                        </div>
+                        <Button href={`/proposals/${item.slug}/#deliberation`} variant="outline" size="sm">
+                          Contribute
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                  {deliberationOpportunities.length > 6 && (
+                    <div class="member-panel__footer">
+                      <a href="/proposals/?stage=deliberate">
+                        Explore all {deliberationOpportunities.length} proposals in discussion →
+                      </a>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
 
-        <Card className="account-section activity-only" aria-labelledby="comments-heading">
-          <h2 id="comments-heading">Your contributions ({activity?.comments.length ?? 0})</h2>
-          {!activity?.comments.length ? (
-            <p class="muted-note">
-              You have not joined a discussion yet. Open an idea in{' '}
-              <a href="/proposals/">Browse proposals</a> to share your feedback or suggest a wording change.
-            </p>
-          ) : (
-            <ul class="activity-list">
-              {activity.comments.map((c) => (
-                <li class="activity-row">
+            <!-- 3. Branch Activity & Authored Ideas (if applicable) -->
+            {branchActivity.length > 0 && (
+              <section class="member-panel" aria-labelledby="branch-activity-heading">
+                <div class="member-panel__head">
                   <div>
-                    <a class="activity-title" href={`/proposals/${c.proposalSlug}/#deliberation`}>
-                      {c.proposalTitle}
-                    </a>
-                    <p class="activity-body">{c.body}</p>
+                    <h2 id="branch-activity-heading">Activity in your branches</h2>
+                    <p>Proposals originating in or governed by your recognised branch memberships.</p>
                   </div>
-                  <Badge variant="outline">
-                    Stance: {c.stance}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+                </div>
+                <div class="branch-groups">
+                  {branchActivity.map(({ branch, proposals }) => (
+                    <div class="branch-group" aria-labelledby={`branch-activity-${branch.branchId}`}>
+                      <div class="branch-group__head">
+                        <h3 id={`branch-activity-${branch.branchId}`}>{branch.name}</h3>
+                        <a href={`/proposals/?branch=${encodeURIComponent(branch.branchId)}`}>All branch proposals →</a>
+                      </div>
+                      {proposals.length ? (
+                        <ul class="opportunity-list">
+                          {proposals.map((proposal) => (
+                            <li class="opportunity-row">
+                              <div class="opportunity-row__body">
+                                <div class="opportunity-row__meta">
+                                  <span class="tabular opportunity-id">{proposal.proposalId}</span>
+                                  <Badge variant="outline">
+                                    {proposal.stage === 'decide' ? 'Open vote' : proposal.stage === 'deliberate' ? 'In discussion' : proposal.stage === 'implement' ? 'Implement' : 'New idea'}
+                                  </Badge>
+                                </div>
+                                <a class="opportunity-title" href={`/proposals/${proposal.slug}/`}>{proposal.title}</a>
+                              </div>
+                              <Button href={`/proposals/${proposal.slug}/`} size="sm" variant="ghost">Open</Button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p class="member-panel__empty">No active proposals currently involve this branch.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {activity?.proposals && activity.proposals.length > 0 && (
+              <section class="member-panel" aria-labelledby="proposals-heading">
+                <div class="member-panel__head">
+                  <div>
+                    <h2 id="proposals-heading">Ideas you authored ({activity.proposals.length})</h2>
+                    <p>Proposals you submitted to the platform.</p>
+                  </div>
+                </div>
+                <ul class="opportunity-list">
+                  {activity.proposals.map((p) => (
+                    <li class="opportunity-row">
+                      <div class="opportunity-row__body">
+                        <div class="opportunity-row__meta">
+                          <span class="opportunity-space">{p.space}</span>
+                          <Badge variant="outline">
+                            {p.stage === 'decide' ? 'Open vote' : p.stage === 'deliberate' ? 'In discussion' : p.stage === 'implement' ? 'Implement' : 'New idea'}
+                          </Badge>
+                        </div>
+                        <a class="opportunity-title" href={`/proposals/${p.slug}/`}>{p.title}</a>
+                      </div>
+                      <Button href={`/proposals/${p.slug}/`} size="sm" variant="outline">View</Button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+
+          <!-- Right Column: Catch-Up Digest & Governance Status Change Log -->
+          <div class="member-col-rail">
+            <CatchUpDigest
+              groups={catchUpGroups}
+              total={catchUpTotal}
+              sinceLabel={catchUpSinceLabel}
+              hasLastVisit={Boolean(lastSeen)}
+            />
+
+            <GovernanceLog items={governanceChanges} />
+          </div>
+        </div>
+
+        <!-- VIEW 2: ACTIVITY & LOG -->
+        <div class="activity-only member-activity-view">
+          <div class="member-overview-grid">
+            <div class="member-col-main">
+              {activity && (
+                <div class="member-timeline-card">
+                  <ActivityTimeline
+                    client:load
+                    groups={memberTimeline}
+                    title="Your participation log"
+                    description="Votes, ideas, contributions, amendments, and endorsements you recorded, newest first."
+                    badge={`${memberTimelineCount} ${memberTimelineCount === 1 ? 'entry' : 'entries'}`}
+                    headingId="activity-heading"
+                    filters={[
+                      { id: 'all', label: 'All' },
+                      { id: 'vote', label: 'Votes' },
+                      { id: 'contribution', label: 'Contributions' },
+                      { id: 'proposal', label: 'Ideas' },
+                      { id: 'amendment', label: 'Amendments' },
+                      { id: 'endorsement', label: 'Endorsements' },
+                      { id: 'governance', label: 'Outcomes' },
+                    ]}
+                    searchable
+                    emptyMessage="Your votes, contributions, and ideas will appear here as you participate."
+                  />
+                </div>
+              )}
+            </div>
+
+            <div class="member-col-rail">
+              <GovernanceLog items={governanceChanges} />
+              <CatchUpDigest
+                groups={catchUpGroups}
+                total={catchUpTotal}
+                sinceLabel={catchUpSinceLabel}
+                hasLastVisit={Boolean(lastSeen)}
+                idPrefix="activity-catchup"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW 3: ACCOUNT & ACCESS -->
         {memberView === 'account' && (
           <div class="account-settings" id="account-settings">
             <MemberSettings
@@ -294,7 +512,6 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
             />
           </div>
         )}
-
       </>
     )}
   </div>
@@ -396,147 +613,429 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
 </script>
 
 <style>
-  .account-shortcuts { display:flex; flex-wrap:wrap; gap:.55rem 1.5rem; padding:.8rem 0; margin:1rem 0; border-block:1px solid var(--horizon-line); font-weight:600; }
-  .account-settings { margin-top: 1rem; }
-  .more-votes { margin-top:1rem; }
-  .more-votes summary { cursor:pointer; font-weight:700; }
-  .more-votes .activity-list { margin-top:1rem; }
   .member-page {
-    max-width: 62rem;
+    max-width: 84rem;
+    padding-top: 1.5rem;
+    padding-bottom: 3.5rem;
   }
+
+  .member-page[data-view="activity"] .overview-only,
+  .member-page[data-view="activity"] .account-only {
+    display: none;
+  }
+
+  .member-page[data-view="account"] .overview-only,
+  .member-page[data-view="account"] .activity-only {
+    display: none;
+  }
+
+  .member-page[data-view="overview"] .activity-only,
+  .member-page[data-view="overview"] .account-only {
+    display: none;
+  }
+
+  /* Sign-in Views */
   .signin-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-    gap: 1.5rem;
-    margin-top: 1rem;
+    gap: 1.25rem;
+    margin-top: 1.25rem;
   }
+
   .signin-legal {
-    margin-top: 0.85rem;
+    margin-top: 0.75rem;
     color: var(--horizon-muted);
-    font-size: 0.92rem;
+    font-size: 0.9rem;
   }
+
   .signin-legal a {
-    color: var(--horizon-purple-deep);
+    color: var(--horizon-ink);
     font-weight: 600;
   }
+
   .signin-box {
-    padding: 1.75rem;
-    background: var(--horizon-lavender-soft);
+    padding: 1.5rem;
+    background: #ffffff;
     border: 1px solid var(--horizon-line);
-    border-radius: 0.85rem;
+    border-radius: 0.75rem;
   }
+
   .signin-box h2 {
-    margin: 0 0 0.45rem;
-    font-size: 1.55rem;
+    margin: 0 0 0.4rem;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.4rem;
   }
+
   .signin-box p {
     margin: 0 0 1rem;
     color: var(--horizon-muted);
+    font-size: 0.9rem;
   }
 
-  .account-header {
+  /* Member Workspace Header */
+  .member-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-end;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-    margin-bottom: 1.5rem;
+    gap: 1rem 1.5rem;
+    margin-bottom: 1.15rem;
   }
-  .account-header h1 {
-    margin: 0 0 0.25rem;
+
+  .member-header__main {
+    min-width: 0;
   }
-  .account-header p {
-    margin: 0;
-    color: var(--horizon-muted);
-    font-size: 1.05rem;
-  }
-  .account-header__actions {
+
+  .member-header__title-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 0.25rem;
   }
+
+  .member-header h1 {
+    margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(1.85rem, 2.8vw, 2.4rem);
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    color: var(--horizon-ink);
+  }
+
+  .member-identity {
+    margin: 0;
+    color: var(--horizon-muted);
+    font-size: 0.9rem;
+  }
+
+  .member-header__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
   .status-banner {
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
   }
 
-  .account-section {
-    padding-top: 2rem;
-    margin-top: 2rem;
-    border-top: 1px solid var(--horizon-line);
-  }
-  .account-section h2 {
-    margin: 0 0 1rem;
-    font-size: 1.65rem;
+  /* Top 4-Stat Hairline Strip */
+  .member-stat-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    overflow: hidden;
+    margin-bottom: 1.15rem;
   }
 
-  .muted-note {
+  .member-stat {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.85rem 1.1rem;
+    border-right: 1px solid var(--horizon-line);
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 120ms ease;
+  }
+
+  .member-stat:last-child {
+    border-right: 0;
+  }
+
+  .member-stat:hover {
+    background: var(--horizon-surface);
+  }
+
+  .member-stat__label {
+    font-size: 0.78rem;
+    font-weight: 500;
     color: var(--horizon-muted);
-    margin: 0;
   }
-  .activity-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    border-top: 1px solid var(--horizon-line);
-  }
-  .activity-row {
+
+  .member-stat__bottom {
     display: flex;
-    align-items: flex-start;
+    align-items: baseline;
     justify-content: space-between;
-    gap: 1rem 2rem;
-    padding: 1.15rem 0;
+    gap: 0.5rem;
+  }
+
+  .member-stat__value {
+    color: var(--horizon-ink);
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+  }
+
+  .member-stat__hint {
+    color: var(--horizon-muted);
+    font-size: 0.75rem;
+    text-align: right;
+  }
+
+  /* Underline Tabs */
+  .member-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.4rem;
+    margin: 0 0 1.25rem;
     border-bottom: 1px solid var(--horizon-line);
   }
-  .activity-row > div { min-width: 0; overflow-wrap: anywhere; }
-  .activity-title {
-    font-weight: 700;
-    font-size: 1.05rem;
+
+  .member-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.6rem;
+    padding: 0.5rem 0.1rem;
+    color: var(--horizon-muted);
+    font-size: 0.88rem;
+    font-weight: 600;
     text-decoration: none;
-    display: block;
-  }
-  .activity-title:hover {
-    text-decoration: underline;
-  }
-  .activity-sub {
-    display: block;
-    margin-top: 0.2rem;
-    font-size: 0.85rem;
-    color: var(--horizon-muted);
-  }
-  .activity-body {
-    margin: 0.35rem 0 0;
-    color: var(--horizon-muted);
-    font-size: 0.94rem;
-    max-width: 62ch;
-  }
-  @media (max-width: 520px) {
-    .activity-row { flex-wrap: wrap; gap: 0.65rem; }
-    .activity-row > :last-child { max-width: 100%; }
   }
 
-  .member-page { max-width:84rem; }
-  .member-page[data-view="activity"] .overview-only,.member-page[data-view="activity"] .account-only,.member-page[data-view="activity"] .member-overview,.member-page[data-view="activity"] .status-banner { display:none; }
-  .member-page[data-view="account"] .overview-only,.member-page[data-view="account"] .activity-only,.member-page[data-view="account"] .member-overview { display:none; }
-  .member-page[data-view="overview"] .activity-only,.member-page[data-view="overview"] .account-only { display:none; }
-  .account-shortcuts { display:flex; flex-wrap:wrap; gap:1.4rem; }
-  .account-shortcuts a { text-decoration:none; padding:.55rem .15rem; font-weight:700; }
-  .account-shortcuts a[aria-current="page"] { border-bottom:3px solid #6b48db; }
-  .account-header { margin-bottom:1.2rem; }
-  .account-header h1 { font:700 clamp(2rem,4vw,3rem)/1.1 Outfit,sans-serif; }
-  .member-overview { display:grid; grid-template-columns:repeat(3,1fr); gap:.8rem; }
-  .member-overview a { display:grid; gap:.15rem; padding:1.2rem; background:#fff; border:1px solid var(--horizon-line); border-radius:.7rem; text-decoration:none; }
-  .member-overview .nav-icon { width:1.5rem; height:1.5rem; color:#613bcd; }
-  .member-overview strong { font-size:1.6rem; line-height:1.1; }
-  .member-overview span { font-size:.85rem; }
-  .account-shortcuts { border-bottom:1px solid var(--horizon-line); padding-block:.9rem; }
-  .account-section { background:#fff; border:1px solid var(--horizon-line); border-radius:.7rem; padding:1.3rem 1.5rem; margin-top:1rem; }
-  .account-section h2 { font-size:1.25rem; }
-  .activity-list { border-top:0; }
-  .activity-row:last-child { border-bottom:0; }
-  .branch-activity + .branch-activity { margin-top:1rem; padding-top:1rem; border-top:1px solid var(--horizon-line); }
-  .branch-activity__heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:.5rem 1rem; }
-  .branch-activity__heading h3 { margin:0; font-size:1rem; }
-  .branch-activity__heading a { font-size:.88rem; font-weight:600; }
-  .status-banner { margin:1rem 0; }
-  @media(max-width:600px){.member-overview{grid-template-columns:1fr;gap:.45rem}.member-overview a{display:flex;align-items:center;gap:.7rem;padding:.7rem 1rem}.member-overview strong{font-size:1.3rem}.member-overview span{font-size:.85rem}.account-section{padding:1rem}}
+  .member-tab:hover {
+    color: var(--horizon-ink);
+  }
+
+  .member-tab[aria-current="page"] {
+    color: var(--horizon-ink);
+  }
+
+  .member-tab[aria-current="page"]::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    background: var(--horizon-ink);
+  }
+
+  .member-tab__count {
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: var(--horizon-surface);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--horizon-muted);
+  }
+
+  /* 2-Column Dashboard Grid */
+  .member-overview-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    align-items: start;
+    gap: 1.25rem;
+  }
+
+  .member-col-main,
+  .member-col-rail {
+    min-width: 0;
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  /* Participation Opportunities & Branch Panels */
+  .member-panel {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .member-panel__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem 0.85rem;
+    border-bottom: 1px solid var(--horizon-line);
+    background: var(--horizon-surface);
+  }
+
+  .member-panel__title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .member-panel__head h2 {
+    margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.3rem;
+    line-height: 1.2;
+    color: var(--horizon-ink);
+  }
+
+  .member-panel__head p {
+    margin: 0.25rem 0 0;
+    font-size: 0.84rem;
+    color: var(--horizon-muted);
+    max-width: 58ch;
+  }
+
+  .member-panel__empty {
+    margin: 0;
+    padding: 1.15rem 1.25rem;
+    font-size: 0.86rem;
+    color: var(--horizon-muted);
+  }
+
+  .opportunity-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .opportunity-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .opportunity-row:last-child {
+    border-bottom: 0;
+  }
+
+  .opportunity-row:hover {
+    background: #fafbff;
+  }
+
+  .opportunity-row__body {
+    min-width: 0;
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  .opportunity-row__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+  }
+
+  .opportunity-id {
+    font-weight: 700;
+    color: var(--horizon-muted);
+  }
+
+  .opportunity-space {
+    padding: 0.08rem 0.42rem;
+    border-radius: 0.28rem;
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-line);
+    color: var(--horizon-ink);
+    font-weight: 600;
+  }
+
+  .opportunity-count {
+    color: var(--horizon-muted);
+  }
+
+  .opportunity-title {
+    color: var(--horizon-ink);
+    font-size: 0.92rem;
+    font-weight: 600;
+    line-height: 1.35;
+    text-decoration: none;
+  }
+
+  .opportunity-title:hover {
+    color: var(--horizon-purple);
+    text-decoration: underline;
+  }
+
+  .member-panel__footer {
+    padding: 0.65rem 1.25rem;
+    background: var(--horizon-surface);
+    border-top: 1px solid var(--horizon-line);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .member-panel__footer a {
+    color: var(--horizon-ink);
+    text-decoration: none;
+  }
+
+  .member-panel__footer a:hover {
+    color: var(--horizon-purple);
+    text-decoration: underline;
+  }
+
+  .branch-group + .branch-group {
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .branch-group__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem 0.5rem;
+    background: #fafbff;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .branch-group__head h3 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .branch-group__head a {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--horizon-purple);
+    text-decoration: none;
+  }
+
+  .member-timeline-card {
+    padding: 1.25rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    background: #ffffff;
+  }
+
+  .account-settings {
+    margin-top: 0.5rem;
+  }
+
+  @media (max-width: 1080px) {
+    .member-overview-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .member-stat-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .member-stat:nth-child(2) {
+      border-right: 0;
+    }
+
+    .member-stat:nth-child(-n + 2) {
+      border-bottom: 1px solid var(--horizon-line);
+    }
+
+    .member-panel__head,
+    .opportunity-row,
+    .branch-group__head {
+      padding-inline: 1rem;
+    }
+  }
 </style>

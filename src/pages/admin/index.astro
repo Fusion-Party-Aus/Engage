@@ -1,38 +1,52 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
-import { ArrowRight, BookOpen, FileText, GitBranch, ShieldCheck, Users } from 'lucide-react';
+import {
+  ArrowRight,
+  BookOpen,
+  CheckCircle2,
+  FileText,
+  Gavel,
+  GitBranch,
+  Layers,
+  MessageSquare,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 import { canViewIdentifiableBallots, getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { listProposals } from '../../lib/store.ts';
 import { groupParticipationFeed, type ParticipationActivity } from '../../lib/participation-feed.ts';
 import { PROPOSAL_VOTES } from '../../lib/vote-storage.ts';
+import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
+import ActivityTimeline from '../../components/blocks/timeline-3';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import Card from '../../components/admin/Card.astro';
-import CardAction from '../../components/admin/CardAction.astro';
-import CardContent from '../../components/admin/CardContent.astro';
-import CardDescription from '../../components/admin/CardDescription.astro';
-import CardFooter from '../../components/admin/CardFooter.astro';
-import CardHeader from '../../components/admin/CardHeader.astro';
-import CardTitle from '../../components/admin/CardTitle.astro';
 import Alert from '../../components/admin/Alert.astro';
 import AlertTitle from '../../components/admin/AlertTitle.astro';
 import AlertDescription from '../../components/admin/AlertDescription.astro';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
+
 const env = runtimeEnv(Astro.locals);
 const user = await getSessionUser(Astro.request, env);
 if (!user) return Astro.redirect('/member/', 302);
 if (!user.isStaff && !user.isBranchAdmin) Astro.response.status = 403;
+
 const db = await getDatabase(env);
-const proposals = user.isStaff ? await listProposals(db, { includeArchived: true }) : user.isBranchAdmin ? (await Promise.all((user.branchAdminIds ?? []).map((branch) => listProposals(db, { includeArchived: true, branch })))).flat() : [];
+const proposals = user.isStaff
+  ? await listProposals(db, { includeArchived: true })
+  : user.isBranchAdmin
+    ? (await Promise.all((user.branchAdminIds ?? []).map((branch) => listProposals(db, { includeArchived: true, branch })))).flat()
+    : [];
+
 const stageCounts = {
   propose: proposals.filter((p) => p.stage === 'propose').length,
   deliberate: proposals.filter((p) => p.stage === 'deliberate').length,
   decide: proposals.filter((p) => p.stage === 'decide').length,
   implement: proposals.filter((p) => p.stage === 'implement').length,
 };
+
 const pipelineTotal = Math.max(proposals.length, 1);
 const pipelineSegments = [
   { label: 'Intake', value: stageCounts.propose, color: '#b8a8d9', href: '/admin/proposals/?stage=propose' },
@@ -40,63 +54,205 @@ const pipelineSegments = [
   { label: 'Active ballots', value: stageCounts.decide, color: '#05d4e5', href: '/admin/proposals/?stage=decide' },
   { label: 'Implement', value: stageCounts.implement, color: '#260b59', href: '/admin/proposals/?stage=implement' },
 ].map((segment) => ({ ...segment, percent: (segment.value / pipelineTotal) * 100 }));
+
 const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
 const showIdentifiableBallots = canViewIdentifiableBallots(user);
 const activityWindowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 const proposalScope = { proposalId: { $in: proposals.map((proposal) => proposal.proposalId) } };
+
 const [recentVotes, recentComments] = await Promise.all([
-  // Identifiable ballot participation follows the same administrator-only
-  // boundary as identifiable ballot records. Moderators keep deliberation
-  // and proposal activity but not member ballot activity.
   showIdentifiableBallots
     ? db.collection(PROPOSAL_VOTES).find({ ...proposalScope, ballotId: /^proposal:/, updatedAt: { $gte: activityWindowStart } }).sort({ updatedAt: -1 }).toArray()
     : Promise.resolve([]),
   db.collection('comments').find({ ...proposalScope, createdAt: { $gte: activityWindowStart } }).sort({ createdAt: -1 }).toArray(),
 ]);
+
 const voteActivities: ParticipationActivity[] = recentVotes.flatMap((entry: any) => {
-  const proposal = proposalMap.get(entry.proposalId); return proposal ? [{ id: String(entry._id), actorId: entry.memberId, actorName: entry.authorName || 'Member', kind: 'vote' as const, date: new Date(entry.updatedAt), proposalTitle: proposal.title, proposalSlug: proposal.slug }] : [];
+  const proposal = proposalMap.get(entry.proposalId);
+  return proposal
+    ? [{ id: String(entry._id), actorId: entry.memberId, actorName: entry.authorName || 'Member', kind: 'vote' as const, date: new Date(entry.updatedAt), proposalTitle: proposal.title, proposalSlug: proposal.slug }]
+    : [];
 });
 const commentActivities: ParticipationActivity[] = recentComments.flatMap((entry: any) => {
-  const proposal = proposalMap.get(entry.proposalId); return proposal ? [{ id: entry.commentId, actorId: entry.memberId, actorName: entry.authorName || 'Member', kind: 'contribution' as const, date: new Date(entry.createdAt), proposalTitle: proposal.title, proposalSlug: proposal.slug }] : [];
+  const proposal = proposalMap.get(entry.proposalId);
+  return proposal
+    ? [{ id: entry.commentId, actorId: entry.memberId, actorName: entry.authorName || 'Member', kind: 'contribution' as const, date: new Date(entry.createdAt), proposalTitle: proposal.title, proposalSlug: proposal.slug }]
+    : [];
 });
-const proposalActivities: ParticipationActivity[] = proposals.filter((proposal) => proposal.authorId && new Date(proposal.createdAt).getTime() >= activityWindowStart.getTime()).map((proposal) => ({ id: proposal.proposalId, actorId: proposal.authorId, actorName: proposal.authorName || 'Member', kind: 'proposal', date: new Date(proposal.createdAt), proposalTitle: proposal.title, proposalSlug: proposal.slug }));
+const proposalActivities: ParticipationActivity[] = proposals
+  .filter((proposal) => proposal.authorId && new Date(proposal.createdAt).getTime() >= activityWindowStart.getTime())
+  .map((proposal) => ({
+    id: proposal.proposalId,
+    actorId: proposal.authorId,
+    actorName: proposal.authorName || 'Member',
+    kind: 'proposal',
+    date: new Date(proposal.createdAt),
+    proposalTitle: proposal.title,
+    proposalSlug: proposal.slug,
+  }));
+
 const recentEvents = [...voteActivities, ...commentActivities, ...proposalActivities];
 const activeMemberIds = [...new Set(recentEvents.map((entry) => entry.actorId).filter((id): id is string => Boolean(id)))];
-const priorActivity = activeMemberIds.length ? await Promise.all([
-  showIdentifiableBallots
-    ? db.collection(PROPOSAL_VOTES).find({ memberId: { $in: activeMemberIds }, ballotId: /^proposal:/, updatedAt: { $lt: activityWindowStart } }).toArray()
-    : Promise.resolve([]),
-  db.collection('comments').find({ memberId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }).toArray(),
-  db.collection('proposals').find({ authorId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }).toArray(),
-]) : [[], [], []];
+const priorActivity = activeMemberIds.length
+  ? await Promise.all([
+      showIdentifiableBallots
+        ? db.collection(PROPOSAL_VOTES).find({ memberId: { $in: activeMemberIds }, ballotId: /^proposal:/, updatedAt: { $lt: activityWindowStart } }).toArray()
+        : Promise.resolve([]),
+      db.collection('comments').find({ memberId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }).toArray(),
+      db.collection('proposals').find({ authorId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }).toArray(),
+    ])
+  : [[], [], []];
+
 const priorParticipants = new Set<string>();
 for (const entry of priorActivity[0] as any[]) if (entry.memberId) priorParticipants.add(entry.memberId);
 for (const entry of priorActivity[1] as any[]) if (entry.memberId) priorParticipants.add(entry.memberId);
 for (const entry of priorActivity[2] as any[]) if (entry.authorId) priorParticipants.add(entry.authorId);
 const firstParticipants = new Set(activeMemberIds.filter((id) => !priorParticipants.has(id)));
 const recentActivity = groupParticipationFeed(recentEvents, firstParticipants);
-const feedDate = (date: Date) => new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }).format(date);
-const feedTime = (date: Date) => new Intl.DateTimeFormat('en-AU', { hour: 'numeric', minute: '2-digit' }).format(date);
+
+const adminTimelineEvents: ActivityTimelineEvent[] = recentActivity.slice(0, 30).map((entry) => {
+  if (entry.kind === 'votes') {
+    const first = entry.proposals[0];
+    return {
+      id: `votes-${entry.actorId}-${entry.lastDate.toISOString()}`,
+      date: entry.lastDate,
+      actor: entry.actorName,
+      action: 'voted on',
+      target: `${entry.count} proposal${entry.count === 1 ? '' : 's'}`,
+      href: first ? `/proposals/${first.slug}/` : undefined,
+      kind: 'vote' as const,
+      badge: entry.firstParticipation ? 'First participation' : undefined,
+      details: [
+        ...entry.proposals.slice(0, 3).map((proposal) => ({
+          label: proposal.title,
+          href: `/proposals/${proposal.slug}/`,
+        })),
+        ...(entry.proposals.length > 3 ? [{ label: `and ${entry.proposals.length - 3} more` }] : []),
+      ],
+    };
+  }
+  if (entry.kind === 'contribution')
+    return {
+      id: `contribution-${entry.id}`,
+      date: entry.date,
+      actor: entry.actorName,
+      action: 'contributed to',
+      target: entry.proposalTitle,
+      href: `/proposals/${entry.proposalSlug}/`,
+      kind: 'contribution' as const,
+      badge: entry.firstParticipation ? 'First participation' : undefined,
+    };
+  return {
+    id: `proposal-${entry.id}`,
+    date: entry.date,
+    actor: entry.actorName,
+    action: 'submitted',
+    target: entry.proposalTitle,
+    href: `/proposals/${entry.proposalSlug}/`,
+    kind: 'proposal' as const,
+    badge: entry.firstParticipation ? 'First participation' : undefined,
+  };
+});
+const adminTimeline = buildActivityTimeline(adminTimelineEvents);
 
 const activeBallotsNeedingReview = proposals.filter((proposal) => proposal.stage === 'decide' && !proposal.ballotRevisionId);
 const ballotResults = await db.collection('ballot_results').find({ result: 'successful' }).toArray();
 const registry = user.isAdmin ? await db.collection('policy_registry').find({}).toArray() : [];
 const ratifiedIds = new Set(registry.map((policy) => policy.proposalId));
-const awaitingRatification = ballotResults.filter((result) => !ratifiedIds.has(result.proposalId)).map((result) => proposalMap.get(result.proposalId)).filter(Boolean);
+const awaitingRatification = ballotResults
+  .filter((result) => !ratifiedIds.has(result.proposalId))
+  .map((result) => proposalMap.get(result.proposalId))
+  .filter(Boolean);
 const awaitingPublication = user.isAdmin ? registry.filter((policy) => policy.status === 'adopted' && policy.publicationStatus === 'unpublished') : [];
 const proposalIds = proposals.map((proposal) => proposal.proposalId);
-const unresolvedAmendments = proposalIds.length ? await db.collection('amendments').countDocuments({ proposalId: { $in: proposalIds }, status: { $in: ['proposed', 'conflict', 'endorsed'] } }) : 0;
+const unresolvedAmendments = proposalIds.length
+  ? await db.collection('amendments').countDocuments({ proposalId: { $in: proposalIds }, status: { $in: ['proposed', 'conflict', 'endorsed'] } })
+  : 0;
 const membersAwaitingReview = user.isAdmin ? await db.collection('memberships').countDocuments({ status: 'pending' }) : 0;
 
-const attentionItems: Array<{ title: string; description: string; href: string; cta: string; tone: 'warning' | 'info' | 'destructive' | 'success' }> = [];
-for (const proposal of activeBallotsNeedingReview) attentionItems.push({ title: 'Ballot wording needs review', description: `${proposal.title} has no single recorded ballot revision.`, href: '/admin/proposals/?stage=decide', cta: 'Review ballot', tone: 'warning' });
-for (const proposal of awaitingRatification) attentionItems.push({ title: 'Successful ballot awaiting ratification', description: `${(proposal as any).title} · formal adoption is still pending`, href: user.isAdmin ? '/admin/policies/' : `/proposals/${(proposal as any).slug}/`, cta: user.isAdmin ? 'Open registry' : 'View decision', tone: 'info' });
-for (const policy of awaitingPublication) attentionItems.push({ title: 'Adopted policy not yet published', description: (policy as any).title, href: '/admin/policies/', cta: 'Authorise publication', tone: 'destructive' });
-if (unresolvedAmendments > 0) attentionItems.push({ title: `${unresolvedAmendments} amendment${unresolvedAmendments === 1 ? '' : 's'} need review`, description: 'Proposed changes, conflicts and endorsements remain separate from formal approval.', href: '/admin/proposals/', cta: 'Review proposals', tone: 'warning' });
-if (user.isAdmin && membersAwaitingReview > 0) attentionItems.push({ title: `${membersAwaitingReview} member account${membersAwaitingReview === 1 ? '' : 's'} need verification`, description: 'Review membership before enabling participation.', href: '/admin/members/', cta: 'Review members', tone: 'info' });
+type AttentionTone = 'warning' | 'info' | 'destructive' | 'success';
+interface AttentionGroup {
+  key: string;
+  title: string;
+  description: string;
+  names: Array<{ title: string; href: string }>;
+  href: string;
+  cta: string;
+  tone: AttentionTone;
+  count: number;
+}
+
+const attentionGroups: AttentionGroup[] = [];
+if (activeBallotsNeedingReview.length) {
+  attentionGroups.push({
+    key: 'ballot-wording',
+    title: 'Ballot wording needs review',
+    description: 'These ballots have no bound wording revision. Bind the reviewed revision before recording an outcome.',
+    names: activeBallotsNeedingReview.map((proposal) => ({ title: proposal.title, href: `/admin/proposals/${proposal.slug}/` })),
+    href: '/admin/proposals/?stage=decide',
+    cta: 'Review ballots',
+    tone: 'warning',
+    count: activeBallotsNeedingReview.length,
+  });
+}
+if (awaitingRatification.length) {
+  attentionGroups.push({
+    key: 'ratification',
+    title: 'Successful ballots awaiting ratification',
+    description: 'Ballot success and formal ratification are separate decisions. Review the exact wording before recording adoption.',
+    names: awaitingRatification.map((proposal) => ({ title: String((proposal as any).title), href: `/admin/proposals/${(proposal as any).slug}/` })),
+    href: user.isAdmin ? '/admin/policies/' : '/admin/proposals/',
+    cta: user.isAdmin ? 'Open registry' : 'View decisions',
+    tone: 'info',
+    count: awaitingRatification.length,
+  });
+}
+if (awaitingPublication.length) {
+  attentionGroups.push({
+    key: 'publication',
+    title: 'Adopted policy not yet published',
+    description: 'Ratified records stay private until an administrator authorises publication.',
+    names: awaitingPublication.map((policy) => ({ title: String((policy as any).title), href: `/admin/policies/#policy-${(policy as any).policyId}` })),
+    href: '/admin/policies/',
+    cta: 'Authorise publication',
+    tone: 'destructive',
+    count: awaitingPublication.length,
+  });
+}
+if (unresolvedAmendments > 0) {
+  attentionGroups.push({
+    key: 'amendments',
+    title: 'Amendments need review',
+    description: 'Proposed changes, conflicts, and endorsements remain separate from formal approval.',
+    names: [],
+    href: '/admin/proposals/',
+    cta: 'Review amendments',
+    tone: 'warning',
+    count: unresolvedAmendments,
+  });
+}
+if (user.isAdmin && membersAwaitingReview > 0) {
+  attentionGroups.push({
+    key: 'members',
+    title: 'Member accounts need verification',
+    description: 'Review membership before enabling participation.',
+    names: [],
+    href: '/admin/members/',
+    cta: 'Review members',
+    tone: 'info',
+    count: membersAwaitingReview,
+  });
+}
+const attentionCount = attentionGroups.reduce((total, group) => total + group.count, 0);
 ---
 
-<AdminLayout title={user.isBranchAdmin && !user.isStaff ? 'Your branch tasks' : 'Admin overview'} description="Manage proposals, ballots, branches and policy publication." section="overview" isAdmin={user.isAdmin} isBranchAdmin={Boolean(user.isBranchAdmin)}>
+<AdminLayout
+  title={user.isBranchAdmin && !user.isStaff ? 'Branch Governance Operations' : 'Governance Operations'}
+  description="Manage proposals, active ballots, branch electorates, and formal policy publication."
+  section="overview"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
   {!user.isStaff && !user.isBranchAdmin ? (
     <Alert variant="destructive">
       <ShieldCheck />
@@ -105,190 +261,399 @@ if (user.isAdmin && membersAwaitingReview > 0) attentionItems.push({ title: `${m
     </Alert>
   ) : (
     <div class="admin-stack">
-      <Card class="gap-0">
-        <CardHeader class="flex flex-wrap items-start justify-between gap-3 border-b pb-4 sm:flex-row">
-          <div class="grid gap-1">
-            <CardTitle class="text-base">Needs attention</CardTitle>
-            <CardDescription>Governance actions that are waiting on a decision.</CardDescription>
+      <!-- Project Detail 1: 4-Stage Hairline Metric Strip -->
+      <div class="project-detail-strip" aria-label="Proposal lifecycle stage counts">
+        <a href="/admin/proposals/?stage=propose" class="project-stat-cell">
+          <span class="project-stat-cell__label"><Layers aria-hidden="true" />1. Intake (Propose)</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{stageCounts.propose}</strong>
+            <span class="project-stat-cell__hint">New ideas</span>
           </div>
-          <Badge variant={attentionItems.length ? 'warning' : 'success'}>{attentionItems.length ? `${attentionItems.length} open` : 'All clear'}</Badge>
-        </CardHeader>
-        <CardContent class="p-0">
-          {attentionItems.length ? (
-            <ul class="divide-y">
-              {attentionItems.map((item) => (
-                <li class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div class="grid min-w-0 gap-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <Badge variant={item.tone}>{item.tone === 'destructive' ? 'Urgent' : item.tone === 'warning' ? 'Review' : 'Action'}</Badge>
-                      <p class="m-0 text-sm font-semibold text-foreground">{item.title}</p>
-                    </div>
-                    <p class="m-0 text-sm text-muted-foreground">{item.description}</p>
-                  </div>
-                  <Button href={item.href} variant="outline" size="sm" className="shrink-0">{item.cta}<ArrowRight /></Button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div class="px-5 py-8">
-              <p class="m-0 text-sm font-semibold text-foreground">No outstanding governance actions</p>
-              <p class="mt-1 mb-0 text-sm text-muted-foreground">New activity will appear here when it needs review.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </a>
+        <a href="/admin/proposals/?stage=deliberate" class="project-stat-cell">
+          <span class="project-stat-cell__label"><MessageSquare aria-hidden="true" />2. Deliberation</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{stageCounts.deliberate}</strong>
+            <span class="project-stat-cell__hint">Open discussion</span>
+          </div>
+        </a>
+        <a href="/admin/proposals/?stage=decide" class="project-stat-cell">
+          <span class="project-stat-cell__label"><Gavel aria-hidden="true" />3. Active ballots</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{stageCounts.decide}</strong>
+            <span class="project-stat-cell__hint">{activeBallotsNeedingReview.length ? `${activeBallotsNeedingReview.length} unbound` : 'Voting open'}</span>
+          </div>
+        </a>
+        <a href="/admin/proposals/?stage=implement" class="project-stat-cell">
+          <span class="project-stat-cell__label"><CheckCircle2 aria-hidden="true" />4. Implement</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{stageCounts.implement}</strong>
+            <span class="project-stat-cell__hint">Post-ballot</span>
+          </div>
+        </a>
+      </div>
 
-      <section aria-labelledby="overview-heading">
-        <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 id="overview-heading" class="m-0 text-base font-semibold text-foreground">At a glance</h2>
-            <p class="m-0 text-sm text-muted-foreground">Counts across the four proposal stages.</p>
-          </div>
-          <Button href="/admin/proposals/" variant="ghost" size="sm">View all proposals<ArrowRight /></Button>
-        </div>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { href: '/admin/proposals/?stage=propose', label: 'Intake', value: stageCounts.propose, badge: 'Propose', hint: 'New ideas waiting for discussion', variant: 'muted' as const },
-            { href: '/admin/proposals/?stage=deliberate', label: 'Deliberation', value: stageCounts.deliberate, badge: 'Discuss', hint: 'Open for member contributions', variant: 'info' as const },
-            { href: '/admin/proposals/?stage=decide', label: 'Active ballots', value: stageCounts.decide, badge: 'Decide', hint: 'Voting under way now', variant: 'warning' as const },
-            { href: '/admin/proposals/?stage=implement', label: 'Implement', value: stageCounts.implement, badge: 'Process', hint: 'Decision processing and adoption status', variant: 'success' as const },
-          ].map((stat) => (
-            <a href={stat.href} class="group no-underline">
-              <Card class="admin-stat-card h-full gap-0 transition-colors group-hover:border-[var(--horizon-purple)]">
-                <CardHeader>
-                  <CardDescription>{stat.label}</CardDescription>
-                  <CardTitle class="admin-stat-value">{stat.value}</CardTitle>
-                  <CardAction><Badge variant={stat.variant}>{stat.badge}</Badge></CardAction>
-                </CardHeader>
-                <CardFooter class="mt-auto justify-between border-t pt-3 text-sm">
-                  <span class="font-medium text-foreground">{stat.hint}</span>
-                  <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </CardFooter>
-              </Card>
-            </a>
-          ))}
-        </div>
-      </section>
-
-      <Card class="gap-0">
-        <CardHeader class="border-b pb-4">
-          <div class="grid gap-1">
-            <CardTitle>Proposal pipeline</CardTitle>
-            <CardDescription>Where proposals sit across the four governance stages.</CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent class="grid gap-5 p-5">
-          <div
-            class="flex h-3 overflow-hidden rounded-full bg-muted"
-            role="img"
-            aria-label={`Pipeline: ${stageCounts.propose} intake, ${stageCounts.deliberate} deliberation, ${stageCounts.decide} active ballots, ${stageCounts.implement} implementation`}
-          >
-            {pipelineSegments.map((segment) => (
-              <span
-                style={`width:${segment.percent}%;background:${segment.color}`}
-                title={`${segment.label}: ${segment.value}`}
-                class="h-full transition-[width]"
-              ></span>
-            ))}
-          </div>
-          <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {pipelineSegments.map((segment) => (
-              <a href={segment.href} class="grid gap-0.5 no-underline">
-                <span class="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span class="size-2 rounded-full" style={`background:${segment.color}`}></span>
-                  {segment.label}
-                </span>
-                <strong class="text-xl font-semibold tabular-nums text-foreground">{segment.value}</strong>
-              </a>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card class="gap-0">
-        <CardHeader class="flex flex-row items-start justify-between gap-3 border-b pb-4">
-          <div class="grid gap-1">
-            <CardTitle class="text-base">Recent participation</CardTitle>
-            <CardDescription>Member activity in the last seven days.</CardDescription>
-          </div>
-          <Button href="/admin/proposals/" variant="outline" size="sm">Open proposals</Button>
-        </CardHeader>
-        <CardContent class="p-0">
-          <div class="grid grid-cols-3 divide-x border-b">
-            {[
-              { value: voteActivities.length, label: 'Recent votes' },
-              { value: commentActivities.length, label: 'Contributions' },
-              { value: firstParticipants.size, label: 'First-time' },
-            ].map((stat) => (
-              <div class="grid gap-0.5 px-5 py-4">
-                <strong class="text-xl font-semibold tabular-nums text-foreground">{stat.value}</strong>
-                <span class="text-xs text-muted-foreground">{stat.label}</span>
+      <!-- Project Detail 1: Flat 2-Column Workspace Grid -->
+      <div class="project-workspace-grid">
+        <!-- Main Column: Needs Attention Action Queue + Recent Participation -->
+        <div class="project-workspace-main">
+          <!-- Section 1: Needs Attention Queue -->
+          <section class="overview-section" aria-labelledby="attention-heading">
+            <div class="overview-section__head">
+              <div>
+                <h2 id="attention-heading">Needs attention</h2>
+                <p>Governance actions grouped by the decision or review they require.</p>
               </div>
-            ))}
-          </div>
-          {recentActivity.length ? (
-            <ul class="divide-y">
-              {recentActivity.slice(0, 30).map((entry) => (
-                <li class="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div class="grid min-w-0 gap-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                      {entry.firstParticipation && <Badge variant="info">First participation</Badge>}
-                      <Badge variant="muted">{entry.kind === 'votes' ? 'Vote' : entry.kind === 'contribution' ? 'Contribution' : 'New proposal'}</Badge>
-                    </div>
-                    {entry.kind === 'votes' ? (
-                      <>
-                        <p class="m-0 text-sm text-foreground"><strong>{entry.actorName}</strong> voted on <strong>{entry.count} proposal{entry.count === 1 ? '' : 's'}</strong></p>
-                        <div class="flex flex-wrap gap-x-3 gap-y-1">
-                          {entry.proposals.slice(0, 3).map((proposal) => <a class="text-sm" href={`/proposals/${proposal.slug}/`}>{proposal.title}</a>)}
-                          {entry.proposals.length > 3 && <span class="text-sm text-muted-foreground">and {entry.proposals.length - 3} more</span>}
-                        </div>
-                      </>
-                    ) : entry.kind === 'contribution' ? (
-                      <p class="m-0 text-sm text-foreground"><strong>{entry.actorName}</strong> contributed to <a href={`/proposals/${entry.proposalSlug}/`}>{entry.proposalTitle}</a></p>
-                    ) : (
-                      <p class="m-0 text-sm text-foreground"><strong>{entry.actorName}</strong> submitted <a href={`/proposals/${entry.proposalSlug}/`}>{entry.proposalTitle}</a></p>
-                    )}
-                  </div>
-                  <time datetime={(entry.kind === 'votes' ? entry.lastDate : entry.date).toISOString()} class="shrink-0 text-xs text-muted-foreground">
-                    {entry.kind === 'votes' && entry.count > 1 ? `${feedDate(entry.firstDate)}–${feedTime(entry.lastDate)}` : feedDate(entry.kind === 'votes' ? entry.lastDate : entry.date)}
-                  </time>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p class="m-0 px-5 py-8 text-sm text-muted-foreground">No member activity in the last seven days.</p>
-          )}
-        </CardContent>
-      </Card>
+              <Badge variant={attentionCount ? 'warning' : 'success'}>
+                {attentionCount ? `${attentionCount} open` : 'All clear'}
+              </Badge>
+            </div>
 
-      {(user.isAdmin || user.isBranchAdmin) && (
-        <section aria-labelledby="workspaces-heading">
-          <h2 id="workspaces-heading" class="mb-3 text-base font-semibold text-foreground">Administration workspaces</h2>
-          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              { href: '/admin/proposals/', title: 'Proposals & Decisions', description: 'Create proposals, manage their stages and review member contributions.', icon: FileText },
-              ...(user.isAdmin ? [{ href: '/admin/members/', title: 'Members & Access', description: 'Verify accounts and manage platform access.', icon: Users }] : []),
-              { href: '/admin/branches/', title: 'Branches & Membership', description: user.isAdmin ? 'Configure organisational relationships, access and referrals.' : 'Manage access for your assigned branch.', icon: GitBranch },
-              ...(user.isAdmin ? [{ href: '/admin/policies/', title: 'Policy Registry', description: 'Record ballot outcomes, ratification and authorised publication.', icon: BookOpen }] : []),
-            ].map((workspace) => {
-              const Icon = workspace.icon;
-              return (
-                <a href={workspace.href} class="group no-underline">
-                  <Card class="admin-stat-card h-full gap-0 transition-colors group-hover:border-[var(--horizon-purple)]">
-                    <CardContent class="grid gap-3 p-5">
-                      <span class="grid size-9 place-items-center rounded-lg bg-[var(--horizon-lavender)] text-[var(--horizon-purple)]"><Icon className="size-4" /></span>
-                      <div class="grid gap-1">
-                        <strong class="text-sm font-semibold text-foreground">{workspace.title}</strong>
-                        <span class="text-sm text-muted-foreground">{workspace.description}</span>
+            {attentionGroups.length ? (
+              <ul class="attention-list">
+                {attentionGroups.map((group) => (
+                  <li class="attention-row">
+                    <div class="attention-row__main">
+                      <div class="attention-row__title">
+                        <Badge variant={group.tone}>
+                          {group.tone === 'destructive' ? 'Urgent' : group.tone === 'warning' ? 'Review' : 'Action'}
+                        </Badge>
+                        <strong>{group.title}</strong>
+                        <span class="admin-attention-count tabular">{group.count}</span>
                       </div>
-                    </CardContent>
-                  </Card>
-                </a>
-              );
-            })}
+                      <p class="attention-row__desc">{group.description}</p>
+                      {group.names.length > 0 && (
+                        <p class="attention-row__links">
+                          {group.names.slice(0, 3).map((item, index) => (
+                            <>
+                              {index > 0 && <span aria-hidden="true"> · </span>}
+                              <a href={item.href}>{item.title}</a>
+                            </>
+                          ))}
+                          {group.names.length > 3 ? ` · and ${group.names.length - 3} more` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <Button href={group.href} variant="outline" size="sm" className="shrink-0">
+                      {group.cta}<ArrowRight />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div class="attention-empty">
+                <strong>No outstanding governance actions</strong>
+                <p>Ballots, ratifications, and member verifications are up to date.</p>
+              </div>
+            )}
+          </section>
+
+          <!-- Section 2: Recent Member Participation -->
+          <section class="overview-section" aria-labelledby="participation-heading">
+            <div class="overview-section__head">
+              <div>
+                <h2 id="participation-heading">Recent member participation</h2>
+                <p>Verified votes, deliberation stances, and new proposals over the last 7 days.</p>
+              </div>
+              <Button href="/admin/proposals/" variant="outline" size="sm">Proposal register</Button>
+            </div>
+
+            <div class="participation-strip">
+              <div>
+                <strong class="tabular">{voteActivities.length}</strong>
+                <span>Recent votes</span>
+              </div>
+              <div>
+                <strong class="tabular">{commentActivities.length}</strong>
+                <span>Deliberation stances</span>
+              </div>
+              <div>
+                <strong class="tabular">{firstParticipants.size}</strong>
+                <span>First-time participants</span>
+              </div>
+            </div>
+
+            <div class="participation-timeline-wrap">
+              <ActivityTimeline
+                client:load
+                groups={adminTimeline}
+                filters={[
+                  { id: 'all', label: 'All' },
+                  { id: 'vote', label: 'Votes' },
+                  { id: 'contribution', label: 'Contributions' },
+                  { id: 'proposal', label: 'Proposals' },
+                ]}
+                searchable
+                emptyMessage="No member activity in the last seven days."
+              />
+            </div>
+          </section>
+        </div>
+
+        <!-- Right Contextual Rail: Pipeline distribution, Workspaces, Authority summary -->
+        <aside class="project-workspace-rail" aria-label="Pipeline distribution and administration workspaces">
+          <div class="project-rail-block">
+            <h3>
+              <span>Pipeline distribution</span>
+              <span class="tabular text-xs font-normal text-muted-foreground">{proposals.length} total</span>
+            </h3>
+            <div
+              class="flex h-2.5 overflow-hidden rounded-full bg-muted"
+              role="img"
+              aria-label={`Pipeline: ${stageCounts.propose} intake, ${stageCounts.deliberate} deliberation, ${stageCounts.decide} active ballots, ${stageCounts.implement} implementation`}
+            >
+              {pipelineSegments.map((segment) => (
+                <span
+                  style={`width:${segment.percent}%;background:${segment.color}`}
+                  title={`${segment.label}: ${segment.value}`}
+                  class="h-full"
+                ></span>
+              ))}
+            </div>
+            <dl class="project-rail-props">
+              {pipelineSegments.map((segment) => (
+                <div>
+                  <dt>
+                    <span class="size-2 rounded-full" style={`background:${segment.color}`}></span>
+                    <a href={segment.href} class="text-muted-foreground no-underline hover:underline">{segment.label}</a>
+                  </dt>
+                  <dd class="tabular">{segment.value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
-        </section>
-      )}
+
+          <div class="project-rail-block">
+            <h3>Administration workspaces</h3>
+            <div class="project-rail-notes">
+              <a href="/admin/proposals/" class="project-rail-note">
+                <span class="project-rail-note__icon"><FileText aria-hidden="true" /></span>
+                <div class="project-rail-note__body">
+                  <div class="project-rail-note__head">
+                    <strong>Proposals &amp; Decisions</strong>
+                    <span class="tabular">{proposals.length}</span>
+                  </div>
+                  <p>Manage stages, bind ballot wording, and review amendments.</p>
+                </div>
+              </a>
+
+              {user.isAdmin && (
+                <a href="/admin/policies/" class="project-rail-note">
+                  <span class="project-rail-note__icon"><BookOpen aria-hidden="true" /></span>
+                  <div class="project-rail-note__body">
+                    <div class="project-rail-note__head">
+                      <strong>Policy Registry</strong>
+                      <span class="tabular">{registry.length}</span>
+                    </div>
+                    <p>Ratify successful ballots and authorise public publication.</p>
+                  </div>
+                </a>
+              )}
+
+              {user.isAdmin && (
+                <a href="/admin/members/" class="project-rail-note">
+                  <span class="project-rail-note__icon"><Users aria-hidden="true" /></span>
+                  <div class="project-rail-note__body">
+                    <div class="project-rail-note__head">
+                      <strong>Members &amp; Access</strong>
+                      {membersAwaitingReview > 0 && <span class="tabular">{membersAwaitingReview} pending</span>}
+                    </div>
+                    <p>Verify member eligibility and assign platform roles.</p>
+                  </div>
+                </a>
+              )}
+
+              <a href="/admin/branches/" class="project-rail-note">
+                <span class="project-rail-note__icon"><GitBranch aria-hidden="true" /></span>
+                <div class="project-rail-note__body">
+                  <div class="project-rail-note__head">
+                    <strong>Branches &amp; Electorates</strong>
+                  </div>
+                  <p>Configure branch recognition, electorates, and referrals.</p>
+                </div>
+              </a>
+            </div>
+          </div>
+
+          <div class="project-rail-block">
+            <h3>Your authority scope</h3>
+            <p class="admin-inline-note">
+              {user.isAdmin
+                ? 'National administrator: full authority across proposals, ballot binding, policy ratification, and member verification.'
+                : user.isBranchAdmin
+                  ? 'Branch administrator: delegated authority for your assigned branches.'
+                  : 'Moderator: deliberation and proposal review access.'}
+            </p>
+          </div>
+        </aside>
+      </div>
     </div>
   )}
 </AdminLayout>
+
+<style>
+  .overview-section {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .overview-section + .overview-section {
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .overview-section__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .overview-section__head h2 {
+    margin: 0;
+    font-family: var(--font-newsreader), Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--horizon-ink);
+  }
+
+  .overview-section__head p {
+    margin: 0.2rem 0 0;
+    font-size: 0.85rem;
+    color: var(--horizon-muted);
+  }
+
+  .attention-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    background: var(--horizon-white);
+    overflow: hidden;
+  }
+
+  .attention-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem 1.25rem;
+    padding: 0.9rem 1.1rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .attention-row:last-child {
+    border-bottom: 0;
+  }
+
+  .attention-row__main {
+    min-width: 0;
+    flex: 1;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .attention-row__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.9rem;
+    color: var(--horizon-ink);
+  }
+
+  .attention-row__desc {
+    margin: 0;
+    font-size: 0.83rem;
+    color: var(--horizon-muted);
+  }
+
+  .attention-row__links {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+
+  .attention-row__links a {
+    color: var(--horizon-ink);
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .attention-empty {
+    padding: 1.1rem 1.25rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.6rem;
+    background: var(--horizon-surface);
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .attention-empty strong {
+    font-size: 0.9rem;
+    color: var(--horizon-ink);
+  }
+
+  .attention-empty p {
+    margin: 0;
+    font-size: 0.83rem;
+    color: var(--horizon-muted);
+  }
+
+  .participation-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.6rem;
+    background: var(--horizon-surface);
+    overflow: hidden;
+  }
+
+  .participation-strip > div {
+    padding: 0.7rem 1rem;
+    border-right: 1px solid var(--horizon-line);
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .participation-strip > div:last-child {
+    border-right: 0;
+  }
+
+  .participation-strip strong {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--horizon-ink);
+  }
+
+  .participation-strip span {
+    font-size: 0.8rem;
+    color: var(--horizon-muted);
+  }
+
+  .participation-timeline-wrap {
+    padding: 1rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    background: var(--horizon-white);
+  }
+
+  @media (max-width: 640px) {
+    .participation-strip {
+      grid-template-columns: 1fr;
+    }
+
+    .participation-strip > div {
+      border-right: 0;
+      border-bottom: 1px solid var(--horizon-line);
+    }
+
+    .participation-strip > div:last-child {
+      border-bottom: 0;
+    }
+  }
+</style>

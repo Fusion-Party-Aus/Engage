@@ -3,44 +3,80 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { Input } from '../../../components/ui/input';
 import { NativeSelect } from '../../../components/ui/native-select';
 import { Textarea } from '../../../components/ui/textarea';
-import { BookOpen, RefreshCw, ScrollText, Search, ShieldAlert } from 'lucide-react';
+import {
+  BookOpen,
+  CheckCircle2,
+  Clock,
+  FileCode,
+  FileText,
+  Gavel,
+  RefreshCw,
+  ScrollText,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+} from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { listProposals } from '../../../lib/store.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
-import Card from '../../../components/admin/Card.astro';
-import CardContent from '../../../components/admin/CardContent.astro';
-import CardDescription from '../../../components/admin/CardDescription.astro';
-import CardHeader from '../../../components/admin/CardHeader.astro';
-import CardTitle from '../../../components/admin/CardTitle.astro';
 import Field from '../../../components/admin/Field.astro';
 import Alert from '../../../components/admin/Alert.astro';
 import AlertTitle from '../../../components/admin/AlertTitle.astro';
 import AlertDescription from '../../../components/admin/AlertDescription.astro';
+
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
-const env = runtimeEnv(Astro.locals); const user = await getSessionUser(Astro.request, env);
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
 if (!user) return Astro.redirect('/member/', 302);
 if (!user.isAdmin) Astro.response.status = 403;
+
 const db = await getDatabase(env);
 const rawQuery = (Astro.url.searchParams.get('q') ?? '').trim();
 const q = rawQuery.toLowerCase();
 const publicationFilter = Astro.url.searchParams.get('publication') ?? 'all';
 const branches = user.isAdmin ? await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray() : [];
 const policies = user.isAdmin ? await db.collection('policy_registry').find({}).sort({ ratifiedAt: -1, policyId: 1 }).toArray() : [];
-const filteredPolicies = policies.filter((policy: any) => (!q || `${policy.title} ${policy.policyId} ${policy.jurisdiction ?? ''} ${policy.category ?? ''}`.toLowerCase().includes(q)) && (publicationFilter === 'all' || policy.publicationStatus === publicationFilter));
+const filteredPolicies = policies.filter(
+  (policy: any) =>
+    (!q || `${policy.title} ${policy.policyId} ${policy.jurisdiction ?? ''} ${policy.category ?? ''}`.toLowerCase().includes(q)) &&
+    (publicationFilter === 'all' || policy.publicationStatus === publicationFilter),
+);
 const proposals = user.isAdmin ? await listProposals(db, { includeArchived: true }) : [];
 const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
 const resultRows = user.isAdmin ? await db.collection('ballot_results').find({ result: 'successful' }).sort({ recordedAt: -1 }).toArray() : [];
-const awaitingRatification = resultRows.filter((result) => !policies.some((policy: any) => policy.proposalId === result.proposalId)).map((result) => ({ ...result, proposal: proposalMap.get(result.proposalId) })).filter((row) => row.proposal);
+const awaitingRatification = resultRows
+  .filter((result) => !policies.some((policy: any) => policy.proposalId === result.proposalId))
+  .map((result) => ({ ...result, proposal: proposalMap.get(result.proposalId) }))
+  .filter((row) => row.proposal);
+
 const ratificationBranches = branches;
 const successorOptions = policies.filter((policy: any) => policy.status === 'adopted');
 const publishedCount = policies.filter((policy: any) => policy.publicationStatus === 'published').length;
 const unpublishedCount = policies.filter((policy: any) => policy.publicationStatus === 'unpublished').length;
-const statusVariant = (status: string) => status === 'published' ? 'success' : status === 'unpublished' ? 'warning' : status === 'withdrawn' ? 'destructive' : 'outline';
+const statusVariant = (status: string) =>
+  status === 'published' ? 'success' : status === 'unpublished' ? 'warning' : status === 'withdrawn' ? 'destructive' : 'outline';
+const resultByProposal = new Map(resultRows.map((result: any) => [result.proposalId, result]));
+const formatDate = (value: unknown) =>
+  value ? new Date(String(value)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not recorded';
+
+const publicationEvents = user.isAdmin ? await db.collection('publication_events').find({}).sort({ publishedAt: -1 }).toArray() : [];
+const eventsByPolicy = new Map<string, any[]>();
+for (const event of publicationEvents) {
+  const key = String(event.policyId ?? '');
+  eventsByPolicy.set(key, [...(eventsByPolicy.get(key) ?? []), event]);
+}
 ---
-<AdminLayout title="Adopt and publish" description="Review successful ballots and exact policy revisions awaiting a decision." section="policies" isAdmin={user.isAdmin}>
+
+<AdminLayout
+  title="Policy Registry & Ratification"
+  description="Review successful ballots awaiting ratification, manage adopted policy records, and authorise public publication."
+  section="policies"
+  isAdmin={user.isAdmin}
+>
   {!user.isAdmin ? (
     <Alert variant="destructive">
       <ShieldAlert />
@@ -49,247 +85,648 @@ const statusVariant = (status: string) => status === 'published' ? 'success' : s
     </Alert>
   ) : (
     <div class="admin-stack">
-      <Card class="gap-0">
-        <CardHeader class="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
-          <div class="grid gap-1">
-            <CardTitle class="text-base">Successful ballots awaiting ratification</CardTitle>
-            <CardDescription>Ballot success, formal ratification and public publication are separate decisions.</CardDescription>
+      <!-- Project Detail 1 Top 4-Stat Hairline Strip -->
+      <div class="project-detail-strip" aria-label="Policy registry totals">
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><BookOpen aria-hidden="true" />Adopted policies</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{policies.length}</strong>
+            <span class="project-stat-cell__hint">In official registry</span>
           </div>
-          <Badge variant={awaitingRatification.length ? 'warning' : 'success'}>{awaitingRatification.length ? `${awaitingRatification.length} pending` : 'Up to date'}</Badge>
-        </CardHeader>
-        <CardContent class="p-0">
-          {awaitingRatification.length ? (
-            <div class="divide-y">
-              {awaitingRatification.map((row: any) => (
-                <details class="registry-item">
-                  <summary>
-                    <div class="grid min-w-0 gap-1">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <strong class="text-sm font-semibold text-foreground">{row.proposal.title}</strong>
-                        <Badge variant="warning">Successful ballot · not yet ratified</Badge>
-                      </div>
-                      <small class="text-muted-foreground">{row.proposal.proposalId} · ballot revision {String(row.revisionId).slice(0, 8)}</small>
-                    </div>
-                    <ScrollText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  </summary>
-                  <div class="grid gap-4 border-t p-4">
-                    <p class="admin-inline-note">Review the exact wording and confirm the authorised ratifying branch and decision event before recording adoption.</p>
-                    <div class="approved-wording">
-                      <strong class="text-sm">Ballot wording</strong>
-                      <p>{row.proposal.summary}</p>
-                      <div class="typeset typeset-notes max-w-[37em]"><pre>{row.proposal.details}</pre></div>
-                    </div>
-                    <form class="ratify-form" data-proposal-id={row.proposalId} data-revision-id={row.revisionId}>
-                      <input type="hidden" name="proposalId" value={row.proposalId} />
-                      <input type="hidden" name="revisionId" value={row.revisionId} />
-                      <div class="admin-form-grid">
-                        <Field label="Ratifying authority" htmlFor={`ratify-authority-${row.proposalId}`}>
-                          <NativeSelect defaultValue="" id={`ratify-authority-${row.proposalId}`} name="authorityBranchId" required>
-                            <option value="">Choose authorised branch</option>
-                            {ratificationBranches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
-                          </NativeSelect>
-                        </Field>
-                        <Field label="Policy jurisdiction (optional)" htmlFor={`ratify-jurisdiction-${row.proposalId}`}>
-                          <NativeSelect defaultValue="" id={`ratify-jurisdiction-${row.proposalId}`} name="jurisdictionBranchId">
-                            <option value="">National or not recorded</option>
-                            {ratificationBranches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
-                          </NativeSelect>
-                        </Field>
-                        <Field label="Ratification decision event reference" htmlFor={`ratify-event-${row.proposalId}`}>
-                          <Input id={`ratify-event-${row.proposalId}`} name="decisionEventId" required maxLength={200} />
-                        </Field>
-                        <Field label="Effective date (optional)" htmlFor={`ratify-date-${row.proposalId}`}>
-                          <Input id={`ratify-date-${row.proposalId}`} type="date" name="effectiveAt" />
-                        </Field>
-                      </div>
-                      <Field label="Adopted amendment IDs (optional, one per line)" htmlFor={`ratify-amendments-${row.proposalId}`}>
-                        <Textarea id={`ratify-amendments-${row.proposalId}`} name="adoptedAmendmentIds" rows={2} placeholder="Add only amendments with a formal approval decision" />
-                      </Field>
-                      <div class="admin-actions">
-                        <Button type="submit">Record formal ratification</Button>
-                        <span class="ratify-status admin-status" role="status" aria-live="polite"></span>
-                      </div>
-                    </form>
-                  </div>
-                </details>
-              ))}
-            </div>
-          ) : <p class="admin-empty px-5 py-8">No successful ballots are awaiting ratification.</p>}
-        </CardContent>
-      </Card>
-
-      <section class="grid gap-3 sm:grid-cols-3" aria-label="Registry totals">
-        {[
-          { value: policies.length, label: 'Adopted policies', icon: BookOpen },
-          { value: publishedCount, label: 'Published', icon: BookOpen },
-          { value: unpublishedCount, label: 'Awaiting publication', icon: ScrollText },
-        ].map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Card class="admin-stat-card gap-0">
-              <CardContent class="flex items-start justify-between gap-3 p-5">
-                <div class="grid gap-1">
-                  <strong class="text-2xl font-semibold tabular-nums text-foreground">{stat.value}</strong>
-                  <span class="text-sm text-muted-foreground">{stat.label}</span>
-                </div>
-                <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
-              </CardContent>
-            </Card>
-          );
-        })}
-      </section>
-
-      <Card class="gap-0">
-        <CardHeader class="border-b pb-4">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="grid gap-1">
-              <CardTitle class="text-base">Registry records</CardTitle>
-              <CardDescription>Only a ratified revision appears here. Publishing requires a separate explicit action.</CardDescription>
-            </div>
-            <Button className="shrink-0" id="reconcile-publications" type="button" variant="outline" size="sm"><RefreshCw />Reconcile publication events</Button>
+        </div>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><CheckCircle2 aria-hidden="true" />Published</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{publishedCount}</strong>
+            <span class="project-stat-cell__hint">Publicly accessible</span>
           </div>
-        </CardHeader>
-        <CardContent class="grid gap-4 p-5">
-          <form method="get" action="/admin/policies/" class="admin-form-grid">
-            <Field label="Search policy, ID, topic or jurisdiction" htmlFor="policy-registry-search">
-              <div class="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="policy-registry-search" type="search" name="q" placeholder="Search registry" className="pl-9" />
+        </div>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><Gavel aria-hidden="true" />Awaiting ratification</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{awaitingRatification.length}</strong>
+            <span class="project-stat-cell__hint">Successful ballots</span>
+          </div>
+        </div>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><Clock aria-hidden="true" />Awaiting publication</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{unpublishedCount}</strong>
+            <span class="project-stat-cell__hint">Ratified, unpublished</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Project Detail 1 Flat 2-Column Workspace Grid -->
+      <div class="project-workspace-grid">
+        <div class="project-workspace-main">
+          <!-- Section 1: Successful ballots awaiting ratification -->
+          <section class="registry-section" aria-labelledby="ratification-heading">
+            <div class="registry-section__head">
+              <div>
+                <h2 id="ratification-heading">Successful ballots awaiting ratification</h2>
+                <p>Ballot success, formal ratification, and public publication are distinct governance steps.</p>
               </div>
-            </Field>
-            <Field label="Publication status" htmlFor="policy-publication-filter">
-              <NativeSelect defaultValue={publicationFilter} id="policy-publication-filter" name="publication">
-                <option value="all">All statuses</option>
-                {['unpublished', 'published', 'withdrawn', 'superseded'].map((status) => <option value={status}>{status[0]!.toUpperCase() + status.slice(1)}</option>)}
-              </NativeSelect>
-            </Field>
-            <div class="flex items-end"><Button type="submit" variant="outline">Filter</Button></div>
-          </form>
+              <Badge variant={awaitingRatification.length ? 'warning' : 'success'}>
+                {awaitingRatification.length ? `${awaitingRatification.length} pending` : 'Up to date'}
+              </Badge>
+            </div>
 
-          <div class="divide-y rounded-lg border">
-            {filteredPolicies.length ? filteredPolicies.map((policy: any) => (
-              <details class="registry-item" id={`policy-${policy.policyId}`}>
-                <summary>
-                  <div class="grid min-w-0 gap-1">
-                    <strong class="text-sm font-semibold text-foreground">{policy.title}</strong>
-                    <small class="text-muted-foreground">{policy.policyId} · {policy.jurisdiction ?? 'Jurisdiction not recorded'} · authority {branches.find((branch: any) => branch.branchId === policy.governanceAuthorityBranchId)?.name ?? policy.governanceAuthorityBranchId ?? 'not recorded'}</small>
-                  </div>
-                  <Badge variant={statusVariant(policy.publicationStatus)}>{policy.status} · {policy.publicationStatus}</Badge>
-                </summary>
-                <div class="grid gap-4 border-t p-4">
-                  <div class="approved-wording">
-                    <strong class="text-sm">Exact ratified wording · revision {String(policy.revisionId).slice(0, 8)}</strong>
-                    <p>{policy.summary}</p>
-                    {Array.isArray(policy.commitments) && <ul>{policy.commitments.map((commitment: string) => <li>{commitment}</li>)}</ul>}
-                    <div class="typeset typeset-notes max-w-[37em]"><pre>{policy.approvedWording}</pre></div>
-                  </div>
-                  <p class="admin-inline-note">Provenance: {policy.provenance?.label ?? policy.provenance?.category ?? 'not recorded'} · Decision event: {policy.ratification?.decisionEventId ?? 'not recorded'} · Adopted amendments: {policy.ratification?.adoptedAmendmentIds?.join(', ') || 'none recorded'}</p>
-                  {policy.publicationStatus === 'unpublished' && (
-                    <form class="policy-action-form publish-form" data-policy-id={policy.policyId}>
-                      <div class="admin-actions">
-                        <Button type="submit">Authorise publication</Button>
-                        <span class="admin-status" role="status" aria-live="polite"></span>
-                      </div>
-                    </form>
-                  )}
-                  {policy.publicationStatus === 'published' && (
-                    <div class="grid gap-4 lg:grid-cols-2">
-                      <form class="policy-action-form withdraw-form rounded-lg border p-4" data-policy-id={policy.policyId}>
-                        <Field label="Correction or withdrawal reason" htmlFor={`withdraw-reason-${policy.policyId}`}>
-                          <Input id={`withdraw-reason-${policy.policyId}`} name="reason" required maxLength={1000} />
-                        </Field>
-                        <div class="admin-actions">
-                          <Button type="submit" variant="outline" size="sm">Withdraw publication</Button>
-                          <span class="admin-status" role="status" aria-live="polite"></span>
+            {awaitingRatification.length ? (
+              <div class="registry-list">
+                {awaitingRatification.map((row: any) => (
+                  <details class="registry-item" open={awaitingRatification.length === 1}>
+                    <summary>
+                      <div class="grid min-w-0 gap-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="tabular text-xs font-bold text-muted-foreground">{row.proposal.proposalId}</span>
+                          <strong class="text-sm font-semibold text-foreground">{row.proposal.title}</strong>
+                          <Badge variant="warning">Successful ballot · unratified</Badge>
                         </div>
-                      </form>
-                      <form class="policy-action-form supersede-form rounded-lg border p-4" data-policy-id={policy.policyId}>
-                        <Field label="Successor adopted policy" htmlFor={`successor-${policy.policyId}`}>
-                          <NativeSelect defaultValue="" id={`successor-${policy.policyId}`} name="successorPolicyId" required>
-                            <option value="">Choose successor</option>
-                            {successorOptions.filter((item: any) => item.policyId !== policy.policyId).map((item: any) => <option value={item.policyId}>{item.title}</option>)}
-                          </NativeSelect>
-                        </Field>
-                        <Field label="Reason for supersession" htmlFor={`supersede-reason-${policy.policyId}`}>
-                          <Input id={`supersede-reason-${policy.policyId}`} name="reason" required maxLength={1000} />
+                        <small class="text-muted-foreground">
+                          Frozen ballot revision <code>{String(row.revisionId).slice(0, 8)}</code> · recorded {formatDate(row.recordedAt)}
+                        </small>
+                      </div>
+                      <ScrollText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    </summary>
+                    <div class="grid gap-4 border-t p-4">
+                      <p class="admin-inline-note">
+                        Verify the frozen ballot wording and record the ratifying party authority and decision event reference.
+                      </p>
+                      <div class="approved-wording">
+                        <strong class="text-sm">Frozen ballot wording</strong>
+                        <p>{row.proposal.summary}</p>
+                        <div class="typeset typeset-notes max-w-[42em]"><pre>{row.proposal.details}</pre></div>
+                      </div>
+                      <form class="ratify-form" data-proposal-id={row.proposalId} data-revision-id={row.revisionId}>
+                        <input type="hidden" name="proposalId" value={row.proposalId} />
+                        <input type="hidden" name="revisionId" value={row.revisionId} />
+                        <div class="admin-form-grid">
+                          <Field label="Ratifying authority" htmlFor={`ratify-authority-${row.proposalId}`}>
+                            <NativeSelect defaultValue="" id={`ratify-authority-${row.proposalId}`} name="authorityBranchId" required>
+                              <option value="">Choose authorised branch</option>
+                              {ratificationBranches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                            </NativeSelect>
+                          </Field>
+                          <Field label="Policy jurisdiction (optional)" htmlFor={`ratify-jurisdiction-${row.proposalId}`}>
+                            <NativeSelect defaultValue="" id={`ratify-jurisdiction-${row.proposalId}`} name="jurisdictionBranchId">
+                              <option value="">National or not recorded</option>
+                              {ratificationBranches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                            </NativeSelect>
+                          </Field>
+                          <Field label="Ratification decision event reference" htmlFor={`ratify-event-${row.proposalId}`}>
+                            <Input id={`ratify-event-${row.proposalId}`} name="decisionEventId" required maxLength={200} />
+                          </Field>
+                          <Field label="Effective date (optional)" htmlFor={`ratify-date-${row.proposalId}`}>
+                            <Input id={`ratify-date-${row.proposalId}`} type="date" name="effectiveAt" />
+                          </Field>
+                        </div>
+                        <Field label="Adopted amendment IDs (optional, one per line)" htmlFor={`ratify-amendments-${row.proposalId}`}>
+                          <Textarea id={`ratify-amendments-${row.proposalId}`} name="adoptedAmendmentIds" rows={2} placeholder="Add only amendments with a formal approval decision" />
                         </Field>
                         <div class="admin-actions">
-                          <Button type="submit" variant="outline" size="sm">Supersede policy</Button>
-                          <span class="admin-status" role="status" aria-live="polite"></span>
+                          <Button type="submit" size="sm">Record formal ratification</Button>
+                          <span class="ratify-status admin-status" role="status" aria-live="polite"></span>
                         </div>
                       </form>
                     </div>
+                  </details>
+                ))}
+              </div>
+            ) : (
+              <p class="empty-registry-box">No successful ballots are currently awaiting ratification.</p>
+            )}
+          </section>
+
+          <!-- Section 2: Ratified Policy Registry Records -->
+          <section class="registry-section" aria-labelledby="records-heading">
+            <div class="registry-section__head">
+              <div>
+                <h2 id="records-heading">Ratified policy registry</h2>
+                <p>Only formally ratified revisions appear in this register. Publication requires a separate explicit action.</p>
+              </div>
+            </div>
+
+            <!-- Filter Bar & Status Tabs -->
+            <div class="registry-toolbar">
+              <nav class="project-tabs" aria-label="Filter policy registry by status">
+                {[
+                  ['all', 'All records', policies.length],
+                  ['published', 'Published', publishedCount],
+                  ['unpublished', 'Unpublished', unpublishedCount],
+                  ['withdrawn', 'Withdrawn', policies.filter((p: any) => p.publicationStatus === 'withdrawn').length],
+                  ['superseded', 'Superseded', policies.filter((p: any) => p.publicationStatus === 'superseded').length],
+                ].map(([val, label, count]) => (
+                  <a
+                    href={val === 'all' ? '/admin/policies/' : `/admin/policies/?publication=${val}`}
+                    class:list={['project-tab', { 'is-active': publicationFilter === val }]}
+                    aria-current={publicationFilter === val ? 'page' : undefined}
+                  >
+                    {label}
+                    <span class="project-tab__count tabular">{count}</span>
+                  </a>
+                ))}
+              </nav>
+
+              <form method="get" action="/admin/policies/" class="registry-filter-form">
+                <Field label="Search policy, ID, topic or jurisdiction" htmlFor="policy-registry-search">
+                  <div class="relative">
+                    <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input id="policy-registry-search" type="search" name="q" defaultValue={rawQuery} placeholder="Filter by title, policy ID, or jurisdiction" className="pl-9" />
+                  </div>
+                </Field>
+                <Field label="Publication status" htmlFor="policy-publication-filter">
+                  <NativeSelect defaultValue={publicationFilter} id="policy-publication-filter" name="publication">
+                    <option value="all">All statuses</option>
+                    {['unpublished', 'published', 'withdrawn', 'superseded'].map((status) => (
+                      <option value={status}>{status[0]!.toUpperCase() + status.slice(1)}</option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <div class="flex items-end gap-2">
+                  <Button type="submit" variant="outline" size="sm">Apply</Button>
+                  {(rawQuery || publicationFilter !== 'all') && (
+                    <Button href="/admin/policies/" variant="ghost" size="sm">Reset</Button>
                   )}
                 </div>
-              </details>
-            )) : <p class="admin-empty px-4 py-8">No registry entries match this search.</p>}
+              </form>
+            </div>
+
+            <div class="registry-list">
+              {filteredPolicies.length ? (
+                filteredPolicies.map((policy: any) => (
+                  <details class="registry-item" id={`policy-${policy.policyId}`}>
+                    <summary>
+                      <div class="grid min-w-0 gap-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="tabular text-xs font-bold text-muted-foreground">{policy.policyId}</span>
+                          <strong class="text-sm font-semibold text-foreground">{policy.title}</strong>
+                        </div>
+                        <small class="text-muted-foreground">
+                          {policy.jurisdiction ?? 'National / Party-wide'} · authority{' '}
+                          {branches.find((branch: any) => branch.branchId === policy.governanceAuthorityBranchId)?.name ??
+                            policy.governanceAuthorityBranchId ??
+                            'not recorded'}
+                        </small>
+                      </div>
+                      <Badge variant={statusVariant(policy.publicationStatus)}>
+                        {policy.status} · {policy.publicationStatus}
+                      </Badge>
+                    </summary>
+
+                    <div class="grid gap-4 border-t p-4">
+                      <div class="approved-wording">
+                        <strong class="text-sm">Exact ratified wording · revision {String(policy.revisionId).slice(0, 8)}</strong>
+                        <p>{policy.summary}</p>
+                        {Array.isArray(policy.commitments) && (
+                          <ul>
+                            {policy.commitments.map((commitment: string) => (
+                              <li>{commitment}</li>
+                            ))}
+                          </ul>
+                        )}
+                        <div class="typeset typeset-notes max-w-[42em]"><pre>{policy.approvedWording}</pre></div>
+                      </div>
+
+                      <p class="admin-inline-note">
+                        Provenance: {policy.provenance?.label ?? policy.provenance?.category ?? 'not recorded'} · Decision event:{' '}
+                        {policy.ratification?.decisionEventId ?? 'not recorded'} · Adopted amendments:{' '}
+                        {policy.ratification?.adoptedAmendmentIds?.join(', ') || 'none recorded'}
+                      </p>
+
+                      <dl class="admin-property-grid">
+                        <div>
+                          <dt>Jurisdiction</dt>
+                          <dd>{branches.find((branch: any) => branch.branchId === policy.jurisdictionBranchId)?.name ?? policy.jurisdiction ?? 'Not recorded'}</dd>
+                        </div>
+                        <div>
+                          <dt>Governance authority</dt>
+                          <dd>{branches.find((branch: any) => branch.branchId === policy.governanceAuthorityBranchId)?.name ?? policy.governanceAuthorityBranchId ?? 'Not recorded'}</dd>
+                        </div>
+                        <div>
+                          <dt>Ratified revision</dt>
+                          <dd><code>{String(policy.ratification?.ratifiedRevisionId ?? policy.revisionId ?? 'Not recorded').slice(0, 16)}</code></dd>
+                        </div>
+                        <div>
+                          <dt>Ratified date</dt>
+                          <dd>{formatDate(policy.ratification?.ratifiedAt)}</dd>
+                        </div>
+                        <div>
+                          <dt>Published date</dt>
+                          <dd>{formatDate(policy.publishedAt)}</dd>
+                        </div>
+                        <div>
+                          <dt>Superseded by</dt>
+                          <dd>{policy.supersededBy ?? 'Active'}</dd>
+                        </div>
+                      </dl>
+
+                      <div class="admin-record-actions">
+                        {['published', 'withdrawn', 'superseded'].includes(String(policy.publicationStatus)) && (
+                          <Button href={`/policies/${encodeURIComponent(String(policy.policyId))}/`} variant="outline" size="sm">
+                            View public policy
+                          </Button>
+                        )}
+                        {proposalMap.get(policy.proposalId) && (
+                          <Button href={`/admin/proposals/${proposalMap.get(policy.proposalId)!.slug}/`} variant="ghost" size="sm">
+                            Open proposal workspace
+                          </Button>
+                        )}
+                        {resultByProposal.get(policy.proposalId) && (
+                          <Button href={`/admin/proposals/?q=${encodeURIComponent(String(policy.proposalId))}#proposal-${policy.proposalId}`} variant="ghost" size="sm">
+                            Ballot outcome
+                          </Button>
+                        )}
+                      </div>
+
+                      {eventsByPolicy.get(policy.policyId)?.length ? (
+                        <details class="admin-disclosure admin-disclosure--muted">
+                          <summary>Publication audit history ({eventsByPolicy.get(policy.policyId)!.length})</summary>
+                          <div class="admin-disclosure__body">
+                            <ol class="admin-audit-list">
+                              {eventsByPolicy.get(policy.policyId)!.map((event: any) => (
+                                <li>
+                                  <strong>{event.transition ?? event.eventType ?? 'Publication event'}</strong>
+                                  <span>{event.status ?? 'recorded'} · {formatDate(event.completedAt ?? event.publishedAt)}</span>
+                                  <code>{String(event.revisionId ?? '').slice(0, 16)}</code>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        </details>
+                      ) : null}
+
+                      {policy.publicationStatus === 'unpublished' && (
+                        <form class="policy-action-form publish-form" data-policy-id={policy.policyId}>
+                          <div class="admin-actions">
+                            <Button type="submit" size="sm">Authorise publication</Button>
+                            <span class="admin-status" role="status" aria-live="polite"></span>
+                          </div>
+                        </form>
+                      )}
+
+                      {policy.publicationStatus === 'published' && (
+                        <div class="grid gap-4 lg:grid-cols-2">
+                          <form class="policy-action-form withdraw-form rounded-lg border p-4" data-policy-id={policy.policyId}>
+                            <Field label="Correction or withdrawal reason" htmlFor={`withdraw-reason-${policy.policyId}`}>
+                              <Input id={`withdraw-reason-${policy.policyId}`} name="reason" required maxLength={1000} />
+                            </Field>
+                            <div class="admin-actions">
+                              <Button type="submit" variant="outline" size="sm">Withdraw publication</Button>
+                              <span class="admin-status" role="status" aria-live="polite"></span>
+                            </div>
+                          </form>
+                          <form class="policy-action-form supersede-form rounded-lg border p-4" data-policy-id={policy.policyId}>
+                            <Field label="Successor adopted policy" htmlFor={`successor-${policy.policyId}`}>
+                              <NativeSelect defaultValue="" id={`successor-${policy.policyId}`} name="successorPolicyId" required>
+                                <option value="">Choose successor</option>
+                                {successorOptions
+                                  .filter((item: any) => item.policyId !== policy.policyId)
+                                  .map((item: any) => (
+                                    <option value={item.policyId}>{item.title}</option>
+                                  ))}
+                              </NativeSelect>
+                            </Field>
+                            <Field label="Reason for supersession" htmlFor={`supersede-reason-${policy.policyId}`}>
+                              <Input id={`supersede-reason-${policy.policyId}`} name="reason" required maxLength={1000} />
+                            </Field>
+                            <div class="admin-actions">
+                              <Button type="submit" variant="outline" size="sm">Supersede policy</Button>
+                              <span class="admin-status" role="status" aria-live="polite"></span>
+                            </div>
+                          </form>
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                ))
+              ) : (
+                <p class="empty-registry-box">
+                  {policies.length === 0
+                    ? 'No policy has been ratified yet. Successful ballots appear above when they are ready for formal ratification.'
+                    : 'No registry entries match this search.'}
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <!-- Right Contextual Rail (Project Detail 1 Right Column) -->
+        <aside class="project-workspace-rail" aria-label="Registry operations, authority rules, and publication audit">
+          <div class="project-rail-block">
+            <h3>Registry operations</h3>
+            <p class="admin-inline-note">
+              Reconcile pending outbox publication events and verify that public registry records match ratified snapshots.
+            </p>
+            <Button id="reconcile-publications" type="button" variant="outline" size="sm" className="w-full justify-center">
+              <RefreshCw />Reconcile publication events
+            </Button>
           </div>
-        </CardContent>
-      </Card>
+
+          <div class="project-rail-block">
+            <h3>Separation of authority</h3>
+            <dl class="project-rail-props">
+              <div>
+                <dt><Gavel className="size-3.5" aria-hidden="true" />Ballot outcome</dt>
+                <dd>Member electorate</dd>
+              </div>
+              <div>
+                <dt><ShieldCheck className="size-3.5" aria-hidden="true" />Ratification</dt>
+                <dd>Authorised branch</dd>
+              </div>
+              <div>
+                <dt><BookOpen className="size-3.5" aria-hidden="true" />Publication</dt>
+                <dd>National admin</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="project-rail-block">
+            <h3>Public endpoints</h3>
+            <div class="project-rail-notes">
+              <a href="/policies/" class="project-rail-note">
+                <span class="project-rail-note__icon"><BookOpen aria-hidden="true" /></span>
+                <div class="project-rail-note__body">
+                  <div class="project-rail-note__head">
+                    <strong>Public policy library</strong>
+                  </div>
+                  <p>Browse published national and branch policies.</p>
+                </div>
+              </a>
+              <a href="/api/v1/policies" target="_blank" rel="noopener noreferrer" class="project-rail-note">
+                <span class="project-rail-note__icon"><FileCode aria-hidden="true" /></span>
+                <div class="project-rail-note__body">
+                  <div class="project-rail-note__head">
+                    <strong>JSON API v1 ↗</strong>
+                    <span>/api/v1/policies</span>
+                  </div>
+                  <p>Machine-readable feed of published policy revisions.</p>
+                </div>
+              </a>
+            </div>
+          </div>
+
+          <div class="project-rail-block">
+            <h3>
+              <span>Recent publication events</span>
+              <span class="tabular text-xs font-normal text-muted-foreground">{publicationEvents.length}</span>
+            </h3>
+            {publicationEvents.length ? (
+              <div class="project-rail-notes">
+                {publicationEvents.slice(0, 5).map((event: any) => (
+                  <a href={`#policy-${event.policyId}`} class="project-rail-note">
+                    <span class="project-rail-note__icon"><FileText aria-hidden="true" /></span>
+                    <div class="project-rail-note__body">
+                      <div class="project-rail-note__head">
+                        <strong>{event.policyId}</strong>
+                        <span class="tabular">{formatDate(event.completedAt ?? event.publishedAt)}</span>
+                      </div>
+                      <p>{event.transition ?? event.eventType ?? 'Published'} · {event.status ?? 'completed'}</p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p class="admin-inline-note">No publication events recorded yet.</p>
+            )}
+          </div>
+        </aside>
+      </div>
     </div>
   )}
 </AdminLayout>
 
 <script>
-  document.querySelectorAll<HTMLFormElement>('.ratify-form').forEach((form) => form.addEventListener('submit', async (event) => {
-    event.preventDefault(); if (!form.reportValidity()) return;
-    const status = form.querySelector<HTMLElement>('.ratify-status'); const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); if (button) button.disabled = true;
-    try {
-      const fd = new FormData(form); const body: Record<string, unknown> = Object.fromEntries(fd.entries());
-      body.adoptedAmendmentIds = String(fd.get('adoptedAmendmentIds') || '').split('\n').map((id) => id.trim()).filter(Boolean);
-      if (!body.jurisdictionBranchId) delete body.jurisdictionBranchId; if (!body.effectiveAt) delete body.effectiveAt;
-      const key = form.dataset.idempotencyKey ?? crypto.randomUUID(); form.dataset.idempotencyKey = key;
-      const response = await fetch('/api/admin/policies/ratify', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'Idempotency-Key': key }, body: JSON.stringify(body) });
-      const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || 'Could not ratify policy.'); location.reload();
-    } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not ratify policy.'; if (button) button.disabled = false; }
-  }));
-  document.querySelectorAll<HTMLFormElement>('.policy-action-form').forEach((form) => form.addEventListener('submit', async (event) => {
-    event.preventDefault(); if (!form.reportValidity()) return;
-    const status = form.querySelector<HTMLElement>('[role="status"]'); const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); if (button) button.disabled = true;
-    const path = form.classList.contains('publish-form') ? 'publish' : form.classList.contains('withdraw-form') ? 'withdraw' : 'supersede';
-    try {
-      const body: Record<string, unknown> = { policyId: form.dataset.policyId, ...Object.fromEntries(new FormData(form).entries()) };
-      const key = form.dataset.idempotencyKey ?? crypto.randomUUID(); form.dataset.idempotencyKey = key;
-      const response = await fetch(`/api/admin/policies/${path}`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'Idempotency-Key': key }, body: JSON.stringify(body) });
-      const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || 'Could not update policy publication.'); location.reload();
-    } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not update policy publication.'; if (button) button.disabled = false; }
-  }));
+  document.querySelectorAll<HTMLFormElement>('.ratify-form').forEach((form) =>
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const status = form.querySelector<HTMLElement>('.ratify-status');
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (button) button.disabled = true;
+      try {
+        const fd = new FormData(form);
+        const body: Record<string, unknown> = Object.fromEntries(fd.entries());
+        body.adoptedAmendmentIds = String(fd.get('adoptedAmendmentIds') || '')
+          .split('\n')
+          .map((id) => id.trim())
+          .filter(Boolean);
+        if (!body.jurisdictionBranchId) delete body.jurisdictionBranchId;
+        if (!body.effectiveAt) delete body.effectiveAt;
+        const key = form.dataset.idempotencyKey ?? crypto.randomUUID();
+        form.dataset.idempotencyKey = key;
+        const response = await fetch('/api/admin/policies/ratify', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', 'Idempotency-Key': key },
+          body: JSON.stringify(body),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Could not ratify policy.');
+        location.reload();
+      } catch (error) {
+        if (status) status.textContent = error instanceof Error ? error.message : 'Could not ratify policy.';
+        if (button) button.disabled = false;
+      }
+    }),
+  );
+
+  document.querySelectorAll<HTMLFormElement>('.policy-action-form').forEach((form) =>
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const status = form.querySelector<HTMLElement>('[role="status"]');
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (button) button.disabled = true;
+      const path = form.classList.contains('publish-form') ? 'publish' : form.classList.contains('withdraw-form') ? 'withdraw' : 'supersede';
+      try {
+        const body: Record<string, unknown> = { policyId: form.dataset.policyId, ...Object.fromEntries(new FormData(form).entries()) };
+        const key = form.dataset.idempotencyKey ?? crypto.randomUUID();
+        form.dataset.idempotencyKey = key;
+        const response = await fetch(`/api/admin/policies/${path}`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', 'Idempotency-Key': key },
+          body: JSON.stringify(body),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Could not update policy publication.');
+        location.reload();
+      } catch (error) {
+        if (status) status.textContent = error instanceof Error ? error.message : 'Could not update policy publication.';
+        if (button) button.disabled = false;
+      }
+    }),
+  );
+
   document.querySelector<HTMLButtonElement>('#reconcile-publications')?.addEventListener('click', async (event) => {
-    const button = event.currentTarget as HTMLButtonElement; button.disabled = true;
-    try { const response = await fetch('/api/admin/policies/reconcile', { method: 'POST', credentials: 'same-origin' }); const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || 'Reconciliation failed.'); alert(`Checked ${result.inspected} pending events and completed ${result.completed}.`); location.reload(); }
-    catch (error) { alert(error instanceof Error ? error.message : 'Reconciliation failed.'); button.disabled = false; }
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/admin/policies/reconcile', { method: 'POST', credentials: 'same-origin' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Reconciliation failed.');
+      alert(`Checked ${result.inspected} pending events and completed ${result.completed}.`);
+      location.reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Reconciliation failed.');
+      button.disabled = false;
+    }
   });
 </script>
 
 <style>
+  .registry-section {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .registry-section + .registry-section {
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .registry-section__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .registry-section__head h2 {
+    margin: 0;
+    font-family: var(--font-newsreader), Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--horizon-ink);
+  }
+
+  .registry-section__head p {
+    margin: 0.2rem 0 0;
+    font-size: 0.85rem;
+    color: var(--horizon-muted);
+  }
+
+  .registry-toolbar {
+    display: grid;
+    gap: 0.85rem;
+    padding: 0.5rem 1rem 1rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.6rem;
+    background: var(--horizon-surface);
+  }
+
+  .registry-filter-form {
+    display: grid;
+    grid-template-columns: 2fr 1fr auto;
+    gap: 0.75rem;
+    align-items: end;
+  }
+
+  .registry-list {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    background: var(--horizon-white);
+    overflow: hidden;
+  }
+
+  .registry-item {
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .registry-item:last-child {
+    border-bottom: 0;
+  }
+
   .registry-item > summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    min-height: 3.75rem;
-    padding: 0.8rem 1rem;
+    min-height: 3.5rem;
+    padding: 0.75rem 1rem;
     cursor: pointer;
     list-style: none;
   }
-  .registry-item > summary::-webkit-details-marker { display: none; }
-  .registry-item > summary::after { content: '+'; color: var(--horizon-purple); font-size: 1.05rem; line-height: 1; }
-  .registry-item[open] > summary::after { content: '−'; }
-  .registry-item[open] > summary { background: var(--horizon-lavender-soft); }
-  .registry-item > summary:focus-visible { outline: 3px solid var(--horizon-focus); outline-offset: -2px; }
+
+  .registry-item > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .registry-item > summary::after {
+    content: '+';
+    color: var(--horizon-purple);
+    font-size: 1.05rem;
+    line-height: 1;
+  }
+
+  .registry-item[open] > summary::after {
+    content: '−';
+  }
+
+  .registry-item[open] > summary {
+    background: var(--horizon-surface);
+  }
+
+  .registry-item > summary:focus-visible {
+    outline: 3px solid var(--horizon-focus);
+    outline-offset: -2px;
+  }
+
+  .empty-registry-box {
+    margin: 0;
+    padding: 1.25rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.55rem;
+    background: var(--horizon-surface);
+    color: var(--horizon-muted);
+    font-size: 0.88rem;
+  }
+
   .approved-wording {
     margin: 0.25rem 0;
     padding: 0.9rem;
     border-radius: 0.55rem;
-    background: var(--horizon-lavender-soft);
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-line);
     overflow-wrap: anywhere;
   }
-  .approved-wording p { margin: 0.4rem 0; }
-  .approved-wording ul { margin: 0.4rem 0; padding-left: 1.25rem; }
-  .approved-wording pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .ratify-form { display: grid; gap: 1rem; }
-  .policy-action-form { display: grid; gap: 1rem; align-content: start; }
-  @media (max-width: 600px) {
-    .registry-item > summary { align-items: flex-start; flex-direction: column; }
+
+  .approved-wording p {
+    margin: 0.4rem 0;
+  }
+
+  .approved-wording ul {
+    margin: 0.4rem 0;
+    padding-left: 1.25rem;
+  }
+
+  .approved-wording pre {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .ratify-form {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .policy-action-form {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+  }
+
+  @media (max-width: 720px) {
+    .registry-filter-form {
+      grid-template-columns: 1fr;
+    }
+
+    .registry-item > summary {
+      align-items: flex-start;
+      flex-direction: column;
+    }
   }
 </style>

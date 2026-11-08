@@ -1,0 +1,292 @@
+---
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+
+interface OutstandingItem {
+  proposalId: string;
+  slug: string;
+  title: string;
+  space: string;
+  branchName?: string;
+}
+
+interface Props {
+  items: OutstandingItem[];
+  canParticipate: boolean;
+  eligibilityNote: string;
+}
+
+const { items, canParticipate, eligibilityNote } = Astro.props;
+const visible = items.slice(0, 6);
+const remaining = items.slice(6);
+---
+
+<section class="member-attention" aria-labelledby="awaiting-heading">
+  <div class="attention-head">
+    <div class="attention-head__copy">
+      <div class="attention-title-row">
+        <h2 id="awaiting-heading">Open ballots for you</h2>
+        <Badge variant={items.length ? 'warning' : 'success'}>
+          {items.length ? `${items.length} open` : 'Up to date'}
+        </Badge>
+      </div>
+      <p class="attention-lead">
+        {canParticipate ? eligibilityNote : 'Verify your membership before you can vote.'}
+      </p>
+    </div>
+    {items.length > 0 && (
+      <Button href="/proposals/?stage=decide" variant="ghost" size="sm">
+        All ballots
+      </Button>
+    )}
+  </div>
+
+  {!canParticipate ? (
+    <div class="attention-empty">
+      <p>Your account is awaiting membership verification before voting.</p>
+      <Button href="/member/?view=account" variant="outline" size="sm">Check account status</Button>
+    </div>
+  ) : items.length === 0 ? (
+    <div class="attention-empty attention-empty--clear">
+      <CheckCircle2 aria-hidden="true" className="size-4" />
+      <div>
+        <p>You are caught up on all eligible ballots.</p>
+        <span>New decisions appear here when you are eligible and have not yet voted.</span>
+      </div>
+    </div>
+  ) : (
+    <>
+      <ol class="attention-list">
+        {visible.map((item) => (
+          <li class="attention-item">
+            <div class="attention-item__body">
+              <div class="attention-item__meta">
+                <span class="tabular attention-id">{item.proposalId}</span>
+                <span class="attention-space">{item.space}</span>
+                {item.branchName && <span class="attention-branch">{item.branchName}</span>}
+              </div>
+              <a class="attention-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
+            </div>
+            <Button href={`/proposals/${item.slug}/#proposal-vote`} size="sm" variant="outline">
+              Vote
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          </li>
+        ))}
+      </ol>
+
+      {remaining.length > 0 && (
+        <details class="attention-more">
+          <summary>Show {remaining.length} more open ballot{remaining.length === 1 ? '' : 's'}</summary>
+          <ol class="attention-list attention-list--compact">
+            {remaining.map((item) => (
+              <li class="attention-item">
+                <div class="attention-item__body">
+                  <div class="attention-item__meta">
+                    <span class="tabular attention-id">{item.proposalId}</span>
+                    <span class="attention-space">{item.space}</span>
+                    {item.branchName && <span class="attention-branch">{item.branchName}</span>}
+                  </div>
+                  <a class="attention-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
+                </div>
+                <Button href={`/proposals/${item.slug}/#proposal-vote`} size="sm" variant="ghost">Vote →</Button>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </>
+  )}
+</section>
+
+<style>
+  .member-attention {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    background: var(--horizon-white);
+    overflow: hidden;
+  }
+
+  .attention-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem 0.85rem;
+    border-bottom: 1px solid var(--horizon-line);
+    background: var(--horizon-surface);
+  }
+
+  .attention-head__copy {
+    max-width: 56ch;
+  }
+
+  .attention-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .attention-head h2 {
+    margin: 0;
+    color: var(--horizon-ink);
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.3rem;
+    line-height: 1.2;
+  }
+
+  .attention-lead {
+    margin: 0.25rem 0 0;
+    color: var(--horizon-muted);
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
+
+  .attention-list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .attention-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .attention-item:last-child {
+    border-bottom: 0;
+  }
+
+  .attention-item:hover {
+    background: #fafbff;
+  }
+
+  .attention-list--compact .attention-item {
+    padding-block: 0.6rem;
+  }
+
+  .attention-item__body {
+    display: grid;
+    min-width: 0;
+    gap: 0.18rem;
+  }
+
+  .attention-item__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+  }
+
+  .attention-id {
+    font-weight: 700;
+    color: var(--horizon-muted);
+  }
+
+  .attention-space,
+  .attention-branch {
+    padding: 0.08rem 0.42rem;
+    border-radius: 0.28rem;
+    background: var(--horizon-surface);
+    border: 1px solid var(--horizon-line);
+    color: var(--horizon-ink);
+    font-weight: 600;
+  }
+
+  .attention-title {
+    color: var(--horizon-ink);
+    font-size: 0.92rem;
+    font-weight: 600;
+    line-height: 1.35;
+    text-decoration: none;
+  }
+
+  .attention-title:hover {
+    color: var(--horizon-purple);
+    text-decoration: underline;
+  }
+
+  .attention-empty {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1.15rem 1.25rem;
+    color: var(--horizon-muted);
+    font-size: 0.88rem;
+  }
+
+  .attention-empty p {
+    margin: 0;
+    color: var(--horizon-ink);
+    font-weight: 600;
+  }
+
+  .attention-empty--clear {
+    justify-content: flex-start;
+  }
+
+  .attention-empty--clear > svg {
+    color: var(--horizon-success-ink);
+  }
+
+  .attention-empty--clear span {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: 0.82rem;
+  }
+
+  .attention-more {
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .attention-more > summary {
+    display: flex;
+    align-items: center;
+    min-height: 2.5rem;
+    padding: 0.55rem 1.25rem;
+    background: var(--horizon-surface);
+    color: var(--horizon-ink);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    list-style: none;
+  }
+
+  .attention-more > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .attention-more > summary::after {
+    content: '+';
+    margin-left: auto;
+    color: var(--horizon-purple);
+    font-size: 1rem;
+  }
+
+  .attention-more[open] > summary::after {
+    content: '−';
+  }
+
+  .attention-more > summary:focus-visible {
+    outline: 3px solid var(--horizon-focus);
+    outline-offset: -2px;
+  }
+
+  @media (max-width: 700px) {
+    .attention-head,
+    .attention-item,
+    .attention-more > summary {
+      padding-inline: 1rem;
+    }
+  }
+</style>
