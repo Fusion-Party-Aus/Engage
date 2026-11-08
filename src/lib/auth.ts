@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
+import { passkey } from "@better-auth/passkey";
 import { magicLink } from "better-auth/plugins";
 import { createAuthMiddleware, APIError } from "better-auth/api";
 import { ObjectId, type Db } from "mongodb";
@@ -40,6 +41,10 @@ export function googleLoginConfigured(env: PlatformEnv): boolean {
 
 export function emailLoginConfigured(env: PlatformEnv): boolean {
   return Boolean(env.RESEND_API_KEY && env.AUTH_EMAIL_FROM);
+}
+
+export function passkeyLoginConfigured(env: PlatformEnv): boolean {
+  return loginConfigured(env);
 }
 
 export function loginConfigured(env: PlatformEnv): boolean {
@@ -131,43 +136,48 @@ export function createEngageAuth(db: Db, env: PlatformEnv) {
           },
         }
       : {},
-    plugins: emailLoginConfigured(env)
-      ? [
-          magicLink({
-            expiresIn: 600,
-            storeToken: "hashed",
-            rateLimit: { window: 60, max: 5 },
-            sendMagicLink: async ({ email, url }) => {
-              const safeUrl = url
-                .replaceAll("&", "&amp;")
-                .replaceAll('"', "&quot;")
-                .replaceAll("<", "&lt;")
-                .replaceAll(">", "&gt;");
-              const response = await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                  authorization: `Bearer ${env.RESEND_API_KEY}`,
-                  "content-type": "application/json",
-                },
-                body: JSON.stringify({
-                  from: env.AUTH_EMAIL_FROM,
-                  to: [email],
-                  subject: "Your Engage sign-in link",
-                  text: `Sign in to Engage:\n\n${url}\n\nThis link expires in 10 minutes and can be used once. If you did not request it, ignore this email.`,
-                  html: `<p><a href="${safeUrl}">Sign in to Engage</a></p><p>This link expires in 10 minutes and can be used once.</p><p>If you did not request it, ignore this email.</p>`,
-                }),
-                signal: AbortSignal.timeout(10_000),
-              });
-              if (
-                !response.ok ||
-                typeof (await response.json()).id !== "string"
-              ) {
-                throw new Error("Sign-in email could not be sent.");
-              }
-            },
-          }),
-        ]
-      : [],
+    plugins: [
+      passkey({
+        rpName: "Engage · Fusion Party Australia",
+      }),
+      ...(emailLoginConfigured(env)
+        ? [
+            magicLink({
+              expiresIn: 600,
+              storeToken: "hashed",
+              rateLimit: { window: 60, max: 5 },
+              sendMagicLink: async ({ email, url }) => {
+                const safeUrl = url
+                  .replaceAll("&", "&amp;")
+                  .replaceAll('"', "&quot;")
+                  .replaceAll("<", "&lt;")
+                  .replaceAll(">", "&gt;");
+                const response = await fetch("https://api.resend.com/emails", {
+                  method: "POST",
+                  headers: {
+                    authorization: `Bearer ${env.RESEND_API_KEY}`,
+                    "content-type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    from: env.AUTH_EMAIL_FROM,
+                    to: [email],
+                    subject: "Your Engage sign-in link",
+                    text: `Sign in to Engage:\n\n${url}\n\nThis link expires in 10 minutes and can be used once. If you did not request it, ignore this email.`,
+                    html: `<p><a href="${safeUrl}">Sign in to Engage</a></p><p>This link expires in 10 minutes and can be used once.</p><p>If you did not request it, ignore this email.</p>`,
+                  }),
+                  signal: AbortSignal.timeout(10_000),
+                });
+                if (
+                  !response.ok ||
+                  typeof (await response.json()).id !== "string"
+                ) {
+                  throw new Error("Sign-in email could not be sent.");
+                }
+              },
+            }),
+          ]
+        : []),
+    ],
     rateLimit: { enabled: true, storage: "database" },
     // An administrator may pre-create a member before they prove their email.
     // Better Auth only links an untrusted provider when it reports a verified,

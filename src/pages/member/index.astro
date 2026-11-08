@@ -8,10 +8,18 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
 import MemberSettings from '../../components/member/MemberSettings';
+import MemberOnboarding from '../../components/member/MemberOnboarding';
 import ActivityTimeline from '../../components/blocks/timeline-3';
 import AttentionQueue from '../../components/member/AttentionQueue.astro';
 import CatchUpDigest from '../../components/member/CatchUpDigest.astro';
 import GovernanceLog from '../../components/member/GovernanceLog.astro';
+import {
+  Compass,
+  Fingerprint,
+  KeyRound,
+  Mail,
+  Sparkles,
+} from 'lucide-react';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
 import { buildMemberCatchUp, listMemberActivityStream, type MemberCatchUpGroup } from '../../lib/member-activity.ts';
 import {
@@ -19,6 +27,7 @@ import {
   emailLoginConfigured,
   getSessionUser,
   googleLoginConfigured,
+  passkeyLoginConfigured,
 } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { listOutstandingDecisions, listProposals, listUserActivity } from '../../lib/store.ts';
@@ -119,6 +128,14 @@ const branchActivity = memberBranches.map((branch: any) => ({
 const emailAvailable = emailLoginConfigured(env);
 const googleAvailable = googleLoginConfigured(env);
 const devLoginAvailable = devLoginEnabled(env);
+const passkeyAvailable = passkeyLoginConfigured(env) || devLoginAvailable;
+const userPasskeyCount = user
+  ? await db.collection('passkey').countDocuments({ userId: user.memberId }).catch(() => 0)
+  : 0;
+const totalContributions =
+  (activity?.votes.length ?? 0) +
+  (activity?.comments.length ?? 0) +
+  (activity?.proposals.length ?? 0);
 const requestedView = Astro.url.searchParams.get('view');
 const memberView = requestedView === 'activity' || requestedView === 'account' ? requestedView : 'overview';
 ---
@@ -129,90 +146,206 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
 >
   <div class="page-wrap section-space member-page" data-view={memberView}>
     {!user ? (
-      <>
-        <header class="page-intro">
-          <h1>Sign in to take part.</h1>
-          <p>
-            Use the email address and full name on your Fusion Party membership. After your first
-            sign-in, an administrator verifies your membership so you can comment and vote.
-          </p>
-          <p class="signin-legal">
-            Member participation is subject to the{' '}
-            <a href="/terms/">Terms of Use</a> and{' '}
-            <a href="/privacy/">Privacy Policy</a>.
-          </p>
-        </header>
+      <div class="signin-shell">
+        <div class="signin-main">
+          <header class="signin-hero">
+            <div class="signin-hero__badges">
+              <Badge variant="info">Passwordless member access</Badge>
+              <Badge variant="outline">Passkey · Email link · Google</Badge>
+            </div>
+            <h1>Sign in to take part.</h1>
+            <p class="signin-hero__lead">
+              Explore proposals, shape policy wording, and vote on bound revisions. Returning members can sign in with a passkey or email link; first-time members only need the email and full name on their Fusion Party membership.
+            </p>
+          </header>
 
-        <div class="signin-grid">
-          {emailAvailable && (
-            <section class="signin-box" aria-labelledby="email-signin-heading">
-              <h2 id="email-signin-heading">Sign in with an email link</h2>
-              <p>We’ll email you a one-click sign-in link—no password required.</p>
-              <form id="email-signin-form" class="grid gap-4">
-                <Field label="Email address" htmlFor="signin-email">
-                  <Input
-                    id="signin-email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    maxLength={254}
-                    required
-                  />
-                </Field>
-                <Field label="Full name (required for first sign-in)" htmlFor="signin-name">
-                  <Input
-                    id="signin-name"
-                    name="name"
-                    autoComplete="name"
-                    minLength={2}
-                    maxLength={100}
-                  />
-                </Field>
-                <div>
-                  <Button type="submit">Email me a sign-in link</Button>
-                  <p id="email-status" class="form-status" role="status" aria-live="polite"></p>
-                </div>
-              </form>
-            </section>
-          )}
-
-          {googleAvailable && (
-            <section class="signin-box" aria-labelledby="google-signin-heading">
-              <h2 id="google-signin-heading">Sign in with Google</h2>
-              <p>Continue using your Google account.</p>
-              <Button id="google-signin" variant="outline">
-                Continue with Google
-              </Button>
-              <p id="google-status" class="form-status" role="status" aria-live="polite"></p>
-            </section>
-          )}
-
-          {devLoginAvailable && (
-            <section class="signin-box" aria-labelledby="dev-signin-heading">
-              <h2 id="dev-signin-heading">Local development sign-in</h2>
-              <p>Sign in locally as a verified member or administrator to test the platform.</p>
-              <form id="dev-signin-form" class="grid gap-4">
-                <Field label="Account role" htmlFor="dev-role">
-                  <NativeSelect id="dev-role" name="role">
-                    <option value="member">Verified Member</option>
-                    <option value="administrator">Administrator</option>
-                  </NativeSelect>
-                </Field>
-                <div>
-                  <Button type="submit">Sign in locally</Button>
-                  <p id="dev-status" class="form-status" role="status" aria-live="polite"></p>
-                </div>
-              </form>
-            </section>
-          )}
-
-          {!emailAvailable && !googleAvailable && !devLoginAvailable && (
+          {!emailAvailable && !googleAvailable && !devLoginAvailable && !passkeyAvailable ? (
             <Alert variant="warning">
               <AlertDescription>Member sign-in is temporarily unavailable. Please try again shortly.</AlertDescription>
             </Alert>
+          ) : (
+            <div class="signin-methods">
+              {/* Primary Card: Email Link + Instant Passkey / Google */}
+              <section class="signin-card signin-card--primary" aria-labelledby="primary-signin-heading">
+                <div class="signin-card__header">
+                  <div>
+                    <h2 id="primary-signin-heading">Member sign-in</h2>
+                    <p>No password to remember—choose your fastest sign-in method below.</p>
+                  </div>
+                  <Badge variant="secondary">Takes 30 sec</Badge>
+                </div>
+
+                {/* Fast 1-Tap Methods: Passkey & Google */}
+                {(passkeyAvailable || googleAvailable) && (
+                  <div class="signin-quick-actions" aria-label="One-tap sign-in options">
+                    {passkeyAvailable && (
+                      <div class="signin-quick-block">
+                        <Button id="passkey-signin" type="button" variant="outline" className="signin-passkey-btn">
+                          <Fingerprint className="size-4" aria-hidden="true" />
+                          <span>Sign in with a passkey</span>
+                          <span class="signin-btn-hint">Face ID · Touch ID · Security key</span>
+                        </Button>
+                        <p id="passkey-status" class="form-status" role="status" aria-live="polite"></p>
+                      </div>
+                    )}
+
+                    {googleAvailable && (
+                      <div class="signin-quick-block">
+                        <Button id="google-signin" type="button" variant="outline" className="signin-google-btn">
+                          <KeyRound className="size-4" aria-hidden="true" />
+                          <span>Continue with Google</span>
+                          <span class="signin-btn-hint">Verified matching membership email</span>
+                        </Button>
+                        <p id="google-status" class="form-status" role="status" aria-live="polite"></p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {emailAvailable && (passkeyAvailable || googleAvailable) && (
+                  <div class="signin-divider" role="separator">
+                    <span>or receive a one-click email link</span>
+                  </div>
+                )}
+
+                {emailAvailable && (
+                  <form id="email-signin-form" class="signin-email-form" novalidate>
+                    <Field label="Membership email address" htmlFor="signin-email">
+                      <Input
+                        id="signin-email"
+                        name="email"
+                        type="email"
+                        autoComplete="username webauthn"
+                        placeholder="you@example.org.au"
+                        maxLength={254}
+                        required
+                      />
+                    </Field>
+
+                    <div class="signin-name-disclosure" id="signin-name-wrap">
+                      <div class="signin-name-head">
+                        <label for="signin-name">Full name</label>
+                        <span class="signin-name-badge">First sign-in only</span>
+                      </div>
+                      <Input
+                        id="signin-name"
+                        name="name"
+                        autoComplete="name"
+                        placeholder="Required on your first sign-in so an admin can verify your membership"
+                        minLength={2}
+                        maxLength={100}
+                      />
+                      <p class="signin-field-hint">
+                        Already signed in before? Leave your name blank—we’ll recognise your email automatically.
+                      </p>
+                    </div>
+
+                    <div class="signin-submit-row">
+                      <Button type="submit" className="signin-submit-btn">
+                        <Mail className="size-4" aria-hidden="true" />
+                        Email me a sign-in link
+                      </Button>
+                      <span class="signin-expiry-note">Link valid for 10 minutes · Single use</span>
+                    </div>
+
+                    <div id="email-status-box" class="signin-status-banner" hidden>
+                      <p id="email-status" class="form-status" role="status" aria-live="polite"></p>
+                    </div>
+                  </form>
+                )}
+              </section>
+
+              {devLoginAvailable && (
+                <section class="signin-card signin-card--dev" aria-labelledby="dev-signin-heading">
+                  <div class="signin-card__header">
+                    <div>
+                      <h2 id="dev-signin-heading">Local development sign-in</h2>
+                      <p>Instant sandbox session to test member onboarding, deliberation, and admin workflows.</p>
+                    </div>
+                    <Badge variant="warning">Dev / Preview</Badge>
+                  </div>
+                  <form id="dev-signin-form" class="signin-dev-form">
+                    <Field label="Simulated account role" htmlFor="dev-role">
+                      <NativeSelect id="dev-role" name="role">
+                        <option value="member">Verified Member (member@local.test)</option>
+                        <option value="administrator">National Administrator (admin@local.test)</option>
+                      </NativeSelect>
+                    </Field>
+                    <div class="signin-submit-row">
+                      <Button type="submit" variant="outline">Sign in locally</Button>
+                      <p id="dev-status" class="form-status" role="status" aria-live="polite"></p>
+                    </div>
+                  </form>
+                </section>
+              )}
+
+              <p class="signin-legal">
+                Member participation is subject to the <a href="/terms/">Terms of Use</a> and{' '}
+                <a href="/privacy/">Privacy Policy</a>. Engage uses strictly necessary session cookies and never sells or tracks personal data for advertising.
+              </p>
+            </div>
           )}
         </div>
-      </>
+
+        <!-- Right Onboarding Preview Rail: What happens when you sign in -->
+        <aside class="signin-onboarding-rail" aria-label="How member onboarding works">
+          <div class="onboarding-preview-card">
+            <div class="onboarding-preview-card__head">
+              <span class="onboarding-preview-kicker">
+                <Sparkles className="size-3.5" aria-hidden="true" />
+                New to Engage?
+              </span>
+              <h2>From first sign-in to your first vote.</h2>
+              <p>Engage is designed so you can read everything immediately and participate without learning parliamentary procedure.</p>
+            </div>
+
+            <ol class="onboarding-roadmap">
+              <li class="onboarding-roadmap__step">
+                <span class="onboarding-roadmap__num tabular">1</span>
+                <div>
+                  <strong>Sign in without a password</strong>
+                  <p>Request a 1-click email link or continue with Google using your Fusion membership email.</p>
+                </div>
+              </li>
+              <li class="onboarding-roadmap__step">
+                <span class="onboarding-roadmap__num tabular">2</span>
+                <div>
+                  <strong>Save a passkey for 1-tap return access</strong>
+                  <p>Enroll Face ID, Touch ID, Windows Hello, or your password manager in 15 seconds from your dashboard.</p>
+                </div>
+              </li>
+              <li class="onboarding-roadmap__step">
+                <span class="onboarding-roadmap__num tabular">3</span>
+                <div>
+                  <strong>Automatic membership &amp; branch check</strong>
+                  <p>An administrator confirms your Fusion membership and branch electorate so you can comment, amend, and vote.</p>
+                </div>
+              </li>
+              <li class="onboarding-roadmap__step">
+                <span class="onboarding-roadmap__num tabular">4</span>
+                <div>
+                  <strong>Shape wording &amp; vote on bound revisions</strong>
+                  <p>Post stances during Stage 2 (Deliberate) and cast your ballot on frozen wording in Stage 3 (Decide).</p>
+                </div>
+              </li>
+            </ol>
+
+            <div class="onboarding-preview-card__public">
+              <div class="onboarding-public-row">
+                <Compass className="size-4 shrink-0 text-[var(--horizon-purple)]" aria-hidden="true" />
+                <div>
+                  <strong>Just browsing today? No account needed.</strong>
+                  <p>All public proposals, revision diffs, ballot tallies, and published policies are open to everyone.</p>
+                </div>
+              </div>
+              <div class="onboarding-public-links">
+                <Button href="/proposals/" variant="outline" size="sm">Browse proposals</Button>
+                <Button href="/how-it-works/" variant="ghost" size="sm">60-second walkthrough →</Button>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
     ) : (
       <>
         <header class="member-header">
@@ -265,6 +398,26 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
         )}
 
         <LegalAcceptanceGate />
+
+        <!-- Guided Member Onboarding & Activation Flow -->
+        <div class="overview-only">
+          <MemberOnboarding
+            client:load
+            name={user.name}
+            email={user.email}
+            status={user.status}
+            canParticipate={Boolean(user.canParticipate)}
+            branches={memberBranches.map((branch: any) => ({ id: branch.branchId, name: branch.name }))}
+            openBallotsCount={awaitingDecision.length}
+            firstBallotHref={awaitingDecision[0] ? `/proposals/${awaitingDecision[0].slug}/` : undefined}
+            firstBallotTitle={awaitingDecision[0]?.title}
+            deliberationsCount={deliberationOpportunities.length}
+            firstDeliberationHref={deliberationOpportunities[0] ? `/proposals/${deliberationOpportunities[0].slug}/` : undefined}
+            firstDeliberationTitle={deliberationOpportunities[0]?.title}
+            totalContributions={totalContributions}
+            initialPasskeyCount={userPasskeyCount}
+          />
+        </div>
 
         <!-- Top 4-Cell Hairline Metric Strip -->
         <div class="member-stat-strip" aria-label="Your participation summary">
@@ -520,62 +673,146 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
 <script>
   import { createAuthClient } from 'better-auth/client';
   import { magicLinkClient } from 'better-auth/client/plugins';
+  import { passkeyClient } from '@better-auth/passkey/client';
 
-  const authClient = createAuthClient({ plugins: [magicLinkClient()] });
+  const authClient = createAuthClient({
+    plugins: [magicLinkClient(), passkeyClient()],
+  });
 
   const emailForm = document.querySelector<HTMLFormElement>('#email-signin-form');
   const emailStatus = document.querySelector<HTMLElement>('#email-status');
+  const emailStatusBox = document.querySelector<HTMLElement>('#email-status-box');
   const googleStatus = document.querySelector<HTMLElement>('#google-status');
+  const passkeyStatus = document.querySelector<HTMLElement>('#passkey-status');
+  const passkeyBtn = document.querySelector<HTMLButtonElement>('#passkey-signin');
+
+  function setEmailMessage(message: string, tone: 'info' | 'success' | 'error' = 'info') {
+    if (!emailStatus) return;
+    emailStatus.textContent = message;
+    if (emailStatusBox) {
+      emailStatusBox.hidden = !message;
+      emailStatusBox.dataset.tone = tone;
+    }
+  }
+
   const errorCode = new URLSearchParams(location.search).get('error');
   if (errorCode) {
     if (errorCode === 'link') {
-      if (emailStatus) {
-        emailStatus.textContent =
-          'That sign-in link has expired or was already used. Request a new link below.';
-      }
+      setEmailMessage(
+        'That sign-in link has expired or was already used. Request a fresh link below or sign in with your passkey.',
+        'error',
+      );
     } else if (errorCode === 'google' || errorCode === 'invalid_code') {
       if (googleStatus) {
         googleStatus.textContent =
-          'Google sign-in could not be completed. Please try again or use email sign-in.';
+          'Google sign-in could not be completed. Please try again or use an email link.';
       }
-    } else if (emailStatus) {
-      emailStatus.textContent =
-        'Sign-in could not be completed. Please try again.';
+    } else {
+      setEmailMessage('Sign-in could not be completed. Please try again.', 'error');
     }
   }
+
+  // Optional conditional WebAuthn autofill if supported by the browser
+  if (
+    emailForm &&
+    typeof window !== 'undefined' &&
+    typeof window.PublicKeyCredential !== 'undefined' &&
+    typeof window.PublicKeyCredential.isConditionalMediationAvailable === 'function'
+  ) {
+    window.PublicKeyCredential.isConditionalMediationAvailable()
+      .then((available) => {
+        if (!available) return;
+        return authClient.signIn.passkey({ autoFill: true });
+      })
+      .then((res) => {
+        if (res && !res.error && res.data?.session) {
+          location.reload();
+        }
+      })
+      .catch(() => {
+        // Ignore silent autofill cancellation
+      });
+  }
+
+  passkeyBtn?.addEventListener('click', async () => {
+    if (!passkeyStatus) return;
+    if (typeof window === 'undefined' || typeof window.PublicKeyCredential === 'undefined') {
+      passkeyStatus.textContent =
+        'This browser does not support passkeys. Please use an email sign-in link instead.';
+      return;
+    }
+    passkeyBtn.disabled = true;
+    passkeyStatus.textContent = 'Waiting for your device passkey…';
+    try {
+      const result = await authClient.signIn.passkey();
+      if (result.error) {
+        const errCode = 'code' in result.error ? result.error.code : undefined;
+        if (errCode === 'PASSKEY_NOT_FOUND') {
+          passkeyStatus.textContent =
+            'No Engage passkey matched that credential. Sign in with an email link first, then add a passkey in Account & Access.';
+        } else if (
+          errCode === 'AUTH_CANCELLED' ||
+          errCode === 'ERROR_CEREMONY_ABORTED'
+        ) {
+          passkeyStatus.textContent =
+            'Passkey prompt cancelled. Click again or request an email sign-in link below.';
+        } else if (result.error.status === 503) {
+          passkeyStatus.textContent =
+            'Passkey verification requires a live authentication server. Use Local development sign-in below in local preview mode.';
+        } else {
+          passkeyStatus.textContent =
+            result.error.message || 'Could not sign in with a passkey. Try an email sign-in link below.';
+        }
+      } else {
+        passkeyStatus.textContent = 'Passkey verified. Signing you in…';
+        location.reload();
+      }
+    } catch {
+      passkeyStatus.textContent =
+        'Could not complete passkey sign-in. Try an email sign-in link below.';
+    } finally {
+      passkeyBtn.disabled = false;
+    }
+  });
 
   emailForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!emailStatus || !emailForm.reportValidity()) return;
     const btn = emailForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     btn.disabled = true;
-    emailStatus.textContent = 'Sending sign-in link…';
+    setEmailMessage('Sending your one-click sign-in link…', 'info');
 
     try {
       const data = new FormData(emailForm);
+      const emailValue = String(data.get('email')).trim();
       const result = await authClient.signIn.magicLink({
-        email: String(data.get('email')).trim(),
+        email: emailValue,
         name: String(data.get('name')).trim() || undefined,
         callbackURL: '/member/',
         errorCallbackURL: '/member/?error=link',
       });
       if (result.error) {
         if (result.error.code === 'NAME_REQUIRED') {
-          emailStatus.textContent = 'Please enter your full name for your first sign-in.';
+          setEmailMessage(
+            'Welcome! Because this is your first sign-in with this email, please enter your full name so an administrator can verify your Fusion membership.',
+            'error',
+          );
           const nameInput = emailForm.querySelector<HTMLInputElement>('[name="name"]')!;
           nameInput.required = true;
           nameInput.focus();
         } else if (result.error.status === 429) {
-          emailStatus.textContent = 'Too many attempts. Please wait a minute and try again.';
+          setEmailMessage('Too many attempts. Please wait a minute and try again.', 'error');
         } else {
-          emailStatus.textContent = 'Could not send sign-in link. Please try again shortly.';
+          setEmailMessage('Could not send sign-in link. Please try again shortly.', 'error');
         }
       } else {
-        emailStatus.textContent =
-          'Check your email inbox for your sign-in link (valid for 10 minutes).';
+        setEmailMessage(
+          `Check ${emailValue} for your sign-in link (valid for 10 minutes, single use). Tip: once signed in, add a passkey for 1-tap access next time.`,
+          'success',
+        );
       }
     } catch {
-      emailStatus.textContent = 'Could not send sign-in link. Please try again shortly.';
+      setEmailMessage('Could not send sign-in link. Please try again shortly.', 'error');
     } finally {
       btn.disabled = false;
     }
@@ -634,42 +871,390 @@ const memberView = requestedView === 'activity' || requestedView === 'account' ?
     display: none;
   }
 
-  /* Sign-in Views */
-  .signin-grid {
+  /* Sign-in Views & Onboarding Preview */
+  .signin-shell {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-    gap: 1.25rem;
-    margin-top: 1.25rem;
+    grid-template-columns: minmax(0, 1.12fr) minmax(20rem, 0.88fr);
+    gap: 2rem;
+    align-items: start;
   }
 
-  .signin-legal {
-    margin-top: 0.75rem;
+  .signin-main {
+    display: grid;
+    gap: 1.35rem;
+    min-width: 0;
+  }
+
+  .signin-hero {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .signin-hero__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .signin-hero h1 {
+    margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(2.4rem, 5vw, 4.1rem);
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+    color: var(--horizon-purple-deep);
+  }
+
+  .signin-hero__lead {
+    margin: 0;
+    max-width: 60ch;
     color: var(--horizon-muted);
-    font-size: 0.9rem;
+    font-size: 1rem;
+    line-height: 1.6;
   }
 
-  .signin-legal a {
-    color: var(--horizon-ink);
+  .signin-methods {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .signin-card {
+    padding: 1.5rem;
+    background: var(--horizon-white);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .signin-card--dev {
+    background: var(--horizon-lavender-soft);
+  }
+
+  .signin-card__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .signin-card__header h2 {
+    margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(1.85rem, 3.4vw, 2.75rem);
+    line-height: 1.1;
+    color: var(--horizon-purple-deep);
+  }
+
+  .signin-card__header p {
+    margin: 0.2rem 0 0;
+    color: var(--horizon-muted);
+    font-size: 0.92rem;
+  }
+
+  .signin-quick-actions {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .signin-quick-block {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .signin-quick-block :global(.signin-passkey-btn),
+  .signin-quick-block :global(.signin-google-btn) {
+    width: 100%;
+    min-height: 3rem;
+    justify-content: flex-start;
+    gap: 0.65rem;
+    padding: 0.65rem 1rem;
+    border-radius: 0.45rem;
+    border-color: var(--horizon-line);
+    background: var(--horizon-lavender-soft);
+    color: var(--horizon-purple-deep);
+    font-weight: 700;
+  }
+
+  .signin-quick-block :global(.signin-passkey-btn:hover),
+  .signin-quick-block :global(.signin-google-btn:hover) {
+    background: var(--horizon-lavender);
+    border-color: var(--horizon-purple);
+  }
+
+  .signin-btn-hint {
+    margin-left: auto;
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--horizon-muted);
+  }
+
+  .signin-divider {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0.15rem 0;
+  }
+
+  .signin-divider::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    height: 1px;
+    background: var(--horizon-line);
+  }
+
+  .signin-divider span {
+    position: relative;
+    padding: 0 0.75rem;
+    background: var(--horizon-white);
+    color: var(--horizon-muted);
+    font-size: 0.92rem;
     font-weight: 600;
   }
 
-  .signin-box {
-    padding: 1.5rem;
-    background: #ffffff;
+  .signin-email-form,
+  .signin-dev-form {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .signin-name-disclosure {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+  }
+
+  .signin-name-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .signin-name-head label {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+  }
+
+  .signin-name-badge {
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: var(--horizon-white);
+    border: 1px solid var(--horizon-line);
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--horizon-purple);
+  }
+
+  .signin-field-hint {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: var(--horizon-muted);
+  }
+
+  .signin-submit-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .signin-expiry-note {
+    font-size: 0.92rem;
+    color: var(--horizon-muted);
+  }
+
+  .signin-status-banner {
+    padding: 0.75rem 1rem;
+    border-radius: 0.45rem;
+    border: 1px solid var(--horizon-line);
+    background: var(--horizon-lavender-soft);
+  }
+
+  .signin-status-banner[data-tone="success"] {
+    background: var(--horizon-success-bg);
+    border-color: var(--horizon-success-ink);
+  }
+
+  .signin-status-banner[data-tone="success"] .form-status {
+    color: var(--horizon-success-ink);
+  }
+
+  .signin-status-banner[data-tone="error"] {
+    background: var(--horizon-danger-bg);
+    border-color: var(--horizon-danger-ink);
+  }
+
+  .signin-status-banner[data-tone="error"] .form-status {
+    color: var(--horizon-danger-ink);
+  }
+
+  .signin-status-banner .form-status {
+    margin: 0;
+    min-height: 0;
+  }
+
+  .signin-legal {
+    margin: 0;
+    color: var(--horizon-muted);
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+
+  .signin-legal a {
+    color: var(--horizon-purple-deep);
+    font-weight: 600;
+  }
+
+  /* Onboarding Preview Rail */
+  .signin-onboarding-rail {
+    position: sticky;
+    top: 5.25rem;
+  }
+
+  .onboarding-preview-card {
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
+    background: var(--horizon-white);
+    overflow: hidden;
   }
 
-  .signin-box h2 {
-    margin: 0 0 0.4rem;
+  .onboarding-preview-card__head {
+    padding: 1.35rem 1.4rem 1.15rem;
+    background: var(--horizon-lavender-soft);
+    border-bottom: 1px solid var(--horizon-line);
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .onboarding-preview-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--horizon-purple);
+  }
+
+  .onboarding-preview-card__head h2 {
+    margin: 0;
     font-family: 'Newsreader', Georgia, serif;
-    font-size: 1.4rem;
+    font-size: clamp(1.85rem, 3.4vw, 2.75rem);
+    line-height: 1.1;
+    color: var(--horizon-purple-deep);
   }
 
-  .signin-box p {
-    margin: 0 0 1rem;
+  .onboarding-preview-card__head p {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.5;
     color: var(--horizon-muted);
-    font-size: 0.9rem;
+  }
+
+  .onboarding-roadmap {
+    list-style: none;
+    margin: 0;
+    padding: 1.25rem 1.4rem;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .onboarding-roadmap__step {
+    display: grid;
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+  }
+
+  .onboarding-roadmap__num {
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    background: var(--horizon-lavender);
+    border: 1px solid var(--horizon-line);
+    color: var(--horizon-purple-deep);
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
+  .onboarding-roadmap__step strong {
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--horizon-purple-deep);
+    margin-bottom: 0.15rem;
+  }
+
+  .onboarding-roadmap__step p {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: var(--horizon-muted);
+  }
+
+  .onboarding-preview-card__public {
+    padding: 1.15rem 1.4rem;
+    background: var(--horizon-lavender-soft);
+    border-top: 1px solid var(--horizon-line);
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .onboarding-public-row {
+    display: grid;
+    grid-template-columns: 1.1rem minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: start;
+  }
+
+  .onboarding-public-row strong {
+    display: block;
+    font-size: 0.92rem;
+    color: var(--horizon-purple-deep);
+    margin-bottom: 0.15rem;
+  }
+
+  .onboarding-public-row p {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: var(--horizon-muted);
+  }
+
+  .onboarding-public-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  @media (max-width: 980px) {
+    .signin-shell {
+      grid-template-columns: 1fr;
+    }
+
+    .signin-onboarding-rail {
+      position: static;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .signin-btn-hint {
+      display: none;
+    }
   }
 
   /* Member Workspace Header */

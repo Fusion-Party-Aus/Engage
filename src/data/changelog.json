@@ -1,5 +1,21 @@
 [
   {
+    "hash": "5ef40c8",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
+  },
+  {
+    "hash": "ac9bb41",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "deploy",
+    "summary": "Automate production deployment gated on staging health"
+  },
+  {
     "hash": "c6edce0",
     "date": "2026-11-09",
     "type": "docs",

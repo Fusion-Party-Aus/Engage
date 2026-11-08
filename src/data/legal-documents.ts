@@ -138,17 +138,18 @@ export const privacyPolicy: LegalDocument = {
             `a member identifier and account timestamps;`,
             `your platform role (member, moderator or administrator), membership status (pending, verified or suspended) and whether your account is disabled;`,
             `branch memberships, branch administrator delegations, and who assigned or revoked them;`,
+            `if you register a passkey, your WebAuthn credential identifier, public key, signature counter, authenticator device type, backup status, transport hints and optional device label (Engage never receives your biometric data);`,
             `if you use Google sign-in, the account identifier and profile information Google returns, such as name, email address, email-verification status and profile image.`,
           ],
         },
         {
           type: "paragraph",
-          text: `Engage does not use a password for the sign-in methods configured in this release. If Fusion enables another sign-in method, this policy will be updated.`,
+          text: `Engage does not use a password for the sign-in methods configured in this release (email sign-in links, WebAuthn passkeys and Google sign-in).`,
         },
         { type: "subheading", text: "Authentication and security information" },
         {
           type: "paragraph",
-          text: `When you request an email sign-in link, we process your email address and a single-use token. The token is stored in hashed form, expires after 10 minutes and can be used once. When you are signed in, Better Auth, the authentication library used by Engage, creates a session record. Session records may include a session identifier, the associated account, expiry time, IP address and browser user-agent. We also keep rate-limiting and security records to prevent abuse.`,
+          text: `When you request an email sign-in link, we process your email address and a single-use token. The token is stored in hashed form, expires after 10 minutes and can be used once. When you register or sign in with a passkey, Engage verifies a cryptographic WebAuthn challenge against the public key stored for your account. When you are signed in, Better Auth, the authentication library used by Engage, creates a session record. Session records may include a session identifier, the associated account, expiry time, IP address and browser user-agent. We also keep rate-limiting and security records to prevent abuse.`,
         },
         {
           type: "paragraph",
@@ -625,7 +626,7 @@ export const termsOfUse: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `Sign-in uses an email link, and Google if Fusion has enabled it. You must use your own email address and give your full name. Do not impersonate anyone or use a false identity to obtain access.`,
+          text: `Sign-in uses an email link, a registered WebAuthn passkey, or Google if Fusion has enabled it. You must use your own email address and give your full name. Do not impersonate anyone or use a false identity to obtain access.`,
         },
         {
           type: "paragraph",

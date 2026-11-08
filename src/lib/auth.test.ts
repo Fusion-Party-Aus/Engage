@@ -5,6 +5,7 @@ import {
   createEngageAuth,
   devLoginEnabled,
   getSessionUser,
+  passkeyLoginConfigured,
 } from "./auth.ts";
 import { POST as createDevSession } from "../pages/api/session.ts";
 
@@ -88,6 +89,21 @@ test("development sign-in endpoint fails closed outside explicit development mod
   assert.match(
     development.headers.get("set-cookie") ?? "",
     /engage_dev_user=administrator/,
+  );
+});
+
+test("passkeyLoginConfigured aligns with core Better Auth configuration", () => {
+  assert.equal(passkeyLoginConfigured({}), false);
+  assert.equal(
+    passkeyLoginConfigured({
+      MONGODB_URI: "mongodb://localhost:27017",
+      MONGODB_DB_NAME: "engage",
+      BETTER_AUTH_URL: "https://engage.fusionparty.org.au",
+      BETTER_AUTH_SECRET: "synthetic-secret-at-least-32-characters-long",
+      RESEND_API_KEY: "re_synthetic",
+      AUTH_EMAIL_FROM: "engage@fusionparty.org.au",
+    }),
+    true,
   );
 });
 
