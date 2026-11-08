@@ -13,6 +13,7 @@ import {
   PanelLeft,
   PlusCircle,
   ScrollText,
+  Settings,
   ShieldCheck,
   Users,
   X,
@@ -24,12 +25,13 @@ import '../styles/admin.css';
 interface Props {
   title: string;
   description: string;
-  section?: 'overview' | 'proposals' | 'members' | 'branches' | 'policies';
+  section?: 'overview' | 'proposals' | 'members' | 'branches' | 'policies' | 'settings';
   isAdmin?: boolean;
   isBranchAdmin?: boolean;
+  hideIntro?: boolean;
 }
 
-const { title, description, section = 'policies', isAdmin = false, isBranchAdmin = false } = Astro.props;
+const { title, description, section = 'policies', isAdmin = false, isBranchAdmin = false, hideIntro = false } = Astro.props;
 const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
 
 const proposalsHref = isAdmin || isBranchAdmin ? '/admin/proposals/' : '/admin/';
@@ -39,6 +41,7 @@ const governanceItems = [
   { key: 'members', href: isAdmin ? '/admin/members/' : '/admin/branches/#membership-heading', label: 'Member access', icon: Users, show: isAdmin || isBranchAdmin },
   { key: 'branches', href: '/admin/branches/#branches-heading', label: 'Branch work', icon: GitBranch, show: isAdmin || isBranchAdmin },
   { key: 'policies', href: '/admin/policies/', label: 'Adopt & publish', icon: BookOpen, show: isAdmin },
+  { key: 'settings', href: '/admin/settings/', label: 'Platform settings', icon: Settings, show: isAdmin },
 ].filter((item) => item.show);
 
 const siteItems = [
@@ -169,11 +172,12 @@ const roleLabel = user?.isAdmin ? 'Administrator' : user?.isBranchAdmin ? 'Branc
       </header>
 
       <div class="admin-content">
-        <header class="admin-intro">
-          <p class="admin-eyebrow">Admin workspace</p>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </header>
+        {!hideIntro && (
+          <header class="admin-intro">
+            <h1>{title}</h1>
+            <p>{description}</p>
+          </header>
+        )}
         <slot />
       </div>
     </div>

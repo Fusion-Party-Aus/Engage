@@ -9,41 +9,65 @@ import '../styles/global.css';
 import SiteHeader from '../components/site/SiteHeader.astro';
 import SiteFooter from '../components/site/SiteFooter.astro';
 import { getSessionUser } from '../lib/auth.ts';
-import { runtimeEnv } from '../lib/db.ts';
-import { trustedCanonical } from '../lib/public-origin.ts';
+import { getDatabase, runtimeEnv } from '../lib/db.ts';
+import { resolvePublicOrigin, trustedCanonical } from '../lib/public-origin.ts';
+import { getSiteConfig } from '../lib/site-config.ts';
 
 interface Props {
   title: string;
   description?: string;
   canonical?: string;
+  image?: string;
+  imageAlt?: string;
+  ogType?: 'website' | 'article';
   noIndex?: boolean;
   workspace?: boolean;
 }
 
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([
+  getDatabase(env),
+  getSessionUser(Astro.request, env),
+]);
+const siteConfig = await getSiteConfig(db, env);
+
 const {
   title,
-  description = 'Browse proposals, join discussions, vote when eligible, and explore the policy registry from Fusion Party Australia.',
+  description = siteConfig.defaultDescription || 'Browse proposals, join discussions, vote when eligible, and explore the policy registry from Fusion Party Australia.',
   canonical,
+  image,
+  imageAlt,
+  ogType = 'website',
   noIndex = false,
   workspace = false,
 } = Astro.props;
 
-const env = runtimeEnv(Astro.locals);
-const user = await getSessionUser(Astro.request, env);
 const privateHost =
   import.meta.env.DEV ||
   env.APP_MODE !== 'production' ||
   Astro.url.hostname === 'localhost' ||
   Astro.url.hostname === '127.0.0.1';
-const preventIndexing = noIndex || privateHost;
+const preventIndexing = noIndex || privateHost || !siteConfig.allowPublicIndexing;
 const path = Astro.url.pathname;
+
+const originInput = {
+  env,
+  requestUrl: Astro.url,
+  development: import.meta.env.DEV,
+};
+const publicOrigin = resolvePublicOrigin(originInput);
 const canonicalHref = canonical
-  ? trustedCanonical(canonical, {
-      env,
-      requestUrl: Astro.url,
-      development: import.meta.env.DEV,
-    })
-  : undefined;
+  ? trustedCanonical(canonical, originInput)
+  : trustedCanonical(path, originInput);
+
+const resolveSocialImage = (candidate?: string): string => {
+  const chosen = (candidate || siteConfig.defaultOgImage || '/engage-og-card.png').trim();
+  if (/^https?:\/\//i.test(chosen)) return chosen;
+  return new URL(chosen.startsWith('/') ? chosen : `/${chosen}`, `${publicOrigin}/`).href;
+};
+
+const ogImageHref = resolveSocialImage(image);
+const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organizationName}`;
 ---
 <!doctype html>
 <html lang="en-AU">
@@ -54,6 +78,24 @@ const canonicalHref = canonical
     <meta name="description" content={description} />
     {preventIndexing && <meta name="robots" content="noindex, nofollow" />}
     {canonicalHref && <link rel="canonical" href={canonicalHref} />}
+
+    <!-- OpenGraph / Facebook / Discord Link Unfurling -->
+    <meta property="og:site_name" content={`${siteConfig.siteName} · ${siteConfig.organizationName}`} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {canonicalHref && <meta property="og:url" content={canonicalHref} />}
+    <meta property="og:image" content={ogImageHref} />
+    <meta property="og:image:alt" content={ogImageAltText} />
+    <meta property="og:locale" content="en_AU" />
+
+    <!-- Twitter / X Large Summary Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageHref} />
+    <meta name="twitter:image:alt" content={ogImageAltText} />
+
     <link rel="icon" href="/fusion_horizon_logo_light.svg" type="image/svg+xml" />
     <title>{title}</title>
   </head>
@@ -61,6 +103,7 @@ const canonicalHref = canonical
     <svg class="icon-definitions" aria-hidden="true" focusable="false">
       <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></symbol>
       <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></symbol>
+      <symbol id="icon-plus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" /></symbol>
       <symbol id="icon-files" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v14M18 6H9a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Z" /><path d="M11 11h5M11 15h5" /></symbol>
       <symbol id="icon-book" viewBox="0 0 24 24"><path d="M12 7v14M3 18V5a2 2 0 0 1 2-2h3a4 4 0 0 1 4 4 4 4 0 0 1 4-4h3a2 2 0 0 1 2 2v13h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4z" /></symbol>
       <symbol id="icon-vote" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /><path d="m2 12 1 1 2-2" /></symbol>
@@ -69,13 +112,13 @@ const canonicalHref = canonical
       <symbol id="icon-gauge" viewBox="0 0 24 24"><path d="M20.9 13a9 9 0 1 1-17.8 0M12 13l4-4M7 17h.01M12 19h.01M17 17h.01" /></symbol>
     </svg>
     <a class="skip-link" href="#main-content">Skip to content</a>
-    <SiteHeader user={user} path={path} />
+    <SiteHeader user={user} path={path} siteConfig={siteConfig} />
 
     <main id="main-content">
       <slot />
     </main>
 
-    {!workspace && <SiteFooter user={user} />}
+    {!workspace && <SiteFooter user={user} siteConfig={siteConfig} />}
   </body>
 </html>
 <script>
@@ -90,4 +133,39 @@ const canonicalHref = canonical
       }
     });
   });
+
+  // Same-origin hover/focus link prefetching for near-instant page navigation
+  const prefetched = new Set<string>();
+  const shouldPrefetch = (anchor: HTMLAnchorElement | null): anchor is HTMLAnchorElement => {
+    if (!anchor || !anchor.href) return false;
+    if (anchor.target && anchor.target !== '_self') return false;
+    if (anchor.hasAttribute('download')) return false;
+    let url: URL;
+    try {
+      url = new URL(anchor.href, location.origin);
+    } catch {
+      return false;
+    }
+    if (url.origin !== location.origin) return false;
+    if (url.pathname === location.pathname && url.search === location.search) return false;
+    if (url.pathname.startsWith('/api/')) return false;
+    return !prefetched.has(url.href);
+  };
+  const prefetchLink = (anchor: HTMLAnchorElement | null) => {
+    if (!shouldPrefetch(anchor)) return;
+    prefetched.add(anchor.href);
+    const link = document.createElement('link');
+    link.rel = 'prefetch';
+    link.href = anchor.href;
+    link.as = 'document';
+    document.head.appendChild(link);
+  };
+  document.addEventListener('mouseover', (e) => {
+    const a = (e.target as Element | null)?.closest?.('a') as HTMLAnchorElement | null;
+    if (a) prefetchLink(a);
+  }, { passive: true });
+  document.addEventListener('focusin', (e) => {
+    const a = (e.target as Element | null)?.closest?.('a') as HTMLAnchorElement | null;
+    if (a) prefetchLink(a);
+  }, { passive: true });
 </script>

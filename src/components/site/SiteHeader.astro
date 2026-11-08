@@ -1,55 +1,62 @@
 ---
 import { Button } from '../ui/button';
 import type { SessionUser } from '../../lib/types.ts';
+import type { SiteConfig } from '../../lib/site-config.ts';
 
 interface Props {
   user: SessionUser | null;
   path: string;
+  siteConfig?: SiteConfig;
 }
 
-const { user, path } = Astro.props;
-const stage = Astro.url.searchParams.get('stage') ?? '';
+const { user, path, siteConfig } = Astro.props;
 const isStaff = Boolean(user?.isStaff || user?.isBranchAdmin);
+const primaryCtaLabel = siteConfig?.primaryCtaLabel || 'Suggest an idea';
+const primaryCtaHref = siteConfig?.primaryCtaHref || '/proposals/new/';
+const showPrimaryCta = siteConfig?.showPrimaryCtaInHeader !== false;
 
 const links = [
+  ...(showPrimaryCta
+    ? [
+        {
+          href: primaryCtaHref,
+          label: primaryCtaLabel,
+          icon: 'plus',
+          current: path.startsWith('/proposals/new'),
+          star: true,
+        },
+      ]
+    : []),
   {
     href: '/proposals/',
-    label: 'Browse proposals',
+    label: 'Proposals',
     icon: 'files',
-    current: path.startsWith('/proposals') && !['decide', 'deliberate'].includes(stage),
-  },
-  {
-    href: '/proposals/?stage=deliberate',
-    label: 'Join discussions',
-    icon: 'users',
-    current: stage === 'deliberate',
-  },
-  {
-    href: '/proposals/?stage=decide',
-    label: 'See open votes',
-    icon: 'vote',
-    current: stage === 'decide',
+    current: path.startsWith('/proposals') && !path.startsWith('/proposals/new'),
+    star: false,
   },
   {
     href: '/policies/',
     label: 'Policy registry',
     icon: 'book',
     current: path.startsWith('/policies'),
+    star: false,
   },
   {
     href: '/how-it-works/',
     label: 'How it works',
     icon: 'info',
     current: path.startsWith('/how-it-works'),
+    star: false,
   },
 ];
 
 if (isStaff) {
   links.push({
     href: '/admin/',
-    label: 'Admin tasks',
+    label: 'Admin',
     icon: 'gauge',
     current: path.startsWith('/admin'),
+    star: false,
   });
 }
 ---
@@ -59,17 +66,23 @@ if (isStaff) {
     <a class="brand" href="/" aria-label="Engage home">
       <img src="/fusion_horizon_logo_light.svg" alt="" width="40" height="40" />
       <span class="brand__word">
-        Engage
-        <span class="brand__sub">Fusion Party Australia</span>
+        {siteConfig?.siteName || 'Engage'}
+        <span class="brand__sub">{siteConfig?.organizationName || 'Fusion Party Australia'}</span>
       </span>
     </a>
 
     <nav class="site-nav" aria-label="Primary navigation">
       {links.map((link) => (
-        <a href={link.href} aria-current={link.current ? 'page' : undefined}>
-          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <use href={`#icon-${link.icon}`} />
-          </svg>
+        <a
+          href={link.href}
+          class:list={{ 'is-star': link.star }}
+          aria-current={link.current ? 'page' : undefined}
+        >
+          {link.star && (
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <use href={`#icon-${link.icon}`} />
+            </svg>
+          )}
           {link.label}
         </a>
       ))}
@@ -78,7 +91,7 @@ if (isStaff) {
     <div class="site-actions">
       {user ? (
         <>
-          <Button href="/member/" size="sm" className="h-9 px-4 text-sm">My Engage</Button>
+          <Button href="/member/" size="sm" variant="outline" className="h-9 px-3.5 text-sm">My Engage</Button>
           <button class="site-signout" type="button" data-signout>Sign out</button>
         </>
       ) : (
@@ -98,7 +111,11 @@ if (isStaff) {
 
       <nav class="site-menu__panel" aria-label="Mobile navigation">
         {links.map((link) => (
-          <a href={link.href} aria-current={link.current ? 'page' : undefined}>
+          <a
+            href={link.href}
+            class:list={{ 'is-star': link.star }}
+            aria-current={link.current ? 'page' : undefined}
+          >
             <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <use href={`#icon-${link.icon}`} />
             </svg>
@@ -173,7 +190,7 @@ if (isStaff) {
 
   .site-header__inner {
     width: min(var(--content-width), calc(100% - 3rem));
-    min-height: 4.5rem;
+    min-height: 4.25rem;
     margin-inline: auto;
     display: flex;
     align-items: center;
@@ -191,13 +208,13 @@ if (isStaff) {
   }
 
   .brand img {
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 2.15rem;
+    height: 2.15rem;
     object-fit: contain;
   }
 
   .brand__word {
-    font-size: 1.08rem;
+    font-size: 1.06rem;
     font-weight: 700;
     letter-spacing: -0.01em;
     line-height: 1;
@@ -205,25 +222,26 @@ if (isStaff) {
 
   .brand__sub {
     display: block;
-    margin-top: 0.22rem;
+    margin-top: 0.2rem;
     color: var(--horizon-muted);
     font-size: 0.68rem;
     font-weight: 500;
-    letter-spacing: 0.035em;
+    letter-spacing: 0.03em;
   }
 
   .site-nav {
     display: flex;
     align-items: center;
-    gap: 0.1rem;
+    gap: 0.25rem;
     margin-left: auto;
   }
 
   .site-nav a {
     display: inline-flex;
     align-items: center;
-    padding: 0.5rem 0.68rem;
-    border-radius: 0.5rem;
+    gap: 0.35rem;
+    padding: 0.45rem 0.72rem;
+    border-radius: 0.45rem;
     color: #3d2a5c;
     font-size: 0.86rem;
     font-weight: 600;
@@ -243,15 +261,40 @@ if (isStaff) {
     box-shadow: inset 0 -2px var(--horizon-accent);
   }
 
-  .site-nav .nav-icon {
-    display: none;
+  .site-nav a.is-star {
+    background: var(--horizon-lavender-soft);
+    border: 1px solid #d2c4ec;
+    color: var(--horizon-purple-deep);
+    font-weight: 700;
+    padding: 0.42rem 0.8rem;
+    margin-right: 0.35rem;
+  }
+
+  .site-nav a.is-star:hover {
+    background: var(--horizon-lavender);
+    border-color: #b59fe0;
+  }
+
+  .site-nav a.is-star[aria-current='page'] {
+    background: var(--horizon-purple);
+    border-color: var(--horizon-purple);
+    color: #ffffff;
+    box-shadow: none;
+  }
+
+  .site-nav a.is-star .nav-icon {
+    width: 0.95rem;
+    height: 0.95rem;
+    stroke-width: 2.2;
   }
 
   .site-actions {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
+    gap: 0.75rem;
     flex: 0 0 auto;
+    padding-left: 0.75rem;
+    border-left: 1px solid var(--horizon-line);
   }
 
   .site-signout {
@@ -279,8 +322,8 @@ if (isStaff) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2.75rem;
-    height: 2.75rem;
+    width: 2.65rem;
+    height: 2.65rem;
     background: var(--horizon-white);
     border: 1px solid var(--horizon-line);
     border-radius: 0.55rem;
@@ -298,8 +341,8 @@ if (isStaff) {
   }
 
   .site-menu__toggle .nav-icon {
-    width: 1.3rem;
-    height: 1.3rem;
+    width: 1.25rem;
+    height: 1.25rem;
   }
 
   .site-menu__toggle .close-icon {
@@ -331,12 +374,19 @@ if (isStaff) {
     display: flex;
     align-items: center;
     gap: 0.65rem;
-    padding: 0.7rem 0.75rem;
+    padding: 0.68rem 0.75rem;
     border-radius: 0.5rem;
     color: var(--horizon-purple-deep);
-    font-size: 0.95rem;
+    font-size: 0.94rem;
     font-weight: 600;
     text-decoration: none;
+  }
+
+  .site-menu__panel > a.is-star {
+    background: var(--horizon-lavender-soft);
+    border: 1px solid #d5c8ee;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
   }
 
   .site-menu__panel > a:hover,
@@ -380,7 +430,7 @@ if (isStaff) {
     cursor: pointer;
   }
 
-  @media (max-width: 980px) {
+  @media (max-width: 860px) {
     .site-header__inner {
       min-height: 4rem;
     }

@@ -1,0 +1,243 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { Button } from '../../../components/ui/button';
+import { Card, CardContent } from '../../../components/ui/card';
+import { Field } from '../../../components/ui/field';
+import { Input } from '../../../components/ui/input';
+import { Textarea } from '../../../components/ui/textarea';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { getSiteConfig } from '../../../lib/site-config.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([
+  getDatabase(env),
+  getSessionUser(Astro.request, env),
+]);
+
+if (!user) {
+  return Astro.redirect('/member/');
+}
+if (!user.isAdmin) {
+  return Astro.redirect('/admin/');
+}
+
+const config = await getSiteConfig(db, env);
+---
+
+<AdminLayout
+  title="Platform settings"
+  description="Configure Engage public indexing, OpenGraph link previews, navigation CTA, social channels, and state/territory directory links."
+  section="settings"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={user.isBranchAdmin}
+>
+  <form id="platform-settings-form" class="settings-grid">
+    <!-- 1. Visibility, SEO & Roadmap Toggles -->
+    <Card>
+      <CardContent className="grid gap-4 p-6">
+        <div class="settings-head">
+          <h2>Visibility, SEO &amp; public features</h2>
+          <p>Control search engine indexing, default social link cards, and public feature flags without redeploying.</p>
+        </div>
+
+        <label class="toggle-row">
+          <input type="checkbox" name="allowPublicIndexing" checked={config.allowPublicIndexing} />
+          <div>
+            <strong>Allow search engine indexing on public pages</strong>
+            <p>When enabled, public pages output <code>index, follow</code> so Google and Bing index published policies and proposals.</p>
+          </div>
+        </label>
+
+        <label class="toggle-row">
+          <input type="checkbox" name="publicPulsePollEnabled" checked={config.publicPulsePollEnabled} />
+          <div>
+            <strong>Enable non-binding public pulse poll indicator</strong>
+            <p>Post-member-review evaluation flag. Separates non-binding public sentiment polls from binding verified-member ballots.</p>
+          </div>
+        </label>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <Field label="Primary navbar CTA label" htmlFor="primaryCtaLabel">
+            <Input id="primaryCtaLabel" name="primaryCtaLabel" defaultValue={config.primaryCtaLabel} required />
+          </Field>
+          <Field label="Primary navbar CTA link" htmlFor="primaryCtaHref">
+            <Input id="primaryCtaHref" name="primaryCtaHref" defaultValue={config.primaryCtaHref} required />
+          </Field>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <Field label="Default OpenGraph image path or URL" htmlFor="defaultOgImage">
+            <Input id="defaultOgImage" name="defaultOgImage" defaultValue={config.defaultOgImage} required />
+          </Field>
+          <Field label="Source repository URL" htmlFor="repositoryUrl">
+            <Input id="repositoryUrl" name="repositoryUrl" defaultValue={config.repositoryUrl} required />
+          </Field>
+        </div>
+      </CardContent>
+    </Card>
+
+    <!-- 2. Backup & Handover Documentation -->
+    <Card>
+      <CardContent className="grid gap-4 p-6">
+        <div class="settings-head">
+          <h2>Backup &amp; maintainer handover summary</h2>
+          <p>Displayed on the public <a href="/how-it-works/#backup-handover">How it works</a> page for operational transparency.</p>
+        </div>
+
+        <Field label="Docker & MongoDB backup summary" htmlFor="backupSummary">
+          <Textarea id="backupSummary" name="backupSummary" rows={2} defaultValue={config.backupSummary} required />
+        </Field>
+
+        <Field label="Maintainer handover strategy" htmlFor="handoverSummary">
+          <Textarea id="handoverSummary" name="handoverSummary" rows={2} defaultValue={config.handoverSummary} required />
+        </Field>
+      </CardContent>
+    </Card>
+
+    <!-- 3. Social Links & State/Territory Sites (JSON editors) -->
+    <Card>
+      <CardContent className="grid gap-4 p-6">
+        <div class="settings-head">
+          <h2>Fusion social channels &amp; state/territory sites</h2>
+          <p>Rendered in the global footer and <a href="/branches/">Branches directory</a>.</p>
+        </div>
+
+        <Field label="National social media links (JSON array)" htmlFor="socialLinksJson">
+          <Textarea
+            id="socialLinksJson"
+            name="socialLinksJson"
+            rows={6}
+            className="font-mono text-xs"
+            defaultValue={JSON.stringify(config.socialLinks, null, 2)}
+          />
+        </Field>
+
+        <Field label="State & territory websites and Facebook pages (JSON array)" htmlFor="stateSitesJson">
+          <Textarea
+            id="stateSitesJson"
+            name="stateSitesJson"
+            rows={10}
+            className="font-mono text-xs"
+            defaultValue={JSON.stringify(config.stateSites, null, 2)}
+          />
+        </Field>
+
+        <div class="settings-actions">
+          <Button type="submit" id="save-settings-btn">Save platform settings</Button>
+          <span id="settings-status" class="settings-status" role="status" aria-live="polite"></span>
+        </div>
+      </CardContent>
+    </Card>
+  </form>
+</AdminLayout>
+
+<script>
+  const form = document.getElementById('platform-settings-form') as HTMLFormElement | null;
+  const btn = document.getElementById('save-settings-btn') as HTMLButtonElement | null;
+  const status = document.getElementById('settings-status');
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!form || !btn || !status) return;
+    btn.disabled = true;
+    status.textContent = 'Saving settings…';
+
+    try {
+      const fd = new FormData(form);
+      const socialLinks = JSON.parse(String(fd.get('socialLinksJson') ?? '[]'));
+      const stateSites = JSON.parse(String(fd.get('stateSitesJson') ?? '[]'));
+
+      const payload = {
+        allowPublicIndexing: fd.get('allowPublicIndexing') === 'on',
+        publicPulsePollEnabled: fd.get('publicPulsePollEnabled') === 'on',
+        primaryCtaLabel: String(fd.get('primaryCtaLabel') ?? '').trim(),
+        primaryCtaHref: String(fd.get('primaryCtaHref') ?? '').trim(),
+        defaultOgImage: String(fd.get('defaultOgImage') ?? '').trim(),
+        repositoryUrl: String(fd.get('repositoryUrl') ?? '').trim(),
+        backupSummary: String(fd.get('backupSummary') ?? '').trim(),
+        handoverSummary: String(fd.get('handoverSummary') ?? '').trim(),
+        socialLinks,
+        stateSites,
+      };
+
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not save platform settings.');
+      status.textContent = 'Settings saved.';
+    } catch (err) {
+      status.textContent = err instanceof Error ? err.message : 'Error saving settings.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+
+<style>
+  .settings-grid {
+    display: grid;
+    gap: 1.25rem;
+    max-width: 58rem;
+  }
+
+  .settings-head h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 650;
+  }
+
+  .settings-head p {
+    margin: 0.25rem 0 0;
+    font-size: 0.9rem;
+    color: var(--horizon-muted);
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--horizon-line);
+    background: #faf9fd;
+    cursor: pointer;
+  }
+
+  .toggle-row input {
+    margin-top: 0.22rem;
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--horizon-purple);
+  }
+
+  .toggle-row strong {
+    display: block;
+    font-size: 0.92rem;
+  }
+
+  .toggle-row p {
+    margin: 0.15rem 0 0;
+    font-size: 0.84rem;
+    color: var(--horizon-muted);
+  }
+
+  .settings-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding-top: 0.5rem;
+  }
+
+  .settings-status {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--horizon-purple);
+  }
+</style>

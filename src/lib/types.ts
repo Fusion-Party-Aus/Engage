@@ -43,6 +43,14 @@ export interface PlatformEnv {
   GOOGLE_CLIENT_SECRET?: string;
   RESEND_API_KEY?: string;
   AUTH_EMAIL_FROM?: string;
+  ENGAGE_ALLOW_INDEXING?: string;
+  ENGAGE_DEFAULT_OG_IMAGE?: string;
+  ENGAGE_PUBLIC_PULSE_POLL?: string;
+  ENGAGE_PRIMARY_CTA_LABEL?: string;
+  ENGAGE_PRIMARY_CTA_HREF?: string;
+  ENGAGE_SOCIAL_LINKS_JSON?: string;
+  ENGAGE_STATE_SITES_JSON?: string;
+  ENGAGE_REPO_URL?: string;
 }
 
 export interface SessionUser {
@@ -153,6 +161,7 @@ export interface CommentRecord {
   stance: CommentStance;
   body: string;
   upvotes: string[];
+  upvoteEvents?: Array<{ memberId: string; at: Date }>;
   createdAt: Date;
 }
 

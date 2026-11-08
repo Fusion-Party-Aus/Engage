@@ -4,13 +4,15 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { getSiteConfig } from '../../lib/site-config.ts';
 import { listProposals } from '../../lib/store.ts';
 export const prerender = false;
 const env = runtimeEnv(Astro.locals);
 const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
-const [branches, proposals] = await Promise.all([
+const [branches, proposals, siteConfig] = await Promise.all([
   db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
   listProposals(db, { includeArchived: false, user }),
+  getSiteConfig(db, env),
 ]);
 const kinds = ['national', 'state', 'territory', 'constituent'];
 const grouped = kinds.map((kind) => ({ kind, items: branches.filter((branch: any) => branch.kind === kind) })).filter((group) => group.items.length);
@@ -59,6 +61,28 @@ const countFor = (branchId: string) => proposals.filter((proposal) => [proposal.
     ))}
 
     {!grouped.length && <p>No branches are currently listed publicly.</p>}
+
+    {siteConfig.stateSites.length > 0 && (
+      <section class="branch-group" aria-labelledby="state-sites-heading">
+        <h2 id="state-sites-heading">State &amp; territory websites and Facebook pages</h2>
+        <div class="branch-rows">
+          {siteConfig.stateSites.map((site) => (
+            <Card className="flex-row items-center justify-between gap-4 px-5 py-4">
+              <CardContent className="min-w-0 p-0">
+                <strong class="block">{site.code} · {site.label}</strong>
+                <span class="text-sm text-muted-foreground">{site.websiteUrl.replace(/^https?:\/\//, '')}</span>
+              </CardContent>
+              <div class="flex flex-wrap items-center gap-2">
+                <Button href={site.websiteUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">Website ↗</Button>
+                {site.facebookUrl && (
+                  <Button href={site.facebookUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">Facebook ↗</Button>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </section>
+    )}
   </div>
 </SiteLayout>
 
