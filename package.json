@@ -7,8 +7,9 @@
     "node": ">=22.23.4"
   },
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
+    "changelog": "node scripts/generate-changelog.mjs",
+    "dev": "node scripts/generate-changelog.mjs && astro dev",
+    "build": "node scripts/generate-changelog.mjs && astro build",
     "start": "node ./dist/server/entry.mjs",
     "preview": "astro preview",
     "check": "astro check",

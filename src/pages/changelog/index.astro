@@ -1,0 +1,439 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { getSiteConfig } from '../../lib/site-config.ts';
+import rawEntries from '../../data/changelog.json' with { type: 'json' };
+import { execFileSync } from 'node:child_process';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+
+interface ChangelogEntry {
+  hash: string;
+  date: string;
+  type: string;
+  category: 'feature' | 'fix' | 'improvement' | 'docs' | 'ops';
+  scope: string;
+  summary: string;
+  details?: string;
+}
+
+const env = runtimeEnv(Astro.locals);
+const db = await getDatabase(env);
+const siteConfig = await getSiteConfig(db, env);
+const repoUrl = (siteConfig.repoUrl || 'https://github.com/Fusion-Party-Aus/Engage').replace(/\/+$/, '');
+
+// Read live git log when available (e.g. local dev), falling back to build-time src/data/changelog.json in Docker
+function loadChangelogEntries(): ChangelogEntry[] {
+  try {
+    const raw = execFileSync(
+      'git',
+      [
+        'log',
+        '--no-merges',
+        '-n',
+        '80',
+        '--date=short',
+        '--pretty=format:%h%x1f%ad%x1f%s%x1f%b%x1e',
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 400 },
+    );
+    const convRe = /^([a-z]+)(?:\(([^)]+)\))?!?:\s*(.+)$/i;
+    const parsed = raw
+      .split('\x1e')
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .map((line): ChangelogEntry | null => {
+        const [hash, date, subject, body = ''] = line.split('\x1f');
+        if (!hash || !date || !subject) return null;
+        const trimmed = subject.trim();
+        if (/^Merge pull request/i.test(trimmed)) return null;
+        const match = trimmed.match(convRe);
+        const rawType = match ? match[1]!.toLowerCase() : 'update';
+        const scope = match && match[2] ? match[2]!.toLowerCase() : 'platform';
+        const summary = match ? match[3]!.trim() : trimmed;
+        const category: ChangelogEntry['category'] =
+          rawType === 'feat' || rawType === 'release'
+            ? 'feature'
+            : rawType === 'fix'
+              ? 'fix'
+              : rawType === 'perf' || rawType === 'refactor' || rawType === 'style'
+                ? 'improvement'
+                : rawType === 'docs'
+                  ? 'docs'
+                  : 'ops';
+        const cleanBody = body
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l && !/^Co-authored-by:/i.test(l))
+          .join(' ');
+        return {
+          hash: hash.trim(),
+          date: date.trim(),
+          type: rawType,
+          category,
+          scope,
+          summary: summary[0] ? summary[0].toUpperCase() + summary.slice(1) : summary,
+          ...(cleanBody ? { details: cleanBody } : {}),
+        };
+      })
+      .filter((item): item is ChangelogEntry => Boolean(item));
+    if (parsed.length > 0) return parsed;
+  } catch {
+    // Fall back to build-time JSON snapshot
+  }
+  return rawEntries as ChangelogEntry[];
+}
+
+const entries = loadChangelogEntries();
+const activeCategory = (Astro.url.searchParams.get('category') ?? 'all').trim().toLowerCase();
+
+const filteredEntries =
+  activeCategory === 'all'
+    ? entries
+    : entries.filter((e) => e.category === activeCategory);
+
+// Group by date
+const groupedByDate = new Map<string, ChangelogEntry[]>();
+for (const entry of filteredEntries) {
+  const list = groupedByDate.get(entry.date) ?? [];
+  list.push(entry);
+  groupedByDate.set(entry.date, list);
+}
+
+const counts = {
+  all: entries.length,
+  feature: entries.filter((e) => e.category === 'feature').length,
+  improvement: entries.filter((e) => e.category === 'improvement').length,
+  fix: entries.filter((e) => e.category === 'fix').length,
+  docs: entries.filter((e) => e.category === 'docs').length,
+  ops: entries.filter((e) => e.category === 'ops').length,
+};
+
+const categoryLabel = (cat: ChangelogEntry['category']) => {
+  if (cat === 'feature') return 'Feature';
+  if (cat === 'improvement') return 'UX & Perf';
+  if (cat === 'fix') return 'Fix';
+  if (cat === 'docs') return 'Docs';
+  return 'Ops & CI';
+};
+
+const categoryVariant = (cat: ChangelogEntry['category']) => {
+  if (cat === 'feature') return 'success' as const;
+  if (cat === 'improvement') return 'info' as const;
+  if (cat === 'fix') return 'warning' as const;
+  if (cat === 'docs') return 'secondary' as const;
+  return 'muted' as const;
+};
+
+const formatDateHeading = (isoDate: string) => {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+};
+---
+
+<SiteLayout
+  title="Changelog · Engage"
+  description="Live platform changelog generated directly from Engage git commit history: features, UX improvements, governance safeguards, and bug fixes."
+  canonical="/changelog/"
+>
+  <div class="page-wrap section-space changelog-page">
+    <header class="changelog-hero">
+      <div class="changelog-hero__top">
+        <div>
+          <span class="changelog-eyebrow">Platform transparency · Git-backed release log</span>
+          <h1>Changelog</h1>
+          <p class="changelog-lead">
+            Every change to Engage is tracked in version control and automatically published here. Filter by feature, UX/performance improvement, or governance fix.
+          </p>
+        </div>
+        <div class="changelog-hero__actions">
+          <Button href={repoUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
+            View GitHub repository ↗
+          </Button>
+          <Button href="/how-it-works/" variant="outline" size="sm">
+            How Engage works →
+          </Button>
+        </div>
+      </div>
+
+      <!-- Category Filter Tabs -->
+      <nav class="changelog-tabs" aria-label="Filter changelog by category">
+        {[
+          { id: 'all', label: 'All commits', count: counts.all },
+          { id: 'feature', label: 'Features', count: counts.feature },
+          { id: 'improvement', label: 'UX & Performance', count: counts.improvement },
+          { id: 'fix', label: 'Fixes & Security', count: counts.fix },
+          { id: 'docs', label: 'Docs & Release', count: counts.docs },
+          { id: 'ops', label: 'Ops & Deployment', count: counts.ops },
+        ].map((tab) => {
+          const isCurrent = activeCategory === tab.id;
+          const href = tab.id === 'all' ? '/changelog/' : `/changelog/?category=${tab.id}`;
+          return (
+            <a
+              href={href}
+              class:list={['changelog-tab', { 'is-active': isCurrent }]}
+              aria-current={isCurrent ? 'page' : undefined}
+            >
+              <span>{tab.label}</span>
+              <span class="changelog-tab__count tabular">{tab.count}</span>
+            </a>
+          );
+        })}
+      </nav>
+    </header>
+
+    {groupedByDate.size === 0 ? (
+      <div class="changelog-empty">
+        <p>No changelog entries match this filter.</p>
+        <Button href="/changelog/" variant="outline" size="sm">Show all entries</Button>
+      </div>
+    ) : (
+      <div class="changelog-timeline">
+        {[...groupedByDate.entries()].map(([date, dayEntries]) => (
+          <section class="changelog-day" aria-labelledby={`day-${date}`}>
+            <div class="changelog-day__header">
+              <h2 id={`day-${date}`}>{formatDateHeading(date)}</h2>
+              <span class="changelog-day__count tabular">{dayEntries.length} {dayEntries.length === 1 ? 'commit' : 'commits'}</span>
+            </div>
+
+            <ol class="changelog-list">
+              {dayEntries.map((item) => (
+                <li class="changelog-item">
+                  <div class="changelog-item__meta">
+                    <Badge variant={categoryVariant(item.category)}>{categoryLabel(item.category)}</Badge>
+                    <span class="changelog-scope tabular">{item.scope}</span>
+                  </div>
+
+                  <div class="changelog-item__body">
+                    <strong class="changelog-summary">{item.summary}</strong>
+                    {item.details && <p class="changelog-details">{item.details}</p>}
+                  </div>
+
+                  <a
+                    href={`${repoUrl}/commit/${item.hash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="changelog-hash tabular"
+                    title={`Inspect commit ${item.hash} on GitHub`}
+                  >
+                    <code>{item.hash}</code> ↗
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))}
+      </div>
+    )}
+  </div>
+</SiteLayout>
+
+<style>
+  .changelog-page {
+    max-width: 66rem;
+    padding-top: 1.5rem;
+    padding-bottom: 4rem;
+  }
+
+  .changelog-hero {
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 1rem;
+    padding: clamp(1.35rem, 2.5vw, 2rem);
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 10px rgba(29, 10, 73, 0.03);
+  }
+
+  .changelog-hero__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .changelog-eyebrow {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--horizon-purple);
+    margin-bottom: 0.3rem;
+  }
+
+  .changelog-hero h1 {
+    margin: 0 0 0.5rem;
+    font-size: clamp(2rem, 3.5vw, 2.65rem);
+  }
+
+  .changelog-lead {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--horizon-muted);
+  }
+
+  .changelog-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .changelog-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .changelog-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.38rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--horizon-line);
+    background: #faf9fd;
+    color: var(--horizon-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .changelog-tab:hover {
+    color: var(--horizon-purple-deep);
+    border-color: #b7a2df;
+  }
+
+  .changelog-tab.is-active {
+    background: var(--horizon-purple);
+    border-color: var(--horizon-purple);
+    color: #ffffff;
+  }
+
+  .changelog-tab__count {
+    font-size: 0.74rem;
+    opacity: 0.85;
+  }
+
+  .changelog-timeline {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .changelog-day {
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 1rem;
+    padding: clamp(1.15rem, 2vw, 1.65rem);
+  }
+
+  .changelog-day__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-bottom: 0.85rem;
+    margin-bottom: 0.85rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .changelog-day__header h2 {
+    margin: 0;
+    font-size: 1.35rem;
+  }
+
+  .changelog-day__count {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .changelog-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .changelog-item {
+    display: grid;
+    grid-template-columns: 10.5rem minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.85rem;
+    padding: 0.7rem 0.85rem;
+    border-radius: 0.7rem;
+    background: #faf9fd;
+    border: 1px solid var(--horizon-line);
+  }
+
+  .changelog-item__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .changelog-scope {
+    font-size: 0.76rem;
+    font-weight: 650;
+    color: var(--horizon-muted);
+  }
+
+  .changelog-item__body {
+    min-width: 0;
+  }
+
+  .changelog-summary {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 650;
+    color: var(--horizon-purple-deep);
+    line-height: 1.4;
+  }
+
+  .changelog-details {
+    margin: 0.25rem 0 0;
+    font-size: 0.84rem;
+    color: var(--horizon-muted);
+    line-height: 1.5;
+  }
+
+  .changelog-hash {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--horizon-purple);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .changelog-hash:hover {
+    text-decoration: underline;
+  }
+
+  .changelog-empty {
+    padding: 2rem;
+    background: #ffffff;
+    border: 1px solid var(--horizon-line);
+    border-radius: 1rem;
+    text-align: center;
+  }
+
+  @media (max-width: 720px) {
+    .changelog-item {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.4rem;
+    }
+  }
+</style>
