@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { canAdministerBranch } from "../../../../lib/auth.ts";
+import { promotePendingVotePreferences } from "../../../../lib/store.ts";
 export const prerender = false;
 async function admin(request: Request, locals: unknown) {
   const env = runtimeEnv(locals);
@@ -123,6 +124,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         after: record,
         createdAt: record.assignedAt,
       });
+    await promotePendingVotePreferences(db, memberId);
     return Response.json(
       { membership: record },
       { status: existing?.status === "active" ? 200 : 201 },

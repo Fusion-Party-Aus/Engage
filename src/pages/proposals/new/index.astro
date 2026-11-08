@@ -1,6 +1,7 @@
 ---
 import SiteLayout from '../../../layouts/SiteLayout.astro';
 import { Button } from '../../../components/ui/button';
+import { Badge } from '../../../components/ui/badge';
 import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { Textarea } from '../../../components/ui/textarea';
@@ -15,13 +16,27 @@ const [user, db] = await Promise.all([getSessionUser(Astro.request, env), getDat
 const branches = user?.isAdmin || user?.isBranchAdmin
   ? await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()
   : [];
+
+const quickTopics = [
+  'Climate & Energy',
+  'Housing & Planning',
+  'Transport & Infrastructure',
+  'Digital Rights & AI',
+  'Healthcare',
+  'Education & Science',
+  'Economy & Tax',
+  'Party Governance',
+];
 ---
 <SiteLayout title="Suggest an idea · Engage" description="Suggest a proposal for Fusion members to consider." noIndex>
   <div class="page-wrap section-space compose-page">
     <Button href="/proposals/" variant="ghost" size="sm">← Browse proposals</Button>
-    <header>
-      <h1>Suggest an idea</h1>
-      <p>Start with the change you want to see. You can refine the wording as members respond.</p>
+    <header class="compose-header">
+      <div class="compose-header__top">
+        <h1>Suggest an idea</h1>
+        <Badge variant="info">Step 1 takes ~60 sec</Badge>
+      </div>
+      <p>Start with the core change you want to see. Other members will help refine the wording and commitments during deliberation.</p>
     </header>
 
     {!user ? (
@@ -45,24 +60,41 @@ const branches = user?.isAdmin || user?.isBranchAdmin
         <Field label="Title" htmlFor="proposal-title">
           <Input id="proposal-title" name="title" required minLength={4} maxLength={200} placeholder="A clear, concise title (e.g. Expand regional rail frequencies)" />
         </Field>
-        <Field label="Topic space" htmlFor="proposal-topic">
-          <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="For example: Housing, Climate, Governance, Digital Rights" />
-        </Field>
-        <Field label="Proposal scope" htmlFor="proposal-branch">
-          <select id="proposal-branch" name="branch" class="w-full" required>
-            <option value="national">National</option>
-            {branches.filter((branch: any) => user?.isAdmin || user?.branchAdminIds?.includes(branch.branchId)).map((branch: any) => (
-              <option value={branch.branchId}>{branch.name}</option>
+
+        <div class="topic-field-block">
+          <Field label="Topic space" htmlFor="proposal-topic">
+            <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="Choose a topic below or type your own (e.g. Housing, Climate)" />
+          </Field>
+          <div class="topic-chips" role="group" aria-label="Quick-select topic space">
+            {quickTopics.map((topic) => (
+              <button type="button" class="topic-chip" data-topic-value={topic}>
+                {topic}
+              </button>
             ))}
-          </select>
-          <p class="field-hint">Branch proposals are visible within their branch and require a branch administrator to create.</p>
-        </Field>
+          </div>
+        </div>
+
+        {(user?.isAdmin || user?.isBranchAdmin) && (
+          <Field label="Proposal scope" htmlFor="proposal-branch">
+            <select id="proposal-branch" name="branch" class="scope-select w-full" required>
+              <option value="national">National</option>
+              {branches.filter((branch: any) => user?.isAdmin || user?.branchAdminIds?.includes(branch.branchId)).map((branch: any) => (
+                <option value={branch.branchId}>{branch.name}</option>
+              ))}
+            </select>
+            <p class="field-hint">Branch proposals are visible within their branch and require a branch administrator to create.</p>
+          </Field>
+        )}
+
         <Field label="What would change? (Summary)" htmlFor="proposal-summary">
-          <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder="Describe the proposed change in a few clear sentences." />
+          <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder="Describe the proposed change in 2–4 clear sentences." />
         </Field>
 
-        <details open>
-          <summary>Add goals, background &amp; images</summary>
+        <details class="optional-drawer">
+          <summary>
+            <span>Add key commitments, background rationale &amp; images</span>
+            <Badge variant="outline">Optional · Can be added later</Badge>
+          </summary>
           <div class="compose-details-grid">
             <Field label="What should this achieve? (One commitment per line)" htmlFor="proposal-outcomes">
               <Textarea id="proposal-outcomes" name="outcomes" rows={4} placeholder="1. First key commitment&#10;2. Second key commitment" />
@@ -113,7 +145,7 @@ const branches = user?.isAdmin || user?.isBranchAdmin
         </details>
 
         <div class="form-actions">
-          <Button type="submit" id="submit-btn">Submit idea</Button>
+          <Button type="submit" id="submit-btn">Put idea on the record</Button>
           <span id="submit-status" class="form-status" role="status" aria-live="polite"></span>
         </div>
       </form>
@@ -125,9 +157,25 @@ const branches = user?.isAdmin || user?.isBranchAdmin
   const form = document.querySelector<HTMLFormElement>('#new-proposal-form');
   const status = document.querySelector<HTMLElement>('#submit-status');
   const button = document.querySelector<HTMLButtonElement>('#new-proposal-form button[type="submit"]');
+  const topicInput = document.querySelector<HTMLInputElement>('#proposal-topic');
+  const topicChips = document.querySelectorAll<HTMLButtonElement>('[data-topic-value]');
   const detailsTextarea = document.querySelector<HTMLTextAreaElement>('#proposal-details');
   const insertImageBtn = document.querySelector<HTMLButtonElement>('#insert-image-btn');
   const insertLinkBtn = document.querySelector<HTMLButtonElement>('#insert-link-btn');
+
+  topicChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const val = chip.dataset.topicValue;
+      if (!topicInput || !val) return;
+      topicInput.value = val;
+      topicChips.forEach((c) => c.classList.toggle('is-active', c === chip));
+    });
+  });
+
+  topicInput?.addEventListener('input', () => {
+    const current = topicInput.value.trim();
+    topicChips.forEach((c) => c.classList.toggle('is-active', c.dataset.topicValue === current));
+  });
 
   insertImageBtn?.addEventListener('click', () => {
     if (!detailsTextarea) return;
@@ -163,6 +211,7 @@ const branches = user?.isAdmin || user?.isBranchAdmin
     const data = new FormData(form);
     const attachmentUrl = String(data.get('attachmentUrl') ?? '').trim();
     const attachmentDescription = String(data.get('attachmentDescription') ?? '').trim();
+    const branchVal = String(data.get('branch') ?? 'national').trim();
     const payload = {
       title: data.get('title'),
       space: data.get('space'),
@@ -175,7 +224,7 @@ const branches = user?.isAdmin || user?.isBranchAdmin
       ...(attachmentUrl ? { attachmentUrl } : {}),
       ...(attachmentDescription ? { attachmentDescription } : {}),
       stage: 'propose',
-      ...(String(data.get('branch') ?? '') !== 'national' ? { originatingBranchId: String(data.get('branch') ?? '').trim() } : {}),
+      ...(branchVal && branchVal !== 'national' ? { originatingBranchId: branchVal } : {}),
     };
     try {
       const response = await fetch('/api/proposals', {
@@ -199,18 +248,27 @@ const branches = user?.isAdmin || user?.isBranchAdmin
     max-width: 54rem;
   }
 
-  header {
+  .compose-header {
     margin: 1rem 0 1.5rem;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .compose-header__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
   }
 
   h1 {
-    margin: 0 0 0.4rem;
+    margin: 0;
     font: 600 clamp(2.1rem, 4vw, 2.8rem)/1.08 Newsreader, Georgia, serif;
   }
 
-  header p {
+  .compose-header p {
     margin: 0;
-    max-width: 60ch;
+    max-width: 62ch;
     color: var(--horizon-muted);
   }
 
@@ -223,14 +281,75 @@ const branches = user?.isAdmin || user?.isBranchAdmin
     border-radius: 0.8rem;
   }
 
-  .compose-form details {
+  .topic-field-block {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .topic-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.38rem;
+  }
+
+  .topic-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--horizon-line);
+    background: var(--horizon-surface);
+    color: var(--horizon-purple-deep);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+
+  .topic-chip:hover {
+    background: var(--horizon-lavender);
+    border-color: var(--horizon-purple);
+  }
+
+  .topic-chip.is-active {
+    background: var(--horizon-purple);
+    border-color: var(--horizon-purple);
+    color: #ffffff;
+  }
+
+  .scope-select {
+    height: 2.35rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--horizon-line);
+    background: #ffffff;
+    padding: 0 0.75rem;
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--horizon-ink);
+  }
+
+  .optional-drawer {
     border-top: 1px solid var(--horizon-line);
     padding-top: 1rem;
   }
 
-  .compose-form summary {
+  .optional-drawer summary {
     cursor: pointer;
     font-weight: 700;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    list-style: none;
+  }
+
+  .optional-drawer summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .optional-drawer[open] summary {
     margin-bottom: 1rem;
   }
 

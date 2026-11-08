@@ -151,6 +151,9 @@ const totalContributions =
   (activity?.votes.length ?? 0) +
   (activity?.comments.length ?? 0) +
   (activity?.proposals.length ?? 0);
+const completedOpenBallotsCount =
+  activity?.votes.filter((v) => v.proposalStage === 'decide').length ?? 0;
+const totalEligibleOpenBallotsCount = completedOpenBallotsCount + awaitingDecision.length;
 const requestedView = Astro.url.searchParams.get('view');
 const memberView = requestedView === 'activity' || requestedView === 'account' ? requestedView : 'overview';
 
@@ -537,6 +540,8 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               items={outstandingItems}
               canParticipate={Boolean(user.canParticipate)}
               eligibilityNote={eligibilityNote}
+              completedCount={completedOpenBallotsCount}
+              totalEligibleCount={totalEligibleOpenBallotsCount}
             />
 
             <!-- 2. Relevant Participation Opportunities (Deliberation & Amendments) -->

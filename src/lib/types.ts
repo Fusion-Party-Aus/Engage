@@ -177,6 +177,17 @@ export interface VoteRecord {
   updatedAt: Date;
 }
 
+export interface PendingVotePreferenceRecord {
+  ballotId: string;
+  proposalId: string;
+  revisionId?: string;
+  memberId: string;
+  authorName?: string;
+  choice: VoteChoice;
+  reason?: string;
+  updatedAt: Date;
+}
+
 export interface MemberRecord {
   memberId: string;
   name: string;

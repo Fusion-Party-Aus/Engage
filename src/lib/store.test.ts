@@ -13,7 +13,9 @@ import {
   listProposals,
   listUserActivity,
   normalizeKind,
+  promotePendingVotePreferences,
   saveMember,
+  savePendingVotePreference,
   saveProposal,
   toggleUpvoteComment,
 } from "./store.ts";
@@ -1249,5 +1251,104 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
     const detail = await getProposalDetail(db, proposal.proposalId, memberUser);
     assert.deepEqual(detail?.proposal.votes, original.votes);
     assert.equal(detail?.votesList.length, 1);
+  });
+
+  it("stores pending-verification ballot preferences without altering official vote totals, and promotes them upon admin verification", async () => {
+    const db = createMemoryDb();
+    const { ObjectId } = await import("mongodb");
+    await db.collection("user").insertOne({
+      _id: new ObjectId(adminUser.memberId),
+      name: adminUser.name,
+      email: adminUser.email,
+    });
+    await db.collection("user").insertOne({
+      _id: new ObjectId(pendingUser.memberId),
+      name: pendingUser.name,
+      email: pendingUser.email,
+      status: "pending",
+      role: "member",
+    });
+
+    const proposal = await saveProposal(db, adminUser, {
+      title: "High-Speed Rail Electrification Standard",
+      space: "Transport & Infrastructure",
+      summary: "Adopt 25kV AC overhead electrification across intercity rail corridors.",
+      stage: "decide",
+    });
+
+    // Pending member cannot cast a formal ballot directly
+    await assert.rejects(
+      () =>
+        castVote(db, pendingUser, {
+          proposalId: proposal.proposalId,
+          choice: "approve",
+        }),
+      /verified before you can participate in decisions/,
+    );
+
+    // Pending member can save a pending vote preference bound to the current ballot revision
+    const queued = await savePendingVotePreference(db, pendingUser, {
+      proposalId: proposal.proposalId,
+      choice: "approve",
+      reason: "Essential for freight and passenger interoperability.",
+    });
+    assert.equal(queued.pendingVerification, true);
+    assert.equal(queued.choice, "approve");
+    assert.equal(queued.revisionId, proposal.ballotRevisionId);
+
+    // Official ballot totals remain 0 before verification, while pendingUser sees their queued preference
+    const beforeVerifyDetail = await getProposalDetail(
+      db,
+      proposal.proposalId,
+      pendingUser,
+    );
+    assert.equal(beforeVerifyDetail?.proposal.votes.total, 0);
+    assert.equal(beforeVerifyDetail?.proposal.votes.approve, 0);
+    assert.equal(beforeVerifyDetail?.myVote, null);
+    assert.equal(beforeVerifyDetail?.myPendingVote, "approve");
+    assert.equal(
+      beforeVerifyDetail?.myPendingReason,
+      "Essential for freight and passenger interoperability.",
+    );
+
+    // Admin verifies the member -> pending vote preference is automatically promoted into proposal_votes
+    await saveMember(
+      db,
+      adminUser,
+      {
+        memberId: pendingUser.memberId,
+        name: pendingUser.name,
+        email: pendingUser.email,
+        role: "member",
+        status: "verified",
+      },
+      false,
+    );
+
+    const verifiedSession: SessionUser = {
+      ...pendingUser,
+      status: "verified",
+      canParticipate: true,
+    };
+    const afterVerifyDetail = await getProposalDetail(
+      db,
+      proposal.proposalId,
+      verifiedSession,
+    );
+    assert.equal(afterVerifyDetail?.proposal.votes.total, 1);
+    assert.equal(afterVerifyDetail?.proposal.votes.approve, 1);
+    assert.equal(afterVerifyDetail?.myVote, "approve");
+    assert.equal(
+      afterVerifyDetail?.myReason,
+      "Essential for freight and passenger interoperability.",
+    );
+    assert.equal(afterVerifyDetail?.myPendingVote, null);
+
+    // Calling promotePendingVotePreferences again is a safe no-op
+    const secondPromoteCount = await promotePendingVotePreferences(
+      db,
+      pendingUser.memberId,
+    );
+    assert.equal(secondPromoteCount, 0);
   });
 });

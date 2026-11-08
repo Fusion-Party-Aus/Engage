@@ -15,11 +15,21 @@ interface Props {
   items: OutstandingItem[];
   canParticipate: boolean;
   eligibilityNote: string;
+  completedCount?: number;
+  totalEligibleCount?: number;
 }
 
-const { items, canParticipate, eligibilityNote } = Astro.props;
+const {
+  items,
+  canParticipate,
+  eligibilityNote,
+  completedCount = 0,
+  totalEligibleCount = items.length + completedCount,
+} = Astro.props;
 const visible = items.slice(0, 6);
 const remaining = items.slice(6);
+const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalEligibleCount) * 100) : 0;
+const estMins = Math.max(1, Math.ceil((items.length * 45) / 60));
 ---
 
 <section class="member-attention" aria-labelledby="awaiting-heading">
@@ -28,24 +38,38 @@ const remaining = items.slice(6);
       <div class="attention-title-row">
         <h2 id="awaiting-heading">Open ballots for you</h2>
         <Badge variant={items.length ? 'warning' : 'success'}>
-          {items.length ? `${items.length} open` : 'Up to date'}
+          {items.length ? `${items.length} remaining` : 'All complete'}
         </Badge>
       </div>
       <p class="attention-lead">
-        {canParticipate ? eligibilityNote : 'Verify your membership before you can vote.'}
+        {canParticipate
+          ? totalEligibleCount > 0
+            ? `${completedCount} of ${totalEligibleCount} eligible ballots completed (${progressPct}%)${items.length ? ` · ~${estMins} min to finish` : ''}. ${eligibilityNote}`
+            : eligibilityNote
+          : 'Verify your membership before you can cast a formal ballot (you can still preview and queue your choice on any open ballot).'}
       </p>
     </div>
-    {items.length > 0 && (
-      <Button href="/proposals/?stage=decide" variant="ghost" size="sm">
-        All ballots
-      </Button>
-    )}
+    <div class="attention-head__right">
+      {canParticipate && totalEligibleCount > 0 && (
+        <div class="attention-progress" aria-label={`${completedCount} of ${totalEligibleCount} ballots completed`}>
+          <div class="attention-progress__bar" aria-hidden="true">
+            <span style={`width: ${progressPct}%`}></span>
+          </div>
+          <span class="attention-progress__label tabular">{completedCount}/{totalEligibleCount} done</span>
+        </div>
+      )}
+      {items.length > 0 && (
+        <Button href="/proposals/?stage=decide" variant="ghost" size="sm">
+          All ballots
+        </Button>
+      )}
+    </div>
   </div>
 
   {!canParticipate ? (
     <div class="attention-empty">
-      <p>Your account is awaiting membership verification before voting.</p>
-      <Button href="/member/?view=account" variant="outline" size="sm">Check account status</Button>
+      <p>Your account is awaiting membership verification. You can preview and save your ballot choices now and they will be recorded once verified.</p>
+      <Button href="/proposals/?stage=decide" variant="outline" size="sm">Browse open ballots</Button>
     </div>
   ) : items.length === 0 ? (
     <div class="attention-empty attention-empty--clear">
@@ -69,7 +93,7 @@ const remaining = items.slice(6);
               <a class="attention-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
             </div>
             <Button href={`/proposals/${item.slug}/#proposal-vote`} size="sm" variant="outline">
-              Vote
+              Vote (~45s)
               <ArrowRight aria-hidden="true" />
             </Button>
           </li>
@@ -120,7 +144,41 @@ const remaining = items.slice(6);
   }
 
   .attention-head__copy {
-    max-width: 56ch;
+    max-width: 58ch;
+  }
+
+  .attention-head__right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .attention-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .attention-progress__bar {
+    width: 5.5rem;
+    height: 0.42rem;
+    border-radius: 999px;
+    background: var(--horizon-line);
+    overflow: hidden;
+  }
+
+  .attention-progress__bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--horizon-purple);
+  }
+
+  .attention-progress__label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
   }
 
   .attention-title-row {

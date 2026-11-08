@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
 import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
-import { castVote } from "../../lib/store.ts";
+import { castVote, savePendingVotePreference } from "../../lib/store.ts";
 
 export const prerender = false;
 
@@ -20,6 +20,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const db = await getDatabase(env);
     const gate = await requireLegalAcceptance(db, user, env);
     if (gate) return gate;
+
+    if (!user.canParticipate && user.status === "pending" && !body.amendmentId) {
+      const pending = await savePendingVotePreference(db, user, body);
+      return Response.json(pending);
+    }
+
     const result = await castVote(db, user, body);
     return Response.json(result);
   } catch (error) {

@@ -1,5 +1,21 @@
 [
   {
+    "hash": "5a78927",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "participation",
+    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
+  },
+  {
+    "hash": "46f1b9b",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "branches",
+    "summary": "Fix error on branch pages, and seed branches to database"
+  },
+  {
     "hash": "c14ee07",
     "date": "2026-11-09",
     "type": "feat",

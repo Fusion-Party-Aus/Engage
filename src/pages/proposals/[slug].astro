@@ -13,7 +13,7 @@ import { NativeSelect } from '../../components/ui/native-select';
 import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { getProposalDetail } from '../../lib/store.ts';
+import { getProposalDetail, listOutstandingDecisions } from '../../lib/store.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import type { ProposalStage } from '../../lib/types.ts';
 
@@ -40,6 +40,7 @@ const [
   ballotResult,
   relatedProposals,
   amendmentRows,
+  outstandingDecisions,
 ] = proposal
   ? await Promise.all([
       db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray(),
@@ -57,8 +58,11 @@ const [
         .limit(4)
         .toArray(),
       db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray(),
+      user?.canParticipate && proposal.stage === 'decide'
+        ? listOutstandingDecisions(db, user.memberId, user)
+        : Promise.resolve([]),
     ])
-  : [[], null, null, null, null, [], []];
+  : [[], null, null, null, null, [], [], []];
 
 const ballotRevision = proposal?.ballotRevisionId
   ? revisions.find((revision: any) => revision.revisionId === proposal.ballotRevisionId)
@@ -96,6 +100,27 @@ for (const amendment of amendmentRows) {
 const comments = detail?.comments ?? [];
 const myVote = detail?.myVote ?? null;
 const myReason = detail?.myReason ?? '';
+const myPendingVote = detail?.myPendingVote ?? null;
+const myPendingReason = detail?.myPendingReason ?? '';
+
+const remainingBallots = proposal
+  ? outstandingDecisions.filter((item) => item.proposalId !== proposal.proposalId)
+  : [];
+const nextBallotInfo = remainingBallots[0]
+  ? {
+      slug: remainingBallots[0].slug,
+      title: remainingBallots[0].title,
+      remainingCount: remainingBallots.length,
+    }
+  : null;
+
+const topSupportComment = [...comments]
+  .filter((c) => c.stance === 'support')
+  .sort((a, b) => b.upvotes.length - a.upvotes.length || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+
+const topConcernComment = [...comments]
+  .filter((c) => c.stance === 'concern')
+  .sort((a, b) => b.upvotes.length - a.upvotes.length || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
 
 const stagePillLabel = (stage: ProposalStage) => {
   if (stage === 'propose') return 'New idea';
@@ -320,8 +345,11 @@ const initialsFor = (name: string) =>
               {proposal.stage === 'decide' && myVote && (
                 <span class="personal-vote-chip is-voted">✓ You have voted</span>
               )}
+              {proposal.stage === 'decide' && !myVote && myPendingVote && (
+                <a href="#proposal-vote" class="personal-vote-chip is-action">Queued pending verification →</a>
+              )}
               {proposal.stage === 'decide' && !myVote && canVoteOnProposal && (
-                <a href="#proposal-vote" class="personal-vote-chip is-action">Needs your vote →</a>
+                <a href="#proposal-vote" class="personal-vote-chip is-action">Your ballot: Unrecorded →</a>
               )}
               <span class:list={['stage-badge', `stage-badge--${proposal.stage}`]}>
                 {stagePillLabel(proposal.stage)}
@@ -343,11 +371,13 @@ const initialsFor = (name: string) =>
                 {proposal.stage === 'decide'
                   ? myVote
                     ? '✓ Action complete'
-                    : canVoteOnProposal
-                      ? 'Your immediate action · Takes ~30 seconds'
-                      : !user
-                        ? 'Your immediate action · Takes ~1 minute'
-                        : 'Ballot eligibility notice'
+                    : myPendingVote
+                      ? '✓ Queued pending verification'
+                      : canVoteOnProposal
+                        ? 'Your immediate action · Takes ~30 seconds'
+                        : !user
+                          ? 'Your immediate action · Takes ~1 minute'
+                          : 'Save your ballot · Takes ~30 seconds'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
                     ? 'Your immediate action · Takes ~1 minute'
                     : 'Stage 4 · Implementation'}
@@ -356,11 +386,15 @@ const initialsFor = (name: string) =>
                 {proposal.stage === 'decide'
                   ? myVote
                     ? `You voted "${myVote[0]!.toUpperCase() + myVote.slice(1)}" on ${ballotRevisionLabel}. You can change your vote while the ballot is open.`
-                    : canVoteOnProposal
-                      ? `Cast your formal ballot (Approve, Abstain, or Reject) on ${ballotRevisionLabel}.`
-                      : !user
-                        ? 'Sign in with your verified Fusion membership to cast your formal ballot on this proposal.'
-                        : 'Verify your membership or branch eligibility to vote in this ballot.'
+                    : myPendingVote
+                      ? `Your "${myPendingVote[0]!.toUpperCase() + myPendingVote.slice(1)}" choice is saved on ${ballotRevisionLabel} and will be formally recorded once an administrator verifies your membership.`
+                      : canVoteOnProposal
+                        ? `Your ballot is currently unrecorded. Cast your vote (Approve, Abstain, or Reject) on ${ballotRevisionLabel}.`
+                        : !user
+                          ? 'Preview and select your ballot choice now—sign in to record your vote (or queue it pending membership verification).'
+                          : user.status === 'pending'
+                            ? `Save your ballot choice on ${ballotRevisionLabel} now—it will be stored pending membership verification by an administrator.`
+                            : 'Verify your membership or branch eligibility to vote in this ballot.'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
                     ? user?.canParticipate
                       ? 'Add your stance (Support, Concern, or Wording suggestion) or propose a formal amendment before voting opens.'
@@ -378,10 +412,14 @@ const initialsFor = (name: string) =>
                   </a>
                 ) : !user ? (
                   <a
-                    href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#proposal-vote`)}&intent=vote&title=${encodeURIComponent(proposal.title)}`}
+                    href="#proposal-vote"
                     class="next-action-btn is-primary"
                   >
-                    Sign in to vote →
+                    Preview &amp; cast ballot →
+                  </a>
+                ) : user.status === 'pending' ? (
+                  <a href="#proposal-vote" class="next-action-btn is-primary">
+                    {myPendingVote ? 'Update queued vote →' : 'Save vote pending verification →'}
                   </a>
                 ) : (
                   <a href="/member/" class="next-action-btn is-secondary">Check verification →</a>
@@ -768,6 +806,33 @@ const initialsFor = (name: string) =>
                 </div>
               </div>
 
+              {(topSupportComment || topConcernComment) && (
+                <div class="deliberation-takeaways" aria-label="Key deliberation takeaways">
+                  {topSupportComment && (
+                    <div class="takeaway-box takeaway-box--support">
+                      <div class="takeaway-box__head">
+                        <Badge variant="success">Leading support</Badge>
+                        <span class="takeaway-meta tabular">
+                          {topSupportComment.authorName} · {topSupportComment.upvotes.length} {topSupportComment.upvotes.length === 1 ? 'endorsement' : 'endorsements'}
+                        </span>
+                      </div>
+                      <p class="takeaway-quote">{topSupportComment.body}</p>
+                    </div>
+                  )}
+                  {topConcernComment && (
+                    <div class="takeaway-box takeaway-box--concern">
+                      <div class="takeaway-box__head">
+                        <Badge variant="destructive">Leading concern</Badge>
+                        <span class="takeaway-meta tabular">
+                          {topConcernComment.authorName} · {topConcernComment.upvotes.length} {topConcernComment.upvotes.length === 1 ? 'endorsement' : 'endorsements'}
+                        </span>
+                      </div>
+                      <p class="takeaway-quote">{topConcernComment.body}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <!-- Contributions Thread -->
               <div id="comments-list" class="comments-thread">
                 {comments.length === 0 ? (
@@ -858,12 +923,48 @@ const initialsFor = (name: string) =>
                     </div>
                   </div>
 
+                  <div class="stance-starters" aria-label="Quick stance starters">
+                    <span class="stance-starters__hint">Quick start:</span>
+                    <button
+                      type="button"
+                      class="starter-chip"
+                      data-starter-stance="support"
+                      data-starter-placeholder="What makes this proposal valuable or effective? Share the evidence or outcomes you support..."
+                    >
+                      I support this because…
+                    </button>
+                    <button
+                      type="button"
+                      class="starter-chip"
+                      data-starter-stance="concern"
+                      data-starter-placeholder="What unintended consequence, cost, or implementation risk should members consider?"
+                    >
+                      Implementation concern…
+                    </button>
+                    <button
+                      type="button"
+                      class="starter-chip"
+                      data-starter-stance="amendment"
+                      data-starter-placeholder="Which sentence or commitment should be clarified, and what wording do you suggest?"
+                    >
+                      Suggested wording tweak…
+                    </button>
+                    <button
+                      type="button"
+                      class="starter-chip"
+                      data-starter-stance="comment"
+                      data-starter-placeholder="Ask a clarifying question or share context for other members..."
+                    >
+                      Clarifying question…
+                    </button>
+                  </div>
+
                   <Field label="Your contribution" htmlFor="comment-body-input" className="sr-only-label">
                     <Textarea
                       id="comment-body-input"
                       name="body"
                       required
-                      minLength={3}
+                      minLength={5}
                       maxLength={4000}
                       rows={3}
                       placeholder="Share constructive analysis, raise an implementation concern, or propose improved wording..."
@@ -1045,6 +1146,10 @@ const initialsFor = (name: string) =>
                   <dd>
                     {myVote ? (
                       <strong class="status-voted">You have voted ({myVote[0]!.toUpperCase() + myVote.slice(1)})</strong>
+                    ) : myPendingVote ? (
+                      <strong>Queued: {myPendingVote[0]!.toUpperCase() + myPendingVote.slice(1)} (Pending verification)</strong>
+                    ) : canVoteOnProposal && proposal.stage === 'decide' ? (
+                      <strong>Unrecorded ({eligibilityLabel})</strong>
                     ) : (
                       <strong>{eligibilityLabel}</strong>
                     )}
@@ -1068,22 +1173,20 @@ const initialsFor = (name: string) =>
                     <p>{branchElectorate ? 'This ballot is restricted to members of the authorised branch electorate.' : 'This branch electorate is not currently recognised for voting.'}</p>
                   ) : user ? (
                     <div class="rail-notice__row">
-                      <p>Your membership is awaiting verification before you can cast a formal ballot.</p>
+                      <p>
+                        {myPendingVote
+                          ? 'Your ballot choice is saved and will be recorded once an administrator verifies your membership.'
+                          : 'Your membership is awaiting verification. You can save your ballot choice below now and it will be recorded once verified.'}
+                      </p>
                       <Button href="/member/" variant="outline" size="sm">Account</Button>
                     </div>
                   ) : (
                     <div class="rail-notice__row">
                       <p>
                         {votes.total > 0
-                          ? `Join ${votes.total} verified ${votes.total === 1 ? 'vote' : 'votes'} recorded on this revision—sign in with your passkey or email link to cast your ballot.`
-                          : 'Sign in with your passkey or email link as a verified Fusion member to cast your formal ballot on this wording.'}
+                          ? `Join ${votes.total} verified ${votes.total === 1 ? 'vote' : 'votes'} on this revision—choose your option below or sign in to record your ballot.`
+                          : 'Choose your option below to preview your ballot, or sign in with your passkey or email link to vote.'}
                       </p>
-                      <Button
-                        href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#proposal-vote`)}&intent=vote&title=${encodeURIComponent(proposal.title)}`}
-                        size="sm"
-                      >
-                        Sign in to vote
-                      </Button>
                     </div>
                   )}
                 </div>
@@ -1094,11 +1197,18 @@ const initialsFor = (name: string) =>
                   <ProposalBallot
                     client:load
                     proposalId={proposal.proposalId}
+                    proposalSlug={proposal.slug}
+                    proposalTitle={proposal.title}
                     initialChoice={myVote}
                     initialReason={myReason}
+                    initialPendingChoice={myPendingVote}
+                    initialPendingReason={myPendingReason}
                     initialTally={votes}
                     open={proposal.stage === 'decide'}
                     canVote={canVoteOnProposal}
+                    isGuest={!user}
+                    isPendingMember={Boolean(user && !user.canParticipate && user.status === 'pending')}
+                    nextBallot={nextBallotInfo}
                   />
                 </div>
               ) : (
@@ -1344,6 +1454,27 @@ const initialsFor = (name: string) =>
           card.style.display = 'none';
         }
       });
+    });
+  });
+
+  // Quick Stance Starter chips (Cognitive Fluency & Micro-Commitments)
+  const starterChips = document.querySelectorAll<HTMLButtonElement>('[data-starter-stance]');
+  const commentBodyInput = document.getElementById('comment-body-input') as HTMLTextAreaElement | null;
+  starterChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const targetStance = chip.dataset.starterStance;
+      const placeholder = chip.dataset.starterPlaceholder;
+      if (targetStance) {
+        const radio = document.querySelector<HTMLInputElement>(
+          `#comment-form input[name="stance"][value="${targetStance}"]`,
+        );
+        if (radio) radio.checked = true;
+      }
+      if (commentBodyInput) {
+        if (placeholder) commentBodyInput.placeholder = placeholder;
+        commentBodyInput.focus();
+      }
+      starterChips.forEach((c) => c.classList.toggle('is-active', c === chip));
     });
   });
 
@@ -2470,6 +2601,82 @@ const initialsFor = (name: string) =>
     background: var(--horizon-purple);
     border-color: var(--horizon-purple);
     color: #ffffff;
+  }
+
+  .deliberation-takeaways {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .takeaway-box {
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--horizon-line);
+    background: #faf9fd;
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .takeaway-box__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+  }
+
+  .takeaway-meta {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .takeaway-quote {
+    margin: 0;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--horizon-purple-deep);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .stance-starters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .stance-starters__hint {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+    margin-right: 0.15rem;
+  }
+
+  .starter-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.24rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--horizon-line);
+    background: #ffffff;
+    color: var(--horizon-purple-deep);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+
+  .starter-chip:hover,
+  .starter-chip.is-active {
+    background: var(--horizon-lavender);
+    border-color: var(--horizon-purple);
   }
 
   .comments-thread {

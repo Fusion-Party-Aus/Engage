@@ -17,6 +17,7 @@ import {
 import { getSessionUser } from '../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../lib/db.ts';
 import { listOutstandingDecisions, listProposals } from '../lib/store.ts';
+import { PROPOSAL_VOTES } from '../lib/vote-storage.ts';
 import { getSiteConfig } from '../lib/site-config.ts';
 import type { ProposalStage } from '../lib/types.ts';
 
@@ -27,12 +28,24 @@ if (authError) return Astro.redirect(`/member/?error=${encodeURIComponent(authEr
 const env = runtimeEnv(Astro.locals);
 const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
 const siteConfig = await getSiteConfig(db, env);
-const [proposals, publishedPolicyCount, mine] = await Promise.all([
+const [proposals, publishedPolicyCount, mine, myVoteRows] = await Promise.all([
   listProposals(db, { includeArchived: false, user }),
   db.collection('policy_registry').countDocuments({ publicationStatus: 'published' }),
   user?.canParticipate ? listOutstandingDecisions(db, user.memberId, user) : Promise.resolve([]),
+  user?.canParticipate
+    ? db.collection(PROPOSAL_VOTES).find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray()
+    : Promise.resolve([]),
 ]);
 const votes = proposals.filter((p) => p.stage === 'decide');
+const openProposalIds = new Set(votes.map((p) => p.proposalId));
+const completedOpenVotesCount = new Set(
+  myVoteRows.map((v: any) => String(v.proposalId ?? '')).filter((id) => openProposalIds.has(id)),
+).size;
+const totalEligibleOpenVotesCount = completedOpenVotesCount + mine.length;
+const homeProgressPct =
+  totalEligibleOpenVotesCount > 0
+    ? Math.round((completedOpenVotesCount / totalEligibleOpenVotesCount) * 100)
+    : 0;
 const discussions = proposals.filter((p) => p.stage === 'deliberate');
 const ideas = proposals.filter((p) => p.stage === 'propose');
 const implementing = proposals.filter((p) => p.stage === 'implement');
@@ -116,8 +129,15 @@ const stageVariant = (s: ProposalStage) => {
           <span class="home-pipeline-cell__label"><Vote className="size-3.5" aria-hidden="true" />Votes for you</span>
           <div class="home-pipeline-cell__bottom">
             <strong class="home-pipeline-cell__value tabular">{mine.length}</strong>
-            <span class="home-pipeline-cell__hint">{votes.length} open total</span>
+            <span class="home-pipeline-cell__hint tabular">
+              {totalEligibleOpenVotesCount > 0 ? `${completedOpenVotesCount}/${totalEligibleOpenVotesCount} done` : `${votes.length} open total`}
+            </span>
           </div>
+          {totalEligibleOpenVotesCount > 0 && (
+            <div class="home-mini-progress" aria-hidden="true">
+              <span style={`width: ${homeProgressPct}%`}></span>
+            </div>
+          )}
         </a>
         <a href="/proposals/?stage=deliberate" class="home-pipeline-cell">
           <span class="home-pipeline-cell__label"><MessageSquare className="size-3.5" aria-hidden="true" />In discussion</span>
@@ -142,7 +162,11 @@ const stageVariant = (s: ProposalStage) => {
             <div class="home-block__head">
               <div>
                 <h2 id="your-votes">Open ballots for you</h2>
-                <p>Ballots you are eligible to vote on, bound to an exact wording revision.</p>
+                <p>
+                  {totalEligibleOpenVotesCount > 0
+                    ? `${completedOpenVotesCount} of ${totalEligibleOpenVotesCount} eligible ballots completed (${homeProgressPct}%). Each ballot is bound to an exact wording revision.`
+                    : 'Ballots you are eligible to vote on, bound to an exact wording revision.'}
+                </p>
               </div>
               <a href="/proposals/?stage=decide" class="home-block__link">All {votes.length} open votes →</a>
             </div>
@@ -644,6 +668,21 @@ const stageVariant = (s: ProposalStage) => {
   .home-pipeline-cell__hint {
     font-size: 0.74rem;
     color: var(--horizon-muted);
+  }
+
+  .home-mini-progress {
+    height: 0.32rem;
+    border-radius: 999px;
+    background: var(--horizon-line);
+    overflow: hidden;
+    margin-top: 0.1rem;
+  }
+
+  .home-mini-progress > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--horizon-purple);
   }
 
   .home-pipeline-cell__desc {

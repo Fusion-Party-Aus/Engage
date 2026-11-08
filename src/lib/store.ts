@@ -6,6 +6,7 @@ import type {
   CommentStance,
   MemberRecord,
   MembershipStatus,
+  PendingVotePreferenceRecord,
   PolicyProvenance,
   ProposalKind,
   ProposalRecord,
@@ -19,6 +20,8 @@ import type {
   VoteTally,
 } from "./types.ts";
 import { createHash, randomUUID } from "node:crypto";
+
+export const PENDING_VOTE_PREFERENCES = "pending_vote_preferences";
 
 export function getDefaultProvenanceLabel(
   category: string,
@@ -439,6 +442,8 @@ export async function getProposalDetail(
   votesList: VoteRecord[];
   myVote: VoteChoice | null;
   myReason: string;
+  myPendingVote?: VoteChoice | null;
+  myPendingReason?: string;
 } | null> {
   const key = idOrSlug.trim();
   if (!key) return null;
@@ -459,7 +464,7 @@ export async function getProposalDetail(
     return null;
   }
 
-  const [rawComments, votes] = await Promise.all([
+  const [rawComments, votes, pendingPref] = await Promise.all([
     db
       .collection<CommentRecord>("comments")
       .find({
@@ -480,6 +485,14 @@ export async function getProposalDetail(
       })
       .sort({ updatedAt: -1 })
       .toArray(),
+    user && !user.canParticipate && user.status === "pending"
+      ? db
+          .collection<PendingVotePreferenceRecord>(PENDING_VOTE_PREFERENCES)
+          .findOne({
+            ballotId: proposalBallotId(proposal.proposalId),
+            memberId: user.memberId,
+          })
+      : Promise.resolve(null),
   ]);
 
   const comments = rawComments.map((c) => ({
@@ -506,6 +519,11 @@ export async function getProposalDetail(
     }
   }
 
+  const myPendingVote: VoteChoice | null =
+    !myVote && pendingPref?.choice ? pendingPref.choice : null;
+  const myPendingReason =
+    !myVote && pendingPref?.reason ? pendingPref.reason : "";
+
   return {
     proposal: {
       ...proposal,
@@ -516,6 +534,8 @@ export async function getProposalDetail(
     votesList: proposalVotes,
     myVote,
     myReason,
+    myPendingVote,
+    myPendingReason,
   };
 }
 
@@ -1552,6 +1572,14 @@ export async function castVote(
     { upsert: true },
   );
 
+  // Clear any pending preference for this ballot now that a formal vote is recorded
+  await db
+    .collection<PendingVotePreferenceRecord>(PENDING_VOTE_PREFERENCES)
+    .deleteOne({
+      ballotId: proposalBallotId(proposal.proposalId),
+      memberId: user.memberId,
+    });
+
   const allVotes = await votesCol
     .find({ ballotId: proposalBallotId(proposal.proposalId) })
     .toArray();
@@ -1564,6 +1592,188 @@ export async function castVote(
   }
 
   return { choice, votes };
+}
+
+export async function savePendingVotePreference(
+  db: Db,
+  user: SessionUser,
+  body: Record<string, unknown>,
+): Promise<{
+  choice: VoteChoice;
+  pendingVerification: true;
+  revisionId: string;
+}> {
+  if (user.status === "suspended") {
+    throw new Error(
+      "Your account is suspended and cannot save ballot preferences.",
+    );
+  }
+  const proposalId =
+    typeof body.proposalId === "string"
+      ? body.proposalId.trim()
+      : typeof body.policyId === "string"
+        ? body.policyId.trim()
+        : "";
+  const proposal = await db
+    .collection<ProposalRecord>("proposals")
+    .findOne({ proposalId });
+  if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user)) {
+    throw new Error("Proposal not found.");
+  }
+  if (proposal.stage !== "decide") {
+    throw new Error("This proposal is not currently in the Decide stage.");
+  }
+
+  let ballotRevisionId = proposal.ballotRevisionId;
+  if (!ballotRevisionId) {
+    const latest = await db
+      .collection("proposal_revisions")
+      .find({ proposalId })
+      .sort({ createdAt: -1 })
+      .limit(1)
+      .toArray();
+    ballotRevisionId = latest[0]?.revisionId;
+  }
+  if (!ballotRevisionId) {
+    throw new Error(
+      "A proposal revision is required before a ballot preference can be saved.",
+    );
+  }
+
+  const rawChoice =
+    typeof body.choice === "string" ? body.choice.trim().toLowerCase() : "";
+  if (!["approve", "abstain", "reject", "do-not-approve"].includes(rawChoice)) {
+    throw new Error("Choose Approve, Abstain, or Reject.");
+  }
+  const choice: VoteChoice =
+    rawChoice === "approve"
+      ? "approve"
+      : rawChoice === "abstain"
+        ? "abstain"
+        : "reject";
+  const reason =
+    typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+
+  await db
+    .collection<PendingVotePreferenceRecord>(PENDING_VOTE_PREFERENCES)
+    .updateOne(
+      {
+        ballotId: proposalBallotId(proposal.proposalId),
+        memberId: user.memberId,
+      },
+      {
+        $set: {
+          ballotId: proposalBallotId(proposal.proposalId),
+          proposalId: proposal.proposalId,
+          revisionId: ballotRevisionId,
+          memberId: user.memberId,
+          authorName: user.name || "Pending Member",
+          choice,
+          ...(reason ? { reason } : { reason: "" }),
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true },
+    );
+
+  return {
+    choice,
+    pendingVerification: true,
+    revisionId: ballotRevisionId,
+  };
+}
+
+export async function promotePendingVotePreferences(
+  db: Db,
+  memberId: string,
+): Promise<number> {
+  const pendingCol = db.collection<PendingVotePreferenceRecord>(
+    PENDING_VOTE_PREFERENCES,
+  );
+  const pendingItems = await pendingCol.find({ memberId }).toArray();
+  if (pendingItems.length === 0) return 0;
+
+  const userDoc = ObjectId.isValid(memberId)
+    ? await db.collection("user").findOne({ _id: new ObjectId(memberId) })
+    : null;
+  if (userDoc?.disabled === true) return 0;
+
+  const membershipDoc = await db
+    .collection<{ memberId: string; status: MembershipStatus }>("memberships")
+    .findOne({ memberId, status: "verified" });
+  if (!membershipDoc) return 0;
+
+  const authorName =
+    typeof userDoc?.name === "string" && userDoc.name.trim()
+      ? userDoc.name.trim()
+      : "Verified Member";
+
+  let promoted = 0;
+  const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
+
+  for (const item of pendingItems) {
+    const rawProposal = await db
+      .collection<ProposalRecord>("proposals")
+      .findOne({ proposalId: item.proposalId });
+    if (!rawProposal) continue;
+    const proposal = normalizeProposalDoc(rawProposal);
+    if (proposal.stage !== "decide") continue;
+
+    // Enforce identical branch electorate eligibility as castVote
+    if (proposal.jurisdictionBranchId) {
+      const [branch, branchMembership] = await Promise.all([
+        db.collection("branches").findOne({
+          branchId: proposal.jurisdictionBranchId,
+          recognised: true,
+        }),
+        db.collection("branch_memberships").findOne({
+          branchId: proposal.jurisdictionBranchId,
+          memberId,
+          status: "active",
+        }),
+      ]);
+      if (!branch || !branchMembership) continue;
+    }
+
+    const ballotRevisionId = proposal.ballotRevisionId;
+    if (!ballotRevisionId || item.revisionId !== ballotRevisionId) {
+      continue;
+    }
+
+    const existingFormalVote = await votesCol.findOne({
+      ballotId: proposalBallotId(proposal.proposalId),
+      memberId,
+    });
+    if (!existingFormalVote) {
+      await votesCol.updateOne(
+        {
+          ballotId: proposalBallotId(proposal.proposalId),
+          memberId,
+        },
+        {
+          $set: {
+            ballotId: proposalBallotId(proposal.proposalId),
+            proposalId: proposal.proposalId,
+            revisionId: ballotRevisionId,
+            memberId,
+            authorName,
+            choice: item.choice,
+            reason: item.reason ?? "",
+            updatedAt: new Date(),
+          },
+        },
+        { upsert: true },
+      );
+      promoted += 1;
+    }
+
+    await pendingCol.deleteOne({
+      ballotId: proposalBallotId(proposal.proposalId),
+      memberId,
+    });
+  }
+
+  return promoted;
 }
 
 export async function listUserActivity(
@@ -1821,6 +2031,9 @@ export async function saveMember(
       },
       { upsert: true },
     );
+    if (status === "verified" && disabled !== true) {
+      await promotePendingVotePreferences(db, memberId);
+    }
   }
 
   if (disabled === true) {
