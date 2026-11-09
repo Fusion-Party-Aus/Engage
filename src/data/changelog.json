@@ -1,7 +1,15 @@
 [
   {
-    "hash": "5a78927",
-    "date": "2026-11-09",
+    "hash": "b98af1d",
+    "date": "2026-11-08",
+    "type": "feat",
+    "category": "feature",
+    "scope": "time",
+    "summary": "Display time in user's local timezone"
+  },
+  {
+    "hash": "5de3c91",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "participation",
@@ -9,7 +17,7 @@
   },
   {
     "hash": "46f1b9b",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "fix",
     "category": "fix",
     "scope": "branches",
@@ -17,7 +25,7 @@
   },
   {
     "hash": "c14ee07",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "member",
@@ -25,7 +33,7 @@
   },
   {
     "hash": "31e34df",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "member",
@@ -33,7 +41,7 @@
   },
   {
     "hash": "ac9bb41",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "deploy",
@@ -41,7 +49,7 @@
   },
   {
     "hash": "c6edce0",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "docs",
     "category": "docs",
     "scope": "audit",
@@ -49,7 +57,7 @@
   },
   {
     "hash": "3098b44",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "ui",
@@ -57,7 +65,7 @@
   },
   {
     "hash": "99f0153",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "changelog",
@@ -65,7 +73,7 @@
   },
   {
     "hash": "71a6351",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "perf",
     "category": "improvement",
     "scope": "server",
@@ -73,7 +81,7 @@
   },
   {
     "hash": "3512e0a",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "workspaces",
@@ -81,7 +89,7 @@
   },
   {
     "hash": "f58e150",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "proposals",
@@ -89,7 +97,7 @@
   },
   {
     "hash": "ff1f0a8",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "walkthrough",
@@ -97,7 +105,7 @@
   },
   {
     "hash": "0a291c4",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "editor",
@@ -105,7 +113,7 @@
   },
   {
     "hash": "d6f09b0",
-    "date": "2026-11-09",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "settings",
@@ -113,7 +121,7 @@
   },
   {
     "hash": "e7d793a",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "docs",
     "category": "docs",
     "scope": "release",
@@ -122,7 +130,7 @@
   },
   {
     "hash": "4660690",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "docs",
     "category": "docs",
     "scope": "release",
@@ -131,7 +139,7 @@
   },
   {
     "hash": "2b85970",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "feat",
     "category": "feature",
     "scope": "ui",
@@ -140,7 +148,7 @@
   },
   {
     "hash": "153e909",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "docs",
     "category": "docs",
     "scope": "release",
@@ -149,7 +157,7 @@
   },
   {
     "hash": "33cc170",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "feat",
     "category": "feature",
     "scope": "legal",
@@ -158,7 +166,7 @@
   },
   {
     "hash": "0dff758",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "fix",
     "category": "fix",
     "scope": "app",
@@ -167,7 +175,7 @@
   },
   {
     "hash": "60e0679",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "feat",
     "category": "feature",
     "scope": "governance",
@@ -176,7 +184,7 @@
   },
   {
     "hash": "1b973fa",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "docs",
     "category": "docs",
     "scope": "deploy",
@@ -184,7 +192,7 @@
   },
   {
     "hash": "cffc1a0",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "docs",
     "category": "docs",
     "scope": "deploy",
@@ -192,7 +200,7 @@
   },
   {
     "hash": "ef8e9a8",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "docs",
     "category": "docs",
     "scope": "deploy",
@@ -200,7 +208,7 @@
   },
   {
     "hash": "3280da3",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -208,7 +216,7 @@
   },
   {
     "hash": "6e2cc5e",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -216,7 +224,7 @@
   },
   {
     "hash": "a65c66d",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -224,7 +232,7 @@
   },
   {
     "hash": "09de77b",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -232,7 +240,7 @@
   },
   {
     "hash": "0ad210b",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "chore",
     "category": "ops",
     "scope": "ops",
@@ -241,7 +249,7 @@
   },
   {
     "hash": "47e5f9b",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "fix",
     "category": "fix",
     "scope": "security",
@@ -250,7 +258,7 @@
   },
   {
     "hash": "c8f957f",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "feat",
     "category": "feature",
     "scope": "web",
@@ -259,7 +267,7 @@
   },
   {
     "hash": "5c55df2",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "feat",
     "category": "feature",
     "scope": "registry",
@@ -268,7 +276,7 @@
   },
   {
     "hash": "9e76480",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "feat",
     "category": "feature",
     "scope": "governance",
@@ -277,7 +285,7 @@
   },
   {
     "hash": "19389e0",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "feat",
     "category": "feature",
     "scope": "ui",
@@ -286,7 +294,7 @@
   },
   {
     "hash": "2ffd083",
-    "date": "2026-11-08",
+    "date": "2026-11-07",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -369,7 +377,7 @@
   },
   {
     "hash": "c1f724c",
-    "date": "2026-10-25",
+    "date": "2026-10-24",
     "type": "style",
     "category": "improvement",
     "scope": "platform",
@@ -377,7 +385,7 @@
   },
   {
     "hash": "fbf5a0b",
-    "date": "2026-10-25",
+    "date": "2026-10-24",
     "type": "docs",
     "category": "docs",
     "scope": "platform",
@@ -385,7 +393,7 @@
   },
   {
     "hash": "d46d756",
-    "date": "2026-10-25",
+    "date": "2026-10-24",
     "type": "feat",
     "category": "feature",
     "scope": "platform",
@@ -548,7 +556,7 @@
   },
   {
     "hash": "29113ec",
-    "date": "2026-10-10",
+    "date": "2026-10-09",
     "type": "update",
     "category": "ops",
     "scope": "platform",
