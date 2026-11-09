@@ -146,7 +146,7 @@ export async function recordEmailEvent(db:Db, eventId:string, event:{type:string
   }
   const field = event.type.replace("email.","");
   await outbox.updateOne({_id:message._id},{$set:{[`${field}At`]:now}});
-  if (["email.bounced","email.complained"].includes(event.type)) await db.collection("engagement_email_preferences").updateOne({memberId:message.memberId},{$set:{memberId:message.memberId,suppressed:true,suppressionReason:event.type,updatedAt:now}},{upsert:true});
+  if (message.kind !== "test" && ["email.bounced","email.complained"].includes(event.type)) await db.collection("engagement_email_preferences").updateOne({memberId:message.memberId},{$set:{memberId:message.memberId,suppressed:true,suppressionReason:event.type,updatedAt:now}},{upsert:true});
   await db.collection<any>("engagement_email_events").updateOne({_id:eventId},{$set:{processed:true}});
 }
 
@@ -157,7 +157,7 @@ export class TestEmailError extends Error {
 /** Admin-only, self-addressed sample; independent of scheduled digest enablement and ballot state. */
 export async function sendAdminTestEmail(db:Db, env:PlatformEnv, user:SessionUser, send:typeof fetch = fetch, now = new Date()) {
   if (!user.isAdmin) throw new TestEmailError("Administrator access required.",403);
-  if (!env.RESEND_API_KEY || !env.AUTH_EMAIL_FROM || !env.ENGAGE_EMAIL_SECRET) throw new TestEmailError("Configure RESEND_API_KEY, AUTH_EMAIL_FROM and ENGAGE_EMAIL_SECRET before sending a test.",503);
+  if (!env.RESEND_API_KEY || !env.AUTH_EMAIL_FROM || !env.ENGAGE_EMAIL_SECRET) throw new TestEmailError("Configure the email provider key, sender address and email signing secret in production settings before sending a test.",503);
   if (!user.email || user.status === "suspended") throw new TestEmailError("An active administrator email is required.",403);
   const preference=await db.collection("engagement_email_preferences").findOne({memberId:user.memberId});
   if (preference?.suppressed) throw new TestEmailError("Test delivery is paused after a bounce or spam complaint. Resolve email delivery first.",409);
@@ -174,12 +174,21 @@ export async function sendAdminTestEmail(db:Db, env:PlatformEnv, user:SessionUse
   catch(error) { if ((error as {code?:number}).code === 11000) throw new TestEmailError("A test was already attempted this minute.",429); throw error; }
   try {
     const response=await send("https://api.resend.com/emails",{method:"POST",headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,"content-type":"application/json","Idempotency-Key":id},body:JSON.stringify({from:env.AUTH_EMAIL_FROM,to:[user.email],...content,headers:{"List-Unsubscribe":`<${unsubscribeUrl}>`,"List-Unsubscribe-Post":"List-Unsubscribe=One-Click"}}),signal:AbortSignal.timeout(10000)});
+    // Explicit rejection is different from a timeout after a possibly accepted request.
+    // Keep raw provider bodies (which can contain sensitive details) out of records and API errors.
+    if (!response.ok && response.status < 500) {
+      const reason=response.status === 401 ? "The email provider rejected its API key. Check production email credentials." : response.status === 403 ? "The email provider refused this sender. Check the sender address, verified domain and API key permissions in Resend." : response.status === 429 ? "The email provider rate limit was reached. Wait before trying again." : "The email provider rejected the message. Check the sender configuration and provider dashboard.";
+      await outbox.updateOne({_id:id},{$set:{status:"failed",failedAt:now,providerHttpStatus:response.status,error:reason}});
+      throw new TestEmailError(reason,response.status === 429 ? 429 : 502);
+    }
     const result=await response.json() as {id?:string};
-    if (!response.ok || !result.id) throw new Error("Provider did not confirm acceptance");
-    await outbox.updateOne({_id:id},{$set:{status:"sent",providerId:result.id,acceptedAt:new Date()}});
-    return {status:"accepted",providerId:result.id};
-  } catch {
+    if (!response.ok || typeof result.id !== 'string' || !result.id.trim()) throw new Error("Provider did not confirm acceptance");
+    await outbox.updateOne({_id:id},{$set:{status:"sent",providerId:result.id,providerHttpStatus:response.status,acceptedAt:now}});
+    return {status:"accepted",providerId:result.id,recipient:user.email};
+  } catch (error) {
+    if (error instanceof TestEmailError) throw error;
     await outbox.updateOne({_id:id},{$set:{status:"held",heldAt:new Date()}});
     throw new TestEmailError("The provider did not confirm acceptance. Delivery is uncertain; check the test delivery record before retrying.",502);
   }
 }
+

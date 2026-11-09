@@ -1,69 +1,105 @@
 ---
 import { lifecycleConversion } from '../../lib/member-lifecycle.ts';
 import AdminLayout from '../../layouts/AdminLayout.astro';
+import { Button } from '../../components/ui/button';
 import { getSessionUser } from '../../lib/auth.ts';
-import { digestEnabled, ensureDigestCohort, notificationEnabled } from '../../lib/digest-preferences.ts';
+import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
+import { deliveryBreakdown, percentage, testDeliveryHistory } from '../../lib/admin-engagement.ts';
 import { getDatabase,runtimeEnv } from '../../lib/db.ts';
+import '../../styles/engagement.css';
 export const prerender=false;
 Astro.response.headers.set('Cache-Control','private, no-store');
 const env=runtimeEnv(Astro.locals), user=await getSessionUser(Astro.request,env);
 if (!user?.isAdmin) return new Response('Administrator access required',{status:403});
-const db=await getDatabase(env);
-const since=new Date(Date.now()-30*86400000);
-const [messages, preferences, existingMembers, accounts, testMessages] = await Promise.all([
- db.collection('engagement_email_outbox').find({createdAt:{$gte:since},kind:{$nin:['test','verification']}}).project({status:1,providerId:1,deliveredAt:1,bouncedAt:1,complainedAt:1,failedAt:1,openedAt:1,clickedAt:1}).toArray(),
- db.collection('engagement_email_preferences').find({}).project({memberId:1,digestEnabled:1,accountNotificationsEnabled:1,generalCommunicationsEnabled:1,suppressed:1,unsubscribedAt:1}).toArray(),
- ensureDigestCohort(db),
- db.collection("user").find({}).project({_id:1}).toArray(),
- db.collection('engagement_email_outbox').find({kind:'test',memberId:user.memberId}).sort({createdAt:-1}).limit(5).project({status:1,providerId:1,createdAt:1,deliveredAt:1,bouncedAt:1,complainedAt:1,failedAt:1}).toArray(),
-]);
-const verificationMessages=await db.collection('engagement_email_outbox').find({kind:'verification',createdAt:{$gte:since}}).toArray();
-const funnel=lifecycleConversion(await db.collection<any>('engagement_lifecycle_events').find({}).toArray());
-const preferenceByMember = new Map(preferences.map(p=>[p.memberId,p]));
-const subscribers = accounts.filter(a=>digestEnabled(preferenceByMember.get(String(a._id)) ?? null,existingMembers.has(String(a._id)))).length;
-const accepted=messages.filter(m=>m.providerId).length;
-const count=(field:string)=>messages.filter(m=>m[field]).length;
-const rate=(n:number)=>accepted ? `${(100*n/accepted).toFixed(1)}%` : '—';
+const period=Number(Astro.url.searchParams.get('days') || 30);
+const days=[7,30,90].includes(period) ? period : 30;
+const since=new Date(Date.now()-days*86400000);
+let report:any=null;
+let tests:Awaited<ReturnType<typeof testDeliveryHistory>>=[];
+try {
+ const db=await getDatabase(env);
+ const [messages,preferences,existingMembers,accounts,memberships,events,history] = await Promise.all([
+  db.collection('engagement_email_outbox').find({createdAt:{$gte:since},kind:{$nin:['test','verification']}}).toArray(),
+  db.collection('engagement_email_preferences').find({}).toArray(), ensureDigestCohort(db),
+  db.collection('user').find({}).project({_id:1,emailVerified:1,disabled:1}).toArray(),
+  db.collection('memberships').find({status:'verified'}).project({memberId:1}).toArray(),
+  db.collection<any>('engagement_lifecycle_events').find({}).toArray(), testDeliveryHistory(db,user.memberId),
+ ]);
+ const preferenceByMember=new Map(preferences.map(p=>[p.memberId,p]));
+ const verified=new Set(memberships.map(m=>String(m.memberId)));
+ const subscribers=accounts.filter(a=>a.emailVerified && !a.disabled && verified.has(String(a._id)) && digestEnabled(preferenceByMember.get(String(a._id)) ?? null,existingMembers.has(String(a._id)))).length;
+ const accepted=messages.filter(m=>m.providerId).length;
+ const recipients=new Set(messages.filter(m=>m.providerId).map(m=>m.memberId));
+ const unsubscriptions=preferences.filter(p=>recipients.has(p.memberId) && p.unsubscribedAt && new Date(p.unsubscribedAt)>=since).length;
+ report={subscribers,accepted,unsubscriptions,recipients:recipients.size,counts:deliveryBreakdown(messages),funnel:lifecycleConversion(events),total:messages.length,suppressed:preferences.filter(p=>p.suppressed).length};
+ tests=history;
+} catch { /* Render a useful recoverable page instead of a raw database exception. */ }
+const counts=report?.counts;
+const funnel=report?.funnel;
+const kpis=[
+ {label:'Eligible subscribers',value:report?.subscribers ?? 'Unavailable',detail:'Verified members with confirmed email and reminders enabled'},
+ {label:'Messages sent',value:report?.accepted ?? 'Unavailable',detail:`Accepted by the provider · last ${days} days`},
+ {label:'Delivery success',value:report ? percentage(counts.delivered,report.accepted) : 'Unavailable',detail:'Confirmed delivered / accepted messages'},
+ {label:'Bounce rate',value:report ? percentage(counts.bounced,report.accepted) : 'Unavailable',detail:'Bounced / accepted messages'},
+ {label:'Unsubscribe rate',value:report ? percentage(report.unsubscriptions,report.recipients) : 'Unavailable',detail:'Recipients unsubscribed in period / accepted recipients'},
+ {label:'Returning voters',value:funnel ? percentage(funnel.thirtyDayReturned,funnel.thirtyDayEligible) : 'Unavailable',detail:'All mature tracked first-time voters · 30-day return'},
+];
+const labels={accepted:'Accepted · awaiting delivery',delivered:'Delivered',bounced:'Bounced',complained:'Spam complaints',failed:'Failed',held:'Held or awaiting acceptance'};
+const date=(v:any)=>v ? new Date(v).toLocaleString('en-AU',{timeZone:'Australia/Melbourne'}) : 'Not recorded';
 ---
-<AdminLayout title="Member engagement" description="Ballot reminder delivery over the last 30 days" section="overview" isAdmin>
- <section aria-labelledby="test-email-heading">
-  <h2 id="test-email-heading">Send yourself a test digest</h2>
-  <p>Send a Horizon-styled sample to {user.email}. This works while scheduled digests are disabled. It uses sample ballot data and a demo unsubscribe link; voting and notification preferences are unchanged.</p>
-  <form id="test-digest-form" method="post" action="/api/admin/email/test"><button type="submit" id="test-digest-button" class="rounded-full bg-[#32105a] px-5 py-3 text-white">Send test email to me</button></form>
-  <p id="test-digest-status" role="status" aria-live="polite"></p>
-  {testMessages.length > 0 && <ul>{testMessages.map(m=><li>{new Date(m.createdAt).toLocaleString('en-AU',{timeZone:'Australia/Melbourne'})} (Melbourne) — {m.bouncedAt ? 'Bounced' : m.complainedAt ? 'Spam complaint' : m.failedAt ? 'Delivery failed' : m.deliveredAt ? 'Delivered' : m.status === 'sent' ? 'Accepted by provider · delivery pending' : 'Sending / uncertain delivery'}</li>)}</ul>}
-  <p>Refresh to see delivery receipts. Tests are limited to one per minute per administrator and excluded from member digest rates.</p>
- </section>
- <h2>Verification and participation</h2>
- <p>{verificationMessages.length} notices claimed; {verificationMessages.filter(m=>m.deliveredAt).length} delivered; {verificationMessages.filter(m=>m.bouncedAt).length} bounced; {verificationMessages.filter(m=>m.failedAt).length} failed; {verificationMessages.filter(m=>['held','sending','queued'].includes(String(m.status))).length} pending or uncertain; {verificationMessages.filter(m=>m.status==='suppressed').length} suppressed.</p>
- <p>First vote within seven days: {funnel.sevenDayConverted} / {funnel.sevenDayEligible} mature verified accounts. Returning participation within 30 days: {funnel.thirtyDayReturned} / {funnel.thirtyDayEligible} mature first-vote accounts.</p>
- <p>Preview historical re-engagement counts with <code>/api/admin/email/reengagement?cutoff=YYYY-MM-DD</code>. This read-only report never sends messages.</p>
- <h2>Ballot reminders · last 30 days</h2>
- <p>Sending is {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}. {subscribers} subscribed members; {preferences.filter(p=>p.suppressed).length} suppressed.</p>
- <p>{accounts.filter(a=>notificationEnabled(preferenceByMember.get(String(a._id)) ?? null,"essential")).length} account-notification subscriptions; {accounts.filter(a=>notificationEnabled(preferenceByMember.get(String(a._id)) ?? null,"general")).length} general-communication subscriptions. Security and sign-in mail is separate.</p>
- <table><thead><tr><th>Metric</th><th>Messages</th><th>Rate of accepted messages</th></tr></thead><tbody>
- <tr><td>Accepted by provider</td><td>{accepted}</td><td>—</td></tr>
- {(['delivered','bounced','complained','failed','opened','clicked'] as const).map(k=><tr><td>{k}</td><td>{count(`${k}At`)}</td><td>{rate(count(`${k}At`))}</td></tr>)}
- <tr><td>Held / uncertain send</td><td>{messages.filter(m=>['held','sending'].includes(m.status)).length}</td><td>—</td></tr>
- </tbody></table>
- <p>Rates count unique messages, not webhook retries. Delivery reporting requires the signed Resend webhook. Opens/clicks appear only if enabled at the provider and are estimates, affected by email scanners.</p>
- <p>{preferences.filter(p=>p.unsubscribedAt).length} members have unsubscribed using an email link. Opt-outs are preferences, separate from provider delivery failures.</p>
- <p>Bounces and complaints pause further reminder delivery. Unsubscribes never affect sign-in or membership.</p>
+<AdminLayout title="Member engagement" description="Understand delivery and voting participation, and check a sample email." section="overview" isAdmin>
+ <div class="engagement-dashboard">
+  <div class="engagement-toolbar">
+   <span class="engagement-badge">Scheduled digests {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}</span>
+   <form method="get" class="engagement-controls"><label for="engagement-period">Email reporting period</label><select name="days" id="engagement-period">{[7,30,90].map(n=><option value={n} selected={n===days}>Last {n} days</option>)}</select><Button type="submit" size="sm" variant="outline">Apply</Button></form>
+  </div>
+  {!report && <p class="engagement-feedback" role="alert">Engagement data could not be loaded. Refresh this page to try again. The testing controls remain available.</p>}
+  <section aria-label="Engagement overview" class="engagement-kpis">
+   {kpis.map(k=><article class="engagement-card engagement-kpi"><h2>{k.label}</h2><p class="engagement-value">{k.value}</p><p>{k.detail}</p></article>)}
+  </section>
+  <div class="engagement-columns">
+   <section class="engagement-card" aria-labelledby="delivery-heading">
+    <header><h2 id="delivery-heading">Email delivery</h2><p>Member digests · last {days} days</p></header>
+    {report?.total === 0 && <p class="engagement-empty">No member digests in this period. Admin test emails appear separately below.</p>}
+    {!report && <p class="engagement-empty">Delivery figures are unavailable.</p>}
+    {report && <ul class="engagement-breakdown">{Object.entries(labels).map(([key,label])=><li><div><span>{label}</span><strong>{counts[key]}</strong></div><progress aria-label={label} value={counts[key]} max={Math.max(report.total,1)}>{counts[key]} of {report.total}</progress></li>)}</ul>}
+    <p class="engagement-caption">Each message appears in one current state. Acceptance does not confirm inbox delivery. Rates are unavailable until at least one message is accepted.</p>
+   </section>
+   <section class="engagement-card" aria-labelledby="participation-heading">
+    <header><h2 id="participation-heading">Voting participation</h2><p>All tracked cohorts with a complete observation window</p></header>
+    <dl class="engagement-metrics">
+     <div><dt>Verified → first vote within 7 days</dt><dd>{funnel ? percentage(funnel.sevenDayConverted,funnel.sevenDayEligible) : 'Unavailable'}</dd><small>{funnel ? `${funnel.sevenDayConverted} of ${funnel.sevenDayEligible} mature verified accounts` : 'Data could not be loaded'}</small></div>
+     <div><dt>Returned to vote within 30 days</dt><dd>{funnel ? percentage(funnel.thirtyDayReturned,funnel.thirtyDayEligible) : 'Unavailable'}</dd><small>{funnel ? `${funnel.thirtyDayReturned} of ${funnel.thirtyDayEligible} mature first-time voters` : 'Data could not be loaded'}</small></div>
+    </dl>
+    <p class="engagement-caption">A return requires a successful voting day at least 24 hours after the first vote and within 30 days. Opening the site or casting several votes in one session does not count.</p>
+    <details class="engagement-availability"><summary>Was there a new ballot to vote on?</summary><p>Historical ballot availability was not recorded for each member. These groups cannot yet be measured reliably:</p><dl class="engagement-metrics"><div><dt>Eligible new ballot available</dt><dd>Unavailable</dd></div><div><dt>No eligible new ballot available</dt><dd>Unavailable</dd></div><div><dt>Availability unknown</dt><dd>{funnel?.thirtyDayEligible ?? 'Unavailable'}</dd></div></dl><p>Do not interpret a missing return as disengagement. The overall return rate includes members whose opportunity to return is unknown.</p></details>
+   </section>
+  </div>
+  <div class="engagement-columns">
+   <section class="engagement-card" aria-labelledby="test-email-heading">
+    <header><h2 id="test-email-heading">Test email</h2><p>Preview the Horizon digest in your own inbox.</p></header>
+    <p class="engagement-recipient"><span>Recipient</span><strong>{user.email}</strong></p>
+    <form id="test-digest-form"><Button type="submit" id="test-digest-button">Send test email to me</Button></form>
+    <noscript><p>Enable JavaScript to send a test email and view its confirmation.</p></noscript>
+    <p id="test-digest-status" class="engagement-feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+    <div class="engagement-history-heading"><h3>Recent tests</h3><Button type="button" id="refresh-test-history" size="sm" variant="outline">Refresh status</Button></div>
+    <div id="test-history">{tests.length ? tests.map(m=><article class="engagement-receipt"><strong>{m.status}</strong><time>{date(m.createdAt)} Melbourne</time><details><summary>Provider receipt</summary><dl><dt>Message ID</dt><dd>{m.providerId || 'Not accepted'}</dd><dt>Provider HTTP status</dt><dd>{m.providerHttpStatus ?? 'Not recorded'}</dd><dt>Accepted</dt><dd>{date(m.acceptedAt)}</dd><dt>Delivered</dt><dd>{date(m.deliveredAt)}</dd></dl></details></article>) : <p class="engagement-empty">{report ? 'No test emails recorded for your account.' : 'History unavailable. Use Refresh status to retry.'}</p>}</div>
+    <p class="engagement-caption">Sample data only. Tests are limited to one per calendar minute per administrator and excluded from member statistics.</p>
+   </section>
+   <section class="engagement-card" aria-labelledby="historical-heading">
+    <header><h2 id="historical-heading">Historical re-engagement</h2><p>Check who may qualify for a future participation reminder.</p></header>
+    <form id="reengagement-preview-form" class="engagement-preview"><label for="reengagement-cutoff">Verified on or before</label><input type="date" id="reengagement-cutoff" name="cutoff" required max={new Date().toISOString().slice(0,10)} /><Button type="submit" variant="outline">Preview eligibility</Button></form>
+    <p id="reengagement-status" class="engagement-feedback" role="status" aria-live="polite"></p>
+    <div id="reengagement-results"><p class="engagement-empty">Choose a cutoff date to see eligible, excluded, suppressed and review counts.</p></div>
+    <p class="engagement-caption">Read-only preview. This action never sends messages or changes member preferences.</p>
+   </section>
+  </div>
+  <details class="engagement-card engagement-diagnostics"><summary>Delivery diagnostics</summary><div>
+   <dl class="engagement-metrics"><div><dt>Email provider configuration</dt><dd>{env.RESEND_API_KEY && env.AUTH_EMAIL_FROM && env.ENGAGE_EMAIL_SECRET ? 'Present · acceptance still needs a test' : 'Incomplete'}</dd></div><div><dt>Signed delivery webhook</dt><dd>{env.RESEND_WEBHOOK_SECRET ? 'Secret present · receipt not yet verified' : 'Not configured'}</dd></div><div><dt>Suppressed accounts</dt><dd>{report?.suppressed ?? 'Unavailable'}</dd></div></dl>
+   <p>Verify the sender address and its domain in Resend. Configuration being present does not prove the credentials or domain are valid.</p><p>Delivery receipts require the signed provider webhook. Without a receipt, accepted messages remain pending. The latest five tests for your account are shown above; message IDs can be inspected in Resend.</p><p>Timeouts and uncertain outcomes are held for inspection and are not retried automatically. Explicit provider rejection is recorded as failed. Check the provider before retrying a held message.</p><p>Bounces and spam complaints suppress further reminders. Unsubscribing affects Engage digests only. Tests do not add subscribers or enable scheduled delivery.</p>
+  </div></details>
+ </div>
 </AdminLayout>
-
 <script>
-const form=document.querySelector<HTMLFormElement>('#test-digest-form');
-const button=document.querySelector<HTMLButtonElement>('#test-digest-button');
-const status=document.querySelector<HTMLElement>('#test-digest-status');
-form?.addEventListener('submit',async(event)=>{
- event.preventDefault();
- if (!button || !status || button.disabled) return;
- button.disabled=true;status.textContent='Sending your sample digest…';
- try {
-  const response=await fetch('/api/admin/email/test',{method:'POST',credentials:'same-origin'});
-  const result=await response.json() as {error?:string};
-  status.textContent=response.ok ? 'Test accepted by the email provider. Check your inbox; refresh this page for delivery receipts.' : result.error || 'Test email could not be sent.';
- } catch {status.textContent='The request was interrupted. Check delivery status before trying again.';}
- finally {button.disabled=false;}
-});
+ import '../../scripts/admin-engagement.ts';
 </script>
