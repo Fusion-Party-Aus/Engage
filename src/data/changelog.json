@@ -1,5 +1,14 @@
 [
   {
+    "hash": "bc6409f",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "notifications",
+    "summary": "Manage account, Engage digest and general communication preferences separately",
+    "details": "Existing accounts default to digests on; new accounts opt in. Onboarding explains reminders, defaults, unsubscribe and reporting. Existing opt-outs and bounce suppressions are preserved."
+  },
+  {
     "hash": "7a56a95",
     "date": "2026-11-09",
     "type": "feat",
