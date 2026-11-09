@@ -2,6 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { ObjectId } from "mongodb";
+import { digestEnabled, ensureDigestCohort, notificationEnabled, notificationPreferenceChanges } from "./digest-preferences.ts";
+import { ALL as unsubscribe } from "../pages/api/email/unsubscribe.ts";
+import { getDatabase } from "./db.ts";
+import { readFile } from "node:fs/promises";
 import { createMemoryDb } from "./db.ts";
 import { ballotExpired, CURRENT_BALLOT_CLOSES_AT, closesWithinSevenDays } from "./ballot-deadline.ts";
 import { rankProposals } from "./proposal-metrics.ts";
@@ -83,8 +87,9 @@ test("signed webhooks reject tampering and stale replays; bounce suppresses remi
  assert.equal((await db.collection("engagement_email_preferences").findOne({memberId}))?.suppressed,true);
  assert.equal(await db.collection("engagement_email_events").countDocuments({}),1);
 });
-test("digest sends only to opted-in verified accounts, records provider acceptance and reminds once",async()=>{
+test("new accounts require opt-in, record provider acceptance and are reminded once",async()=>{
  const {db}=await fixture();
+ await ensureDigestCohort(db);
  await db.collection("user").insertOne({_id:new ObjectId(memberId),name:"Member",email:"member@example.test",emailVerified:true});
  await db.collection("memberships").insertOne({memberId,status:"verified"});
  const env={ENGAGE_DIGEST_ENABLED:"true",ENGAGE_EMAIL_SECRET:"secret",RESEND_API_KEY:"key",AUTH_EMAIL_FROM:"Engage <test@example.test>",PUBLIC_ORIGIN:"https://example.test"};
@@ -116,4 +121,81 @@ test("webhook backlog reconciliation processes beyond the first 500 events",asyn
  await runBallotDigests(db,{ENGAGE_DIGEST_ENABLED:'true',ENGAGE_EMAIL_SECRET:'secret',RESEND_API_KEY:'key',AUTH_EMAIL_FROM:'test@example.test',PUBLIC_ORIGIN:'https://example.test'},async()=>{throw new Error('No mail expected');},now);
  assert.equal(await db.collection('engagement_email_events').countDocuments({processed:true}),501);
  assert.ok((await db.collection('engagement_email_outbox').findOne({providerId:'provider-500'}))?.deliveredAt);
+});
+
+test("rollout cohort stays fixed across restarts; explicit opt-outs and suppressions win",async()=>{
+ const db=createMemoryDb();
+ const oldId=new ObjectId(), newId=new ObjectId();
+ await db.collection("user").insertOne({_id:oldId});
+ const existing=await ensureDigestCohort(db);
+ assert.equal(existing.has(oldId.toString()),true);
+ assert.equal(digestEnabled(null,existing.has(oldId.toString())),true);
+ await db.collection("user").insertOne({_id:newId});
+ const restarted=await ensureDigestCohort(db);
+ assert.equal(restarted.has(newId.toString()),false);
+ assert.equal(digestEnabled(null,restarted.has(newId.toString())),false);
+ assert.equal(digestEnabled({digestEnabled:false},true),false);
+ assert.equal(digestEnabled({unsubscribedAt:new Date()},true),false);
+ assert.equal(digestEnabled({digestEnabled:true,suppressed:true},true),false);
+ assert.equal(digestEnabled({suppressed:true},true),false);
+ assert.equal(digestEnabled({digestEnabled:true},false),true);
+});
+test("existing verified accounts receive reminders without returning to opt in",async()=>{
+ const {db}=await fixture();
+ await db.collection("user").insertOne({_id:new ObjectId(memberId),name:"Member",email:"member@example.test",emailVerified:true});
+ await db.collection("memberships").insertOne({memberId,status:"verified"});
+ const env={ENGAGE_DIGEST_ENABLED:"true",ENGAGE_EMAIL_SECRET:"secret",RESEND_API_KEY:"key",AUTH_EMAIL_FROM:"test@example.test",PUBLIC_ORIGIN:"https://example.test"};
+ let calls=0; const send:typeof fetch=async(_url,init)=>{calls++;const body=JSON.parse(String(init?.body));assert.ok(body.text.includes('existing Engage account'));assert.ok(!body.text.includes('because you enabled'));return Response.json({id:'existing-member-mail'});};
+ assert.equal((await runBallotDigests(db,env,send,now)).sent,1);
+ assert.equal(calls,1);
+ assert.equal(await db.collection("engagement_email_preferences").countDocuments({}),0);
+});
+test("default-enabled existing accounts still respect explicit opt-outs and bounce suppression",async()=>{
+ for(const preference of [{digestEnabled:false},{suppressed:true},{digestEnabled:true,suppressed:true}]) {
+  const {db}=await fixture();
+  await db.collection("user").insertOne({_id:new ObjectId(memberId),name:"Member",email:"member@example.test",emailVerified:true});
+  await db.collection("memberships").insertOne({memberId,status:"verified"});
+  await db.collection("engagement_email_preferences").insertOne({memberId,...preference});
+  const env={ENGAGE_DIGEST_ENABLED:"true",ENGAGE_EMAIL_SECRET:"secret",RESEND_API_KEY:"key",AUTH_EMAIL_FROM:"test@example.test",PUBLIC_ORIGIN:"https://example.test"};
+  assert.equal((await runBallotDigests(db,env,async()=>{throw Error('Must not send');},now)).sent,0);
+  const saved=await db.collection("engagement_email_preferences").findOne({memberId});
+  for(const [key,value] of Object.entries(preference)) assert.equal(saved?.[key],value);
+ }
+});
+
+test("notification categories save independently and have separate defaults",()=>{
+ const existing={digestEnabled:true,accountNotificationsEnabled:false,generalCommunicationsEnabled:true};
+ for (const category of ["essential","engage","general"] as const) {
+  const form=new FormData();form.set("category",category);
+  const changes=notificationPreferenceChanges(form);
+  const result={...existing,...changes};
+  assert.equal(Object.keys(changes).length,1);
+  assert.equal(notificationEnabled(result,category,true),false);
+  for(const key of Object.keys(existing)) if(!(key in changes)) assert.equal(result[key as keyof typeof existing],existing[key as keyof typeof existing]);
+ }
+ assert.equal(notificationEnabled(null,"essential"),true);
+ assert.equal(notificationEnabled(null,"general"),false);
+ assert.equal(notificationEnabled(null,"engage",true),true);
+ assert.equal(notificationEnabled(null,"engage",false),false);
+ const unknown=new FormData();unknown.set("category","anything");assert.throws(()=>notificationPreferenceChanges(unknown));
+});
+test("digest unsubscribe leaves other categories intact and GET link scans do not unsubscribe",async()=>{
+ const env={APP_MODE:"preview",ENGAGE_EMAIL_SECRET:"test-secret"};
+ const db=await getDatabase(env);
+ const id='unsubscribe-'+crypto.randomUUID();
+ await db.collection("engagement_email_preferences").insertOne({memberId:id,digestEnabled:true,accountNotificationsEnabled:false,generalCommunicationsEnabled:true});
+ const url=new URL('https://example.test/api/email/unsubscribe?token='+unsubscribeToken(id,env.ENGAGE_EMAIL_SECRET));
+ const run=(method:string)=>unsubscribe({request:new Request(url,{method}),url,locals:{env}} as never);
+ assert.equal((await run("GET")).status,200);
+ assert.equal((await db.collection("engagement_email_preferences").findOne({memberId:id}))?.digestEnabled,true);
+ assert.equal((await run("POST")).status,200);
+ const result=await db.collection("engagement_email_preferences").findOne({memberId:id});
+ assert.equal(result?.digestEnabled,false);
+ assert.equal(result?.accountNotificationsEnabled,false);
+ assert.equal(result?.generalCommunicationsEnabled,true);
+ assert.equal(await db.collection("engagement_notification_events").countDocuments({memberId:id,category:"engage",source:"email-unsubscribe"}),1);
+});
+test("onboarding explains email defaults, three categories and unsubscribe with direct preference controls",async()=>{
+ const source=await readFile(new URL('../components/member/MemberOnboarding.tsx',import.meta.url),'utf8');
+ for(const text of ['existing Engage accounts','new Engage accounts','My Engage → Notifications','essential account notifications','Engage digests','general communications','Every digest has an unsubscribe link','action="/api/email/preferences"','defaultChecked={props.digestEnabled === true}']) assert.ok(source.includes(text),text);
 });

@@ -32,6 +32,9 @@ export interface MemberOnboardingProps {
   firstDeliberationTitle?: string;
   totalContributions: number;
   initialPasskeyCount?: number;
+  digestEnabled?: boolean;
+  digestExistingMember?: boolean;
+  digestSuppressed?: boolean;
 }
 
 const DISMISS_STORAGE_KEY = 'engage_onboarding_dismissed_v1';
@@ -336,6 +339,20 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
             <X className="size-3.5" aria-hidden="true" />
           </button>
         </div>
+      </div>
+
+      <div className="border-b border-[var(--horizon-line)] bg-[var(--horizon-lavender-soft)] px-5 py-4">
+        <h3 className="font-heading text-lg font-semibold">Stay on top of ballot deadlines</h3>
+        <p className="my-2 text-sm leading-relaxed">Engage can email you a digest of eligible ballots closing within seven days that you haven’t voted on. Each ballot is reminded once, and reminders stop once you’ve voted. Sign-in emails are separate.</p>
+        <p className="my-2 text-sm">{props.digestExistingMember
+          ? 'Reminders were enabled for existing Engage accounts so you don’t miss the new feature. You can opt out below or unsubscribe in any digest.'
+          : 'For new Engage accounts, reminders stay off until you opt in. This is optional and does not affect voting or membership.'}</p>
+        {props.digestSuppressed ? <p className="text-sm">Reminder delivery is paused after a bounce or spam complaint. Contact an administrator to resolve delivery.</p> :
+          <form method="post" action="/api/email/preferences" className="flex flex-wrap items-center gap-3 py-2">
+            <label className="flex items-center gap-2 text-sm"><input type="hidden" name="category" value="engage" /><input type="checkbox" name="digestEnabled" value="true" defaultChecked={props.digestEnabled === true} /> Send me ballot reminder emails</label>
+            <Button type="submit" size="sm" variant="outline">Save reminder preference</Button>
+          </form>}
+        <p className="text-xs text-[var(--horizon-muted)]">My Engage → Notifications has separate settings for essential account notifications, Engage digests, and general communications such as newsletters and campaigns. Every digest has an unsubscribe link. Delivery, bounce and unsubscribe reporting help keep emails reliable.</p>
       </div>
 
       {/* Post-Sign-In 1-Tap Passkey Upgrade Nudge (Peak-End & Friction Removal) */}

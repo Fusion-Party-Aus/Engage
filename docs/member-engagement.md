@@ -6,8 +6,8 @@
 - Most divisive: highest `4 × approve × reject / (approve + reject)²`, requiring both sides and at least five decisive votes. A 50/50 split scores highest; ties prefer greater turnout then proposal ID.
 - Most approved: highest approve share of approve/reject votes, at least five decisive votes. Abstentions are displayed but excluded from that denominator. This does not imply formal adoption.
 - Most active: all-time formal proposal ballots plus discussion posts. Amendment ballots and pending preferences are excluded. This measures contributions, not unique people.
-- My Engage includes eligible unvoted ballots closing within seven days (including bound amendment ballots), explicit Melbourne deadlines, participation follow-through, and opt-in email preferences. Existing activity and catch-up views remain available.
-- Digests are optional and **off until a member opts in**. Verification/sign-in emails are separate. No bulk subscription migration is included.
+- My Engage includes eligible unvoted ballots closing within seven days (including bound amendment ballots), explicit Melbourne deadlines, participation follow-through, and email preferences. Existing activity and catch-up views remain available.
+- Existing accounts default to reminders on; new accounts default off until they opt in. At first startup, a durable `engagement_email_rollouts` record snapshots the existing account IDs. Repeated startups never expand this cohort. Explicit preferences and unsubscribe records always override the default, and bounce/complaint suppression blocks delivery. Existing users do not need to return or complete onboarding to receive reminders. Onboarding explains the applicable default, timing, unsubscribe and delivery reporting, with a direct reminder preference form. Verification/sign-in emails are separate.
 - Inline HTML email uses Horizon violet, cyan, lavender and Newsreader/Georgia + Outfit/Arial fallbacks; includes plain text and a visible unsubscribe link. No choices or vote reasons appear in email or provider tracking metadata.
 
 ## Apply the requested current-ballot deadline
@@ -57,3 +57,13 @@ Unsubscribe supports RFC 8058 list-unsubscribe POST and a human confirmation pag
 - Real MongoDB integration tests require `VOTING_TEST_MONGODB_URI`; the memory database does not prove MongoDB transaction or unique-index behaviour.
 - Browser screenshots were attempted; this executor prevents Chromium from creating its process singleton socket (`Operation not permitted`). Visual verification and actual inbox rendering remain rollout checks.
 - No real email was sent, no Resend settings changed, and the production deadline migration was not applied during implementation.
+
+## Notification categories
+
+My Engage → Notifications offers three independently saved categories:
+
+- Essential account notifications: account administration and critical voting-related information, default on. The membership-verification notice honours this setting; security and sign-in emails always send.
+- Engage digests: weekly summaries, closing-soon ballots, unvoted proposals and participation updates belong to this category. The current automated sender delivers the closing-soon ballot digest; this change does not add a weekly-summary sender. Existing accounts default on via the immutable rollout snapshot; new accounts must opt in. Digest unsubscribe links change only this category.
+- General communications: newsletters, campaigns and broader party updates, default off in Engage. The preference is stored separately; no external party mailing list is synchronised by this application. Future senders must call `notificationEnabled(preference,"general")` rather than reuse digest consent.
+
+Preference changes and email-link unsubscribes write category-scoped `engagement_notification_events`; delivery/bounce/complaint events remain correlated to provider message IDs. Existing false preferences, unsubscribe records and suppressions are never overwritten by rollout defaults. The existing-account snapshot is captured automatically before the first startup completes, so no return visit is needed. Back up and preserve `engagement_email_rollouts` across releases.

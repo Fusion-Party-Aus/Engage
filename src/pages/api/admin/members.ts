@@ -4,6 +4,7 @@ import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { listMembers, saveMember } from "../../../lib/store.ts";
 import type { PlatformEnv } from "../../../lib/types.ts";
 
+import { notificationEnabled } from "../../../lib/digest-preferences.ts";
 export const prerender = false;
 
 async function sendVerificationNotice(
@@ -134,7 +135,8 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       willBeVerified &&
       willBeEnabled &&
       (!wasVerified || account?.disabled === true);
-    const notification = activated
+    const preference = activated ? await db.collection("engagement_email_preferences").findOne({memberId}) : null;
+    const notification = activated && notificationEnabled(preference,"essential")
       ? await sendVerificationNotice(env, account?.email, account?.name)
       : "not-needed";
     return Response.json({ ...result, notification });

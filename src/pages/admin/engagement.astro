@@ -1,6 +1,7 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { getSessionUser } from '../../lib/auth.ts';
+import { digestEnabled, ensureDigestCohort, notificationEnabled } from '../../lib/digest-preferences.ts';
 import { getDatabase,runtimeEnv } from '../../lib/db.ts';
 export const prerender=false;
 Astro.response.headers.set('Cache-Control','private, no-store');
@@ -8,17 +9,22 @@ const env=runtimeEnv(Astro.locals), user=await getSessionUser(Astro.request,env)
 if (!user?.isAdmin) return new Response('Administrator access required',{status:403});
 const db=await getDatabase(env);
 const since=new Date(Date.now()-30*86400000);
-const [messages, preferences] = await Promise.all([
+const [messages, preferences, existingMembers, accounts] = await Promise.all([
  db.collection('engagement_email_outbox').find({createdAt:{$gte:since}}).project({status:1,providerId:1,deliveredAt:1,bouncedAt:1,complainedAt:1,failedAt:1,openedAt:1,clickedAt:1}).toArray(),
- db.collection('engagement_email_preferences').find({}).project({digestEnabled:1,suppressed:1,unsubscribedAt:1}).toArray(),
+ db.collection('engagement_email_preferences').find({}).project({memberId:1,digestEnabled:1,accountNotificationsEnabled:1,generalCommunicationsEnabled:1,suppressed:1,unsubscribedAt:1}).toArray(),
+ ensureDigestCohort(db),
+ db.collection("user").find({}).project({_id:1}).toArray(),
 ]);
+const preferenceByMember = new Map(preferences.map(p=>[p.memberId,p]));
+const subscribers = accounts.filter(a=>digestEnabled(preferenceByMember.get(String(a._id)) ?? null,existingMembers.has(String(a._id)))).length;
 const accepted=messages.filter(m=>m.providerId).length;
 const count=(field:string)=>messages.filter(m=>m[field]).length;
 const rate=(n:number)=>accepted ? `${(100*n/accepted).toFixed(1)}%` : '—';
 ---
 <AdminLayout title="Member engagement" description="Ballot reminder delivery over the last 30 days" section="overview" isAdmin>
  <h2>Ballot reminders · last 30 days</h2>
- <p>Sending is {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}. {preferences.filter(p=>p.digestEnabled && !p.suppressed).length} subscribed members; {preferences.filter(p=>p.suppressed).length} suppressed.</p>
+ <p>Sending is {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}. {subscribers} subscribed members; {preferences.filter(p=>p.suppressed).length} suppressed.</p>
+ <p>{accounts.filter(a=>notificationEnabled(preferenceByMember.get(String(a._id)) ?? null,"essential")).length} account-notification subscriptions; {accounts.filter(a=>notificationEnabled(preferenceByMember.get(String(a._id)) ?? null,"general")).length} general-communication subscriptions. Security and sign-in mail is separate.</p>
  <table><thead><tr><th>Metric</th><th>Messages</th><th>Rate of accepted messages</th></tr></thead><tbody>
  <tr><td>Accepted by provider</td><td>{accepted}</td><td>—</td></tr>
  {(['delivered','bounced','complained','failed','opened','clicked'] as const).map(k=><tr><td>{k}</td><td>{count(`${k}At`)}</td><td>{rate(count(`${k}At`))}</td></tr>)}

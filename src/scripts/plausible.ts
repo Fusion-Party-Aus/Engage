@@ -21,7 +21,7 @@ if (initAnalytics()) {
     trackEngage('navigation_clicked', {
       area: link.closest('.site-header') ? 'header' : link.closest('.site-footer') ? 'footer' : link.closest('aside') ? 'sidebar' : 'content',
       destination: url.href, section: url.hash.slice(1),
-      view: url.searchParams.get('view') === 'account' ? 'account' : url.searchParams.get('view') === 'activity' ? 'activity' : url.searchParams.get('history') === '1' ? 'history' : 'default',
+      view: url.searchParams.get('view') === 'notifications' ? 'notifications' : url.searchParams.get('view') === 'account' ? 'account' : url.searchParams.get('view') === 'activity' ? 'activity' : url.searchParams.get('history') === '1' ? 'history' : 'default',
       stage: url.searchParams.get('stage') ?? 'all',
       intent: url.searchParams.get('intent') ?? 'none',
     });

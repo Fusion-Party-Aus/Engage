@@ -6,7 +6,7 @@ import { listMembers, listProposals, canViewProposal } from "./store.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 
 export const escapeEmailHtml = (value: string) => value.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
-export const digestEnabled = (preference: { [key:string]: unknown; digestEnabled?: boolean; suppressed?: boolean } | null) => preference?.digestEnabled === true && !preference.suppressed;
+import { digestEnabled, ensureDigestCohort } from "./digest-preferences.ts";
 export function safeEqual(a: string, b: string) {
   const aa = Buffer.from(a), bb = Buffer.from(b);
   return aa.length === bb.length && timingSafeEqual(aa, bb);
@@ -28,10 +28,11 @@ export function readUnsubscribeToken(token: string, secret: string): string | nu
   try { const data = JSON.parse(Buffer.from(payload, "base64url").toString()); return data.v === 1 && typeof data.memberId === "string" ? data.memberId : null; } catch { return null; }
 }
 export type DigestBallot = { key:string; title:string; href:string; closesAt:Date; proposalId:string };
-export function renderDigest(name: string, ballots: DigestBallot[], origin: string, unsubscribeUrl: string) {
+export function renderDigest(name: string, ballots: DigestBallot[], origin: string, unsubscribeUrl: string, existingDefault = false) {
+  const subscriptionExplanation = existingDefault ? "Ballot reminders were enabled for your existing Engage account. You can turn them off at any time." : "You receive this because you enabled Engage ballot reminders.";
   const e = escapeEmailHtml;
-  const text = `Hello ${name || "member"},\n\n${ballots.length} ballot(s) close within seven days and still need your vote.\n\n` + ballots.map(b=>`${b.title}\nCloses ${ballotDeadlineLabel(b.closesAt)}\n${origin}${b.href}`).join("\n\n") + `\n\nMy Engage: ${origin}/member/\nEmail preferences: ${origin}/member/?view=account\nUnsubscribe: ${unsubscribeUrl}\n\nYou receive this because you enabled Engage ballot reminders. Voting is optional; review the exact wording before deciding.`;
-  const html = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Engage ballot digest</title></head><body style="margin:0;background:#f2eef9;color:#271047;font-family:Outfit,Arial,sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="600" style="width:100%;max-width:600px;background:#fff;border-radius:12px" cellpadding="0" cellspacing="0"><tr><td style="background:#32105a;color:white;padding:28px;border-bottom:6px solid #00c9d2"><p style="margin:0;font-size:12px;letter-spacing:3px">FUSION · HORIZON</p><p style="font-family:Newsreader,Georgia,serif;font-size:38px;margin:8px 0 0">Engage</p></td></tr><tr><td style="padding:28px"><h1 style="font-family:Newsreader,Georgia,serif;font-size:30px;line-height:1.15">A few decisions need your voice.</h1><p>Hello ${e(name || "member")},</p><p>These ${ballots.length} ballot(s) close within seven days. You haven’t voted on them yet.</p>${ballots.map(b=>`<div style="border-top:1px solid #ded6e7;padding:22px 0"><h2 style="font-family:Newsreader,Georgia,serif;font-size:24px;margin:0 0 10px">${e(b.title)}</h2><p style="font-size:14px;line-height:1.6">Closes ${e(ballotDeadlineLabel(b.closesAt))}</p><a style="display:inline-block;background:#00c9d2;color:#271047;padding:12px 20px;border-radius:24px;font-weight:bold;text-decoration:none" href="${e(origin + b.href)}">Read the wording &amp; vote →</a></div>`).join("")}<p style="line-height:1.6">Voting is optional. Your choice is yours—review the exact wording and supporting discussion before deciding.</p><p><a href="${origin}/member/" style="color:#32105a">Open My Engage →</a></p></td></tr><tr><td style="padding:24px 28px;background:#f8f5fc;font-size:12px;line-height:1.7;color:#54465f">Fusion Party Australia · Engage member participation<br>You enabled ballot reminder emails. <a href="${origin}/member/?view=account">Email preferences</a> · <a href="${e(unsubscribeUrl)}">Unsubscribe from reminders</a><br>Unsubscribing does not affect sign-in or your membership.</td></tr></table></td></tr></table></body></html>`;
+  const text = `Hello ${name || "member"},\n\n${ballots.length} ballot(s) close within seven days and still need your vote.\n\n` + ballots.map(b=>`${b.title}\nCloses ${ballotDeadlineLabel(b.closesAt)}\n${origin}${b.href}`).join("\n\n") + `\n\nMy Engage: ${origin}/member/\nEmail preferences: ${origin}/member/?view=notifications\nUnsubscribe: ${unsubscribeUrl}\n\n${subscriptionExplanation} Voting is optional; review the exact wording before deciding.`;
+  const html = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Engage ballot digest</title></head><body style="margin:0;background:#f2eef9;color:#271047;font-family:Outfit,Arial,sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="600" style="width:100%;max-width:600px;background:#fff;border-radius:12px" cellpadding="0" cellspacing="0"><tr><td style="background:#32105a;color:white;padding:28px;border-bottom:6px solid #00c9d2"><p style="margin:0;font-size:12px;letter-spacing:3px">FUSION · HORIZON</p><p style="font-family:Newsreader,Georgia,serif;font-size:38px;margin:8px 0 0">Engage</p></td></tr><tr><td style="padding:28px"><h1 style="font-family:Newsreader,Georgia,serif;font-size:30px;line-height:1.15">A few decisions need your voice.</h1><p>Hello ${e(name || "member")},</p><p>These ${ballots.length} ballot(s) close within seven days. You haven’t voted on them yet.</p>${ballots.map(b=>`<div style="border-top:1px solid #ded6e7;padding:22px 0"><h2 style="font-family:Newsreader,Georgia,serif;font-size:24px;margin:0 0 10px">${e(b.title)}</h2><p style="font-size:14px;line-height:1.6">Closes ${e(ballotDeadlineLabel(b.closesAt))}</p><a style="display:inline-block;background:#00c9d2;color:#271047;padding:12px 20px;border-radius:24px;font-weight:bold;text-decoration:none" href="${e(origin + b.href)}">Read the wording &amp; vote →</a></div>`).join("")}<p style="line-height:1.6">Voting is optional. Your choice is yours—review the exact wording and supporting discussion before deciding.</p><p><a href="${origin}/member/" style="color:#32105a">Open My Engage →</a></p></td></tr><tr><td style="padding:24px 28px;background:#f8f5fc;font-size:12px;line-height:1.7;color:#54465f">Fusion Party Australia · Engage member participation<br>${e(subscriptionExplanation)} <a href="${origin}/member/?view=notifications">Email preferences</a> · <a href="${e(unsubscribeUrl)}">Unsubscribe from reminders</a><br>Unsubscribing affects Engage digests only; account notifications, general communications and membership are separate.</td></tr></table></td></tr></table></body></html>`;
   return {subject:`Engage: ${ballots.length} ballot${ballots.length === 1 ? "" : "s"} closing soon`, text, html};
 }
 
@@ -68,6 +69,7 @@ export async function runBallotDigests(db: Db, env: PlatformEnv, send: typeof fe
   if (env.ENGAGE_DIGEST_ENABLED !== "true") return {disabled:true, sent:0, held:0};
   if (!env.RESEND_API_KEY || !env.AUTH_EMAIL_FROM || !env.ENGAGE_EMAIL_SECRET) throw new Error("Digest email configuration is incomplete");
   const origin = emailOrigin(env);
+  const existingMembers = await ensureDigestCohort(db);
   let after: string | undefined;
   for (;;) {
     const unreconciled = await db.collection<any>("engagement_email_events").find({processed:{$ne:true}, ...(after ? {_id:{$gt:after}} : {})}).sort({_id:1}).limit(500).toArray();
@@ -81,7 +83,7 @@ export async function runBallotDigests(db: Db, env: PlatformEnv, send: typeof fe
   for (const member of members.filter(m=>m.status === "verified" && m.emailVerified && !m.disabled)) {
     if (sent + held >= 25) break;
     const preference = await db.collection("engagement_email_preferences").findOne({memberId:member.memberId});
-    if (!digestEnabled(preference)) continue;
+    if (!digestEnabled(preference, existingMembers.has(member.memberId))) continue;
     // Prior sent OR ambiguous reminders hold a ballot from repeat mail, even on another day.
     const prior = await outbox.find({memberId:member.memberId}).project({ballotKeys:1}).toArray();
     const reminded = new Set(prior.flatMap(p=>p.ballotKeys || []));
@@ -90,13 +92,13 @@ export async function runBallotDigests(db: Db, env: PlatformEnv, send: typeof fe
     if (!ballots.length) continue;
     const id = createHash("sha256").update(`${member.memberId}:${now.toISOString().slice(0,10)}`).digest("hex");
     const unsubscribeUrl = `${origin}/api/email/unsubscribe?token=${unsubscribeToken(member.memberId,env.ENGAGE_EMAIL_SECRET)}`;
-    const content = renderDigest(member.name, ballots, origin, unsubscribeUrl);
+    const content = renderDigest(member.name, ballots, origin, unsubscribeUrl, existingMembers.has(member.memberId) && preference?.digestEnabled !== true);
     const payload = {from:env.AUTH_EMAIL_FROM,to:[member.email],...content,headers:{"List-Unsubscribe":`<${unsubscribeUrl}>`,"List-Unsubscribe-Post":"List-Unsubscribe=One-Click"}};
     try { await outbox.insertOne({_id:id, memberId:member.memberId, status:"sending", createdAt:now, ballotKeys:ballots.map(b=>b.key)}); }
     catch (error) { if ((error as {code?:number}).code === 11000) continue; throw error; }
     // Recheck subscription immediately before handoff.
     const latest = await db.collection("engagement_email_preferences").findOne({memberId:member.memberId});
-    if (!digestEnabled(latest)) { await outbox.updateOne({_id:id},{$set:{status:"cancelled"},$unset:{ballotKeys:""}}); continue; }
+    if (!digestEnabled(latest, existingMembers.has(member.memberId))) { await outbox.updateOne({_id:id},{$set:{status:"cancelled"},$unset:{ballotKeys:""}}); continue; }
     try {
       const response = await send("https://api.resend.com/emails", {method:"POST",headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,"content-type":"application/json","Idempotency-Key":`engage-digest-${id}`},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
       const result = await response.json() as {id?:string};

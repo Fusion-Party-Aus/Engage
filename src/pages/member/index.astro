@@ -33,6 +33,7 @@ import {
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import EmailPreferences from '../../components/member/EmailPreferences.astro';
 import { ballotExpired, ballotDeadlineLabel } from '../../lib/ballot-deadline.ts';
+import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
 import { digestBallots } from '../../lib/engagement-email.ts';
 import { listOutstandingDecisions, listProposals, listUserActivity } from '../../lib/store.ts';
 
@@ -74,10 +75,12 @@ const [
     ])
   : [null, [] as ActivityTimelineEvent[], [], [], [], [] as MemberCatchUpGroup[], 0];
 
-const [emailPreference, closingSoon] = user ? await Promise.all([
+const [emailPreference, closingSoon, existingDigestMembers] = user ? await Promise.all([
  db.collection('engagement_email_preferences').findOne({memberId:user.memberId}),
  digestBallots(db,user,visibleProposals),
-]) : [null, []];
+ ensureDigestCohort(db),
+]) : [null, [], new Set<string>()];
+const existingDigestMember = Boolean(user && existingDigestMembers.has(user.memberId));
 const involvedIds = new Set([...(activity?.proposals ?? []).map(p=>p.proposalId), ...(activity?.votes ?? []).map(v=>v.proposalId), ...(activity?.comments ?? []).map(c=>c.proposalId)]);
 const lifecycleItems = visibleProposals.filter(p=>involvedIds.has(p.proposalId) && (p.stage === 'implement' || p.stage === 'archived' || ballotExpired(p))).sort((a,b)=>new Date(b.updatedAt).getTime()-new Date(a.updatedAt).getTime()).slice(0,8);
 const memberTimeline = buildActivityTimeline(memberTimelineEvents);
@@ -165,7 +168,7 @@ const completedOpenBallotsCount =
   new Set(activity?.votes.filter(v => visibleProposals.some(p => p.proposalId === v.proposalId && p.stage === 'decide' && !ballotExpired(p) && v.ballotId === `proposal:${p.proposalId}` && v.revisionId === p.ballotRevisionId)).map(v=>v.proposalId) ?? []).size;
 const totalEligibleOpenBallotsCount = completedOpenBallotsCount + awaitingDecision.length;
 const requestedView = Astro.url.searchParams.get('view');
-const memberView = requestedView === 'activity' || requestedView === 'account' ? requestedView : 'overview';
+const memberView = requestedView === 'activity' || requestedView === 'account' || requestedView === 'notifications' ? requestedView : 'overview';
 
 // Contextual Intent Preservation (Message Match & Safe Same-Origin Redirect)
 const rawReturnTo = Astro.url.searchParams.get('returnTo')?.trim() ?? '';
@@ -427,7 +430,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         <header class="member-header">
           <div class="member-header__main">
             <div class="member-header__title-row">
-              <h1>{memberView === 'activity' ? 'Activity & Governance Log' : memberView === 'account' ? 'My Account' : 'My Engage'}</h1>
+              <h1>{memberView === 'activity' ? 'Activity & Governance Log' : memberView === 'account' ? 'My Account' : memberView === 'notifications' ? 'Notifications' : 'My Engage'}</h1>
               <Badge variant={user.status === 'verified' ? 'success' : user.status === 'suspended' ? 'destructive' : 'warning'}>
                 {user.status === 'verified' ? 'Verified member' : user.status === 'suspended' ? 'Suspended' : 'Verification pending'}
               </Badge>
@@ -491,6 +494,9 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             firstDeliberationHref={deliberationOpportunities[0] ? `/proposals/${deliberationOpportunities[0].slug}/` : undefined}
             firstDeliberationTitle={deliberationOpportunities[0]?.title}
             totalContributions={totalContributions}
+            digestEnabled={digestEnabled(emailPreference, existingDigestMember)}
+            digestExistingMember={existingDigestMember}
+            digestSuppressed={Boolean(emailPreference?.suppressed)}
             initialPasskeyCount={userPasskeyCount}
           />
         </div>
@@ -536,12 +542,13 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             Activity &amp; Log
             <span class="member-tab__count tabular">{memberTimelineCount}</span>
           </a>
+          <a href="/member/?view=notifications" class="member-tab" aria-current={memberView === 'notifications' ? 'page' : undefined}>Notifications</a>
           <a href="/member/?view=account" class="member-tab" aria-current={memberView === 'account' ? 'page' : undefined}>
             Account &amp; Access
           </a>
         </nav>
 
-        <div class="account-only"><EmailPreferences preference={emailPreference} saved={Astro.url.searchParams.get('emailPreferences') === 'saved'} /></div>
+        <div class="notifications-only"><EmailPreferences existingMember={existingDigestMember} preference={emailPreference} saved={Astro.url.searchParams.get('emailPreferences') === 'saved'} /></div>
         <!-- VIEW 1: OVERVIEW (Outstanding votes, Participation opportunities, Catch-up, Status changes) -->
         <div class="overview-only member-overview-grid">
           <!-- Left Column: Actionable Queues -->
@@ -564,7 +571,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               <p>Follow what happened to proposals you authored, discussed or voted on.</p>
               {lifecycleItems.length ? <ul>{lifecycleItems.map(p=><li><a href={`/proposals/${p.slug}/`}>{p.title}</a> — {p.stage === 'implement' ? 'Implementation · inspect the recorded decision' : p.stage === 'archived' ? 'Archived' : 'Voting closed · inspect the recorded decision'}</li>)}</ul> : <p>Closed ballots and implementation updates will appear here.</p>}
             </section>
-            <EmailPreferences preference={emailPreference} saved={Astro.url.searchParams.get('emailPreferences') === 'saved'} />
+            <section class="member-panel"><h2>Stay in the loop</h2><p>Manage Engage digests, account notifications and general communications.</p><a href="/member/?view=notifications">Notification preferences →</a></section>
             <!-- 2. Relevant Participation Opportunities (Deliberation & Amendments) -->
             <section class="member-panel" aria-labelledby="opportunities-heading">
               <div class="member-panel__head">
@@ -1081,6 +1088,11 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
     padding-top: 1.5rem;
     padding-bottom: 3.5rem;
   }
+
+  .member-page:not([data-view="notifications"]) .notifications-only,
+  .member-page[data-view="notifications"] .overview-only,
+  .member-page[data-view="notifications"] .activity-only,
+  .member-page[data-view="notifications"] .account-only { display: none; }
 
   .member-page[data-view="activity"] .overview-only,
   .member-page[data-view="activity"] .account-only {

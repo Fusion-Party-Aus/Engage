@@ -9,6 +9,8 @@ export const ALL: APIRoute = async ({request,url,locals}) => {
  const headers = {"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Referrer-Policy":"no-referrer"};
  if (!memberId) return new Response("Invalid unsubscribe link.",{status:400,headers});
  if (request.method === "GET") return new Response(`<!doctype html><html lang="en"><title>Engage email preferences</title><body style="font-family:Arial;background:#f2eef9;color:#271047;padding:2rem"><h1>Unsubscribe from Engage reminders</h1><p>Sign-in emails and your membership are unaffected.</p><form method="post" action="?token=${escapeEmailHtml(token)}"><button>Unsubscribe</button></form></body></html>`,{headers});
- await (await getDatabase(env)).collection("engagement_email_preferences").updateOne({memberId},{$set:{memberId,digestEnabled:false,unsubscribedAt:new Date()}},{upsert:true});
- return new Response("You are unsubscribed from Engage ballot reminders. You can re-enable them in My Engage.",{headers});
+ const db = await getDatabase(env);
+ await db.collection("engagement_email_preferences").updateOne({memberId},{$set:{memberId,digestEnabled:false,unsubscribedAt:new Date()}},{upsert:true});
+ await db.collection("engagement_notification_events").insertOne({memberId,category:"engage",enabled:false,source:"email-unsubscribe",at:new Date()});
+ return new Response("You are unsubscribed from Engage digests. Account notifications and general communications are unchanged. Re-enable digests in My Engage → Notifications.",{headers});
 };
