@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { Db } from "mongodb";
 import type { PlatformEnv } from "./types.ts";
+import { SOCIAL_PLATFORMS, isPublicHttpUrl, isSiteLink } from "./url-validation.ts";
 
 export interface NavLinkConfig {
   href: string;
@@ -22,6 +24,27 @@ export interface StateSiteConfig {
   branchId?: string;
 }
 
+export type SiteConfigSection =
+  | "visibility"
+  | "features"
+  | "social"
+  | "directory"
+  | "operations"
+  | "restore"
+  | "general";
+
+export interface SiteConfigEvent {
+  eventId: string;
+  section: SiteConfigSection;
+  summary: string;
+  actorId: string;
+  actorName: string;
+  changedFields: string[];
+  before: Partial<SiteConfig>;
+  after: Partial<SiteConfig>;
+  createdAt: Date;
+}
+
 export interface SiteConfig {
   configId: "global";
   siteName: string;
@@ -42,6 +65,7 @@ export interface SiteConfig {
   handoverSummary: string;
   updatedAt?: Date;
   updatedBy?: string;
+  updatedByName?: string;
 }
 
 export const DEFAULT_SOCIAL_LINKS: SocialLinkConfig[] = [
@@ -220,6 +244,80 @@ export function getDefaultSiteConfig(env: PlatformEnv = {}): SiteConfig {
   };
 }
 
+export { SOCIAL_PLATFORMS, isPublicHttpUrl } from "./url-validation.ts";
+
+/**
+ * Validate an incoming settings payload and return human-readable problems
+ * keyed by field (e.g. `socialLinks.2.href`). The sanitiser silently drops bad
+ * values; this makes the API reject them so administrators get feedback.
+ */
+export function validateSiteConfigInput(
+  raw: Record<string, unknown>,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const text = (key: string, label: string, max: number) => {
+    if (raw[key] === undefined) return;
+    const v = typeof raw[key] === "string" ? (raw[key] as string).trim() : "";
+    if (!v) errors[key] = `${label} cannot be empty.`;
+    else if (v.length > max) errors[key] = `${label} must be ${max} characters or fewer.`;
+  };
+  text("primaryCtaLabel", "Button label", 48);
+  text("tagline", "Tagline", 240);
+  text("defaultDescription", "Description", 320);
+  if (raw.primaryCtaHref !== undefined && !isSiteLink(raw.primaryCtaHref))
+    errors.primaryCtaHref = "Enter a page on this site (starting with /) or a full https:// address.";
+  if (raw.defaultOgImage !== undefined && !isSiteLink(raw.defaultOgImage))
+    errors.defaultOgImage = "Enter an image path (starting with /) or a full https:// address.";
+  for (const key of ["allowPublicIndexing", "publicPulsePollEnabled", "showPrimaryCtaInHeader"]) {
+    if (raw[key] !== undefined && typeof raw[key] !== "boolean")
+      errors[key] = "Choose on or off.";
+  }
+  if (raw.socialLinks !== undefined) {
+    if (!Array.isArray(raw.socialLinks)) errors.socialLinks = "Social channels must be a list.";
+    else if (raw.socialLinks.length > 20) errors.socialLinks = "Add at most 20 social channels.";
+    else {
+      const seen = new Set<string>();
+      raw.socialLinks.forEach((item, i) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        const label = String(row.label ?? "").trim();
+        if (!label) errors[`socialLinks.${i}.label`] = "Enter a name for this channel.";
+        else if (label.length > 80) errors[`socialLinks.${i}.label`] = "Keep the name under 80 characters.";
+        if (!isPublicHttpUrl(row.href))
+          errors[`socialLinks.${i}.href`] = "Enter a full web address, like https://www.facebook.com/YourPage.";
+        else if (seen.has(String(row.href).trim().toLowerCase()))
+          errors[`socialLinks.${i}.href`] = "This address is already listed.";
+        else seen.add(String(row.href).trim().toLowerCase());
+        if (
+          row.platform !== undefined &&
+          row.platform !== "" &&
+          !(SOCIAL_PLATFORMS as readonly string[]).includes(String(row.platform))
+        )
+          errors[`socialLinks.${i}.platform`] = "Choose a platform from the list.";
+      });
+    }
+  }
+  if (raw.stateSites !== undefined) {
+    if (!Array.isArray(raw.stateSites)) errors.stateSites = "The branch directory must be a list.";
+    else {
+      const codes = new Set<string>();
+      raw.stateSites.forEach((item, i) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        const code = String(row.code ?? "").trim().toUpperCase();
+        if (!/^[A-Z]{2,10}$/.test(code)) errors[`stateSites.${i}.code`] = "Use 2–10 letters, like VIC.";
+        else if (codes.has(code)) errors[`stateSites.${i}.code`] = "This abbreviation is already used.";
+        else codes.add(code);
+        if (!String(row.name ?? "").trim()) errors[`stateSites.${i}.name`] = "Enter a name.";
+        if (!isPublicHttpUrl(row.websiteHref))
+          errors[`stateSites.${i}.websiteHref`] = "Enter a full web address, like https://vic.example.org.";
+        const fb = row.facebookHref;
+        if (fb !== undefined && fb !== "" && !isPublicHttpUrl(fb))
+          errors[`stateSites.${i}.facebookHref`] = "Enter a full web address or leave blank.";
+      });
+    }
+  }
+  return errors;
+}
+
 export function sanitizeSiteConfigPatch(
   raw: Record<string, unknown>,
   base: SiteConfig,
@@ -309,6 +407,90 @@ const siteConfigCache = new WeakMap<
   { expiresAt: number; value: SiteConfig }
 >();
 
+const EDITABLE_CONFIG_KEYS: Array<keyof SiteConfig> = [
+  "siteName",
+  "organizationName",
+  "tagline",
+  "defaultDescription",
+  "defaultOgImage",
+  "allowPublicIndexing",
+  "publicPulsePollEnabled",
+  "primaryCtaLabel",
+  "primaryCtaHref",
+  "showPrimaryCtaInHeader",
+  "socialLinks",
+  "stateSites",
+  "repoUrl",
+  "docsUrl",
+  "backupSummary",
+  "handoverSummary",
+];
+
+function inferSection(changedFields: string[], requested?: unknown): SiteConfigSection {
+  if (
+    typeof requested === "string" &&
+    ["visibility", "features", "social", "directory", "operations", "restore", "general"].includes(requested)
+  ) {
+    return requested as SiteConfigSection;
+  }
+  if (changedFields.every((f) => f === "socialLinks")) return "social";
+  if (changedFields.every((f) => f === "stateSites")) return "directory";
+  if (changedFields.every((f) => f === "publicPulsePollEnabled")) return "features";
+  if (
+    changedFields.every((f) =>
+      ["repoUrl", "docsUrl", "backupSummary", "handoverSummary"].includes(f),
+    )
+  ) {
+    return "operations";
+  }
+  if (
+    changedFields.every((f) =>
+      [
+        "allowPublicIndexing",
+        "defaultOgImage",
+        "primaryCtaLabel",
+        "primaryCtaHref",
+        "showPrimaryCtaInHeader",
+        "tagline",
+        "defaultDescription",
+      ].includes(f),
+    )
+  ) {
+    return "visibility";
+  }
+  return "general";
+}
+
+function buildChangeSummary(section: SiteConfigSection, changedFields: string[]): string {
+  const labels: Record<string, string> = {
+    allowPublicIndexing: "search engine indexing",
+    defaultOgImage: "sharing preview image",
+    primaryCtaLabel: "header action label",
+    primaryCtaHref: "header action link",
+    showPrimaryCtaInHeader: "header action visibility",
+    publicPulsePollEnabled: "public sentiment poll trial",
+    socialLinks: "national social channels",
+    stateSites: "branch website directory",
+    repoUrl: "source repository link",
+    docsUrl: "operational reference link",
+    backupSummary: "backup overview note",
+    handoverSummary: "maintainer handover note",
+    tagline: "site tagline",
+    defaultDescription: "default page description",
+  };
+  const named = changedFields.map((f) => labels[f] || f);
+  if (section === "restore") {
+    return `Restored ${named.join(", ")} from change history`;
+  }
+  if (named.length === 1) {
+    return `Updated ${named[0]}`;
+  }
+  if (named.length <= 3) {
+    return `Updated ${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+  }
+  return `Updated ${named.slice(0, 2).join(", ")} and ${named.length - 2} other settings`;
+}
+
 export async function getSiteConfig(
   db: Db,
   env: PlatformEnv = {},
@@ -329,6 +511,7 @@ export async function getSiteConfig(
           ...sanitizeSiteConfigPatch(stored as Record<string, unknown>, defaults),
           updatedAt: stored.updatedAt ? new Date(stored.updatedAt) : undefined,
           updatedBy: stored.updatedBy,
+          updatedByName: stored.updatedByName,
         };
     siteConfigCache.set(db, { expiresAt: Date.now() + 30_000, value });
     return value;
@@ -337,28 +520,89 @@ export async function getSiteConfig(
   }
 }
 
+export async function listSiteConfigEvents(
+  db: Db,
+  limit = 40,
+): Promise<SiteConfigEvent[]> {
+  try {
+    const rows = await db
+      .collection<SiteConfigEvent>("site_settings_events")
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .toArray();
+    return rows.map(({ _id, ...rest }: any) => ({
+      ...rest,
+      createdAt: rest.createdAt ? new Date(rest.createdAt) : new Date(),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function updateSiteConfig(
   db: Db,
   env: PlatformEnv,
   actorId: string,
   updates: Record<string, unknown>,
+  actorName = "Administrator",
 ): Promise<SiteConfig> {
   siteConfigCache.delete(db);
   const current = await getSiteConfig(db, env);
   const merged = sanitizeSiteConfigPatch(updates, current) as SiteConfig;
   const now = new Date();
+
+  const changedFields: string[] = [];
+  const beforeSnap: Partial<SiteConfig> = {};
+  const afterSnap: Partial<SiteConfig> = {};
+
+  for (const key of EDITABLE_CONFIG_KEYS) {
+    const prevVal = current[key];
+    const nextVal = merged[key];
+    if (JSON.stringify(prevVal) !== JSON.stringify(nextVal)) {
+      changedFields.push(key);
+      (beforeSnap as Record<string, unknown>)[key] = prevVal;
+      (afterSnap as Record<string, unknown>)[key] = nextVal;
+    }
+  }
+
   const next: SiteConfig = {
     ...current,
     ...merged,
     configId: "global",
     updatedAt: now,
     updatedBy: actorId,
+    updatedByName: actorName,
   };
   await db.collection("site_settings").updateOne(
     { configId: "global" },
     { $set: next },
     { upsert: true },
   );
+
+  if (changedFields.length > 0) {
+    const section = inferSection(changedFields, updates.section);
+    const summary =
+      typeof updates.changeSummary === "string" && updates.changeSummary.trim()
+        ? updates.changeSummary.trim().slice(0, 200)
+        : buildChangeSummary(section, changedFields);
+    const event: SiteConfigEvent = {
+      eventId: randomUUID(),
+      section,
+      summary,
+      actorId,
+      actorName,
+      changedFields,
+      before: beforeSnap,
+      after: afterSnap,
+      createdAt: now,
+    };
+    await db
+      .collection("site_settings_events")
+      .insertOne(event as unknown as Record<string, unknown>)
+      .catch(() => {});
+  }
+
   siteConfigCache.set(db, { expiresAt: Date.now() + 30_000, value: next });
   return next;
 }

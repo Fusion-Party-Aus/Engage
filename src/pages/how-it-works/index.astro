@@ -25,7 +25,7 @@ import {
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { listProposals } from '../../lib/store.ts';
-import { getSiteConfig } from '../../lib/site-config.ts';
+import { getSiteConfig, getDefaultSiteConfig } from '../../lib/site-config.ts';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -448,7 +448,7 @@ const governanceRules = [
             <HardDrive className="size-5 text-primary" aria-hidden="true" />
             <h3>1. Self-contained Docker architecture</h3>
           </div>
-          <p>{siteConfig.backupSummary}</p>
+          <p>{getDefaultSiteConfig().backupSummary}</p>
           <ul class="ops-checklist">
             <li><strong>Application container:</strong> Stateless Astro standalone Node server built from the root <code>Dockerfile</code>.</li>
             <li><strong>Database container:</strong> Single-node MongoDB 8.0 replica set (required for multi-document ACID vote transactions) persisted in the <code>mongo_data</code> volume.</li>
@@ -477,7 +477,7 @@ scripts/restore-preview.sh /backups/engage-YYYY-MM-DD.archive.gz</code></pre>
             <GitBranch className="size-5 text-primary" aria-hidden="true" />
             <h3>3. Maintainer handover checklist</h3>
           </div>
-          <p>{siteConfig.handoverSummary}</p>
+          <p>{getDefaultSiteConfig().handoverSummary}</p>
           <ol class="ops-steps">
             <li><strong>Repository &amp; docs:</strong> Clone <code>Fusion-Party-Aus/Engage</code>; review <code>docs/operations.md</code> and <code>docs/engage-release-handover-2026-11-08.md</code>.</li>
             <li><strong>Environment secrets:</strong> Transfer the <code>.env</code> secrets (<code>MONGODB_URI</code>, <code>SESSION_SECRET</code>, <code>BETTER_AUTH_SECRET</code>, OAuth/Resend keys) via the party’s password manager.</li>

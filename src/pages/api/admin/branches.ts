@@ -3,6 +3,17 @@ import { randomUUID } from "node:crypto";
 import { getSessionUser } from "../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 const kinds = ["national", "state", "territory", "constituent"];
+const parentKinds: Record<string, string[]> = {
+  state: ["national"],
+  territory: ["national"],
+  constituent: ["state", "territory"],
+};
+function parentKindError(kind: string, parent: Record<string, any> | null) {
+  if (!parent || !parentKinds[kind]) return null;
+  return parentKinds[kind]!.includes(String(parent.kind))
+    ? null
+    : `A ${kind} branch must sit under a ${parentKinds[kind]!.join(" or ")} branch.`;
+}
 export const prerender = false;
 export const GET: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -55,19 +66,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { status: 400 },
       );
     const db = await getDatabase(env);
+    const existing = await db.collection("branches").findOne({ branchId });
+    if (existing)
+      return Response.json(
+        { error: "A branch with this identifier already exists." },
+        { status: 409 },
+      );
     if (kind === "national" && parentBranchId)
       return Response.json(
         { error: "National branches cannot have a parent." },
         { status: 400 },
       );
-    if (
-      parentBranchId &&
-      !(await db.collection("branches").findOne({ branchId: parentBranchId }))
-    )
+    const parentRecord = parentBranchId
+      ? await db.collection("branches").findOne({ branchId: parentBranchId })
+      : null;
+    if (parentBranchId && !parentRecord)
       return Response.json(
         { error: "Parent branch not found." },
         { status: 400 },
       );
+    const createKindError = parentKindError(kind, parentRecord);
+    if (createKindError)
+      return Response.json({ error: createKindError }, { status: 400 });
     const record = {
       branchId,
       name,
@@ -168,6 +188,12 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
             : null;
       }
     }
+    const patchParent = parentBranchId
+      ? await branches.findOne({ branchId: parentBranchId })
+      : null;
+    const patchKindError = parentKindError(kind, patchParent);
+    if (patchKindError)
+      return Response.json({ error: patchKindError }, { status: 400 });
     const next = {
       name,
       kind,
