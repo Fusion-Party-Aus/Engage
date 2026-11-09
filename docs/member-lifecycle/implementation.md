@@ -65,3 +65,7 @@ Campaign copy, audience review and sending require explicit approval. This imple
 - No production deploy, member communications, historical backfill, live preference changes or provider-setting changes were performed.
 
 Before an authorised deployment: back up existing collections, run the MongoDB integration suite on an isolated replica set, inspect desktop/mobile My Engage states and both email templates, confirm canonical HTTPS origin and existing Resend sender/webhook configuration. Use a synthetic account to verify approval → one accepted receipt → one delivered receipt → sign-in → eligible ballot → successful vote. Check admin funnel and a read-only campaign preview. Do not enable or reconfigure the digest scheduler as a side effect of this release. No production action is authorised by these notes.
+
+## CI fixture compatibility
+
+The first PR run (`42570218816`) failed before application checks: MongoDB 8.0 exited with fatal message 12257600 on the hosted runner kernel, followed by `ECONNREFUSED`. The [runner maintainers recommend temporarily using Ubuntu 22.04](https://github.com/actions/runner-images/issues/15005); MongoDB tracks Ubuntu kernel detection in [SERVER-131779](https://jira.mongodb.org/browse/SERVER-131779). The application-check job now uses Ubuntu 22.04 while retaining the same MongoDB 8.0 replica set and test suite. Production images and deployment workflows are unchanged. Revisit the runner pin once a published compatible MongoDB 8.0 patch has been verified.

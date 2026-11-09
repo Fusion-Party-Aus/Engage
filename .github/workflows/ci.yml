@@ -8,7 +8,10 @@ permissions:
   contents: read
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Temporary MongoDB 8.0 workaround for the runner's Ubuntu kernel-version
+    # detection bug: actions/runner-images#15005 / MongoDB SERVER-131779.
+    # Return to ubuntu-latest after a published 8.0 fix is verified on that kernel.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     env:
       VOTING_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
