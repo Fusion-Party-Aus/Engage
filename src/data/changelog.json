@@ -1,5 +1,29 @@
 [
   {
+    "hash": "1c13678",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Simplify discovery and expose ballot progression"
+  },
+  {
+    "hash": "50a7710",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "agents.md",
+    "summary": "Enhance AGENTS.md with more bounded structure for Coding agents working on the repository"
+  },
+  {
+    "hash": "d619b8f",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record audited platform settings"
+  },
+  {
     "hash": "5bb7e82",
     "date": "2026-11-09",
     "type": "feat",
@@ -638,30 +662,5 @@
     "category": "docs",
     "scope": "platform",
     "summary": "Record Docker deployment and recovery verification"
-  },
-  {
-    "hash": "da332e6",
-    "date": "2026-10-24",
-    "type": "test",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Use database time for cutoff regression deadlines",
-    "details": "Docker verification exposed a 15 ms Mac/VM offset: host-created expired deadlines could still be in MongoDB’s future. Set these two regression deadlines using MongoDB time, matching the existing admission rule. All seven cutoff tests pass against Docker MongoDB without changing application behaviour."
-  },
-  {
-    "hash": "09a97df",
-    "date": "2026-10-24",
-    "type": "docs",
-    "category": "docs",
-    "scope": "platform",
-    "summary": "Record hosted CI billing blocker"
-  },
-  {
-    "hash": "1796ff1",
-    "date": "2026-10-24",
-    "type": "ci",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Run application checks with real MongoDB integration tests"
   }
 ]
