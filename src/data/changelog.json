@@ -1,5 +1,14 @@
 [
   {
+    "hash": "34166c8",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "engagement",
+    "summary": "Repair admin test email behind the proxy and clarify delivery reporting",
+    "details": "Add responsive engagement cards, safe test receipts and a read-only eligibility preview. Keep unknown historical ballot availability explicit."
+  },
+  {
     "hash": "8d457fc",
     "date": "2026-11-09",
     "type": "fix",
@@ -545,7 +554,7 @@
     "category": "ops",
     "scope": "platform",
     "summary": "Use database time for cutoff regression deadlines",
-    "details": "Docker verification exposed a 15 ms Mac/VM offset: host-created expired deadlines could still be in MongoDB’s future. Set these two regression deadlines using MongoDB time, matching the existing admission rule. All seven cutoff tests pass against Docker MongoDB without changing application behaviour."
+    "details": "Docker verification exposed a 15 ms Mac/VM offset: host-created expired deadlines could still be in MongoDB\u2019s future. Set these two regression deadlines using MongoDB time, matching the existing admission rule. All seven cutoff tests pass against Docker MongoDB without changing application behaviour."
   },
   {
     "hash": "09a97df",
@@ -652,21 +661,5 @@
     "category": "ops",
     "scope": "platform",
     "summary": "Build Horizon policy platform preview"
-  },
-  {
-    "hash": "cf3cbcc",
-    "date": "2026-10-24",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Export Reclaim platform static site and policy baseline"
-  },
-  {
-    "hash": "29113ec",
-    "date": "2026-10-09",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Initial commit"
   }
 ]
