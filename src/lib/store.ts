@@ -1,3 +1,4 @@
+import { recordLifecycle, recordParticipation, notePriorParticipation } from "./member-lifecycle.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { validPersonName } from "./auth.ts";
@@ -1430,6 +1431,7 @@ export async function castVote(
           : "reject";
     const ballotId = `amendment:${amendmentId}`;
     const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
+    await notePriorParticipation(db,user.memberId);
     await votesCol.updateOne(
       { ballotId, memberId: user.memberId },
       {
@@ -1459,6 +1461,7 @@ export async function castVote(
       else votes.reject++;
       votes.total++;
     }
+    await recordParticipation(db, user.memberId);
     return { choice, votes, amendmentId };
   }
   if (proposal.stage !== "decide") {
@@ -1558,6 +1561,7 @@ export async function castVote(
     typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
 
   const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
+  await notePriorParticipation(db,user.memberId);
   await votesCol.updateOne(
     {
       ballotId: proposalBallotId(proposal.proposalId),
@@ -1597,6 +1601,7 @@ export async function castVote(
     votes.total += 1;
   }
 
+  await recordParticipation(db, user.memberId);
   return { choice, votes };
 }
 
@@ -1842,11 +1847,11 @@ export async function listOutstandingDecisions(
   memberId: string,
   user?: SessionUser | null,
 ): Promise<ProposalSummaryView[]> {
+  if (user && !user.canParticipate) return [];
   const [decisions, votes] = await Promise.all([
     listProposals(db, { stage: "decide", user }),
     db.collection<VoteRecord>(PROPOSAL_VOTES).find({ memberId }).toArray(),
   ]);
-  const voted = new Set(votes.map((vote) => vote.proposalId));
   const branchIds = [...new Set(
     decisions
       .map((decision) => decision.jurisdictionBranchId)
@@ -1865,7 +1870,7 @@ export async function listOutstandingDecisions(
   const activeMemberships = new Set(memberships.map(({ branchId }) => branchId));
   const recognisedBranches = new Set(branches.map(({ branchId }) => branchId));
   return decisions.filter((decision) => {
-    if (voted.has(decision.proposalId) || ballotExpired(decision)) return false;
+    if (!decision.ballotRevisionId || votes.some(v=>v.ballotId === proposalBallotId(decision.proposalId) && v.revisionId === decision.ballotRevisionId) || ballotExpired(decision)) return false;
     const branchId = decision.jurisdictionBranchId;
     return !branchId || (activeMemberships.has(branchId) && recognisedBranches.has(branchId));
   });
@@ -1974,6 +1979,8 @@ export async function saveMember(
       updatedAt: now,
     });
     memberId = saved.insertedId.toString();
+    await recordLifecycle(db, memberId, "registration_completed", now);
+    await recordLifecycle(db, memberId, "verification_requested", now);
   } else {
     if (
       typeof body.memberId !== "string" ||
@@ -2026,18 +2033,21 @@ export async function saveMember(
   }
 
   if (status !== undefined) {
+    const previous = await db.collection("memberships").findOne({memberId});
     await db.collection("memberships").updateOne(
       { memberId },
       {
         $set: {
           memberId,
           status,
+          ...(status === "verified" && previous?.status !== "verified" ? {verifiedAt:now} : {}),
           updatedAt: now,
           updatedBy: actor.memberId,
         },
       },
       { upsert: true },
     );
+    if (status === "verified" && previous?.status !== "verified") await recordLifecycle(db, memberId, "verification_approved", now);
     if (status === "verified" && disabled !== true) {
       await promotePendingVotePreferences(db, memberId);
     }

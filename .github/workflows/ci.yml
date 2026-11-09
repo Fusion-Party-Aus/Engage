@@ -8,7 +8,10 @@ permissions:
   contents: read
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Temporary MongoDB 8.0 workaround for the runner's Ubuntu kernel-version
+    # detection bug: actions/runner-images#15005 / MongoDB SERVER-131779.
+    # Return to ubuntu-latest after a published 8.0 fix is verified on that kernel.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     env:
       VOTING_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
@@ -53,6 +56,20 @@ jobs:
       - name: Node and real MongoDB voting/authentication regressions
         run: pnpm test
       - run: pnpm build
+      - name: Desktop and mobile member lifecycle verification
+        env:
+          ENGAGE_PLAYWRIGHT_MODULE: ${{ runner.temp }}/engage-browser/node_modules/playwright/index.mjs
+        run: |
+          npm install --prefix "$RUNNER_TEMP/engage-browser" --no-save --no-package-lock playwright@1.57.0
+          node "$RUNNER_TEMP/engage-browser/node_modules/playwright/cli.js" install --with-deps chromium
+          node scripts/member-lifecycle-browser.mjs
+      - name: Save synthetic lifecycle screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: member-lifecycle-screenshots
+          path: docs/screenshots/member-lifecycle/
+          if-no-files-found: ignore
       - name: MongoDB logs on failure
         if: failure()
         run: docker logs engage-ci-mongo

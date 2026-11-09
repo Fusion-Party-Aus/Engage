@@ -1,5 +1,53 @@
 [
   {
+    "hash": "8d457fc",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "email",
+    "summary": "Keep verification notices within narrow mobile screens"
+  },
+  {
+    "hash": "300966c",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Let administrators inspect the proposed re-engagement audience"
+  },
+  {
+    "hash": "9e72e64",
+    "date": "2026-11-09",
+    "type": "test",
+    "category": "ops",
+    "scope": "member",
+    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
+  },
+  {
+    "hash": "71a61de",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ci",
+    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
+  },
+  {
+    "hash": "cb39b60",
+    "date": "2026-11-09",
+    "type": "docs",
+    "category": "docs",
+    "scope": "member",
+    "summary": "Record lifecycle audit, consent assessment and rollout checks"
+  },
+  {
+    "hash": "52c6570",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Connect verification, participation and legacy consent journeys"
+  },
+  {
     "hash": "eb5f365",
     "date": "2026-11-09",
     "type": "feat",

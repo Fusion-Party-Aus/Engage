@@ -1,4 +1,5 @@
 ---
+import { lifecycleConversion } from '../../lib/member-lifecycle.ts';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { digestEnabled, ensureDigestCohort, notificationEnabled } from '../../lib/digest-preferences.ts';
@@ -10,12 +11,14 @@ if (!user?.isAdmin) return new Response('Administrator access required',{status:
 const db=await getDatabase(env);
 const since=new Date(Date.now()-30*86400000);
 const [messages, preferences, existingMembers, accounts, testMessages] = await Promise.all([
- db.collection('engagement_email_outbox').find({createdAt:{$gte:since},kind:{$ne:'test'}}).project({status:1,providerId:1,deliveredAt:1,bouncedAt:1,complainedAt:1,failedAt:1,openedAt:1,clickedAt:1}).toArray(),
+ db.collection('engagement_email_outbox').find({createdAt:{$gte:since},kind:{$nin:['test','verification']}}).project({status:1,providerId:1,deliveredAt:1,bouncedAt:1,complainedAt:1,failedAt:1,openedAt:1,clickedAt:1}).toArray(),
  db.collection('engagement_email_preferences').find({}).project({memberId:1,digestEnabled:1,accountNotificationsEnabled:1,generalCommunicationsEnabled:1,suppressed:1,unsubscribedAt:1}).toArray(),
  ensureDigestCohort(db),
  db.collection("user").find({}).project({_id:1}).toArray(),
  db.collection('engagement_email_outbox').find({kind:'test',memberId:user.memberId}).sort({createdAt:-1}).limit(5).project({status:1,providerId:1,createdAt:1,deliveredAt:1,bouncedAt:1,complainedAt:1,failedAt:1}).toArray(),
 ]);
+const verificationMessages=await db.collection('engagement_email_outbox').find({kind:'verification',createdAt:{$gte:since}}).toArray();
+const funnel=lifecycleConversion(await db.collection<any>('engagement_lifecycle_events').find({}).toArray());
 const preferenceByMember = new Map(preferences.map(p=>[p.memberId,p]));
 const subscribers = accounts.filter(a=>digestEnabled(preferenceByMember.get(String(a._id)) ?? null,existingMembers.has(String(a._id)))).length;
 const accepted=messages.filter(m=>m.providerId).length;
@@ -31,6 +34,10 @@ const rate=(n:number)=>accepted ? `${(100*n/accepted).toFixed(1)}%` : '—';
   {testMessages.length > 0 && <ul>{testMessages.map(m=><li>{new Date(m.createdAt).toLocaleString('en-AU',{timeZone:'Australia/Melbourne'})} (Melbourne) — {m.bouncedAt ? 'Bounced' : m.complainedAt ? 'Spam complaint' : m.failedAt ? 'Delivery failed' : m.deliveredAt ? 'Delivered' : m.status === 'sent' ? 'Accepted by provider · delivery pending' : 'Sending / uncertain delivery'}</li>)}</ul>}
   <p>Refresh to see delivery receipts. Tests are limited to one per minute per administrator and excluded from member digest rates.</p>
  </section>
+ <h2>Verification and participation</h2>
+ <p>{verificationMessages.length} notices claimed; {verificationMessages.filter(m=>m.deliveredAt).length} delivered; {verificationMessages.filter(m=>m.bouncedAt).length} bounced; {verificationMessages.filter(m=>m.failedAt).length} failed; {verificationMessages.filter(m=>['held','sending','queued'].includes(String(m.status))).length} pending or uncertain; {verificationMessages.filter(m=>m.status==='suppressed').length} suppressed.</p>
+ <p>First vote within seven days: {funnel.sevenDayConverted} / {funnel.sevenDayEligible} mature verified accounts. Returning participation within 30 days: {funnel.thirtyDayReturned} / {funnel.thirtyDayEligible} mature first-vote accounts.</p>
+ <p>Preview historical re-engagement counts with <code>/api/admin/email/reengagement?cutoff=YYYY-MM-DD</code>. This read-only report never sends messages.</p>
  <h2>Ballot reminders · last 30 days</h2>
  <p>Sending is {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}. {subscribers} subscribed members; {preferences.filter(p=>p.suppressed).length} suppressed.</p>
  <p>{accounts.filter(a=>notificationEnabled(preferenceByMember.get(String(a._id)) ?? null,"essential")).length} account-notification subscriptions; {accounts.filter(a=>notificationEnabled(preferenceByMember.get(String(a._id)) ?? null,"general")).length} general-communication subscriptions. Security and sign-in mail is separate.</p>

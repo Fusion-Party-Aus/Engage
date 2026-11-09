@@ -1,3 +1,4 @@
+import { recordLifecycle } from "../../../lib/member-lifecycle.ts";
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
@@ -15,5 +16,6 @@ export const POST: APIRoute = async ({request,locals,url}) => {
  if (existing?.suppressed && Object.values(changes).includes(true)) return Response.json({error:"Email delivery is suppressed after a bounce or spam complaint. Contact an administrator to resolve delivery."},{status:409});
  await db.collection("engagement_email_preferences").updateOne({memberId:user.memberId},{$set:{memberId:user.memberId,...changes,preferenceSource:"member",updatedAt:new Date()}},{upsert:true});
  await db.collection("engagement_notification_events").insertOne({memberId:user.memberId,category:String(form.get("category") ?? "engage"),enabled:Object.values(changes)[0],source:"my-engage",at:new Date()});
+ if (Object.hasOwn(changes,"digestEnabled") && existing?.digestEnabled !== changes.digestEnabled) await recordLifecycle(db,user.memberId,"digest_preferences_changed",new Date(),crypto.randomUUID());
  return Response.redirect(new URL("/member/?view=notifications&emailPreferences=saved",url),303);
 };

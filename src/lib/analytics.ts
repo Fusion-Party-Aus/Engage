@@ -21,6 +21,9 @@ const schema: Record<string, Record<string, readonly string[] | null>> = {
   onboarding_action: { action: ['dismiss', 'dismiss_passkey', 'explore'] },
   section_viewed: { section: null },
   share_copied: {},
+  my_engage_viewed: {},
+  verification_cta_clicked: {},
+  digest_cta_clicked: {},
 };
 const sections = new Set(['proposal-brief', 'outcomes-heading', 'details-heading', 'amendments-heading', 'deliberation', 'revision-history-heading', 'provenance-heading', 'proposal-vote', 'access-matrix', 'passkeys']);
 

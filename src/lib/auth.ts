@@ -1,3 +1,4 @@
+import { recordLifecycle } from "./member-lifecycle.ts";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { passkey } from "@better-auth/passkey";
@@ -113,6 +114,10 @@ export function createEngageAuth(db: Db, env: PlatformEnv) {
       }),
     },
     databaseHooks: {
+      user: { create: { after: async (account) => {
+        await recordLifecycle(db, account.id, 'registration_completed');
+        await recordLifecycle(db, account.id, 'verification_requested');
+      } } },
       session: {
         create: {
           before: async (session) => {

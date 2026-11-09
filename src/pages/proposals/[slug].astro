@@ -1,4 +1,5 @@
 ---
+import { recordLifecycle } from '../../lib/member-lifecycle.ts';
 import { ballotExpired, ballotDeadlineLabel } from '../../lib/ballot-deadline.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
@@ -92,6 +93,7 @@ const [relatedBranches, allAmendmentRevisions] = await Promise.all([
 const branchNameFor = (branchId?: string) =>
   branchId ? String(relatedBranches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
 const canVoteOnProposal = Boolean(proposal && !ballotExpired(proposal) && user?.canParticipate && (!proposal?.jurisdictionBranchId || (branchEligibility && branchElectorate)));
+if (user && canVoteOnProposal && proposal?.stage === 'decide' && proposal.ballotRevisionId) await recordLifecycle(db,user.memberId,'first_eligible_ballot_viewed');
 for (const amendment of amendmentRows) {
   const history = allAmendmentRevisions.filter((row: any) => row.amendmentId === amendment.amendmentId);
   amendment.revisionHistory = history;
