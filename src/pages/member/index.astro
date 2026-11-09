@@ -739,6 +739,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 </SiteLayout>
 
 <script>
+  import { trackEngage } from '../../lib/analytics.ts';
   import { createAuthClient } from 'better-auth/client';
   import { magicLinkClient } from 'better-auth/client/plugins';
   import { passkeyClient } from '@better-auth/passkey/client';
@@ -757,6 +758,12 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
     rawReturnAttr.startsWith('/') && !rawReturnAttr.startsWith('//') && !rawReturnAttr.startsWith('/api/')
       ? rawReturnAttr
       : '/member/';
+
+  function analyticsCallback(method: 'email' | 'google') {
+    const callback = new URL(safeCallbackURL, location.origin);
+    callback.searchParams.set('analytics_signin', method);
+    return `${callback.pathname}${callback.search}${callback.hash}`;
+  }
 
   const emailForm = document.querySelector<HTMLFormElement>('#email-signin-form');
   const emailInput = document.querySelector<HTMLInputElement>('#signin-email');
@@ -793,6 +800,9 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
   const searchParams = new URLSearchParams(location.search);
   const errorCode = searchParams.get('error');
   if (errorCode) {
+    if (errorCode === 'link' || errorCode === 'google' || errorCode === 'invalid_code') {
+      trackEngage('signin_result', { method: errorCode === 'link' ? 'email' : 'google', outcome: 'failed' });
+    }
     if (errorCode === 'link') {
       setEmailMessage(
         'That sign-in link has expired or was already used. Request a fresh link below or sign in with your passkey.',
@@ -863,12 +873,15 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
       }
       return;
     }
+    const method = isAutoPrompt ? 'passkey_auto' : 'passkey';
+    trackEngage('signin_attempted', { method });
     passkeyBtn.disabled = true;
     passkeyStatus.textContent = isAutoPrompt
       ? 'Prompting your saved device passkey…'
       : 'Waiting for your device passkey…';
     try {
       const result = await authClient.signIn.passkey();
+      trackEngage('signin_result', { method, outcome: result.error ? 'failed' : 'success' });
       if (result.error) {
         const errCode = 'code' in result.error ? result.error.code : undefined;
         if (errCode === 'PASSKEY_NOT_FOUND') {
@@ -898,6 +911,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         completeSignInRedirect();
       }
     } catch {
+      trackEngage('signin_result', { method, outcome: 'failed' });
       if (!isAutoPrompt) {
         passkeyStatus.textContent =
           'Could not complete passkey sign-in. Try an email sign-in link below.';
@@ -929,10 +943,12 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
     window.PublicKeyCredential.isConditionalMediationAvailable()
       .then((available) => {
         if (!available) return;
+        trackEngage('signin_attempted', { method: 'passkey_autofill' });
         return authClient.signIn.passkey({ autoFill: true });
       })
       .then((res) => {
         if (res && !res.error && res.data?.session) {
+          trackEngage('signin_result', { method: 'passkey_autofill', outcome: 'success' });
           try {
             localStorage.setItem(PASSKEY_ENROLLED_KEY, 'true');
           } catch {
@@ -955,6 +971,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
     if (!emailStatus || !emailForm.reportValidity()) return;
     const btn = emailForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     btn.disabled = true;
+    trackEngage('signin_attempted', { method: 'email' });
     setEmailMessage('Sending your one-click sign-in link…', 'info');
 
     try {
@@ -963,9 +980,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
       const result = await authClient.signIn.magicLink({
         email: emailValue,
         name: String(data.get('name')).trim() || undefined,
-        callbackURL: safeCallbackURL,
+        callbackURL: analyticsCallback('email'),
         errorCallbackURL: `/member/?error=link&returnTo=${encodeURIComponent(safeCallbackURL)}`,
       });
+      trackEngage('signin_result', { method: 'email', outcome: result.error ? result.error.code === 'NAME_REQUIRED' ? 'name_required' : 'failed' : 'link_sent' });
       if (result.error) {
         if (result.error.code === 'NAME_REQUIRED') {
           setEmailMessage(
@@ -995,6 +1013,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         );
       }
     } catch {
+      trackEngage('signin_result', { method: 'email', outcome: 'failed' });
       setEmailMessage('Could not send sign-in link. Please try again shortly.', 'error');
     } finally {
       btn.disabled = false;
@@ -1003,17 +1022,20 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 
   document.querySelector('#google-signin')?.addEventListener('click', async () => {
     const status = document.querySelector<HTMLElement>('#google-status')!;
+    trackEngage('signin_attempted', { method: 'google' });
     status.textContent = 'Redirecting to Google…';
     try {
       const result = await authClient.signIn.social({
         provider: 'google',
-        callbackURL: safeCallbackURL,
+        callbackURL: analyticsCallback('google'),
         errorCallbackURL: `/member/?error=google&returnTo=${encodeURIComponent(safeCallbackURL)}`,
       });
       if (result.error) {
+        trackEngage('signin_result', { method: 'google', outcome: 'failed' });
         status.textContent = 'Google sign-in is unavailable right now.';
       }
     } catch {
+      trackEngage('signin_result', { method: 'google', outcome: 'failed' });
       status.textContent = 'Google sign-in is unavailable right now.';
     }
   });
@@ -1879,3 +1901,4 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
     }
   }
 </style>
+

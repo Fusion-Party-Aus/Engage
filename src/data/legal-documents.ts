@@ -79,7 +79,7 @@ export const privacyPolicy: LegalDocument = {
   shortTitle: "Privacy Policy",
   description:
     "How Fusion Party Australia collects, uses, shares and retains personal information in Engage.",
-  version: "1.0 (owner-authorised; publication pending)",
+  version: "1.1 (analytics update; publication pending)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -192,7 +192,7 @@ export const privacyPolicy: LegalDocument = {
         { type: "subheading", text: "What we do not collect in this release" },
         {
           type: "paragraph",
-          text: `Engage does not include third-party analytics, advertising trackers or advertising cookies. It does not process payment card details. It does not ask for your date of birth, home address, phone number, health information or biometric data. It does not build advertising or marketing profiles. If Fusion introduces analytics, advertising or other new processing, this policy will be updated before that processing begins.`,
+          text: `Engage uses Fusion-hosted Plausible Analytics to understand aggregate navigation and feature usage. It does not use advertising trackers or advertising cookies, process payment card details, or build advertising or marketing profiles. It does not ask for your date of birth, home address, phone number, health information or biometric data.`,
         },
       ],
     },
@@ -477,11 +477,11 @@ export const privacyPolicy: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `This release does not use third-party analytics, advertising pixels or tracking cookies. It does not create advertising or marketing profiles.`,
+          text: `Production usage analytics is sent to Fusion's Plausible service at analytics.fusionparty.org.au. It records page visits, navigation, search and filter usage, sections viewed, sign-in and passkey outcomes, and contribution attempts and outcomes. Analytics does not receive names, email addresses, member identifiers, search terms, contribution text, ballot choices or reasons. URL query strings and fragments are removed. Administrative paths are grouped together. No analytics cookies or persistent user identifiers are added.`,
         },
         {
           type: "paragraph",
-          text: `Server logs may record technical request data as described in section 2. If analytics is introduced, this policy will be updated and any consent requirement will be implemented before use.`,
+          text: `Plausible processes technical request information to produce aggregate visitor and device statistics. Fusion uses these reports to improve navigation and participation, not to identify an individual's political views. Browser tracking protection or an analytics blocker may prevent collection. Server logs may record technical request data as described in section 2.`,
         },
       ],
     },
@@ -982,3 +982,4 @@ export const legalDocuments = [privacyPolicy, termsOfUse] as const;
 export function legalDocumentBySlug(slug: string): LegalDocument | null {
   return legalDocuments.find((document) => document.slug === slug) ?? null;
 }
+

@@ -100,7 +100,7 @@ const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organ
     <link rel="icon" href="/fusion_horizon_logo_light.svg" type="image/svg+xml" />
     <title>{title}</title>
   </head>
-  <body class:list={{ 'admin-body': workspace }}>
+  <body class:list={{ 'admin-body': workspace }} data-analytics-signed-in={user ? 'yes' : 'no'}>
     <svg class="icon-definitions" aria-hidden="true" focusable="false">
       <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></symbol>
       <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></symbol>
@@ -174,3 +174,4 @@ const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organ
     if (a) prefetchLink(a);
   }, { passive: true });
 </script>
+

@@ -278,7 +278,7 @@ const initialsFor = (name: string) =>
   imageAlt={proposal ? `${proposal.title} · Engage proposal` : undefined}
   ogType="article"
 >
-  <div class="page-wrap section-space proposal-detail-page">
+  <div class="page-wrap section-space proposal-detail-page" data-analytics-stage={proposal?.stage}>
     {!proposal ? (
       <Card className="not-found-box">
         <CardContent className="grid justify-items-start gap-3 py-10">
@@ -1299,6 +1299,7 @@ const initialsFor = (name: string) =>
 </SiteLayout>
 
 <script>
+  import { trackEngage } from '../../lib/analytics.ts';
   // Staff stage selector with ballot integrity confirmation
   const stageSelect = document.getElementById('staff-stage-select') as HTMLSelectElement | null;
   const stageMsg = document.getElementById('staff-stage-msg');
@@ -1379,6 +1380,7 @@ const initialsFor = (name: string) =>
   amendmentForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!amendmentForm.reportValidity()) return;
+    trackEngage('contribution_attempted', { action: 'amendment' });
     const status = amendmentForm.querySelector<HTMLElement>('.amendment-compose-status');
     const button = amendmentForm.querySelector<HTMLButtonElement>('button[type="submit"]');
     if (button) button.disabled = true;
@@ -1400,9 +1402,11 @@ const initialsFor = (name: string) =>
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Could not submit the amendment.');
+      trackEngage('contribution_result', { action: 'amendment', outcome: 'success' });
       if (status) status.textContent = 'Amendment submitted. Reloading…';
       location.reload();
     } catch (error) {
+      trackEngage('contribution_result', { action: 'amendment', outcome: 'failed' });
       if (status) status.textContent = error instanceof Error ? error.message : 'Could not submit the amendment.';
       if (button) button.disabled = false;
     }
@@ -1412,6 +1416,7 @@ const initialsFor = (name: string) =>
     const status = form.querySelector<HTMLElement>('[role="status"]');
     form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) =>
       button.addEventListener('click', async () => {
+        trackEngage('contribution_attempted', { action: 'amendment_ballot' });
         if (status) status.textContent = 'Recording endorsement…';
         form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((item) => (item.disabled = true));
         try {
@@ -1426,8 +1431,10 @@ const initialsFor = (name: string) =>
           });
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.error || 'Could not record endorsement.');
+          trackEngage('contribution_result', { action: 'amendment_ballot', outcome: 'success' });
           if (status) status.textContent = 'Endorsement vote recorded.';
         } catch (error) {
+          trackEngage('contribution_result', { action: 'amendment_ballot', outcome: 'failed' });
           if (status) status.textContent = error instanceof Error ? error.message : 'Could not record endorsement.';
           form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((item) => (item.disabled = false));
         }
@@ -1500,6 +1507,7 @@ const initialsFor = (name: string) =>
       const stance = String(formData.get('stance') ?? 'comment');
       const body = String(formData.get('body') ?? '').trim();
       if (body.length < 5) return;
+      trackEngage('contribution_attempted', { action: 'deliberation' });
 
       commentSubmitBtn.disabled = true;
       commentStatusMsg.textContent = 'Posting…';
@@ -1512,6 +1520,7 @@ const initialsFor = (name: string) =>
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to post');
+        trackEngage('contribution_result', { action: 'deliberation', outcome: 'success' });
 
         const created = data.comment ?? {
           commentId: `cmt-${Date.now()}`,
@@ -1558,6 +1567,7 @@ const initialsFor = (name: string) =>
         if (textarea) textarea.value = '';
         commentStatusMsg.textContent = 'Contribution posted!';
       } catch (err: any) {
+        trackEngage('contribution_result', { action: 'deliberation', outcome: 'failed' });
         commentStatusMsg.textContent = err.message || 'Error';
       } finally {
         commentSubmitBtn.disabled = false;
@@ -1568,6 +1578,7 @@ const initialsFor = (name: string) =>
   // Endorse contribution (+1)
   document.querySelectorAll<HTMLButtonElement>('[data-endorse-id]').forEach((btn) => {
     btn.addEventListener('click', async () => {
+      trackEngage('contribution_attempted', { action: 'endorsement' });
       const commentId = btn.dataset.endorseId;
       btn.disabled = true;
       try {
@@ -1579,11 +1590,12 @@ const initialsFor = (name: string) =>
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
 
+        trackEngage('contribution_result', { action: 'endorsement', outcome: 'success' });
         const countSpan = btn.querySelector('.endorse-count');
         if (countSpan) countSpan.textContent = String(data.count ?? data.upvotes?.length ?? 0);
         btn.classList.toggle('is-endorsed', data.hasUpvoted ?? data.endorsed);
       } catch {
-        // Ignore
+        trackEngage('contribution_result', { action: 'endorsement', outcome: 'failed' });
       } finally {
         btn.disabled = false;
       }
@@ -3336,3 +3348,4 @@ const initialsFor = (name: string) =>
     }
   }
 </style>
+
