@@ -1,0 +1,30 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase,runtimeEnv } from '../../lib/db.ts';
+export const prerender=false;
+Astro.response.headers.set('Cache-Control','private, no-store');
+const env=runtimeEnv(Astro.locals), user=await getSessionUser(Astro.request,env);
+if (!user?.isAdmin) return new Response('Administrator access required',{status:403});
+const db=await getDatabase(env);
+const since=new Date(Date.now()-30*86400000);
+const [messages, preferences] = await Promise.all([
+ db.collection('engagement_email_outbox').find({createdAt:{$gte:since}}).project({status:1,providerId:1,deliveredAt:1,bouncedAt:1,complainedAt:1,failedAt:1,openedAt:1,clickedAt:1}).toArray(),
+ db.collection('engagement_email_preferences').find({}).project({digestEnabled:1,suppressed:1,unsubscribedAt:1}).toArray(),
+]);
+const accepted=messages.filter(m=>m.providerId).length;
+const count=(field:string)=>messages.filter(m=>m[field]).length;
+const rate=(n:number)=>accepted ? `${(100*n/accepted).toFixed(1)}%` : '—';
+---
+<AdminLayout title="Member engagement" description="Ballot reminder delivery over the last 30 days" section="overview" isAdmin>
+ <h2>Ballot reminders · last 30 days</h2>
+ <p>Sending is {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}. {preferences.filter(p=>p.digestEnabled && !p.suppressed).length} subscribed members; {preferences.filter(p=>p.suppressed).length} suppressed.</p>
+ <table><thead><tr><th>Metric</th><th>Messages</th><th>Rate of accepted messages</th></tr></thead><tbody>
+ <tr><td>Accepted by provider</td><td>{accepted}</td><td>—</td></tr>
+ {(['delivered','bounced','complained','failed','opened','clicked'] as const).map(k=><tr><td>{k}</td><td>{count(`${k}At`)}</td><td>{rate(count(`${k}At`))}</td></tr>)}
+ <tr><td>Held / uncertain send</td><td>{messages.filter(m=>['held','sending'].includes(m.status)).length}</td><td>—</td></tr>
+ </tbody></table>
+ <p>Rates count unique messages, not webhook retries. Delivery reporting requires the signed Resend webhook. Opens/clicks appear only if enabled at the provider and are estimates, affected by email scanners.</p>
+ <p>{preferences.filter(p=>p.unsubscribedAt).length} members have unsubscribed using an email link. Opt-outs are preferences, separate from provider delivery failures.</p>
+ <p>Bounces and complaints pause further reminder delivery. Unsubscribes never affect sign-in or membership.</p>
+</AdminLayout>

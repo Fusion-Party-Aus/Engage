@@ -31,6 +31,9 @@ import {
   passkeyLoginConfigured,
 } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import EmailPreferences from '../../components/member/EmailPreferences.astro';
+import { ballotExpired, ballotDeadlineLabel } from '../../lib/ballot-deadline.ts';
+import { digestBallots } from '../../lib/engagement-email.ts';
 import { listOutstandingDecisions, listProposals, listUserActivity } from '../../lib/store.ts';
 
 export const prerender = false;
@@ -71,6 +74,12 @@ const [
     ])
   : [null, [] as ActivityTimelineEvent[], [], [], [], [] as MemberCatchUpGroup[], 0];
 
+const [emailPreference, closingSoon] = user ? await Promise.all([
+ db.collection('engagement_email_preferences').findOne({memberId:user.memberId}),
+ digestBallots(db,user,visibleProposals),
+]) : [null, []];
+const involvedIds = new Set([...(activity?.proposals ?? []).map(p=>p.proposalId), ...(activity?.votes ?? []).map(v=>v.proposalId), ...(activity?.comments ?? []).map(c=>c.proposalId)]);
+const lifecycleItems = visibleProposals.filter(p=>involvedIds.has(p.proposalId) && (p.stage === 'implement' || p.stage === 'archived' || ballotExpired(p))).sort((a,b)=>new Date(b.updatedAt).getTime()-new Date(a.updatedAt).getTime()).slice(0,8);
 const memberTimeline = buildActivityTimeline(memberTimelineEvents);
 const memberTimelineCount = memberTimelineEvents.length;
 const deliberationOpportunities = visibleProposals
@@ -119,6 +128,7 @@ const outstandingItems = awaitingDecision.map((proposal) => ({
   slug: proposal.slug,
   title: proposal.title,
   space: proposal.space,
+  ballotClosesAt: proposal.ballotClosesAt,
   branchName: proposal.jurisdictionBranchId ? branchNameById.get(proposal.jurisdictionBranchId) : undefined,
 }));
 const ballotScopes = [...new Set(outstandingItems.map((item) => item.branchName ?? 'All verified members'))];
@@ -152,7 +162,7 @@ const totalContributions =
   (activity?.comments.length ?? 0) +
   (activity?.proposals.length ?? 0);
 const completedOpenBallotsCount =
-  activity?.votes.filter((v) => v.proposalStage === 'decide').length ?? 0;
+  new Set(activity?.votes.filter(v => visibleProposals.some(p => p.proposalId === v.proposalId && p.stage === 'decide' && !ballotExpired(p) && v.ballotId === `proposal:${p.proposalId}` && v.revisionId === p.ballotRevisionId)).map(v=>v.proposalId) ?? []).size;
 const totalEligibleOpenBallotsCount = completedOpenBallotsCount + awaitingDecision.length;
 const requestedView = Astro.url.searchParams.get('view');
 const memberView = requestedView === 'activity' || requestedView === 'account' ? requestedView : 'overview';
@@ -531,10 +541,15 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           </a>
         </nav>
 
+        <div class="account-only"><EmailPreferences preference={emailPreference} saved={Astro.url.searchParams.get('emailPreferences') === 'saved'} /></div>
         <!-- VIEW 1: OVERVIEW (Outstanding votes, Participation opportunities, Catch-up, Status changes) -->
         <div class="overview-only member-overview-grid">
           <!-- Left Column: Actionable Queues -->
           <div class="member-col-main">
+            <section class="member-panel" aria-labelledby="closing-soon-heading">
+              <h2 id="closing-soon-heading">Closing within seven days</h2>
+              {closingSoon.length ? <ul>{closingSoon.map(b=><li><a href={b.href}>{b.title}</a><p>Closes {ballotDeadlineLabel(b.closesAt)}</p></li>)}</ul> : <p>You have no unvoted eligible ballots closing within seven days.</p>}
+            </section>
             <!-- 1. Open Ballots Queue -->
             <AttentionQueue
               items={outstandingItems}
@@ -544,6 +559,12 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               totalEligibleCount={totalEligibleOpenBallotsCount}
             />
 
+            <section class="member-panel" aria-label="Decisions you took part in">
+              <h2>After your participation</h2>
+              <p>Follow what happened to proposals you authored, discussed or voted on.</p>
+              {lifecycleItems.length ? <ul>{lifecycleItems.map(p=><li><a href={`/proposals/${p.slug}/`}>{p.title}</a> — {p.stage === 'implement' ? 'Implementation · inspect the recorded decision' : p.stage === 'archived' ? 'Archived' : 'Voting closed · inspect the recorded decision'}</li>)}</ul> : <p>Closed ballots and implementation updates will appear here.</p>}
+            </section>
+            <EmailPreferences preference={emailPreference} saved={Astro.url.searchParams.get('emailPreferences') === 'saved'} />
             <!-- 2. Relevant Participation Opportunities (Deliberation & Amendments) -->
             <section class="member-panel" aria-labelledby="opportunities-heading">
               <div class="member-panel__head">
@@ -1901,4 +1922,5 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
     }
   }
 </style>
+
 

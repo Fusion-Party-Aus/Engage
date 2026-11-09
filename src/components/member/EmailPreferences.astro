@@ -1,0 +1,14 @@
+---
+const { preference, saved = false } = Astro.props;
+---
+<section class="email-preferences" aria-label="Ballot reminder preferences">
+ <h2>Ballot reminder emails</h2>
+ <p>Get one digest when eligible ballots enter their final seven days and you haven’t voted. Each ballot is reminded once. Sign-in emails are separate.</p>
+ {saved && <p role="status">Email preferences saved.</p>}
+ {preference?.suppressed ? <p>Reminder delivery is paused after a bounce or spam complaint. Contact an administrator to resolve email delivery.</p> : <form method="post" action="/api/email/preferences">
+  <label><input type="checkbox" name="digestEnabled" value="true" checked={preference?.digestEnabled === true} /> Send me ballot reminders</label>
+  <button type="submit">Save email preferences</button>
+ </form>}
+ <small>Delivery and bounce events help us keep emails reliable. Unsubscribe in any digest or switch reminders off here.</small>
+</section>
+<style>.email-preferences{padding:1.25rem;background:#f8f5fc;border:1px solid #ded6e7;border-radius:.75rem;margin:1rem 0}h2{font-family:Newsreader,Georgia,serif;font-size:1.5rem}p,small{line-height:1.6}form{display:flex;flex-wrap:wrap;align-items:center;gap:1rem;margin:1rem 0}label{display:flex;gap:.5rem;align-items:center}button{background:#32105a;color:white;padding:.65rem 1rem;border-radius:2rem;cursor:pointer}small{display:block;color:#54465f}</style>

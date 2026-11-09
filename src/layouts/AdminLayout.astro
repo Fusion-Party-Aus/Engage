@@ -45,6 +45,7 @@ const governanceItems = [
 ].filter((item) => item.show);
 
 const siteItems = [
+  ...(isAdmin ? [{ href: '/admin/engagement/', label: 'Member engagement', icon: Users }] : []),
   { href: '/', label: 'Engage home', icon: Home },
   { href: '/proposals/', label: 'All proposals', icon: FileText },
   { href: '/policies/', label: 'Policy registry', icon: ScrollText },
@@ -242,3 +243,4 @@ const roleLabel = user?.isAdmin ? 'Administrator' : user?.isBranchAdmin ? 'Branc
     sync();
   </script>
 </SiteLayout>
+

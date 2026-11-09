@@ -43,6 +43,10 @@ export interface PlatformEnv {
   GOOGLE_CLIENT_SECRET?: string;
   RESEND_API_KEY?: string;
   AUTH_EMAIL_FROM?: string;
+  RESEND_WEBHOOK_SECRET?: string;
+  ENGAGE_CRON_SECRET?: string;
+  ENGAGE_EMAIL_SECRET?: string;
+  ENGAGE_DIGEST_ENABLED?: string;
   ENGAGE_ALLOW_INDEXING?: string;
   ENGAGE_DEFAULT_OG_IMAGE?: string;
   ENGAGE_PUBLIC_PULSE_POLL?: string;
@@ -131,6 +135,7 @@ export interface ProposalRecord {
   jurisdictionBranchId?: string;
   publicationScope?: "private" | "branch" | "national";
   ballotRevisionId?: string;
+  ballotClosesAt?: Date;
 
   // Backwards compatibility aliases
   policyId?: string;
@@ -198,3 +203,4 @@ export interface MemberRecord {
   emailVerified: boolean;
   createdAt?: Date;
 }
+

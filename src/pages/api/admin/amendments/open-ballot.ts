@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { canManageBranchBallot } from "../../../../lib/auth.ts";
+import { ballotExpired } from "../../../../lib/ballot-deadline.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -56,6 +57,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         },
         { status: 403 },
       );
+    if (ballotExpired({ballotClosesAt:proposal.ballotClosesAt})) return Response.json({error: "The proposal ballot has closed."}, {status: 409});
     const result = await db
       .collection("amendments")
       .updateOne(
@@ -72,6 +74,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
             ballotAmendmentRevisionId: amendment.currentRevisionId,
             ballotOpenedBy: user.memberId,
             ballotOpenedAt: new Date(),
+            ...(proposal.ballotClosesAt ? {ballotClosesAt: proposal.ballotClosesAt} : {}),
           },
         },
       );
@@ -102,3 +105,4 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 };
+

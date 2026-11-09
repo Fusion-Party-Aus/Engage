@@ -1,4 +1,6 @@
 ---
+import { ballotExpired } from '../lib/ballot-deadline.ts';
+import ProposalHighlights from '../components/ProposalHighlights.astro';
 import SiteLayout from '../layouts/SiteLayout.astro';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -36,7 +38,7 @@ const [proposals, publishedPolicyCount, mine, myVoteRows] = await Promise.all([
     ? db.collection(PROPOSAL_VOTES).find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray()
     : Promise.resolve([]),
 ]);
-const votes = proposals.filter((p) => p.stage === 'decide');
+const votes = proposals.filter((p) => p.stage === 'decide' && !ballotExpired(p));
 const openProposalIds = new Set(votes.map((p) => p.proposalId));
 const completedOpenVotesCount = new Set(
   myVoteRows.map((v: any) => String(v.proposalId ?? '')).filter((id) => openProposalIds.has(id)),
@@ -155,6 +157,7 @@ const stageVariant = (s: ProposalStage) => {
         </a>
       </div>
 
+      <ProposalHighlights proposals={proposals} />
       <div class="home-workspace-grid">
         <div class="home-workspace-main">
           <!-- Open Votes Queue -->
@@ -341,7 +344,8 @@ const stageVariant = (s: ProposalStage) => {
         </section>
 
         <!-- 2-Column Live Register Preview + Public/Member Access Summary -->
-        <div class="home-workspace-grid">
+        <ProposalHighlights proposals={proposals} />
+      <div class="home-workspace-grid">
           <section class="home-workspace-main" aria-labelledby="active-proposals-heading">
             <div class="home-block__head">
               <div>
@@ -985,3 +989,4 @@ const stageVariant = (s: ProposalStage) => {
     }
   }
 </style>
+

@@ -1,4 +1,6 @@
 ---
+import { ballotDeadlineLabel, ballotExpired } from '../../lib/ballot-deadline.ts';
+import ProposalHighlights from '../../components/ProposalHighlights.astro';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -17,6 +19,7 @@ import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { listOutstandingDecisions, listProposals, normalizeStage } from '../../lib/store.ts';
 import { PROPOSAL_VOTES, proposalBallotId } from '../../lib/vote-storage.ts';
 import { getSiteConfig } from '../../lib/site-config.ts';
+import { rankProposals } from '../../lib/proposal-metrics.ts';
 import type { ProposalStage } from '../../lib/types.ts';
 
 export const prerender = false;
@@ -95,7 +98,9 @@ const focusFiltered = rawProposals.filter((proposal) => {
 
 const effectiveSort = initialFocus === 'recent' && initialSort === 'priority' ? 'recent' : initialSort;
 
-const visibleProposals = [...focusFiltered].sort((a, b) => {
+const visibleProposals = ["divisive", "approved", "active"].includes(effectiveSort)
+ ? rankProposals(focusFiltered, effectiveSort as "divisive" | "approved" | "active")
+ : [...focusFiltered].sort((a, b) => {
   if (effectiveSort === 'recent') {
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
   }
@@ -233,6 +238,8 @@ const hasActiveFilters =
           </Button>
         </div>
       </header>
+
+      <ProposalHighlights proposals={baseProposals} />
 
       <!-- Workflow Tabs & Personal Relevance Shortcuts -->
       <div class="workflow-bar">
@@ -389,6 +396,9 @@ const hasActiveFilters =
               >
                 <option value="priority">Sort: Stage priority</option>
                 <option value="recent">Sort: Recently updated</option>
+                <option value="divisive">Sort: Most divisive (5+ votes)</option>
+                <option value="approved">Sort: Most approved (5+ votes)</option>
+                <option value="active">Sort: Most active</option>
                 <option value="ballots">Sort: Ballots cast</option>
                 <option value="contributions">Sort: Contributions</option>
               </NativeSelect>
@@ -418,7 +428,9 @@ const hasActiveFilters =
             const needsVote = outstandingIds.has(item.proposalId);
 
             const actionLabel =
-              item.stage === 'decide'
+              item.stage === 'decide' && ballotExpired(item)
+                ? 'Review closed ballot →'
+                : item.stage === 'decide'
                 ? hasVoted
                   ? 'Review ballot →'
                   : 'Review & vote →'
@@ -454,10 +466,11 @@ const hasActiveFilters =
                     )}
                   </div>
 
-                  <Badge variant={stageVariant(item.stage)}>{stageLabel(item.stage)}</Badge>
+                  <Badge variant={stageVariant(item.stage)}>{item.stage === 'decide' && ballotExpired(item) ? 'Voting closed' : stageLabel(item.stage)}</Badge>
                 </div>
 
                 <!-- Line 2: Prominent Visual Anchor Title -->
+                {item.ballotClosesAt && <p>{ballotExpired(item) ? "Voting closed" : "Voting closes"}: {ballotDeadlineLabel(item.ballotClosesAt)}</p>}
                 <h2 class="proposal-item__title">
                   <a href={`/proposals/${item.slug}/`}>{item.title}</a>
                 </h2>
@@ -1044,4 +1057,5 @@ const hasActiveFilters =
     }
   }
 </style>
+
 
