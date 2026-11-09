@@ -1295,6 +1295,16 @@ const initialsFor = (name: string) =>
     const choice = (event as CustomEvent<{ choice: string }>).detail.choice;
     const title = document.querySelector('.next-action-bar__title');
     if (title) title.textContent = `Your vote: ${choice}. You can change it until voting closes.`;
+    const bar = document.querySelector('.next-action-bar');
+    bar?.classList.add('is-complete');
+    const kicker = document.querySelector('.next-action-bar__kicker');
+    if (kicker) kicker.textContent = 'Vote saved · Review or change · ~30 seconds';
+    const chip = document.querySelector('.personal-vote-chip');
+    if (chip) {
+      chip.textContent = `Your vote: ${choice}`;
+      chip.classList.remove('is-action');
+      chip.classList.add('is-voted');
+    }
     const action = document.querySelector('.next-action-bar a[href="#proposal-vote"]');
     if (action) action.textContent = 'Review your vote →';
   });

@@ -12,7 +12,7 @@ Lifecycle tabs and one participation filter replace overlapping controls. Explic
 
 - `npm test`: 169 passed, 15 skipped (optional integration coverage).
 - `npm run check`: zero errors and warnings; existing hints remain.
-- `npm run build`: passed. No separate lint script is configured.
+- `npm run build`: passed, including an exported source tree without `.git`. No separate lint script is configured.
 - Isolated Chrome, 1440×1000 and 390×844: save, revisit and update a vote; server-confirmed persisted choices; skip without recording a vote; retry after a simulated server failure while preserving choice; completion after all eligible ballots; explicit opt-out through lifecycle tabs and browser back/forward; no matching search results; no horizontal overflow or uncaught browser errors.
 - Existing branch participation tests pass, including equivalence of outstanding counts when reusing discovery data. Branch permutations are covered by automated tests rather than authenticated screenshots of real members.
 - Screenshots use synthetic preview accounts and in-memory data, with 23 ballots opened through the administration API. Desktop and mobile runs use successive outstanding proposals; dates and counts reflect the capture session. Baseline: `50a7710`. Screenshots are in `docs/screenshots/proposal-experience/`.

@@ -60,6 +60,10 @@ if(version==='after') {
 }
 await page.getByRole('button',{name:'Record vote',exact:true}).click();
 await page.getByText(version==='after'?'Vote saved: Approve':'Vote recorded (Approve).',{exact:true}).waitFor();
+if(version==='after') {
+ assert.match(await page.locator('.personal-vote-chip').innerText(), /Approve/);
+ assert.match(await page.locator('.next-action-bar__title').innerText(), /Your vote: Approve/);
+}
 await page.locator('#proposal-vote').evaluate(e=>window.scrollTo(0,e.getBoundingClientRect().top+scrollY-125));await shot('ballot-after');
 await go(link+'#proposal-vote');await shot('ballot-review');
 await page.getByRole('radio',{name:'Reject',exact:true}).click();await page.getByRole('button',{name:'Update vote',exact:true}).click();
