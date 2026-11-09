@@ -1,5 +1,22 @@
 [
   {
+    "hash": "e2137a5",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add durable database migrations and standard branch seed",
+    "details": "Add Admin -> Migrations for national administrators. The page previews each additive migration, shows the last recorded run and any error, and applies Standard branches or Branch participation individually or in order. Every run is recorded in data_migrations with run count, timestamps, actor and result. Standard branches is an idempotent seed for Fusion National, VIC, NSW, QLD, WA, SA, TAS, ACT and NT with National as parent; existing branches are never renamed, re-parented or un-recognised. Branch participation remains blocked until the National branch exists. The command-line seed now uses the same service, and the participation migration remains available for deployment automation."
+  },
+  {
+    "hash": "b980369",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record branch participation and verification"
+  },
+  {
     "hash": "a727732",
     "date": "2026-11-09",
     "type": "feat",
@@ -647,21 +664,5 @@
     "scope": "platform",
     "summary": "Serialize vote admission with ballot closure",
     "details": "Use a common ballot write in MongoDB transactions to order admission and closure, rechecking the current ballot and database cutoff on retries. Keep current selections, permanent results and retryable publication. Configure the existing Mongo service as a single-node replica set and preserve the synthetic preview path. Real MongoDB regressions cover stalled requests, deadlines, concurrent closure, revotes, suspension, audit rollback and repeated finalisation."
-  },
-  {
-    "hash": "78dbe89",
-    "date": "2026-10-24",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Stabilise recorded ballot outcomes and atomic membership audit"
-  },
-  {
-    "hash": "d98b409",
-    "date": "2026-10-24",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Preserve policy review presentation and preview improvements"
   }
 ]
