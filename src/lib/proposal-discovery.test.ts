@@ -17,3 +17,10 @@ test('shared URLs and explicit opt-outs override voting defaults', () => {
     assert.equal(discoveryFocus(params, true), focus);
   }
 });
+test('restoration is scoped to Voting and yields to explicit URLs', () => {
+  assert.equal(discoveryFocus(new URLSearchParams('stage=decide'), true, 'all'), 'all');
+  assert.equal(discoveryFocus(new URLSearchParams('stage=decide&focus=needs-vote'), true, 'all'), 'needs-vote');
+  assert.equal(discoveryFocus(new URLSearchParams('stage=propose'), true, 'needs-vote'), 'all');
+  assert.equal(discoveryFocus(new URLSearchParams('stage=deliberate&focus=needs-vote'), true), 'all');
+  assert.equal(discoveryFocus(new URLSearchParams('stage=decide&focus=all&needsVote=1'), true, 'all'), 'needs-vote');
+});

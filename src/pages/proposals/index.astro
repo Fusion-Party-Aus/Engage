@@ -35,11 +35,15 @@ const siteConfig = await getSiteConfig(db, env);
 const initialQuery = (Astro.url.searchParams.get('q') ?? '').trim();
 const initialSpace = (Astro.url.searchParams.get('space') ?? Astro.url.searchParams.get('category') ?? 'all').trim();
 const initialBranch = (Astro.url.searchParams.get('branch') ?? 'all').trim();
-const initialFocus = discoveryFocus(Astro.url.searchParams, Boolean(user?.canParticipate));
+const initialFocus = discoveryFocus(Astro.url.searchParams, Boolean(user?.canParticipate), Astro.cookies.get('engage_voting_focus')?.value);
 const initialSort = (Astro.url.searchParams.get('sort') ?? 'priority').trim();
 const branches = (await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()).map(({ branchId, name }) => ({ branchId, name }));
 const rawStage = (Astro.url.searchParams.get('stage') ?? Astro.url.searchParams.get('status') ?? 'all').trim();
 const initialStage = rawStage === 'all' ? 'all' : normalizeStage(rawStage);
+if (initialStage === 'decide' && (Astro.url.searchParams.has('focus') || Astro.url.searchParams.has('needsVote'))) {
+  Astro.cookies.set('engage_voting_focus', initialFocus, { path: '/proposals/', sameSite: 'lax', httpOnly: true, maxAge: 60 * 60 * 24 * 90 });
+}
+const joinedOnly = Astro.url.searchParams.get('joined') === '1' || initialFocus === 'discussion';
 
 const [allAvailableProposals, myVotesRaw, joinedComments] = await Promise.all([
   listProposals(db, {
@@ -89,12 +93,8 @@ const votedProposalIds = new Set(
 );
 
 const countDataset = rawProposals.filter((proposal) => {
-  if (initialFocus === 'needs-vote') {
-    return outstandingIds.has(proposal.proposalId);
-  }
-  if (initialFocus === 'discussion') {
-    return joinedIds.has(proposal.proposalId);
-  }
+  if (joinedOnly && !joinedIds.has(proposal.proposalId)) return false;
+  if (initialFocus === 'needs-vote') return outstandingIds.has(proposal.proposalId);
   return true;
 });
 
@@ -153,11 +153,11 @@ const spaces = [...new Set(baseProposals.map((p) => p.space))].sort();
 
 
 const stageCounts = {
-  all: countDataset.length,
-  propose: countDataset.filter((p) => p.stage === 'propose').length,
-  deliberate: countDataset.filter((p) => p.stage === 'deliberate').length,
-  decide: countDataset.filter((p) => p.stage === 'decide' && p.ballotRevisionId && !ballotExpired(p)).length,
-  implement: countDataset.filter((p) => p.stage === 'implement').length,
+  all: rawProposals.length,
+  propose: rawProposals.filter((p) => p.stage === 'propose').length,
+  deliberate: rawProposals.filter((p) => p.stage === 'deliberate').length,
+  decide: rawProposals.filter((p) => p.stage === 'decide' && p.ballotRevisionId && !ballotExpired(p)).length,
+  implement: rawProposals.filter((p) => p.stage === 'implement').length,
 };
 
 const stageTabs: Array<{
@@ -246,7 +246,7 @@ const hasActiveFilters =
               const isCurrent = initialStage === tab.id;
               return (
                 <a
-                  href={buildFilterUrl({ stage: tab.id, focus: initialFocus === 'needs-vote' && tab.id !== 'decide' ? null : Astro.url.searchParams.has('focus') ? initialFocus : null, page: '1' })}
+                  href={buildFilterUrl({ stage: tab.id, focus: null, needsVote: null, page: '1' })}
                   class:list={['workflow-tab', { 'is-active': isCurrent }]}
                   aria-current={isCurrent ? 'page' : undefined}
                 >
@@ -265,6 +265,13 @@ const hasActiveFilters =
       <form data-analytics-collection="proposals" data-analytics-results={visibleProposals.length} id="proposals-filter-form" class="search-controls" role="search" method="get" action="/proposals/">
         {initialStage !== 'all' && <input type="hidden" name="stage" value={initialStage} />}
 
+        <fieldset class="participation-filters">
+          <legend>For me</legend>
+          <input type="hidden" name="focus" value={initialFocus === 'recent' ? 'recent' : 'all'} />
+          {user?.canParticipate && initialStage === 'decide' && <label><input id="needs-my-vote" type="checkbox" name="needsVote" value="1" checked={initialFocus === 'needs-vote'} data-auto-submit /> Needs my vote <span class="tabular">{myOutstandingVotes.length}</span></label>}
+          {user?.canParticipate && initialStage !== 'decide' && <a class="personal-vote-link" href={buildFilterUrl({ stage: 'decide', focus: 'needs-vote', needsVote: null, page: '1' })}>Needs my vote <span class="tabular">{myOutstandingVotes.length}</span></a>}
+          {user && <label><input id="joined-discussions" type="checkbox" name="joined" value="1" checked={joinedOnly} data-auto-submit /> Discussions I’ve joined</label>}
+        </fieldset>
         <div class="search-row">
           <label for="proposal-search" class="sr-only">Search proposals by title, topic or ID</label>
           <Search className="search-row__icon size-4" aria-hidden="true" />
@@ -286,15 +293,6 @@ const hasActiveFilters =
 
         <div class="secondary-filters-row">
           <div class="quiet-filters">
-            <div class="quiet-select-wrap">
-              <label for="proposal-focus" class="sr-only">Participation</label>
-              <NativeSelect id="proposal-focus" name="focus" defaultValue={initialFocus} data-auto-submit>
-                <option value="all">All proposals</option>
-                {user?.canParticipate && <option value="needs-vote">Needs my vote</option>}
-                {user && <option value="discussion">Discussions I’ve joined</option>}
-                <option value="recent">Recently updated</option>
-              </NativeSelect>
-            </div>
 
             <div class="quiet-select-wrap">
               <label for="proposal-space" class="sr-only">Space</label>
@@ -364,6 +362,14 @@ const hasActiveFilters =
         </div>
       </form>
 
+      <details class="explore-proposals">
+        <summary>Explore</summary>
+        <div>
+          <a href={buildFilterUrl({ sort: 'divisive', page: '1' })}>Most divisive</a>
+          <a href={buildFilterUrl({ sort: 'approved', page: '1' })}>Most approved</a>
+          <a href={buildFilterUrl({ sort: 'active', page: '1' })}>Most active</a>
+        </div>
+      </details>
       <!-- Spacious Proposal List -->
       {visibleProposals.length === 0 ? (
         <div class="empty-register">
@@ -519,7 +525,7 @@ const hasActiveFilters =
   const liveCount = document.querySelector<HTMLElement>('#live-results-count');
 
   // Auto-submit quiet dropdown filters on change
-  document.querySelectorAll<HTMLSelectElement>('[data-auto-submit]').forEach((select) => {
+  document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-auto-submit]').forEach((select) => {
     select.addEventListener('change', () => {
       form?.requestSubmit();
     });
@@ -550,6 +556,15 @@ const hasActiveFilters =
 </script>
 
 <style>
+  .participation-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem; border: 0; padding: 0; margin: 0; }
+  .participation-filters legend { float: left; margin-right: 1rem; font-weight: 600; }
+  .participation-filters label { display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; font-size: .9rem; }
+  .personal-vote-link { display: inline-flex; gap: .5rem; min-height: 44px; align-items: center; color: var(--horizon-purple-deep); text-decoration: underline; text-underline-offset: .2em; font-size: .9rem; }
+  .participation-filters input { width: 1.1rem; height: 1.1rem; accent-color: var(--horizon-purple); }
+  .explore-proposals { font-size: .9rem; }
+  .explore-proposals summary { cursor: pointer; width: fit-content; }
+  .explore-proposals > div { display: flex; flex-wrap: wrap; gap: 1.5rem; padding: .75rem 0; }
+
   .proposals-page {
     max-width: 68rem;
     padding-top: 1.5rem;

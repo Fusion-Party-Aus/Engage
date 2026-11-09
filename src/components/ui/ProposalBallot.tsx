@@ -391,11 +391,11 @@ export default function ProposalBallot({
         <nav aria-label="Ballot navigation" className="grid gap-2 border-t border-border pt-4">
           {nextBallot ? (
             <>
-              <a href={`/proposals/${nextBallot.slug}/#proposal-vote`} className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--horizon-purple-deep)] hover:underline">
-                Next ballot · {nextBallot.remainingCount + (savedChoice ? 0 : 1)} remaining
+              <a href={`/proposals/${nextBallot.slug}/`} className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--horizon-purple-deep)] hover:underline">
+                {savedChoice ? 'Read next proposal' : 'Skip for now'}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </a>
-              <span className="text-sm text-muted-foreground">{nextBallot.title}</span>
+              <span className="text-sm text-muted-foreground">{nextBallot.remainingCount + (savedChoice ? 0 : 1)} need your vote · Next: {nextBallot.title}</span>
             </>
           ) : (
             <p className="m-0 text-sm">{savedChoice ? "You're up to date" : 'This is your last outstanding ballot.'}</p>
@@ -404,6 +404,14 @@ export default function ProposalBallot({
         </nav>
       )}
 
+      {savedChoice && (
+        <div className="flex flex-wrap gap-4 text-sm">
+          <a href="#deliberation" className="underline underline-offset-4">Join discussion</a>
+          <button type="button" className="underline underline-offset-4" onClick={async () => {
+            try { await navigator.clipboard.writeText(window.location.href.split('#')[0]); setMessage('Link copied.'); setJustVoted(false); } catch { setError("Couldn't copy link. Copy the address from your browser."); }
+          }}>Share</button>
+        </div>
+      )}
       <Separator />
 
       <section aria-label="Ballot results" className="flex flex-col gap-2">

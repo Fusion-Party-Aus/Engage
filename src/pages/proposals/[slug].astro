@@ -139,7 +139,7 @@ const stageStepLabel = (stage: ProposalStage) => {
 
 const stageGuideText = (stage: ProposalStage) => {
   if (stage === 'decide') {
-    return 'Formal member ballot is open on the bound wording revision. Substantive proposal wording is locked while members vote.';
+    return 'Voting is open.';
   }
   if (stage === 'deliberate') {
     return 'Open for member discussion, scrutiny, and formal wording amendments before a ballot is opened.';
@@ -346,6 +346,7 @@ const initialsFor = (name: string) =>
           </div>
 
           <h1 class="proposal-hero__title">{proposal.title}</h1>
+          <p class="proposal-hero__summary">{proposal.summary}</p>
 
 
           <!-- Immediate Next Action Banner (Zero-Friction Entry Point) -->
@@ -359,11 +360,11 @@ const initialsFor = (name: string) =>
                   ? 'Voting has closed. Review the tally and recorded decision.'
                   : proposal.stage === 'decide'
                   ? myVote
-                    ? '✓ Action complete'
+                    ? 'Review or change · ~30 seconds'
                     : myPendingVote
                       ? '✓ Queued pending verification'
                       : canVoteOnProposal
-                        ? 'Your immediate action · Takes ~30 seconds'
+                        ? 'Review & vote · About 2 minutes'
                         : !user
                           ? 'Your immediate action · Takes ~1 minute'
                           : eligibility?.level === 'follower'
@@ -521,6 +522,14 @@ const initialsFor = (name: string) =>
           </dl>
         </header>
 
+        {canVoteOnProposal && proposal.stage === 'decide' && (
+          <nav class="proposal-progression" aria-label="Proposal progression">
+            <span data-outstanding-after-vote={remainingBallots.length}>{remainingBallots.length + (myVote ? 0 : 1)} need your vote</span>
+            {nextBallotInfo && <a href={`/proposals/${nextBallotInfo.slug}/`}>Skip for now →</a>}
+            <a href="/proposals/?stage=decide&focus=all">All ballots</a>
+          </nav>
+        )}
+
         <!-- Sticky Section Jump Navigation -->
         <nav class="reading-nav" aria-label="Jump to proposal section">
           <div class="reading-nav__links">
@@ -611,8 +620,8 @@ const initialsFor = (name: string) =>
             )}
 
             <!-- Key Commitments -->
-            <section class="decision-content" aria-label="Proposal summary and commitments">
-              <p class="decision-summary">{proposal.summary}</p>
+            <section id="proposal-decision" class="decision-content" aria-label="Proposal summary and commitments">
+
             {proposal.outcomes.length > 0 && (
               <section aria-labelledby="outcomes-heading">
                 <div class="doc-section__header">
@@ -634,6 +643,26 @@ const initialsFor = (name: string) =>
               </section>
             )}
 
+            <!-- Rationale & Context -->
+            {(proposal.details || proposal.detailHtml) && (
+              <section class="decision-rationale" aria-labelledby="details-heading">
+                <details>
+                <summary class="rationale-toggle">Rationale &amp; background</summary>
+                <div class="doc-section__header">
+                  <div>
+                    <h2 id="details-heading" class="sr-only">Rationale &amp; background</h2>
+
+                  </div>
+                </div>
+                <div class="prose-content">
+                  <PortableText value={proposal.details} html={proposal.detailHtml} />
+                </div>
+                </details>
+              </section>
+            )}
+
+            </section>
+
             <section id="proposal-vote" class:list={['rail-card', 'rail-ballot', { 'is-open': proposal.stage === 'decide' }]}>
               <div class="rail-card__head">
                 <div>
@@ -645,6 +674,11 @@ const initialsFor = (name: string) =>
               </div>
 
               {proposal.ballotClosesAt && <p><strong>{ballotExpired(proposal) ? "Voting closed" : "Voting closes"}:</strong> {ballotDeadlineLabel(proposal.ballotClosesAt)}</p>}
+              <details id="ballot-context" class="ballot-context" open>
+                <summary>What you’re deciding</summary>
+                <p>{proposal.summary}</p>
+                <a href="#proposal-decision">Review commitments</a>
+              </details>
               <details class="ballot-record">
                 <summary>Ballot record</summary>
                 <p>Wording: {ballotRevisionLabel}</p>
@@ -709,24 +743,6 @@ const initialsFor = (name: string) =>
 
               <BallotPrivacyNotice />
             </section>
-
-
-            </section>
-
-            <!-- Rationale & Context -->
-            {(proposal.details || proposal.detailHtml) && (
-              <section class="doc-section" aria-labelledby="details-heading">
-                <div class="doc-section__header">
-                  <div>
-                    <h2 id="details-heading">Rationale &amp; background</h2>
-                    <p class="doc-section__sub">Evidence, context, and implementation details supporting the proposal.</p>
-                  </div>
-                </div>
-                <div class="prose-content">
-                  <PortableText value={proposal.details} html={proposal.detailHtml} />
-                </div>
-              </section>
-            )}
 
             <!-- Formal Amendments Section -->
             <section class="doc-section" aria-labelledby="amendments-heading">
@@ -1291,10 +1307,26 @@ const initialsFor = (name: string) =>
 </SiteLayout>
 
 <script>
+  document.querySelectorAll<HTMLAnchorElement>('a[href="#details-heading"]').forEach((link) => {
+    link.addEventListener('click', () => {
+      const rationale = document.querySelector<HTMLDetailsElement>('.decision-rationale details');
+      if (rationale) rationale.open = true;
+    });
+  });
+  document.querySelectorAll<HTMLAnchorElement>('a[href="#proposal-vote"]').forEach((link) => {
+    link.href = '#proposal-decision';
+    link.addEventListener('click', () => {
+      const context = document.querySelector<HTMLDetailsElement>('#ballot-context');
+      if (context) context.open = true;
+    });
+  });
+
   window.addEventListener('engage:vote-saved', (event) => {
     const choice = (event as CustomEvent<{ choice: string }>).detail.choice;
     const title = document.querySelector('.next-action-bar__title');
     if (title) title.textContent = `Your vote: ${choice}. You can change it until voting closes.`;
+    const outstanding = document.querySelector<HTMLElement>('[data-outstanding-after-vote]');
+    if (outstanding) outstanding.textContent = `${outstanding.dataset.outstandingAfterVote} need your vote`;
     const bar = document.querySelector('.next-action-bar');
     bar?.classList.add('is-complete');
     const kicker = document.querySelector('.next-action-bar__kicker');
@@ -1305,7 +1337,7 @@ const initialsFor = (name: string) =>
       chip.classList.remove('is-action');
       chip.classList.add('is-voted');
     }
-    const action = document.querySelector('.next-action-bar a[href="#proposal-vote"]');
+    const action = document.querySelector('.next-action-bar a[href="#proposal-decision"]');
     if (action) action.textContent = 'Review your vote →';
   });
 
@@ -1650,9 +1682,29 @@ const initialsFor = (name: string) =>
 </script>
 
 <style>
-  .decision-content { border-top: 1px solid var(--horizon-line); padding: clamp(1.25rem, 2.2vw, 1.75rem); padding-bottom: 0; }
-  .decision-summary { font-size: 1.15rem; line-height: 1.65; margin: 0 0 1.5rem; }
-  #proposal-vote { scroll-margin-top: 6rem; border: 0; border-radius: 0; box-shadow: none; padding: 1.5rem 0; margin-top: 1.5rem; border-top: 1px solid var(--horizon-line); }
+  .decision-content { background: #fff; border: 1px solid var(--horizon-line); border-radius: 1rem; padding: clamp(1.25rem, 2.2vw, 1.75rem); }
+  .proposal-workspace > .proposal-main, .proposal-workspace > .proposal-rail { display: contents; }
+  .proposal-main > * { grid-column: 1; }
+  .proposal-rail > * { grid-column: 2; }
+  #proposal-vote { grid-column: 2; grid-row: 1; }
+
+  #proposal-vote, #proposal-decision { scroll-margin-top: 7rem; }
+  .decision-rationale { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--horizon-line); }
+  @media (min-width: 1101px) and (min-height: 1100px) { #proposal-vote { position: sticky; top: 7rem; } }
+  .rationale-toggle { cursor: pointer; font-weight: 600; font-size: 1.1rem; }
+  .ballot-context { margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--horizon-line); font-size: .9rem; }
+  .ballot-context summary { cursor: pointer; font-weight: 600; }
+  .ballot-context p { line-height: 1.6; }
+  .proposal-progression { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: .85rem 1.25rem; margin: 1rem 0; border-bottom: 1px solid var(--horizon-line); font-size: .9rem; }
+  .proposal-progression a { color: var(--horizon-purple-deep); text-decoration: underline; text-underline-offset: .2em; }
+  @media (max-width: 1100px) {
+    .proposal-workspace { display: flex !important; flex-direction: column; }
+    .proposal-main, .proposal-rail { display: contents !important; }
+    .proposal-main > *, .proposal-rail > * { width: 100%; }
+
+
+    #proposal-vote { position: static; }
+  }
   .ballot-record { font-size: .875rem; margin-bottom: 1rem; }
   .ballot-record summary { cursor: pointer; }
 

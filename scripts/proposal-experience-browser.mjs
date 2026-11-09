@@ -9,7 +9,7 @@ import {writeFile} from 'node:fs/promises';
 const out=path.resolve('docs/screenshots/proposal-experience');
 const browser=await chromium.launch({...(process.env.CHROME_EXECUTABLE ? {executablePath:process.env.CHROME_EXECUTABLE} : {}),headless:true});
 // Prepare exactly 23 eligible ballots through the same authorised API as administration.
-for (const port of (process.env.AFTER_ONLY ? [4397] : [4396,4397])) {
+for (const port of (process.env.AFTER_ONLY ? [Number(process.env.ENGAGE_PREVIEW_PORT || 4397)] : [4396,4397])) {
  const origin = `http://127.0.0.1:${port}`;
  const headers = {'Cookie':'engage_dev_user=administrator','Content-Type':'application/json'};
  const {proposals} = await fetch(origin+'/api/proposals',{headers}).then(r=>r.json());
@@ -20,7 +20,7 @@ for (const port of (process.env.AFTER_ONLY ? [4397] : [4396,4397])) {
 }
 const results=[];
 try {
-for(const [version,port] of (process.env.AFTER_ONLY ? [['after',4397]] : [['before',4396],['after',4397]])) {
+for(const [version,port] of (process.env.AFTER_ONLY ? [['after',Number(process.env.ENGAGE_PREVIEW_PORT || 4397)]] : [['before',4396],['after',4397]])) {
 const origin=`http://127.0.0.1:${port}`;
 for(const [device,width,height] of [['desktop',1440,1000],['mobile',390,844]]) {
 const context=await browser.newContext({viewport:{width,height}});
@@ -45,7 +45,7 @@ await shot('ballot-before');
 if(version==='after') {
  const next=page.getByRole('navigation',{name:'Ballot navigation'}).getByRole('link').first();
  const nextHref=await next.getAttribute('href');
- await next.click();assert.ok(page.url().includes(nextHref.split('#')[0]));
+ await next.click();assert.ok(page.url().includes(nextHref.split('#')[0]));assert.equal(new URL(page.url()).hash, '', 'next proposal starts at its introduction');
  const detail=await context.request.get(origin+'/api/proposals/'+link.split('/')[2]);
  assert.equal((await detail.json()).myVote,null,'skip must not vote');
  await go(link+'#proposal-vote');
@@ -73,7 +73,7 @@ results.push({version,device,errors,voteSaved:true,voteUpdated:true});assert.dee
 await context.close();
 }
 }
-for(const [version,port] of (process.env.AFTER_ONLY ? [['after',4397]] : [['before',4396],['after',4397]])) {
+for(const [version,port] of (process.env.AFTER_ONLY ? [['after',Number(process.env.ENGAGE_PREVIEW_PORT || 4397)]] : [['before',4396],['after',4397]])) {
  const origin=`http://127.0.0.1:${port}`;
  const context=await browser.newContext();
  await context.addCookies([{name:'engage_dev_user',value:'member',url:origin}]);
@@ -90,13 +90,13 @@ for(const [version,port] of (process.env.AFTER_ONLY ? [['after',4397]] : [['befo
   await page.screenshot({path:`${out}/${version}-complete-${device}.png`});
  }
  if(version==='after') {
-  await page.selectOption('#proposal-focus','all');await page.waitForURL('**focus=all**');
+  await page.locator('#needs-my-vote').uncheck();await page.waitForURL(url=>url.searchParams.get('focus')==='all' && !url.searchParams.has('needsVote'));
   assert.ok(await page.locator('.proposal-item').count()>0,'opt-out shows active ballots');
   await page.getByRole('link',{name:/^All\s/}).first().click();
   await page.getByRole('link',{name:/^Voting\s/}).first().click();
-  assert.equal(new URL(page.url()).searchParams.get('focus'),'all','opt-out survives stage browsing');
+  assert.equal(await page.locator('#needs-my-vote').isChecked(),false,'restored opt-out survives stage browsing');
   await page.goBack();await page.goForward();
-  assert.equal(await page.locator('#proposal-focus').inputValue(),'all');
+  assert.equal(await page.locator('#needs-my-vote').isChecked(),false);
   await page.goto(origin+'/proposals/?stage=decide&focus=all&q=zzzzmissing',{waitUntil:'networkidle'});
   await page.getByRole('heading',{name:'No matching proposals'}).waitFor();
  }
