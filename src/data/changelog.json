@@ -1,5 +1,13 @@
 [
   {
+    "hash": "52c6570",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Connect verification, participation and legacy consent journeys"
+  },
+  {
     "hash": "eb5f365",
     "date": "2026-11-09",
     "type": "feat",

@@ -1,0 +1,32 @@
+{
+  "dataset": "Synthetic ten-member regression fixture. NOT live member counts.",
+  "dryRun": true,
+  "scope": "engage-participation",
+  "campaignApprovalRequired": true,
+  "legacyCohortAvailable": true,
+  "consentCounts": {
+    "explicit-opt-in": 5,
+    "legacy-unrecorded": 2,
+    "explicit-opt-out": 1,
+    "suppressed": 1,
+    "new-unrecorded": 1
+  },
+  "needsReview": 2,
+  "generatedAt": "2026-11-09T00:00:00.000Z",
+  "cutoff": "2026-10-01T00:00:00.000Z",
+  "total": 10,
+  "eligible": 2,
+  "excluded": 5,
+  "suppressed": 1,
+  "reasons": {
+    "eligible": 2,
+    "review-legacy-lawful-basis": 1,
+    "explicit-engage-opt-out": 1,
+    "suppressed": 1,
+    "already-participated": 1,
+    "recently-active": 1,
+    "review-verification-date": 1,
+    "notification-sent-or-uncertain": 1,
+    "new-member-opt-in-required": 1
+  }
+}
