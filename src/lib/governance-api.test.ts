@@ -247,7 +247,11 @@ it("supports admin-managed data-driven branches, explicit memberships and referr
     request: new Request("http://localhost/api/admin/branches/memberships", {
       method: "DELETE",
       headers: admin,
-      body: JSON.stringify({ branchId: childId, memberId }),
+      body: JSON.stringify({
+        branchId: childId,
+        memberId,
+        reason: "Test membership ended.",
+      }),
     }),
     locals: { runtime: { env } },
   } as never);

@@ -33,7 +33,7 @@ export interface MemberSettingsProps {
   role: MemberRole;
   status: MembershipStatus;
   canParticipate: boolean;
-  branches: { id: string; name: string }[];
+  branches: { id: string; name: string; status?: 'member' | 'follower' }[];
   stats: { votes: number; contributions: number; ideas: number };
 }
 
@@ -89,8 +89,8 @@ function InfoRow({ label, description, children }: { label: string; description:
 function MemberPreview({ name, status, branches, stats }: Pick<MemberSettingsProps, 'name' | 'status' | 'branches' | 'stats'>) {
   const copy = statusCopy[status];
   const branchLabel = branches.length
-    ? branches.map((branch) => branch.name).join(' · ')
-    : 'No branch membership on record';
+    ? branches.map((branch) => `${branch.name}${branch.status === 'member' ? ' (member)' : branch.status === 'follower' ? ' (follower)' : ''}`).join(' · ')
+    : 'Fusion National only';
 
   return (
     <Card className="h-full gap-0 shadow-none">
@@ -225,15 +225,20 @@ function AccessSection({ role, canParticipate, branches }: Pick<MemberSettingsPr
             <span className="text-sm">{canParticipate ? 'Comment, suggest and vote' : 'Read and explore only'}</span>
           </InfoRow>
           <FieldSeparator />
-          <InfoRow description="Proposals from these branches appear in your overview." label="Branch memberships">
+          <InfoRow description="Following a branch shows its proposals. Verified membership is decided by the branch." label="Branches you follow">
             {branches.length ? (
               <ul className="flex flex-col gap-1 text-sm">
                 {branches.map((branch) => (
-                  <li key={branch.id}>{branch.name}</li>
+                  <li key={branch.id}>
+                    {branch.name}{' '}
+                    <span className="text-xs text-muted-foreground">
+                      {branch.status === 'member' ? 'Member' : 'Follower'}
+                    </span>
+                  </li>
                 ))}
               </ul>
             ) : (
-              <span className="text-sm text-muted-foreground">None on record</span>
+              <span className="text-sm text-muted-foreground">Fusion National is included for every account</span>
             )}
           </InfoRow>
         </FieldGroup>

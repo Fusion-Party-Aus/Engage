@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import BranchChooser, { type BranchChoice } from '@/components/member/BranchChooser';
 
 export interface MemberOnboardingProps {
   name: string;
@@ -24,6 +25,9 @@ export interface MemberOnboardingProps {
   status: 'pending' | 'verified' | 'suspended';
   canParticipate: boolean;
   branches: { id: string; name: string }[];
+  branchChoices?: BranchChoice[];
+  followingBranchCount?: number;
+  memberKey?: string;
   openBallotsCount: number;
   firstBallotHref?: string;
   firstBallotTitle?: string;
@@ -67,6 +71,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
   const [passkeyError, setPasskeyError] = useState(false);
   const [seenWalkthrough, setSeenWalkthrough] = useState(false);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const [branchesDone, setBranchesDone] = useState(Boolean((props.followingBranchCount ?? 0) > 0));
 
   useEffect(() => {
     let localHasPasskey = Boolean((props.initialPasskeyCount ?? 0) > 0);
@@ -86,6 +91,10 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
       }
       if (sessionStorage.getItem(PASSKEY_NUDGE_DISMISSED_KEY) === 'true') {
         setNudgeDismissed(true);
+      }
+      const branchKey = `engage_branches_onboarded_v1:${props.memberKey || props.email}`;
+      if (localStorage.getItem(branchKey) === 'true') {
+        setBranchesDone(true);
       }
     } catch {
       // Ignore storage access errors
@@ -144,7 +153,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
     }
 
     void checkAndAutoUpgradePasskey();
-  }, [props.email, props.initialPasskeyCount]);
+  }, [props.email, props.memberKey, props.initialPasskeyCount]);
 
   if (props.status === 'suspended' || dismissed) {
     return null;
@@ -152,6 +161,9 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
 
   const verifiedDone = props.status === 'verified';
   const participatedDone = props.totalContributions > 0 || seenWalkthrough;
+  const chosenBranches = (props.branchChoices ?? []).filter(
+    (branch) => !branch.included && (branch.following || branch.verified),
+  );
 
   const steps = [
     {
@@ -182,6 +194,19 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
         ? 'You can suggest ideas, post deliberation stances, propose amendments, and vote in eligible ballots.'
         : 'An administrator cross-checks your name and email against the Fusion roll. You can explore every public proposal while you wait.',
       time: verifiedDone ? 'Verified' : 'Automatic notice',
+    },
+    {
+      id: 'branches',
+      done: branchesDone,
+      title: branchesDone
+        ? chosenBranches.length
+          ? `Connected to ${chosenBranches.map((branch) => branch.name).join(', ')}`
+          : 'Branches chosen later'
+        : 'Choose your branches',
+      description: branchesDone
+        ? 'Fusion National is included. You can change which branches you follow at any time in My Engage.'
+        : 'Follow state or local branches to discover their proposals. Following does not make you a verified member or change your voting rights.',
+      time: '20 sec',
     },
     {
       id: 'first-action',
@@ -387,7 +412,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
       )}
 
       {/* Checklist Grid */}
-      <div className="grid divide-y border-b border-[var(--horizon-line)] md:grid-cols-2 md:divide-x md:divide-y-0 lg:grid-cols-4">
+      <div className="grid divide-y border-b border-[var(--horizon-line)] md:grid-cols-2 md:divide-x md:divide-y-0 lg:grid-cols-3 xl:grid-cols-5">
         {steps.map((step) => (
           <div
             key={step.id}
@@ -462,6 +487,17 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
               </div>
             )}
 
+            {step.id === 'branches' && (
+              <div className="pt-1">
+                <a
+                  href="#onboarding-branches-heading"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--horizon-purple-deep)] hover:underline"
+                >
+                  {branchesDone ? 'Review my branches' : 'Choose branches'} <ArrowRight className="size-3.5" aria-hidden="true" />
+                </a>
+              </div>
+            )}
+
             {step.id === 'first-action' && (
               <div className="pt-1">
                 <a
@@ -476,6 +512,13 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
           </div>
         ))}
       </div>
+
+      <BranchChooser
+        mode="onboarding"
+        memberKey={props.memberKey || props.email}
+        branches={props.branchChoices ?? []}
+        onComplete={() => setBranchesDone(true)}
+      />
 
       {/* Bottom Action & Feedback Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white px-5 py-3">

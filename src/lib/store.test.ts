@@ -1013,24 +1013,15 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       proposalId: proposal.proposalId,
       stage: "deliberate",
     });
-    await assert.rejects(
-      () =>
-        saveProposal(db, branchAdmin, {
-          proposalId: proposal.proposalId,
-          stage: "decide",
-        }),
-      /national administrator must explicitly assign/,
-    );
-    await saveProposal(db, adminUser, {
-      proposalId: proposal.proposalId,
-      governanceAuthorityBranchId: branchId,
-      jurisdictionBranchId: branchId,
-      publicationScope: "branch",
-    });
+    // A delegated branch administrator's own branch supplies governance
+    // authority and jurisdiction at creation, so its local ballot can open
+    // straight away without a national administrator pre-assigning it.
     const ballot = await saveProposal(db, branchAdmin, {
       proposalId: proposal.proposalId,
       stage: "decide",
     });
+    assert.equal(ballot.governanceAuthorityBranchId, branchId);
+    assert.equal(ballot.jurisdictionBranchId, branchId);
     assert.ok(ballot.ballotRevisionId);
     await assert.rejects(
       () =>
@@ -1134,7 +1125,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
         proposalId: proposal.proposalId,
         choice: "approve",
       }),
-      /membership in this proposal's jurisdiction branch/,
+      /Voting is limited to verified State X members/,
     );
     await db
       .collection("branch_memberships")

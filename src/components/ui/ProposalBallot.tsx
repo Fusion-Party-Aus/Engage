@@ -29,6 +29,7 @@ interface Props {
   initialTally: Tally;
   open: boolean;
   canVote: boolean;
+  ineligibleReason?: string;
   isGuest?: boolean;
   isPendingMember?: boolean;
   nextBallot?: NextBallotInfo | null;
@@ -56,6 +57,7 @@ export default function ProposalBallot({
   initialTally,
   open,
   canVote,
+  ineligibleReason,
   isGuest = false,
   isPendingMember = false,
   nextBallot = null,
@@ -327,7 +329,8 @@ export default function ProposalBallot({
                 </Button>
                 {!canVote && !isPendingMember && (
                   <p className="m-0 text-sm text-muted-foreground">
-                    You can read this ballot but are not eligible to vote in this branch electorate.
+                    {ineligibleReason ||
+                      'You can read this ballot but are not eligible to vote in this branch electorate.'}
                   </p>
                 )}
               </div>

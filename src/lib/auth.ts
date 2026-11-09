@@ -277,8 +277,38 @@ export async function getSessionUser(
     const devRole = parseCookie(request, DEV_COOKIE);
     if (devRole === "member" || devRole === "administrator") {
       const isAdmin = devRole === "administrator";
+      const memberId = isAdmin ? "dev-admin-01" : "dev-member-01";
+      // A local development session still respects the same branch facts as a
+      // real session, so follower-versus-member journeys can be reviewed.
+      let verifiedBranchIds: string[] = [];
+      let followedBranchIds: string[] = [];
+      let branchAdminIds: string[] = [];
+      try {
+        const db = await getDatabase(env);
+        const [memberships, subscriptions] = await Promise.all([
+          db
+            .collection<{ branchId: string; branchRole?: string; status: string }>(
+              "branch_memberships",
+            )
+            .find({ memberId, status: "active" })
+            .toArray(),
+          db
+            .collection<{ branchId: string; status: string }>(
+              "branch_subscriptions",
+            )
+            .find({ memberId, status: "following" })
+            .toArray(),
+        ]);
+        verifiedBranchIds = memberships.map((row) => row.branchId);
+        branchAdminIds = memberships
+          .filter((row) => row.branchRole === "administrator")
+          .map((row) => row.branchId);
+        followedBranchIds = subscriptions.map((row) => row.branchId);
+      } catch {
+        // Development sign-in must remain usable without a database.
+      }
       return {
-        memberId: isAdmin ? "dev-admin-01" : "dev-member-01",
+        memberId,
         name: isAdmin ? "Local Administrator" : "Local Verified Member",
         email: isAdmin ? "admin@local.test" : "member@local.test",
         role: isAdmin ? "administrator" : "member",
@@ -286,6 +316,13 @@ export async function getSessionUser(
         canParticipate: true,
         isStaff: isAdmin,
         isAdmin,
+        verifiedBranchIds,
+        followedBranchIds,
+        branchAdminIds,
+        isBranchAdmin: branchAdminIds.length > 0,
+        activeBranchIds: [
+          ...new Set([...verifiedBranchIds, ...followedBranchIds]),
+        ],
       };
     }
   }
@@ -309,21 +346,29 @@ export async function getSessionUser(
       .findOne({ _id: new ObjectId(memberId) });
     if (!account || account.disabled === true) return null;
 
-    const [rolesDocs, membershipDoc, branchMembershipRows] = await Promise.all([
-      db
-        .collection<{ role: UserRole }>("application_roles")
-        .find({ memberId })
-        .toArray(),
-      db
-        .collection<{ status: MembershipStatus }>("memberships")
-        .findOne({ memberId }),
-      db
-        .collection<{ branchId: string; branchRole?: string; status: string }>(
-          "branch_memberships",
-        )
-        .find({ memberId, status: "active" })
-        .toArray(),
-    ]);
+    const [rolesDocs, membershipDoc, branchMembershipRows, subscriptionRows] =
+      await Promise.all([
+        db
+          .collection<{ role: UserRole }>("application_roles")
+          .find({ memberId })
+          .toArray(),
+        db
+          .collection<{ status: MembershipStatus }>("memberships")
+          .findOne({ memberId }),
+        db
+          .collection<{ branchId: string; branchRole?: string; status: string }>(
+            "branch_memberships",
+          )
+          .find({ memberId, status: "active" })
+          .toArray(),
+        db
+          .collection<{ branchId: string; status: string }>(
+            "branch_subscriptions",
+          )
+          .find({ memberId, status: "following" })
+          .toArray()
+          .catch(() => []),
+      ]);
 
     const roles = rolesDocs.map((r) => r.role);
     const role: UserRole = roles.includes("administrator")
@@ -332,7 +377,14 @@ export async function getSessionUser(
         ? "moderator"
         : "member";
     const status: MembershipStatus = membershipDoc?.status ?? "pending";
-    const activeBranchIds = branchMembershipRows.map((row) => row.branchId);
+    const verifiedBranchIds = branchMembershipRows.map((row) => row.branchId);
+    const followedBranchIds = subscriptionRows.map((row) => row.branchId);
+    // Discovery uses the union: a verified member keeps branch visibility even
+    // after choosing to stop following updates. Voting reads branch_memberships
+    // directly and never treats a subscription as membership.
+    const activeBranchIds = [
+      ...new Set([...verifiedBranchIds, ...followedBranchIds]),
+    ];
     const branchAdminIds = branchMembershipRows
       .filter((row) => row.branchRole === "administrator")
       .map((row) => row.branchId);
@@ -349,6 +401,8 @@ export async function getSessionUser(
       branchAdminIds,
       isBranchAdmin: branchAdminIds.length > 0,
       activeBranchIds,
+      followedBranchIds,
+      verifiedBranchIds,
     };
   } catch {
     return null;

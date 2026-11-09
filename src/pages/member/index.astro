@@ -11,6 +11,7 @@ import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
 import MemberSettings from '../../components/member/MemberSettings';
 import MemberOnboarding from '../../components/member/MemberOnboarding';
+import BranchChooser from '../../components/member/BranchChooser';
 import ActivityTimeline from '../../components/blocks/timeline-3';
 import AttentionQueue from '../../components/member/AttentionQueue.astro';
 import CatchUpDigest from '../../components/member/CatchUpDigest.astro';
@@ -38,6 +39,11 @@ import { ballotExpired, ballotDeadlineLabel, closesWithinSevenDays } from '../..
 import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
 import { outstandingBallots, type DigestBallot } from '../../lib/engagement-email.ts';
 import { listProposals, listUserActivity } from '../../lib/store.ts';
+import {
+  ensureNationalBranchAssignment,
+  getMemberBranchProfile,
+  type MemberBranchProfile,
+} from '../../lib/branch-participation.ts';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -48,10 +54,14 @@ const [db, user] = await Promise.all([
   getSessionUser(Astro.request, env),
 ]);
 
+// Existing members without any branch connection receive national governance
+// scope silently. This is a following preference, never a verified membership.
+if (user) await ensureNationalBranchAssignment(db, user.memberId);
+
 const [
   activity,
   memberTimelineEvents,
-  memberBranches,
+  branchProfile,
   visibleProposals,
   allCatchUpGroups,
   userPasskeyCount,
@@ -59,13 +69,7 @@ const [
   ? await Promise.all([
       listUserActivity(db, user.memberId),
       listMemberActivityStream(db, user.memberId),
-      user.activeBranchIds?.length
-        ? db
-            .collection('branches')
-            .find({ branchId: { $in: user.activeBranchIds }, recognised: true })
-            .sort({ name: 1 })
-            .toArray()
-        : Promise.resolve([]),
+      getMemberBranchProfile(db, user.memberId),
       listProposals(db, { user }),
       buildMemberCatchUp(db, user.memberId, new Date(0), user),
       db
@@ -73,7 +77,13 @@ const [
         .countDocuments({ userId: user.memberId })
         .catch(() => 0),
     ])
-  : [null, [] as ActivityTimelineEvent[], [], [], [] as MemberCatchUpGroup[], 0];
+  : [null, [] as ActivityTimelineEvent[], null as MemberBranchProfile | null, [] as any[], [] as MemberCatchUpGroup[], 0];
+
+const connectedBranches = branchProfile?.connected ?? [];
+const memberBranches = connectedBranches.filter((branch) => !branch.included);
+const branchChoices = branchProfile?.all ?? [];
+const followableBranchCount = branchProfile?.following.length ?? 0;
+const verifiedBranchCount = branchProfile?.verified.length ?? 0;
 
 const [emailPreference, outstandingBallotsForMember, existingDigestMembers] = user ? await Promise.all([
  db.collection('engagement_email_preferences').findOne({memberId:user.memberId}),
@@ -96,7 +106,7 @@ const deliberationOpportunities = visibleProposals
   .filter((proposal) => proposal.stage === 'deliberate')
   .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
-const branchPriority = { decide: 0, deliberate: 1, propose: 2, implement: 3, archived: 4 };
+const branchPriority: Record<string, number> = { decide: 0, deliberate: 1, propose: 2, implement: 3, archived: 4 };
 
 const now = new Date();
 const LAST_SEEN_COOKIE = 'engage_member_last_seen';
@@ -175,7 +185,10 @@ const completedOpenBallotsCount =
   new Set(activity?.votes.filter(v => visibleProposals.some(p => p.proposalId === v.proposalId && p.stage === 'decide' && !ballotExpired(p) && v.ballotId === `proposal:${p.proposalId}` && v.revisionId === p.ballotRevisionId)).map(v=>v.proposalId) ?? []).size;
 const totalEligibleOpenBallotsCount = completedOpenBallotsCount + awaitingDecision.length;
 const requestedView = Astro.url.searchParams.get('view');
-const memberView = requestedView === 'activity' || requestedView === 'account' || requestedView === 'notifications' ? requestedView : 'overview';
+const memberView =
+  requestedView === 'activity' || requestedView === 'account' || requestedView === 'notifications' || requestedView === 'branches'
+    ? requestedView
+    : 'overview';
 
 // Contextual Intent Preservation (Message Match & Safe Same-Origin Redirect)
 const rawReturnTo = Astro.url.searchParams.get('returnTo')?.trim() ?? '';
@@ -436,7 +449,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         <header class="member-header">
           <div class="member-header__main">
             <div class="member-header__title-row">
-              <h1>{memberView === 'activity' ? 'Activity & Governance Log' : memberView === 'account' ? 'My Account' : memberView === 'notifications' ? 'Notifications' : 'My Engage'}</h1>
+              <h1>{memberView === 'activity' ? 'Activity & Governance Log' : memberView === 'account' ? 'My Account' : memberView === 'notifications' ? 'Notifications' : memberView === 'branches' ? 'My branches' : 'My Engage'}</h1>
               <Badge variant={user.status === 'verified' ? 'success' : user.status === 'suspended' ? 'destructive' : 'warning'}>
                 {user.status === 'verified' ? 'Verified member' : user.status === 'suspended' ? 'Suspended' : 'Verification pending'}
               </Badge>
@@ -503,7 +516,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             email={user.email}
             status={user.status}
             canParticipate={Boolean(user.canParticipate)}
-            branches={memberBranches.map((branch: any) => ({ id: branch.branchId, name: branch.name }))}
+            branches={branchProfile?.verified.map((branch) => ({ id: branch.branchId, name: branch.name })) ?? []}
+            branchChoices={branchChoices}
+            followingBranchCount={followableBranchCount + verifiedBranchCount}
+            memberKey={user.memberId}
             openBallotsCount={awaitingDecision.length}
             firstBallotHref={awaitingDecision[0] ? `/proposals/${awaitingDecision[0].slug}/` : undefined}
             firstBallotTitle={awaitingDecision[0]?.title}
@@ -516,6 +532,14 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             digestSuppressed={Boolean(emailPreference?.suppressed)}
             initialPasskeyCount={userPasskeyCount}
           />
+          {followableBranchCount === 0 && verifiedBranchCount === 0 && (
+            <BranchChooser
+              client:load
+              mode="invite"
+              memberKey={user.memberId}
+              branches={branchChoices}
+            />
+          )}
         </div>
 
         <!-- Top 4-Cell Hairline Metric Strip -->
@@ -560,6 +584,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             <span class="member-tab__count tabular">{memberTimelineCount}</span>
           </a>
           <a href="/member/?view=notifications" class="member-tab" aria-current={memberView === 'notifications' ? 'page' : undefined}>Notifications</a>
+          <a href="/member/?view=branches" class="member-tab" aria-current={memberView === 'branches' ? 'page' : undefined}>
+            My branches
+            {memberBranches.length > 0 && <span class="member-tab__count tabular">{memberBranches.length}</span>}
+          </a>
           <a href="/member/?view=account" class="member-tab" aria-current={memberView === 'account' ? 'page' : undefined}>
             Account &amp; Access
           </a>
@@ -592,6 +620,47 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               <h2>After your participation</h2>
               <p>Follow what happened to proposals you authored, discussed or voted on.</p>
               {lifecycleItems.length ? <ul>{lifecycleItems.map(p=><li><a href={`/proposals/${p.slug}/`}>{p.title}</a> — {p.stage === 'implement' ? 'Implementation · inspect the recorded decision' : p.stage === 'archived' ? 'Archived' : 'Voting closed · inspect the recorded decision'}</li>)}</ul> : <p>Closed ballots and implementation updates will appear here.</p>}
+            </section>
+            <section class="member-panel" aria-labelledby="my-branches-heading">
+              <div class="member-panel__head">
+                <div>
+                  <div class="member-panel__title-row">
+                    <h2 id="my-branches-heading">My branches</h2>
+                    <Badge variant="secondary">{connectedBranches.length}</Badge>
+                  </div>
+                  <p>Branches you follow or where your membership is verified.</p>
+                </div>
+                <Button href="/member/?view=branches" variant="ghost" size="sm">Manage my branches</Button>
+              </div>
+              <ul class="opportunity-list">
+                {connectedBranches.map((branch) => (
+                  <li class="opportunity-row">
+                    <div class="opportunity-row__body">
+                      <div class="opportunity-row__meta">
+                        <span class="opportunity-space">{branch.name}</span>
+                        {branch.verified ? (
+                          <Badge variant="success">{branch.branchRole === 'administrator' ? 'Branch administrator' : 'Member'}</Badge>
+                        ) : branch.included ? (
+                          <Badge variant="outline">Included</Badge>
+                        ) : (
+                          <Badge variant="info">Follower</Badge>
+                        )}
+                        {!branch.included && branch.following && <Badge variant="outline">Following</Badge>}
+                      </div>
+                      <span class="text-sm text-[var(--horizon-muted)]">
+                        {branch.included
+                          ? 'Included for all Engage users.'
+                          : branch.verified
+                            ? 'Your membership is verified by the branch.'
+                            : 'You follow this branch. A branch administrator decides verified membership.'}
+                      </span>
+                    </div>
+                    {!branch.included && (
+                      <Button href={`/proposals/?branch=${encodeURIComponent(branch.branchId)}`} size="sm" variant="ghost">View proposals</Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </section>
             <section class="member-panel"><h2>Stay in the loop</h2><p>Manage Engage digests, account notifications and general communications.</p><a href="/member/?view=notifications">Notification preferences →</a></section>
             <!-- 2. Relevant Participation Opportunities (Deliberation & Amendments) -->
@@ -645,7 +714,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 <div class="member-panel__head">
                   <div>
                     <h2 id="branch-activity-heading">Activity in your branches</h2>
-                    <p>Proposals originating in or governed by your recognised branch memberships.</p>
+                    <p>Proposals originating in or governed by branches you follow or where your membership is verified.</p>
                   </div>
                 </div>
                 <div class="branch-groups">
@@ -764,7 +833,17 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           </div>
         </div>
 
-        <!-- VIEW 3: ACCOUNT & ACCESS -->
+        <!-- VIEW 3: MY BRANCHES -->
+        <div class="branches-only">
+          <BranchChooser
+            client:load
+            mode="manage"
+            memberKey={user.memberId}
+            branches={branchChoices}
+          />
+        </div>
+
+        <!-- VIEW 4: ACCOUNT & ACCESS -->
         {memberView === 'account' && (
           <div class="account-settings" id="account-settings">
             <MemberSettings
@@ -774,7 +853,11 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               role={user.role}
               status={user.status}
               canParticipate={user.canParticipate}
-              branches={memberBranches.map((branch: any) => ({ id: branch.branchId, name: branch.name }))}
+              branches={memberBranches.map((branch) => ({
+                id: branch.branchId,
+                name: branch.name,
+                status: branch.verified ? 'member' : 'follower',
+              }))}
               stats={{
                 votes: activity?.votes.length ?? 0,
                 contributions: activity?.comments.length ?? 0,
@@ -1118,9 +1201,13 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
   }
 
   .member-page:not([data-view="notifications"]) .notifications-only,
+  .member-page:not([data-view="branches"]) .branches-only,
   .member-page[data-view="notifications"] .overview-only,
   .member-page[data-view="notifications"] .activity-only,
-  .member-page[data-view="notifications"] .account-only { display: none; }
+  .member-page[data-view="notifications"] .account-only,
+  .member-page[data-view="branches"] .overview-only,
+  .member-page[data-view="branches"] .activity-only,
+  .member-page[data-view="branches"] .account-only { display: none; }
 
   .member-page[data-view="activity"] .overview-only,
   .member-page[data-view="activity"] .account-only {

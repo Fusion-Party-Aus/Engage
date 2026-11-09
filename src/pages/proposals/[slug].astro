@@ -16,6 +16,7 @@ import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astr
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { getProposalDetail, listOutstandingDecisions } from '../../lib/store.ts';
+import { getProposalEligibility, type ParticipationEligibility } from '../../lib/branch-participation.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import type { ProposalStage } from '../../lib/types.ts';
 
@@ -37,8 +38,6 @@ const proposal = detail?.proposal;
 const [
   revisions,
   policyRecord,
-  branchEligibility,
-  branchElectorate,
   ballotResult,
   relatedProposals,
   amendmentRows,
@@ -47,12 +46,6 @@ const [
   ? await Promise.all([
       db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray(),
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
-      proposal.jurisdictionBranchId && user?.canParticipate
-        ? db.collection('branch_memberships').findOne({ memberId: user.memberId, branchId: proposal.jurisdictionBranchId, status: 'active' })
-        : Promise.resolve(null),
-      proposal.jurisdictionBranchId
-        ? db.collection('branches').findOne({ branchId: proposal.jurisdictionBranchId, recognised: true })
-        : Promise.resolve(null),
       db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
       db.collection('proposals')
         .find({ space: proposal.space, proposalId: { $ne: proposal.proposalId } })
@@ -64,7 +57,7 @@ const [
         ? listOutstandingDecisions(db, user.memberId, user)
         : Promise.resolve([]),
     ])
-  : [[], null, null, null, null, [], [], []];
+  : [[], null, null, [], [], []];
 
 const ballotRevision = proposal?.ballotRevisionId
   ? revisions.find((revision: any) => revision.revisionId === proposal.ballotRevisionId)
@@ -92,7 +85,10 @@ const [relatedBranches, allAmendmentRevisions] = await Promise.all([
 ]);
 const branchNameFor = (branchId?: string) =>
   branchId ? String(relatedBranches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
-const canVoteOnProposal = Boolean(proposal && !ballotExpired(proposal) && user?.canParticipate && (!proposal?.jurisdictionBranchId || (branchEligibility && branchElectorate)));
+const eligibility: ParticipationEligibility | null = proposal
+  ? await getProposalEligibility(db, proposal, user)
+  : null;
+const canVoteOnProposal = Boolean(proposal && !ballotExpired(proposal) && eligibility?.eligible);
 if (user && canVoteOnProposal && proposal?.stage === 'decide' && proposal.ballotRevisionId) await recordLifecycle(db,user.memberId,'first_eligible_ballot_viewed');
 for (const amendment of amendmentRows) {
   const history = allAmendmentRevisions.filter((row: any) => row.amendmentId === amendment.amendmentId);
@@ -187,15 +183,9 @@ const isResolution = proposal
 const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
 const eligibilityLabel = !user
   ? 'Sign in to check eligibility'
-  : !user.canParticipate
-    ? 'Membership verification pending'
-    : proposal?.stage !== 'decide' || ballotExpired(proposal)
-      ? 'Ballot not currently open'
-      : canVoteOnProposal
-        ? proposal?.jurisdictionBranchId
-          ? `Eligible · ${branchNameFor(proposal.jurisdictionBranchId)}`
-          : 'Eligible · Verified member'
-        : 'Not eligible for this branch ballot';
+  : proposal?.stage !== 'decide' || ballotExpired(proposal)
+    ? 'Ballot not currently open'
+    : eligibility?.label ?? 'Eligibility unavailable';
 
 const policyStatusLabel = policyRecord
   ? `${String(policyRecord.status ?? 'adopted')} · ${String(policyRecord.publicationStatus ?? 'unpublished')}`
@@ -382,7 +372,11 @@ const initialsFor = (name: string) =>
                         ? 'Your immediate action · Takes ~30 seconds'
                         : !user
                           ? 'Your immediate action · Takes ~1 minute'
-                          : 'Save your ballot · Takes ~30 seconds'
+                          : eligibility?.level === 'follower'
+                            ? 'Follower access · You can follow this proposal'
+                            : eligibility?.level === 'not-connected'
+                              ? 'Branch ballot · Verified members only'
+                              : 'Save your ballot · Takes ~30 seconds'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
                     ? 'Your immediate action · Takes ~1 minute'
                     : 'Stage 4 · Implementation'}
@@ -401,7 +395,9 @@ const initialsFor = (name: string) =>
                           ? 'Preview and select your ballot choice now—sign in to record your vote (or queue it pending membership verification).'
                           : user.status === 'pending'
                             ? `Save your ballot choice on ${ballotRevisionLabel} now—it will be stored pending membership verification by an administrator.`
-                            : 'Verify your membership or branch eligibility to vote in this ballot.'
+                            : eligibility?.level === 'follower' || eligibility?.level === 'not-connected'
+                              ? eligibility.reason
+                              : 'Verify your membership or branch eligibility to vote in this ballot.'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
                     ? user?.canParticipate
                       ? 'Add your stance (Support, Concern, or Wording suggestion) or propose a formal amendment before voting opens.'
@@ -429,7 +425,12 @@ const initialsFor = (name: string) =>
                     {myPendingVote ? 'Update queued vote →' : 'Save vote pending verification →'}
                   </a>
                 ) : (
-                  <a href="/member/" class="next-action-btn is-secondary">Check verification →</a>
+                  <a
+                    href={eligibility?.level === 'follower' || eligibility?.level === 'not-connected' ? '/member/?view=branches' : '/member/'}
+                    class="next-action-btn is-secondary"
+                  >
+                    {eligibility?.level === 'follower' || eligibility?.level === 'not-connected' ? 'My branches →' : 'Check verification →'}
+                  </a>
                 )
               ) : proposal.stage === 'deliberate' || proposal.stage === 'propose' ? (
                 <>
@@ -1177,8 +1178,13 @@ const initialsFor = (name: string) =>
 
               {proposal.stage === 'decide' && !canVoteOnProposal && (
                 <div class="rail-notice">
-                  {user?.canParticipate && proposal.jurisdictionBranchId ? (
-                    <p>{branchElectorate ? 'This ballot is restricted to members of the authorised branch electorate.' : 'This branch electorate is not currently recognised for voting.'}</p>
+                  {eligibility?.level === 'follower' || eligibility?.level === 'not-connected' || eligibility?.level === 'branch-unavailable' ? (
+                    <div class="rail-notice__row">
+                      <p>{eligibility.reason}</p>
+                      {eligibility.level !== 'branch-unavailable' && (
+                        <Button href="/member/?view=branches" variant="outline" size="sm">My branches</Button>
+                      )}
+                    </div>
                   ) : user ? (
                     <div class="rail-notice__row">
                       <p>
@@ -1214,6 +1220,7 @@ const initialsFor = (name: string) =>
                     initialTally={votes}
                     open={proposal.stage === 'decide' && !ballotExpired(proposal)}
                     canVote={canVoteOnProposal}
+                    ineligibleReason={!canVoteOnProposal ? eligibility?.reason : undefined}
                     isGuest={!user}
                     isPendingMember={Boolean(user && !user.canParticipate && user.status === 'pending')}
                     nextBallot={nextBallotInfo}

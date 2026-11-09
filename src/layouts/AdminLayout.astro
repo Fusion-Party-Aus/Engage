@@ -38,8 +38,8 @@ const proposalsHref = isAdmin || isBranchAdmin ? '/admin/proposals/' : '/admin/'
 const governanceItems = [
   { key: 'overview', href: '/admin/', label: 'Needs attention', icon: LayoutDashboard, show: true },
   { key: 'proposals', href: proposalsHref, label: 'Review ideas & votes', icon: FileText, show: isAdmin || isBranchAdmin },
-  { key: 'members', href: isAdmin ? '/admin/members/' : '/admin/branches/#membership-heading', label: 'Member access', icon: Users, show: isAdmin || isBranchAdmin },
-  { key: 'branches', href: '/admin/branches/#branches-heading', label: 'Branch work', icon: GitBranch, show: isAdmin || isBranchAdmin },
+  { key: 'members', href: isAdmin ? '/admin/members/' : '/admin/branches/#people', label: 'Member access', icon: Users, show: isAdmin || isBranchAdmin },
+  { key: 'branches', href: '/admin/branches/', label: 'Branch governance', icon: GitBranch, show: isAdmin || isBranchAdmin },
   { key: 'policies', href: '/admin/policies/', label: 'Adopt & publish', icon: BookOpen, show: isAdmin },
   { key: 'settings', href: '/admin/settings/', label: 'Platform settings', icon: Settings, show: isAdmin },
 ].filter((item) => item.show);

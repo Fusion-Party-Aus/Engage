@@ -1,358 +1,137 @@
 ---
 import AdminLayout from '../../../layouts/AdminLayout.astro';
-import { Input } from '../../../components/ui/input';
-import { NativeSelect } from '../../../components/ui/native-select';
-import { Textarea } from '../../../components/ui/textarea';
-import { Checkbox } from '../../../components/ui/checkbox';
-import MembershipRevoke from '../../../components/ui/MembershipRevoke';
-import { GitBranch, Network, Search, Send, ShieldAlert, UserPlus } from 'lucide-react';
-import { getSessionUser } from '../../../lib/auth.ts';
-import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { listMembers, listProposals } from '../../../lib/store.ts';
-import { Button } from '../../../components/ui/button';
-import { Badge } from '../../../components/ui/badge';
-import Card from '../../../components/admin/Card.astro';
-import CardContent from '../../../components/admin/CardContent.astro';
-import CardDescription from '../../../components/admin/CardDescription.astro';
-import CardHeader from '../../../components/admin/CardHeader.astro';
-import CardTitle from '../../../components/admin/CardTitle.astro';
-import Field from '../../../components/admin/Field.astro';
+import BranchWork from '../../../components/BranchWork';
 import Alert from '../../../components/admin/Alert.astro';
 import AlertTitle from '../../../components/admin/AlertTitle.astro';
 import AlertDescription from '../../../components/admin/AlertDescription.astro';
+import { ShieldAlert } from 'lucide-react';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { listMembers } from '../../../lib/store.ts';
+import {
+  countBranchParticipation,
+  listBranchPeople,
+} from '../../../lib/branch-participation.ts';
+
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
-const env = runtimeEnv(Astro.locals); const user = await getSessionUser(Astro.request, env);
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
 if (!user) return Astro.redirect('/member/', 302);
-if (!user.isAdmin && !user.isBranchAdmin) Astro.response.status = 403;
+const allowed = Boolean(user.isAdmin || user.isBranchAdmin);
+if (!allowed) Astro.response.status = 403;
+
 const db = await getDatabase(env);
-const q = (Astro.url.searchParams.get('q') ?? '').trim().toLowerCase();
-const memberQuery = (Astro.url.searchParams.get('member') ?? '').trim();
-const proposalQuery = (Astro.url.searchParams.get('proposal') ?? '').trim();
-const activeBranch = (Astro.url.searchParams.get('branch') ?? '').trim();
-const branchIds = user.isAdmin ? [] : (user.branchAdminIds ?? []);
-const allBranches = user.isAdmin ? await db.collection('branches').find({}).sort({ name: 1 }).toArray() : branchIds.length ? await db.collection('branches').find({ branchId: { $in: branchIds } }).sort({ name: 1 }).toArray() : [];
-const branches = allBranches.filter((branch: any) => !q || `${branch.name} ${branch.kind} ${branch.branchId}`.toLowerCase().includes(q));
-const members = user.isAdmin || user.isBranchAdmin ? (await listMembers(db, memberQuery)).slice(0, 100) : [];
-const verifiedMembers = members.filter((member) => member.status === 'verified' && !member.disabled);
-const membershipScope = user.isAdmin ? (activeBranch ? { branchId: activeBranch, status: 'active' } : { status: 'active' }) : { branchId: { $in: branchIds }, status: 'active' };
-const memberships = user.isAdmin || user.isBranchAdmin ? await db.collection('branch_memberships').find(membershipScope).sort({ assignedAt: -1 }).limit(200).toArray() : [];
-const memberById = new Map(members.map((member) => [member.memberId, member]));
-const referrals = user.isAdmin ? await db.collection('branch_referrals').find(activeBranch ? { targetBranchId: activeBranch } : {}).sort({ referredAt: -1 }).limit(100).toArray() : [];
-const proposals = user.isAdmin ? (await listProposals(db, { includeArchived: true, search: proposalQuery })).slice(0, 60) : [];
-const proposalTitleById = new Map(proposals.map((proposal) => [proposal.proposalId, proposal.title]));
-const parentName = (branchId?: string) => branchId ? (allBranches.find((item: any) => item.branchId === branchId)?.name ?? 'Unknown') : 'No parent';
-const kindLabel = (kind: string) => kind ? kind[0]!.toUpperCase() + kind.slice(1) : 'Branch';
+const adminBranchIds = user.isAdmin ? [] : (user.branchAdminIds ?? []);
+
+let branches: any[] = [];
+let people: any[] = [];
+let counts: Record<string, any> = {};
+let referrals: any[] = [];
+let activity: Record<string, { proposals: number; openBallots: number }> = {};
+
+if (allowed) {
+  const branchFilter = user.isAdmin ? {} : { branchId: { $in: adminBranchIds } };
+  const [branchRows, members] = await Promise.all([
+    db.collection('branches').find(branchFilter).sort({ name: 1 }).toArray(),
+    listMembers(db, ''),
+  ]);
+  // Branch administrators also need their parents' names to place themselves in the hierarchy.
+  const known = new Set(branchRows.map((b: any) => b.branchId));
+  const parentIds = [...new Set(branchRows.map((b: any) => b.parentBranchId).filter((id: unknown) => typeof id === 'string' && !known.has(id)))] as string[];
+  const parentRows = parentIds.length
+    ? await db.collection('branches').find({ branchId: { $in: parentIds } }).toArray()
+    : [];
+  branches = [...branchRows, ...parentRows].map((b: any) => ({
+    branchId: String(b.branchId),
+    name: String(b.name),
+    kind: String(b.kind),
+    parentBranchId: b.parentBranchId ?? null,
+    recognised: b.recognised === true,
+  }));
+
+  const scopedBranchIds = branchRows.map((b: any) => String(b.branchId));
+  const [peopleRows, countRows, activityRows] = await Promise.all([
+    listBranchPeople(db, scopedBranchIds),
+    countBranchParticipation(db, scopedBranchIds),
+    Promise.all(
+      scopedBranchIds.map(async (branchId) => {
+        const [proposals, openBallots] = await Promise.all([
+          db.collection('proposals').countDocuments({
+            $or: [
+              { originatingBranchId: branchId },
+              { governanceAuthorityBranchId: branchId },
+              { jurisdictionBranchId: branchId },
+            ],
+          }),
+          db.collection('proposals').countDocuments({
+            stage: 'decide',
+            $or: [
+              { originatingBranchId: branchId },
+              { governanceAuthorityBranchId: branchId },
+              { jurisdictionBranchId: branchId },
+            ],
+          }),
+        ]);
+        return [branchId, { proposals, openBallots }] as const;
+      }),
+    ),
+  ]);
+  people = peopleRows;
+  counts = Object.fromEntries(countRows);
+  activity = Object.fromEntries(activityRows);
+
+  const referralRows = await db
+    .collection('branch_referrals')
+    .find(user.isAdmin ? {} : { $or: [{ targetBranchId: { $in: adminBranchIds } }, { sourceBranchId: { $in: adminBranchIds } }] })
+    .sort({ referredAt: -1 })
+    .limit(200)
+    .toArray();
+  const proposalIds = [...new Set(referralRows.map((r: any) => r.proposalId))];
+  const proposalRows = proposalIds.length
+    ? await db.collection('proposals').find({ proposalId: { $in: proposalIds } }).toArray()
+    : [];
+  const titleById = new Map(proposalRows.map((p: any) => [p.proposalId, p.title]));
+  const memberById = new Map(members.map((m) => [m.memberId, m]));
+  referrals = referralRows.map((r: any) => ({
+    referralId: r.referralId,
+    proposalId: r.proposalId,
+    proposalTitle: titleById.get(r.proposalId) ?? '',
+    sourceBranchId: r.sourceBranchId ?? null,
+    targetBranchId: r.targetBranchId,
+    reason: r.reason,
+    status: r.status ?? 'referred',
+    referredByName: memberById.get(r.referredBy)?.name ?? '',
+    referredAt: r.referredAt ? new Date(r.referredAt).toISOString() : undefined,
+  }));
+}
 ---
-<AdminLayout title={user.isAdmin ? 'Branch work' : 'Your branch'} description={user.isAdmin ? 'Manage member access, branch structure and referrals.' : 'Manage access in your assigned branches.'} section="branches" isAdmin={user.isAdmin} isBranchAdmin={Boolean(user.isBranchAdmin)}>
-  {!user.isAdmin && !user.isBranchAdmin ? (
+
+<AdminLayout
+  title="Branch governance"
+  description="Manage branch participation, verified members and delegated governance access."
+  section="branches"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  {!allowed ? (
     <Alert variant="destructive">
       <ShieldAlert />
       <AlertTitle>Access required</AlertTitle>
-      <AlertDescription>A national or delegated branch administrator can manage branch access.</AlertDescription>
+      <AlertDescription>A national or delegated branch administrator can manage branches.</AlertDescription>
     </Alert>
   ) : (
-    <div class="admin-stack">
-      {user.isAdmin && (
-        <Card class="gap-0">
-          <CardHeader class="border-b pb-4">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div class="grid gap-1">
-                <CardTitle class="text-base">Organisational structure</CardTitle>
-                <CardDescription>Relationships help members understand where proposals originate and apply. Parent branches do not inherit voting eligibility or governance authority.</CardDescription>
-              </div>
-              <Badge variant="muted"><GitBranch />{branches.length}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent class="grid gap-4 p-5">
-            <form class="flex flex-col gap-3 sm:flex-row sm:items-end" method="get" action="/admin/branches/">
-              <Field label="Search branches" htmlFor="branch-search" class="flex-1">
-                <div class="relative">
-                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input id="branch-search" type="search" name="q" placeholder="Name or branch type" className="pl-9" />
-                </div>
-              </Field>
-              <Button type="submit" variant="outline">Search</Button>
-            </form>
-
-            <div class="divide-y rounded-lg border">
-              {branches.length ? branches.map((branch: any) => (
-                <details class="branch-item">
-                  <summary>
-                    <div class="grid gap-1">
-                      <span class="flex flex-wrap items-center gap-2">
-                        <strong class="text-sm font-semibold text-foreground">{branch.name}</strong>
-                        <Badge variant={branch.recognised ? 'success' : 'outline'}>{branch.recognised ? 'Recognised' : 'Inactive'}</Badge>
-                      </span>
-                      <small class="text-muted-foreground">{kindLabel(branch.kind)} · {parentName(branch.parentBranchId)}</small>
-                    </div>
-                    <Badge variant="muted">{branch.branchId}</Badge>
-                  </summary>
-                  <form class="branch-edit-form border-t p-4" data-branch-id={branch.branchId}>
-                    <input type="hidden" name="branchId" value={branch.branchId} />
-                    <div class="admin-form-grid">
-                      <Field label="Branch name" htmlFor={`branch-name-${branch.branchId}`}>
-                        <Input id={`branch-name-${branch.branchId}`} name="name" required maxLength={120} />
-                      </Field>
-                      <Field label="Branch type" htmlFor={`branch-kind-${branch.branchId}`}>
-                        <NativeSelect defaultValue={branch.kind} id={`branch-kind-${branch.branchId}`} name="kind" required>
-                          {['national', 'state', 'territory', 'constituent'].map((kind) => <option value={kind}>{kindLabel(kind)}</option>)}
-                        </NativeSelect>
-                      </Field>
-                      <Field label="Parent branch" htmlFor={`branch-parent-${branch.branchId}`}>
-                        <NativeSelect defaultValue={branch.parentBranchId ?? ''} id={`branch-parent-${branch.branchId}`} name="parentBranchId">
-                          <option value="">No parent</option>
-                          {allBranches.filter((item: any) => item.branchId !== branch.branchId).map((item: any) => <option value={item.branchId}>{item.name}</option>)}
-                        </NativeSelect>
-                      </Field>
-                    </div>
-                    <label class="flex items-center gap-2 text-sm font-medium text-foreground">
-                      <Checkbox name="recognised" defaultChecked={branch.recognised === true} /> Recognised and visible to the public
-                    </label>
-                    <div class="admin-actions">
-                      <Button variant="outline" size="sm" type="submit">Save branch</Button>
-                      <span class="branch-save-status admin-status" role="status" aria-live="polite"></span>
-                    </div>
-                  </form>
-                </details>
-              )) : <p class="admin-empty p-4">No branches match this search.</p>}
-            </div>
-
-            <details class="admin-disclosure admin-disclosure--muted" open={branches.length === 0}>
-              <summary><Network className="size-4" aria-hidden="true" />Create a branch</summary>
-              <div class="admin-disclosure__body">
-                <form id="branch-create-form" class="branch-edit-form">
-                  <div class="admin-form-grid">
-                    <Field label="Branch name" htmlFor="create-branch-name">
-                      <Input id="create-branch-name" name="name" required maxLength={120} />
-                    </Field>
-                    <Field label="Branch type" htmlFor="create-branch-kind">
-                      <NativeSelect defaultValue="" id="create-branch-kind" name="kind" required>
-                        <option value="">Choose type</option>
-                        <option value="national">National</option>
-                        <option value="state">State</option>
-                        <option value="territory">Territory</option>
-                        <option value="constituent">Constituent</option>
-                      </NativeSelect>
-                    </Field>
-                    <Field label="Parent branch (optional)" htmlFor="create-branch-parent">
-                      <NativeSelect defaultValue="" id="create-branch-parent" name="parentBranchId">
-                        <option value="">No parent</option>
-                        {allBranches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
-                      </NativeSelect>
-                    </Field>
-                  </div>
-                  <label class="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <Checkbox name="recognised" /> Recognised and visible to the public
-                  </label>
-                  <div class="admin-actions">
-                    <Button variant="outline" size="sm" type="submit">Create branch</Button>
-                    <span id="branch-create-status" class="admin-status" role="status" aria-live="polite"></span>
-                  </div>
-                </form>
-              </div>
-            </details>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card class="gap-0">
-        <CardHeader class="border-b pb-4">
-          <CardTitle class="text-base">Branch membership</CardTitle>
-          <CardDescription>Assign verified members and delegated branch administrators.</CardDescription>
-        </CardHeader>
-        <CardContent class="grid gap-4 p-5">
-          <details class="admin-disclosure admin-disclosure--muted">
-            <summary>How branch access works</summary>
-            <div class="admin-disclosure__body">
-              <p class="admin-inline-note">Only verified platform members can be assigned. This assignment is explicit for each branch; parent membership is not inherited. {user.isAdmin ? 'Branch administrator access is a separate delegated platform permission. It allows branch membership and proposal workflow management; ballot actions require explicitly matching proposal authority and jurisdiction. It does not grant authority to ratify or publish policy.' : 'You can manage membership and local proposal workflows only for branches explicitly assigned to you. Ballot actions require matching proposal authority and jurisdiction; policy ratification and publication stay with national administrators.'}</p>
-            </div>
-          </details>
-
-          <form class="admin-form-grid" method="get" action="/admin/branches/">
-            <Field label="Find a member by name or email" htmlFor="branch-member-search">
-              <Input id="branch-member-search" type="search" name="member" placeholder="Start typing a member's name or email" />
-            </Field>
-            {user.isAdmin && <Field label="Show memberships for" htmlFor="branch-scope-filter">
-              <NativeSelect defaultValue={activeBranch} id="branch-scope-filter" name="branch">
-                <option value="">All branches</option>
-                {allBranches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
-              </NativeSelect>
-            </Field>}
-            <div class="flex items-end"><Button type="submit" variant="outline">Find</Button></div>
-          </form>
-
-          <details class="admin-disclosure admin-disclosure--muted" open={Boolean(memberQuery)}>
-            <summary><UserPlus className="size-4" aria-hidden="true" />Assign a member to a branch</summary>
-            <div class="admin-disclosure__body">
-              <form id="branch-membership-form" class="branch-edit-form">
-                <div class="admin-form-grid">
-                  <Field label="Branch" htmlFor="assign-branch">
-                    <NativeSelect defaultValue="" id="assign-branch" name="branchId" required>
-                      <option value="">Choose branch</option>
-                      {allBranches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
-                    </NativeSelect>
-                  </Field>
-                  <Field label="Verified member" htmlFor="assign-member">
-                    <NativeSelect defaultValue="" id="assign-member" name="memberId" required>
-                      <option value="">{memberQuery ? (verifiedMembers.length ? 'Choose member' : 'No verified matches') : 'Search above to find members'}</option>
-                      {verifiedMembers.map((member) => <option value={member.memberId}>{member.name || 'Name not provided'} · {member.email}</option>)}
-                    </NativeSelect>
-                  </Field>
-                  {user.isAdmin && <Field label="Branch access" htmlFor="assign-role">
-                    <NativeSelect defaultValue="member" id="assign-role" name="branchRole">
-                      <option value="member">Member</option>
-                      <option value="administrator">Branch administrator</option>
-                    </NativeSelect>
-                  </Field>}
-                </div>
-                <div class="admin-actions">
-                  <Button variant="outline" size="sm" type="submit">{user.isAdmin ? 'Assign member or administrator' : 'Assign member'}</Button>
-                  <span id="branch-membership-status" class="admin-status" role="status" aria-live="polite"></span>
-                </div>
-              </form>
-            </div>
-          </details>
-
-          <div class="divide-y rounded-lg border" aria-label="Active branch memberships">
-            {memberships.length ? memberships.map((membership: any) => {
-              const member = memberById.get(membership.memberId);
-              const branch = allBranches.find((item: any) => item.branchId === membership.branchId);
-              return (
-                <div class="admin-row px-4">
-                  <div class="admin-row__body">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <h3 class="admin-row__title">{member?.name || 'Member account'}</h3>
-                      <Badge variant={membership.branchRole === 'administrator' ? 'secondary' : 'muted'}>{membership.branchRole === 'administrator' ? 'Branch administrator' : 'Member'}</Badge>
-                    </div>
-                    <p class="admin-row__meta">{member?.email || 'Member details unavailable'} · {branch?.name ?? membership.branchId}</p>
-                  </div>
-                  <MembershipRevoke client:load branchId={membership.branchId} memberId={membership.memberId} />
-                </div>
-              );
-            }) : <p class="admin-empty px-4 py-6">No active memberships match these filters.</p>}
-          </div>
-        </CardContent>
-      </Card>
-
-      {user.isAdmin && (
-        <Card class="gap-0">
-          <CardHeader class="border-b pb-4">
-            <CardTitle class="text-base">Proposal referrals</CardTitle>
-            <CardDescription>Refer a proposal to another recognised branch for review. A referral does not transfer authority or change the proposal&apos;s jurisdiction.</CardDescription>
-          </CardHeader>
-          <CardContent class="grid gap-4 p-5">
-            <form class="admin-form-grid" method="get" action="/admin/branches/">
-              <Field label="Find proposal" htmlFor="referral-proposal-search">
-                <Input id="referral-proposal-search" type="search" name="proposal" placeholder="Proposal title, ID or topic" />
-              </Field>
-              <Field label="Referral activity for" htmlFor="referral-branch-filter">
-                <NativeSelect defaultValue={activeBranch} id="referral-branch-filter" name="branch">
-                  <option value="">All target branches</option>
-                  {allBranches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
-                </NativeSelect>
-              </Field>
-              <div class="flex items-end"><Button type="submit" variant="outline">Find</Button></div>
-            </form>
-
-            <details class="admin-disclosure admin-disclosure--muted" open={Boolean(proposalQuery)}>
-              <summary><Send className="size-4" aria-hidden="true" />Refer a proposal</summary>
-              <div class="admin-disclosure__body">
-                <form id="branch-referral-form" class="branch-edit-form">
-                  <div class="admin-form-grid">
-                    <Field label="Proposal" htmlFor="referral-proposal">
-                      <NativeSelect defaultValue="" id="referral-proposal" name="proposalId" required>
-                        <option value="">Choose proposal</option>
-                        {proposals.map((proposal) => <option value={proposal.proposalId}>{proposal.title} · {proposal.proposalId}</option>)}
-                      </NativeSelect>
-                    </Field>
-                    <Field label="Target recognised branch" htmlFor="referral-target">
-                      <NativeSelect defaultValue="" id="referral-target" name="targetBranchId" required>
-                        <option value="">Choose branch</option>
-                        {allBranches.filter((branch: any) => branch.recognised).map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
-                      </NativeSelect>
-                    </Field>
-                    <Field label="Reason for referral" htmlFor="referral-reason">
-                      <Textarea id="referral-reason" name="reason" required maxLength={1000} rows={3} />
-                    </Field>
-                  </div>
-                  <div class="admin-actions">
-                    <Button variant="outline" size="sm" type="submit">Refer proposal</Button>
-                    <span id="branch-referral-status" class="admin-status" role="status" aria-live="polite"></span>
-                  </div>
-                </form>
-              </div>
-            </details>
-
-            <div class="divide-y rounded-lg border" aria-label="Recent referrals">
-              {referrals.length ? referrals.map((referral: any) => (
-                <div class="admin-row px-4">
-                  <div class="admin-row__body">
-                    <h3 class="admin-row__title">{proposalTitleById.get(referral.proposalId) ?? 'Proposal details unavailable'}</h3>
-                    <p class="admin-row__meta">{allBranches.find((branch: any) => branch.branchId === referral.sourceBranchId)?.name ?? 'Branch'} referred to {allBranches.find((branch: any) => branch.branchId === referral.targetBranchId)?.name ?? referral.targetBranchId} · {referral.reason}</p>
-                  </div>
-                </div>
-              )) : <p class="admin-empty px-4 py-6">No referrals found.</p>}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+    <BranchWork
+      client:load
+      branches={branches}
+      people={people}
+      counts={counts}
+      activity={activity}
+      referrals={referrals}
+      isAdmin={Boolean(user.isAdmin)}
+      adminBranchIds={adminBranchIds}
+      currentUserName={user.name || user.email}
+    />
   )}
 </AdminLayout>
-
-<script>
-  const jsonForm = (id: string, endpoint: string, statusId: string, refresh = false) => {
-    const form = document.querySelector<HTMLFormElement>(`#${id}`); const status = document.querySelector<HTMLElement>(`#${statusId}`);
-    form?.addEventListener('submit', async (event) => {
-      event.preventDefault(); if (!form.reportValidity()) return;
-      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); if (button) button.disabled = true;
-      try {
-        const fd = new FormData(form); const body: Record<string, unknown> = Object.fromEntries(fd.entries());
-        if (fd.has('recognised')) body.recognised = true;
-        const response = await fetch(endpoint, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-        const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || 'Could not save this change.');
-        if (status) status.textContent = 'Saved.'; if (refresh) location.reload(); else form.reset();
-      } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not save this change.'; }
-      finally { if (button) button.disabled = false; }
-    });
-  };
-  jsonForm('branch-create-form', '/api/admin/branches', 'branch-create-status', true);
-  jsonForm('branch-membership-form', '/api/admin/branches/memberships', 'branch-membership-status');
-  jsonForm('branch-referral-form', '/api/admin/branches/referrals', 'branch-referral-status');
-  document.querySelectorAll<HTMLFormElement>('.branch-edit-form[data-branch-id]').forEach((form) => form.addEventListener('submit', async (event) => {
-    event.preventDefault(); if (!form.reportValidity()) return;
-    const status = form.querySelector<HTMLElement>('.branch-save-status'); const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); if (button) button.disabled = true;
-    try {
-      const fd = new FormData(form); const body: Record<string, unknown> = Object.fromEntries(fd.entries()); body.recognised = fd.has('recognised');
-      const response = await fetch('/api/admin/branches', { method: 'PATCH', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || 'Could not update branch.');
-      if (status) status.textContent = 'Branch saved.';
-    } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not update branch.'; }
-    finally { if (button) button.disabled = false; }
-  }));
-</script>
-
-<style>
-  .branch-item > summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    min-height: 3.5rem;
-    padding: 0.75rem 1rem;
-    cursor: pointer;
-    list-style: none;
-  }
-  .branch-item > summary::-webkit-details-marker { display: none; }
-  .branch-item > summary::after { content: '+'; color: var(--horizon-purple); font-size: 1.05rem; line-height: 1; }
-  .branch-item[open] > summary::after { content: '−'; }
-  .branch-item[open] > summary { background: var(--horizon-lavender-soft); }
-  .branch-item > summary:focus-visible { outline: 3px solid var(--horizon-focus); outline-offset: -2px; }
-  .branch-edit-form { display: grid; gap: 0.9rem; padding-top: 0.9rem; }
-  .branch-edit-form + .branch-edit-form { padding-top: 0; }
-  @media (max-width: 600px) {
-    .branch-item > summary { align-items: flex-start; flex-direction: column; }
-    .branch-item > summary::after { position: absolute; right: 1rem; }
-  }
-</style>

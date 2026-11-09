@@ -906,19 +906,19 @@ export async function saveProposal(
 
   const now = new Date();
 
-  const originatingBranchId =
+  let originatingBranchId =
     typeof body.originatingBranchId === "string"
       ? body.originatingBranchId.trim()
       : existing?.originatingBranchId;
-  const governanceAuthorityBranchId =
+  let governanceAuthorityBranchId =
     typeof body.governanceAuthorityBranchId === "string"
       ? body.governanceAuthorityBranchId.trim()
       : existing?.governanceAuthorityBranchId;
-  const jurisdictionBranchId =
+  let jurisdictionBranchId =
     typeof body.jurisdictionBranchId === "string"
       ? body.jurisdictionBranchId.trim()
       : existing?.jurisdictionBranchId;
-  const publicationScope =
+  let publicationScope =
     body.publicationScope === "national" ||
     body.publicationScope === "branch" ||
     body.publicationScope === "private"
@@ -927,6 +927,36 @@ export async function saveProposal(
         (originatingBranchId && branchAdminIds.includes(originatingBranchId)
           ? "branch"
           : undefined));
+
+  // New proposals are usable immediately. A branch administrator's own branch
+  // supplies the governance context; everything else starts under national
+  // governance. This is derived from permissions, not from untrusted input, so
+  // a follower cannot choose a stronger governance authority.
+  if (!existing) {
+    const [nationalBranchForDefault, originBranch] = await Promise.all([
+      db
+        .collection("branches")
+        .findOne({ kind: "national", recognised: true } as any),
+      originatingBranchId
+        ? db.collection("branches").findOne({ branchId: originatingBranchId })
+        : Promise.resolve(null),
+    ]);
+    if (
+      originBranch &&
+      String(originBranch.kind) !== "national" &&
+      (user.isAdmin || branchAdminIds.includes(originatingBranchId!))
+    ) {
+      governanceAuthorityBranchId ||= originatingBranchId;
+      jurisdictionBranchId ||= originatingBranchId;
+      publicationScope ||= "branch";
+    } else if (nationalBranchForDefault) {
+      const nationalId = String(nationalBranchForDefault.branchId);
+      originatingBranchId ||= nationalId;
+      governanceAuthorityBranchId ||= nationalId;
+      jurisdictionBranchId ||= nationalId;
+      publicationScope ||= "national";
+    }
+  }
   if (user.isAdmin) {
     for (const branchId of [
       originatingBranchId,
@@ -1368,26 +1398,15 @@ export async function castVote(
     .findOne({ proposalId });
   if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user))
     throw new Error("Proposal not found.");
-  if (proposal.jurisdictionBranchId) {
-    const branch = await db
-      .collection("branches")
-      .findOne({ branchId: proposal.jurisdictionBranchId, recognised: true });
-    if (!branch)
-      throw new Error(
-        "This branch electorate is not currently recognised or available for voting.",
-      );
-    const branchMembership = await db
-      .collection("branch_memberships")
-      .findOne({
-        branchId: proposal.jurisdictionBranchId,
-        memberId: user.memberId,
-        status: "active",
-      });
-    if (!branchMembership)
-      throw new Error(
-        "Active membership in this proposal's jurisdiction branch is required to vote.",
-      );
-  }
+  // Eligibility is decided in one place so proposal lists, proposal details and
+  // ballot submission cannot drift apart. Following a branch never qualifies.
+  const { getProposalEligibility } = await import("./branch-participation.ts");
+  const eligibility = await getProposalEligibility(
+    db,
+    normalizeProposalDoc(proposal),
+    user,
+  );
+  if (!eligibility.eligible) throw new Error(eligibility.reason);
   if (ballotExpired(proposal)) throw new Error("This ballot has closed.");
   const amendmentId =
     typeof body.amendmentId === "string" ? body.amendmentId.trim() : "";
@@ -1731,7 +1750,8 @@ export async function promotePendingVotePreferences(
     const proposal = normalizeProposalDoc(rawProposal);
     if (proposal.stage !== "decide" || ballotExpired(proposal)) continue;
 
-    // Enforce identical branch electorate eligibility as castVote
+    // Enforce identical branch electorate eligibility as castVote. National
+    // governance is included for every verified Engage account.
     if (proposal.jurisdictionBranchId) {
       const [branch, branchMembership] = await Promise.all([
         db.collection("branches").findOne({
@@ -1744,7 +1764,9 @@ export async function promotePendingVotePreferences(
           status: "active",
         }),
       ]);
-      if (!branch || !branchMembership) continue;
+      if (!branch) continue;
+      if (String((branch as any).kind) !== "national" && !branchMembership)
+        continue;
     }
 
     const ballotRevisionId = proposal.ballotRevisionId;
@@ -1862,17 +1884,23 @@ export async function listOutstandingDecisions(
         db.collection<{ branchId: string }>("branch_memberships")
           .find({ memberId, status: "active", branchId: { $in: branchIds } })
           .toArray(),
-        db.collection<{ branchId: string }>("branches")
+        db.collection<{ branchId: string; kind?: string }>("branches")
           .find({ recognised: true, branchId: { $in: branchIds } })
           .toArray(),
       ])
     : [[], []];
   const activeMemberships = new Set(memberships.map(({ branchId }) => branchId));
-  const recognisedBranches = new Set(branches.map(({ branchId }) => branchId));
+  const recognisedBranches = new Map(
+    branches.map(({ branchId, kind }) => [branchId, kind]),
+  );
   return decisions.filter((decision) => {
     if (!decision.ballotRevisionId || votes.some(v=>v.ballotId === proposalBallotId(decision.proposalId) && v.revisionId === decision.ballotRevisionId) || ballotExpired(decision)) return false;
     const branchId = decision.jurisdictionBranchId;
-    return !branchId || (activeMemberships.has(branchId) && recognisedBranches.has(branchId));
+    if (!branchId) return true;
+    if (!recognisedBranches.has(branchId)) return false;
+    const kind = recognisedBranches.get(branchId);
+    // National governance is included for every verified Engage account.
+    return kind === "national" || activeMemberships.has(branchId);
   });
 }
 

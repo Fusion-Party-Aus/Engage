@@ -9,6 +9,7 @@ Engage is a streamlined CRUD application built with **Astro (Node standalone SSR
 - **Policies (`/policies/` & `/policies/[slug]/`)**: Browse all 76 baseline policies by topic or stage (`Open for discussion`, `Open for voting`, `Adopted`), read the commitment and outcomes in plain English, post comments or wording amendments, and cast `Approve` / `Reject` votes directly on each policy page.
 - **Member Account (`/member/`)**: Passwordless email sign-in link (via Resend) and Google OAuth, displaying membership verification status and a personal log of votes and comments.
 - **Admin Workspace (`/admin/` & `/admin/members/`)**: Create, edit, delete, or change the stage of any policy proposal, and verify member accounts or assign moderator/administrator roles.
+- **Branch participation**: Members choose which branches they follow during onboarding or in **My Engage → My branches**. Authorised branch administrators verify followers as members in **Admin → Branch governance**. See [docs/branch-participation.md](docs/branch-participation.md) for the model, permissions and migration.
 
 ## Local Development
 

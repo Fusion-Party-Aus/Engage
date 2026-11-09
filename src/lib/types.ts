@@ -69,7 +69,12 @@ export interface SessionUser {
   /** Explicitly delegated operational administration of these branch records. */
   branchAdminIds?: string[];
   isBranchAdmin?: boolean;
+  /** Branches the person follows or is a verified member of, used for discovery. */
   activeBranchIds?: string[];
+  /** Engage-owned personal branch subscriptions. */
+  followedBranchIds?: string[];
+  /** Organisational membership facts verified by a branch authority. */
+  verifiedBranchIds?: string[];
 }
 
 export interface BranchMembershipRecord {
@@ -79,6 +84,31 @@ export interface BranchMembershipRecord {
   branchRole?: "member" | "administrator";
   assignedBy?: string;
   assignedAt?: Date;
+  /** Where the organisational membership fact came from. */
+  source?: "engage-local" | "engage-legacy" | "underground-crm" | string;
+  verifiedBy?: string;
+  verifiedAt?: Date;
+  revokedBy?: string;
+  revokedAt?: Date;
+  revocationReason?: string;
+  externalMemberId?: string;
+  version?: number;
+  verification?: {
+    method?: string;
+    verifiedAt?: Date;
+    verifiedBy?: string;
+    authority?: string;
+    note?: string;
+  };
+}
+
+export interface BranchSubscriptionRecord {
+  memberId: string;
+  branchId: string;
+  status: "following" | "unfollowed";
+  source: "member" | "migration";
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface ProvenanceLink {

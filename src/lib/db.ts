@@ -212,6 +212,37 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .createIndex({ memberId: 1, status: 1, branchRole: 1, branchId: 1 })
         .catch(() => {}),
       db
+        .collection("branch_memberships")
+        .createIndex({ branchId: 1, status: 1 })
+        .catch(() => {}),
+      db
+        .collection("branch_memberships")
+        .createIndex({ source: 1, branchId: 1 })
+        .catch(() => {}),
+      db
+        .collection("branch_subscriptions")
+        .createIndex(
+          { memberId: 1, branchId: 1 },
+          { unique: true, name: "branch_subscription_member_unique" },
+        )
+        .catch(() => {}),
+      db
+        .collection("branch_subscriptions")
+        .createIndex({ branchId: 1, status: 1 })
+        .catch(() => {}),
+      db
+        .collection("branch_subscriptions")
+        .createIndex({ memberId: 1, status: 1 })
+        .catch(() => {}),
+      db
+        .collection("branch_subscription_events")
+        .createIndex({ eventId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("branch_subscription_events")
+        .createIndex({ memberId: 1, createdAt: -1 })
+        .catch(() => {}),
+      db
         .collection("branch_membership_events")
         .createIndex({ eventId: 1 }, { unique: true })
         .catch(() => {}),
@@ -234,6 +265,14 @@ export async function initializeDatabase(db: Db): Promise<void> {
       db
         .collection("branch_referrals")
         .createIndex({ referralId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("site_settings_events")
+        .createIndex({ eventId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("site_settings_events")
+        .createIndex({ createdAt: -1 })
         .catch(() => {}),
     ]);
 

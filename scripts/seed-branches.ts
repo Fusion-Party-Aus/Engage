@@ -27,13 +27,25 @@ try {
   const nationalBranchId = "branch-nat";
   const members = await db.collection("memberships").find({ status: "verified" }, { projection: { memberId: 1 } }).toArray();
   for (const member of members) {
-    await db.collection("branch_memberships").updateOne(
+    // National governance scope is a following preference, not a verified
+    // organisational membership fact. It must never certify party membership.
+    await db.collection("branch_subscriptions").updateOne(
       { memberId: member.memberId, branchId: nationalBranchId },
-      { $setOnInsert: { memberId: member.memberId, branchId: nationalBranchId, status: "active", branchRole: "member", assignedAt: new Date(), assignedBy: "migration:seed-branches" } },
+      {
+        $setOnInsert: {
+          memberId: member.memberId,
+          branchId: nationalBranchId,
+          status: "following",
+          source: "migration",
+          autoAssignedNational: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      },
       { upsert: true },
     );
   }
-  console.log(`Seeded ${branches.length} branches and ensured National membership for ${members.length} verified members.`);
+  console.log(`Seeded ${branches.length} branches and ensured National scope for ${members.length} verified members.`);
 } finally {
   await client.close();
 }
