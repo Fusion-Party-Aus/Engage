@@ -134,3 +134,37 @@ export async function recordEmailEvent(db:Db, eventId:string, event:{type:string
   if (["email.bounced","email.complained"].includes(event.type)) await db.collection("engagement_email_preferences").updateOne({memberId:message.memberId},{$set:{memberId:message.memberId,suppressed:true,suppressionReason:event.type,updatedAt:now}},{upsert:true});
   await db.collection<any>("engagement_email_events").updateOne({_id:eventId},{$set:{processed:true}});
 }
+
+export class TestEmailError extends Error {
+  status: number;
+  constructor(message:string, status:number) { super(message); this.status = status; }
+}
+/** Admin-only, self-addressed sample; independent of scheduled digest enablement and ballot state. */
+export async function sendAdminTestEmail(db:Db, env:PlatformEnv, user:SessionUser, send:typeof fetch = fetch, now = new Date()) {
+  if (!user.isAdmin) throw new TestEmailError("Administrator access required.",403);
+  if (!env.RESEND_API_KEY || !env.AUTH_EMAIL_FROM || !env.ENGAGE_EMAIL_SECRET) throw new TestEmailError("Configure RESEND_API_KEY, AUTH_EMAIL_FROM and ENGAGE_EMAIL_SECRET before sending a test.",503);
+  if (!user.email || user.status === "suspended") throw new TestEmailError("An active administrator email is required.",403);
+  const preference=await db.collection("engagement_email_preferences").findOne({memberId:user.memberId});
+  if (preference?.suppressed) throw new TestEmailError("Test delivery is paused after a bounce or spam complaint. Resolve email delivery first.",409);
+  let origin:string;
+  try { origin=emailOrigin(env); } catch { throw new TestEmailError("Configure a valid HTTPS PUBLIC_ORIGIN or BETTER_AUTH_URL.",503); }
+  const unsubscribeUrl=`${origin}/api/email/unsubscribe?token=${unsubscribeToken(`test:${user.memberId}`,env.ENGAGE_EMAIL_SECRET)}`;
+  const sample=renderDigest(user.name,[{key:"sample",proposalId:"sample",title:"Sample proposal — review the voting experience",href:"/proposals/",closesAt:new Date(now.getTime()+7*86400000)}],origin,unsubscribeUrl);
+  const notice="This is a test email with sample data. It does not announce a real ballot deadline. The unsubscribe link is a demo and will not change your preferences.";
+  const content={subject:`[TEST] ${sample.subject}`,text:`${notice}\n\n${sample.text.replace("You receive this because you enabled Engage ballot reminders.","You requested this test from Engage administration.")}`,html:sample.html.replace("You receive this because you enabled Engage ballot reminders.","You requested this test from Engage administration.").replace("<h1 ",`<p style="padding:12px;background:#fcf0d5;color:#593b06"><strong>Test email — sample data only.</strong> ${notice}</p><h1 `)};
+  const id=`test:${user.memberId}:${Math.floor(now.getTime()/60000)}`;
+  const outbox=db.collection<any>("engagement_email_outbox");
+  if (await outbox.findOne({_id:id})) throw new TestEmailError("A test was already attempted this minute. Check its delivery status before trying again.",429);
+  try { await outbox.insertOne({_id:id,kind:"test",memberId:user.memberId,status:"sending",createdAt:now}); }
+  catch(error) { if ((error as {code?:number}).code === 11000) throw new TestEmailError("A test was already attempted this minute.",429); throw error; }
+  try {
+    const response=await send("https://api.resend.com/emails",{method:"POST",headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,"content-type":"application/json","Idempotency-Key":id},body:JSON.stringify({from:env.AUTH_EMAIL_FROM,to:[user.email],...content,headers:{"List-Unsubscribe":`<${unsubscribeUrl}>`,"List-Unsubscribe-Post":"List-Unsubscribe=One-Click"}}),signal:AbortSignal.timeout(10000)});
+    const result=await response.json() as {id?:string};
+    if (!response.ok || !result.id) throw new Error("Provider did not confirm acceptance");
+    await outbox.updateOne({_id:id},{$set:{status:"sent",providerId:result.id,acceptedAt:new Date()}});
+    return {status:"accepted",providerId:result.id};
+  } catch {
+    await outbox.updateOne({_id:id},{$set:{status:"held",heldAt:new Date()}});
+    throw new TestEmailError("The provider did not confirm acceptance. Delivery is uncertain; check the test delivery record before retrying.",502);
+  }
+}

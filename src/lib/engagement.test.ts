@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { ObjectId } from "mongodb";
 import { digestEnabled, ensureDigestCohort, notificationEnabled, notificationPreferenceChanges } from "./digest-preferences.ts";
+import { POST as sendTestEndpoint } from "../pages/api/admin/email/test.ts";
 import { ALL as unsubscribe } from "../pages/api/email/unsubscribe.ts";
 import { getDatabase } from "./db.ts";
 import { readFile } from "node:fs/promises";
 import { createMemoryDb } from "./db.ts";
 import { ballotExpired, CURRENT_BALLOT_CLOSES_AT, closesWithinSevenDays } from "./ballot-deadline.ts";
 import { rankProposals } from "./proposal-metrics.ts";
-import { digestBallots, renderDigest, runBallotDigests, unsubscribeToken, readUnsubscribeToken, verifyResendWebhook, recordEmailEvent } from "./engagement-email.ts";
+import { digestBallots, renderDigest, runBallotDigests, unsubscribeToken, readUnsubscribeToken, verifyResendWebhook, recordEmailEvent, sendAdminTestEmail } from "./engagement-email.ts";
 import { castVote, listOutstandingDecisions, promotePendingVotePreferences, savePendingVotePreference, PENDING_VOTE_PREFERENCES } from "./store.ts";
 import type { ProposalSummaryView, SessionUser } from "./types.ts";
 import { PROPOSAL_VOTES } from "./vote-storage.ts";
@@ -198,4 +199,56 @@ test("digest unsubscribe leaves other categories intact and GET link scans do no
 test("onboarding explains email defaults, three categories and unsubscribe with direct preference controls",async()=>{
  const source=await readFile(new URL('../components/member/MemberOnboarding.tsx',import.meta.url),'utf8');
  for(const text of ['existing Engage accounts','new Engage accounts','My Engage → Notifications','essential account notifications','Engage digests','general communications','Every digest has an unsubscribe link','action="/api/email/preferences"','defaultChecked={props.digestEnabled === true}']) assert.ok(source.includes(text),text);
+});
+
+test("administrator tests use own inbox and sample template while scheduled digests are off",async()=>{
+ const db=createMemoryDb();
+ const admin={...user,isAdmin:true,role:"administrator" as const};
+ const env={ENGAGE_DIGEST_ENABLED:"false",ENGAGE_EMAIL_SECRET:"secret",RESEND_API_KEY:"key",AUTH_EMAIL_FROM:"test@example.test",PUBLIC_ORIGIN:"https://example.test"};
+ let calls=0;
+ const send:typeof fetch=async(_url,init)=>{
+  calls++;const body=JSON.parse(String(init?.body));
+  assert.deepEqual(body.to,[admin.email]);assert.ok(body.subject.startsWith('[TEST]'));
+  assert.ok(body.html.includes('Test email — sample data only'));
+  assert.ok(body.text.includes('not announce a real ballot deadline'));
+  assert.ok(!body.text.includes('because you enabled'));
+  const token=new URL(body.headers['List-Unsubscribe'].slice(1,-1)).searchParams.get('token');
+  assert.ok(token);
+  assert.equal(readUnsubscribeToken(token,env.ENGAGE_EMAIL_SECRET),`test:${admin.memberId}`);
+  return Response.json({id:'test-provider-id'});
+ };
+ const result=await sendAdminTestEmail(db,env,admin,send,now);
+ assert.equal(result.providerId,'test-provider-id');assert.equal(calls,1);
+ const message=await db.collection('engagement_email_outbox').findOne({providerId:result.providerId});
+ assert.equal(message?.kind,'test');assert.equal(message?.ballotKeys,undefined);
+ assert.equal(await db.collection('engagement_email_preferences').countDocuments({}),0);
+ await assert.rejects(sendAdminTestEmail(db,env,admin,send,now),/already attempted/);
+ await recordEmailEvent(db,'test-delivery',{type:'email.delivered',data:{email_id:result.providerId}},now);
+ assert.ok((await db.collection('engagement_email_outbox').findOne({providerId:result.providerId}))?.deliveredAt);
+});
+test("test sender rejects members, missing configuration, suppression and ambiguous provider outcomes",async()=>{
+ const db=createMemoryDb(), admin={...user,isAdmin:true};
+ const env={ENGAGE_EMAIL_SECRET:"secret",RESEND_API_KEY:"key",AUTH_EMAIL_FROM:"test@example.test",PUBLIC_ORIGIN:"https://example.test"};
+ const never:typeof fetch=async()=>{throw Error('Should not send');};
+ await assert.rejects(sendAdminTestEmail(db,env,user,never,now),/Administrator access/);
+ await assert.rejects(sendAdminTestEmail(db,{},admin,never,now),/Configure/);
+ await db.collection('engagement_email_preferences').insertOne({memberId,suppressed:true});
+ await assert.rejects(sendAdminTestEmail(db,env,admin,never,now),/bounce or spam complaint/);
+ await db.collection('engagement_email_preferences').updateOne({memberId},{$set:{suppressed:false}});
+ await assert.rejects(sendAdminTestEmail(db,env,admin,async()=>{throw Error('timeout');},now),/uncertain/);
+ assert.equal((await db.collection('engagement_email_outbox').findOne({kind:'test'}))?.status,'held');
+});
+test("test endpoint requires admin authentication and same-origin POST; demo unsubscribe never writes preferences",async()=>{
+ const url=new URL('https://example.test/api/admin/email/test');
+ const call=(cookie:string,origin:string)=>sendTestEndpoint({url,request:new Request(url,{method:'POST',headers:{cookie,origin}}),locals:{env:{APP_MODE:'preview'}}} as never);
+ assert.equal((await call('',url.origin)).status,401);
+ assert.equal((await call('engage_dev_user=member',url.origin)).status,403);
+ assert.equal((await call('engage_dev_user=administrator','https://other.test')).status,403);
+ const env={APP_MODE:'preview',ENGAGE_EMAIL_SECRET:'demo-secret'};
+ const demoId=`test:${crypto.randomUUID()}`;
+ const demoUrl=new URL('https://example.test/api/email/unsubscribe?token='+unsubscribeToken(demoId,env.ENGAGE_EMAIL_SECRET));
+ const response=await unsubscribe({url:demoUrl,request:new Request(demoUrl,{method:'POST'}),locals:{env}} as never);
+ assert.equal(response.status,200);assert.ok((await response.text()).includes('No notification preferences changed'));
+ const db=await getDatabase(env);
+ assert.equal(await db.collection('engagement_email_preferences').countDocuments({memberId:demoId}),0);
 });

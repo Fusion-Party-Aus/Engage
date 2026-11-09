@@ -67,3 +67,9 @@ My Engage → Notifications offers three independently saved categories:
 - General communications: newsletters, campaigns and broader party updates, default off in Engage. The preference is stored separately; no external party mailing list is synchronised by this application. Future senders must call `notificationEnabled(preference,"general")` rather than reuse digest consent.
 
 Preference changes and email-link unsubscribes write category-scoped `engagement_notification_events`; delivery/bounce/complaint events remain correlated to provider message IDs. Existing false preferences, unsubscribe records and suppressions are never overwritten by rollout defaults. The existing-account snapshot is captured automatically before the first startup completes, so no return visit is needed. Back up and preserve `engagement_email_rollouts` across releases.
+
+## Admin test emails
+
+Open Administration → Member engagement and choose **Send test email to me**. The server sends only to the signed-in national administrator's own session email; client-supplied recipients are ignored. Sender/API key, public origin and email-signing secret must be configured, but scheduled digest enablement and impending ballot deadlines are not required. Existing bounce/complaint suppression is respected.
+
+Tests reuse the production Horizon template, carry `[TEST]` in the subject and a prominent sample-data notice, and use a signed demo unsubscribe token that never changes preferences. Test outbox rows have `kind: test`, no real reminder keys, and are excluded from member delivery-rate denominators. The page displays the administrator's five most recent attempts and webhook delivery outcomes. A unique member/minute claim plus provider idempotency key limits double submits. Uncertain sends remain held and are not automatically retried. No test sends occur on deployment.
