@@ -1,5 +1,14 @@
 [
   {
+    "hash": "eb5f365",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "email",
+    "summary": "Send yourself a sample Engage digest from administration",
+    "details": "Administrators can test Horizon emails before reminders begin, with sample data, safe demo unsubscribe, duplicate-send protection and separate delivery receipts."
+  },
+  {
     "hash": "bc6409f",
     "date": "2026-11-09",
     "type": "feat",
