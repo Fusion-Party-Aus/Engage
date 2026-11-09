@@ -16,7 +16,7 @@ try {
     try { await session.withTransaction(async () => {
       for (const [collection, items, field, state] of [["proposals", proposals, "stage", "decide"], ["amendments", amendments, "status", "voting"]] as const) {
         for (const item of items) {
-          const result = await db.collection(collection).updateOne({_id:item._id, [field]:state, ballotClosesAt: item.ballotClosesAt ?? {$exists:false}}, {$set:{ballotClosesAt:closesAt}}, {session});
+          const result = await db.collection(collection).updateOne({_id:item._id, [field]:state, ballotClosesAt: Object.hasOwn(item,"ballotClosesAt") ? item.ballotClosesAt : {$exists:false}}, {$set:{ballotClosesAt:closesAt}}, {session});
           if (result.matchedCount !== 1) throw new Error("Ballot changed during scheduling; preview again.");
         }
       }

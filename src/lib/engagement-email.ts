@@ -68,8 +68,13 @@ export async function runBallotDigests(db: Db, env: PlatformEnv, send: typeof fe
   if (env.ENGAGE_DIGEST_ENABLED !== "true") return {disabled:true, sent:0, held:0};
   if (!env.RESEND_API_KEY || !env.AUTH_EMAIL_FROM || !env.ENGAGE_EMAIL_SECRET) throw new Error("Digest email configuration is incomplete");
   const origin = emailOrigin(env);
-  const unreconciled = await db.collection<any>("engagement_email_events").find({processed:{$ne:true}}).limit(500).toArray();
-  for (const event of unreconciled) await recordEmailEvent(db,event._id,{type:event.type,data:{email_id:event.providerId}},event.receivedAt);
+  let after: string | undefined;
+  for (;;) {
+    const unreconciled = await db.collection<any>("engagement_email_events").find({processed:{$ne:true}, ...(after ? {_id:{$gt:after}} : {})}).sort({_id:1}).limit(500).toArray();
+    if (!unreconciled.length) break;
+    for (const event of unreconciled) await recordEmailEvent(db,event._id,{type:event.type,data:{email_id:event.providerId}},event.receivedAt);
+    after = unreconciled[unreconciled.length-1]._id;
+  }
   const [members, proposals] = await Promise.all([listMembers(db), listProposals(db, {includeArchived:false})]);
   let sent = 0, held = 0;
   const outbox = db.collection<any>("engagement_email_outbox");
@@ -117,7 +122,11 @@ export async function recordEmailEvent(db:Db, eventId:string, event:{type:string
   await db.collection<any>("engagement_email_events").updateOne({_id:eventId},{$setOnInsert:{providerId:event.data.email_id,type:event.type,receivedAt:now}}, {upsert:true});
   const outbox = db.collection<any>("engagement_email_outbox");
   const message = await outbox.findOne({providerId:event.data.email_id});
-  if (!message) return; // Event remains durable if it races provider-id persistence.
+  if (!message) {
+    // Ignore unrelated sign-in mail after a day, allowing early engagement events time to correlate.
+    if (Date.now() - new Date(now).getTime() > 86400000) await db.collection<any>("engagement_email_events").updateOne({_id:eventId},{$set:{processed:true,unmatched:true}});
+    return;
+  }
   const field = event.type.replace("email.","");
   await outbox.updateOne({_id:message._id},{$set:{[`${field}At`]:now}});
   if (["email.bounced","email.complained"].includes(event.type)) await db.collection("engagement_email_preferences").updateOne({memberId:message.memberId},{$set:{memberId:message.memberId,suppressed:true,suppressionReason:event.type,updatedAt:now}},{upsert:true});

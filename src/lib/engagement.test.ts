@@ -107,3 +107,13 @@ test("ambiguous email sends are held and never automatically repeated",async()=>
  await runBallotDigests(db,env,send,new Date(now.getTime()+86400000));
  assert.equal(calls,1);
 });
+test("webhook backlog reconciliation processes beyond the first 500 events",async()=>{
+ const db=createMemoryDb();
+ for(let i=0;i<501;i++) {
+  await db.collection<any>('engagement_email_events').insertOne({_id:`evt-${String(i).padStart(4,'0')}`,providerId:`provider-${i}`,type:'email.delivered',receivedAt:now});
+  await db.collection('engagement_email_outbox').insertOne({providerId:`provider-${i}`,memberId:`member-${i}`,status:'sent'});
+ }
+ await runBallotDigests(db,{ENGAGE_DIGEST_ENABLED:'true',ENGAGE_EMAIL_SECRET:'secret',RESEND_API_KEY:'key',AUTH_EMAIL_FROM:'test@example.test',PUBLIC_ORIGIN:'https://example.test'},async()=>{throw new Error('No mail expected');},now);
+ assert.equal(await db.collection('engagement_email_events').countDocuments({processed:true}),501);
+ assert.ok((await db.collection('engagement_email_outbox').findOne({providerId:'provider-500'}))?.deliveredAt);
+});
