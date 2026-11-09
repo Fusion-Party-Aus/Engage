@@ -43,7 +43,7 @@ Repository history is not proof of deployment or of individual exposure/acceptan
 
 Other filters remain: verified membership, enabled/proven address, no prior participation, historical verification window, activity recency, notice-delivery uncertainty. Unknown verification dates also remain visible in needs-review counts rather than being silently excluded. General communications preferences do not control this Engage-specific audience.
 
-The read-only report includes consent-state totals, eligible/excluded/suppressed/needs-review totals, exclusion/review reasons, and whether a legacy snapshot exists. It never changes live preferences, captures a new cohort, records inferred consent, or sends messages.
+The default read-only report includes consent-state totals, eligible/excluded/suppressed/needs-review totals, exclusion/review reasons, and whether a legacy snapshot exists. National administrators can add `include=members` to the preview URL to inspect member IDs, per-member consent states and reasons before approving an audience; no addresses or voting choices are returned and this detail never enters Plausible. It never changes live preferences, captures a new cohort, records inferred consent, or sends messages.
 
 ## Documenting a reviewed basis
 

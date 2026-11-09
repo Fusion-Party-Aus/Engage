@@ -168,3 +168,12 @@ test('unreviewed or expired legacy assessments never make the audience sendable 
  report=await previewMemberReengagement(db,new Date('2026-10-01'),now);
  assert.equal(report.eligible,0);assert.equal(report.needsReview,1);
 });
+test('administrator audience detail is opt-in and contains no addresses or ballot choices',async()=>{
+ const {db,memberId}=await fixture();
+ await db.collection('engagement_email_preferences').insertOne({memberId,digestEnabled:true});
+ const aggregate=await previewMemberReengagement(db,new Date('2026-10-01'),now);
+ assert.equal(aggregate.members,undefined);
+ const detail=await previewMemberReengagement(db,new Date('2026-10-01'),now,true);
+ assert.deepEqual(detail.members,[{memberId,consent:'explicit-opt-in',classification:'eligible',reason:'eligible'}]);
+ assert.ok(!JSON.stringify(detail).includes('@'));assert.ok(!JSON.stringify(detail).includes('choice'));
+});

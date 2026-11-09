@@ -3,7 +3,7 @@ import { engageConsentState } from './digest-preferences.ts';
 import { PROPOSAL_VOTES } from './vote-storage.ts';
 
 /** Read-only Engage participation preview. Missing legacy preferences are not refusals. */
-export async function previewMemberReengagement(db: Db, cutoff: Date, now = new Date()) {
+export async function previewMemberReengagement(db: Db, cutoff: Date, now = new Date(), includeMembers = false) {
   if (!Number.isFinite(+cutoff) || cutoff > now) throw new Error('Choose a valid historical verification cutoff.');
   const [memberships, accounts, preferences, messages, votes, sessions, events, rollout, assessments] = await Promise.all([
     db.collection('memberships').find({status:'verified'}).toArray(),
@@ -47,6 +47,6 @@ export async function previewMemberReengagement(db: Db, cutoff: Date, now = new 
   for (const row of rows) reasons[row.reason]=(reasons[row.reason] || 0)+1;
   const consentCounts:Record<string,number>={};
   for (const row of rows) consentCounts[row.consent]=(consentCounts[row.consent] || 0)+1;
-  // API exposes aggregate counts only; private identifiers remain inside this function.
-  return {dryRun:true,scope:'engage-participation',campaignApprovalRequired:true,legacyCohortAvailable:Boolean(rollout),consentCounts,needsReview:rows.filter(r=>r.classification==='needs-review').length,generatedAt:now,cutoff,total:rows.length,eligible:rows.filter(r=>r.classification==='eligible').length,excluded:rows.filter(r=>r.classification==='excluded').length,suppressed:rows.filter(r=>r.classification==='suppressed').length,reasons};
+  // Member detail is opt-in at the authenticated admin endpoint; never sent to analytics.
+  return {dryRun:true,...(includeMembers ? {members:rows} : {}),scope:'engage-participation',campaignApprovalRequired:true,legacyCohortAvailable:Boolean(rollout),consentCounts,needsReview:rows.filter(r=>r.classification==='needs-review').length,generatedAt:now,cutoff,total:rows.length,eligible:rows.filter(r=>r.classification==='eligible').length,excluded:rows.filter(r=>r.classification==='excluded').length,suppressed:rows.filter(r=>r.classification==='suppressed').length,reasons};
 }
