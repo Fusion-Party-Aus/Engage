@@ -154,6 +154,7 @@ const quickTopics = [
 </SiteLayout>
 
 <script>
+  import { trackEngage } from '../../../lib/analytics.ts';
   const form = document.querySelector<HTMLFormElement>('#new-proposal-form');
   const status = document.querySelector<HTMLElement>('#submit-status');
   const button = document.querySelector<HTMLButtonElement>('#new-proposal-form button[type="submit"]');
@@ -208,6 +209,7 @@ const quickTopics = [
     if (!status || !button) return;
     button.disabled = true;
     status.textContent = 'Submitting your idea…';
+    trackEngage('contribution_attempted', { action: 'proposal' });
     const data = new FormData(form);
     const attachmentUrl = String(data.get('attachmentUrl') ?? '').trim();
     const attachmentDescription = String(data.get('attachmentDescription') ?? '').trim();
@@ -234,8 +236,10 @@ const quickTopics = [
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not submit your idea.');
+      trackEngage('contribution_result', { action: 'proposal', outcome: 'success' });
       location.href = `/proposals/${result.proposal.slug}/`;
     } catch (error) {
+      trackEngage('contribution_result', { action: 'proposal', outcome: 'failed' });
       status.textContent =
         error instanceof Error ? error.message : 'Could not submit your idea. Please try again.';
       button.disabled = false;
@@ -431,3 +435,4 @@ const quickTopics = [
     }
   }
 </style>
+

@@ -295,7 +295,7 @@ const hasActiveFilters =
       </div>
 
       <!-- Search & Quiet Secondary Filters -->
-      <form id="proposals-filter-form" class="search-controls" role="search" method="get" action="/proposals/">
+      <form data-analytics-collection="proposals" data-analytics-results={visibleProposals.length} id="proposals-filter-form" class="search-controls" role="search" method="get" action="/proposals/">
         {initialStage !== 'all' && <input type="hidden" name="stage" value={initialStage} />}
         {initialFocus !== 'all' && <input type="hidden" name="focus" value={initialFocus} />}
 
@@ -1044,3 +1044,4 @@ const hasActiveFilters =
     }
   }
 </style>
+

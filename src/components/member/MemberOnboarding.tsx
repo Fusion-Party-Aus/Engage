@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { trackEngage } from '../../lib/analytics.ts';
 import { createAuthClient } from 'better-auth/client';
 import { passkeyClient } from '@better-auth/passkey/client';
 import type { Passkey } from '@better-auth/passkey';
@@ -118,10 +119,12 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
           sessionStorage.getItem(PASSKEY_AUTOREG_ATTEMPTED_KEY) !== 'true'
         ) {
           sessionStorage.setItem(PASSKEY_AUTOREG_ATTEMPTED_KEY, 'true');
+          trackEngage('passkey_enrollment', { mode: 'automatic', outcome: 'attempted' });
           const autoRes = await authClient.passkey.addPasskey({
             name: defaultDevicePasskeyName(),
             useAutoRegister: true,
           });
+          trackEngage('passkey_enrollment', { mode: 'automatic', outcome: autoRes && !autoRes.error ? 'success' : 'failed' });
           if (autoRes && !autoRes.error) {
             setHasPasskey(true);
             setPasskeyFeedback('Passkey automatically saved for 1-tap sign-in next time.');
@@ -205,6 +208,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
 
   async function enrollPasskeyNow() {
     if (enrollingPasskey || !passkeySupported) return;
+    trackEngage('passkey_enrollment', { mode: 'manual', outcome: 'attempted' });
     setEnrollingPasskey(true);
     setPasskeyError(false);
     setPasskeyFeedback('Confirm on your device to save your passkey…');
@@ -212,6 +216,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
       const result = await authClient.passkey.addPasskey({
         name: defaultDevicePasskeyName(),
       });
+      trackEngage('passkey_enrollment', { mode: 'manual', outcome: result.error ? 'failed' : 'success' });
       if (result.error) {
         const errCode = 'code' in result.error ? result.error.code : undefined;
         setPasskeyError(true);
@@ -236,6 +241,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
         }
       }
     } catch {
+      trackEngage('passkey_enrollment', { mode: 'manual', outcome: 'failed' });
       setPasskeyError(true);
       setPasskeyFeedback('Could not register passkey right now. You can manage passkeys in Account & Access.');
     } finally {
@@ -244,6 +250,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
   }
 
   function handleDismiss() {
+    trackEngage('onboarding_action', { action: 'dismiss' });
     setDismissed(true);
     try {
       localStorage.setItem(DISMISS_STORAGE_KEY, 'true');
@@ -253,6 +260,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
   }
 
   function handleDismissNudge() {
+    trackEngage('onboarding_action', { action: 'dismiss_passkey' });
     setNudgeDismissed(true);
     try {
       sessionStorage.setItem(PASSKEY_NUDGE_DISMISSED_KEY, 'true');
@@ -262,6 +270,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
   }
 
   function markWalkthroughVisited() {
+    trackEngage('onboarding_action', { action: 'explore' });
     setSeenWalkthrough(true);
     try {
       localStorage.setItem(WALKTHROUGH_STORAGE_KEY, 'true');
@@ -513,3 +522,4 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
     </section>
   );
 }
+

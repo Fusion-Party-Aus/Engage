@@ -34,7 +34,7 @@ const hasRegistryRecords = records.length > 0;
       </nav>
     </header>
 
-    <form class="policy-filters" method="get" action="/policies/">
+    <form data-analytics-collection="policies" data-analytics-results={policies.length} class="policy-filters" method="get" action="/policies/">
       {showHistory && <input type="hidden" name="history" value="1" />}
       <Field label="Search policies" htmlFor="policy-search">
         <Input id="policy-search" type="search" name="q" defaultValue={q} placeholder="Topic, title or wording" />
@@ -111,3 +111,4 @@ const hasRegistryRecords = records.length > 0;
   .policy-grid h2 a { color:var(--horizon-purple); text-decoration:none; }
   @media(max-width:760px) { .policy-filters { grid-template-columns:1fr; } }
 </style>
+

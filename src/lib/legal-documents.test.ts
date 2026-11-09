@@ -127,16 +127,14 @@ test("privacy policy covers the implemented data practices and sensitive informa
   assert.match(text, /governance record/i);
 });
 
-test("privacy policy does not claim anonymous voting or current analytics", () => {
+test("privacy policy describes aggregate analytics without claiming anonymous voting", () => {
   const text = textOf(privacyPolicy);
 
   assert.doesNotMatch(text, /votes? (are|is) anonymous/i);
   assert.doesNotMatch(text, /secret ballot/i);
-  assert.doesNotMatch(
-    text,
-    /plausible|google analytics|gtag|posthog|umami|matomo/i,
-  );
-  assert.match(text, /does not use third-party analytics/i);
+  assert.match(text, /Fusion-hosted Plausible Analytics/i);
+  assert.match(text, /ballot choices or reasons/i);
+  assert.match(text, /query strings and fragments are removed/i);
 });
 
 test("terms cover participation, content, voting, records and disputes", () => {
@@ -278,3 +276,4 @@ test("legal pages delegate to the shared renderer and add no tracking", () => {
   assert.match(sources[1]!, /prerender = false/);
   assert.match(sources[2]!, /noIndex/);
 });
+

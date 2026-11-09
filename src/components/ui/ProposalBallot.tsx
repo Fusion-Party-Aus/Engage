@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { trackEngage } from '../../lib/analytics.ts';
 import { ArrowRight, CheckCircle2, Clock, Copy, Check, Loader2, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from './badge';
@@ -99,6 +100,7 @@ export default function ProposalBallot({
 
   async function submitVote() {
     if (!selected || !canSubmit) return;
+    trackEngage('contribution_attempted', { action: 'ballot' });
     setBusy(true);
     setError('');
     setJustVoted(false);
@@ -123,6 +125,7 @@ export default function ProposalBallot({
       } catch {
         // Ignore
       }
+      trackEngage('contribution_result', { action: 'ballot', outcome: result.pendingVerification ? 'pending_verification' : 'success' });
       if (result.pendingVerification) {
         setSavedPendingChoice(selected);
         setSavedReason(reason);
@@ -137,6 +140,7 @@ export default function ProposalBallot({
         setMessage('Your vote was recorded.');
       }
     } catch (submitError) {
+      trackEngage('contribution_result', { action: 'ballot', outcome: 'failed' });
       setMessage('');
       setError(
         submitError instanceof Error
@@ -152,6 +156,7 @@ export default function ProposalBallot({
     try {
       const shareUrl = `${window.location.origin}${proposalSlug ? `/proposals/${proposalSlug}/` : window.location.pathname}`;
       await navigator.clipboard.writeText(shareUrl);
+      trackEngage('share_copied');
       setCopiedShare(true);
       window.setTimeout(() => setCopiedShare(false), 2500);
     } catch {
@@ -474,3 +479,4 @@ export default function ProposalBallot({
     </div>
   );
 }
+

@@ -1,5 +1,21 @@
 [
   {
+    "hash": "2167573",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "analytics",
+    "summary": "Measure Engage navigation and participation outcomes"
+  },
+  {
+    "hash": "e41ac7d",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "analytics",
+    "summary": "Initialize Plausible tracking on production"
+  },
+  {
     "hash": "71a98bb",
     "date": "2026-11-09",
     "type": "chore",
