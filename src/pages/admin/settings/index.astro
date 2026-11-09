@@ -73,8 +73,8 @@ const config = await getSiteConfig(db, env);
           <Field label="Default OpenGraph image path or URL" htmlFor="defaultOgImage">
             <Input id="defaultOgImage" name="defaultOgImage" defaultValue={config.defaultOgImage} required />
           </Field>
-          <Field label="Source repository URL" htmlFor="repositoryUrl">
-            <Input id="repositoryUrl" name="repositoryUrl" defaultValue={config.repositoryUrl} required />
+          <Field label="Source repository URL" htmlFor="repoUrl">
+            <Input id="repoUrl" name="repoUrl" defaultValue={config.repoUrl} required />
           </Field>
         </div>
       </CardContent>
@@ -157,7 +157,7 @@ const config = await getSiteConfig(db, env);
         primaryCtaLabel: String(fd.get('primaryCtaLabel') ?? '').trim(),
         primaryCtaHref: String(fd.get('primaryCtaHref') ?? '').trim(),
         defaultOgImage: String(fd.get('defaultOgImage') ?? '').trim(),
-        repositoryUrl: String(fd.get('repositoryUrl') ?? '').trim(),
+        repoUrl: String(fd.get('repoUrl') ?? '').trim(),
         backupSummary: String(fd.get('backupSummary') ?? '').trim(),
         handoverSummary: String(fd.get('handoverSummary') ?? '').trim(),
         socialLinks,
@@ -241,3 +241,4 @@ const config = await getSiteConfig(db, env);
     color: var(--horizon-purple);
   }
 </style>
+

@@ -8,7 +8,7 @@ const methods = ['email', 'google', 'passkey', 'passkey_auto', 'passkey_autofill
 const stages = ['all', 'propose', 'deliberate', 'decide', 'implement'];
 // This allowlist is the analytics boundary: never pass identities, free text or choices.
 const schema: Record<string, Record<string, readonly string[] | null>> = {
-  navigation_clicked: { area: ['header', 'footer', 'sidebar', 'content'], destination: null, section: null, view: ['default', 'account', 'activity', 'history'], stage: stages, intent: ['none', 'vote', 'deliberate', 'propose'] },
+  navigation_clicked: { area: ['header', 'footer', 'sidebar', 'content'], destination: null, section: null, view: ['default', 'account', 'activity', 'history', 'notifications'], stage: stages, intent: ['none', 'vote', 'deliberate', 'propose'] },
   listing_viewed: { collection: ['proposals', 'policies'], results: ['0', '1-5', '6-20', '21+'], has_query: ['yes', 'no'] },
   search_submitted: { collection: ['proposals', 'policies'], has_query: ['yes', 'no'] },
   filter_changed: { filter: ['stage', 'topic', 'branch', 'sort', 'jurisdiction'], value: ['all', 'selected', 'propose', 'deliberate', 'decide', 'implement', 'priority', 'recent', 'ballots', 'contributions'] },
@@ -59,7 +59,7 @@ export function initAnalytics(): boolean {
         if (stage && stages.includes(stage)) props.proposal_stage = stage;
         if (window.location.pathname === '/member/') {
           const view = new URL(window.location.href).searchParams.get('view');
-          props.member_view = view === 'account' || view === 'activity' ? view : 'overview';
+          props.member_view = view === 'account' || view === 'activity' || view === 'notifications' ? view : 'overview';
         }
         return props;
       },

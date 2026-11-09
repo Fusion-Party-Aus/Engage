@@ -1,0 +1,19 @@
+---
+import { rankProposals, proposalMetrics } from '../lib/proposal-metrics.ts';
+import type { ProposalSummaryView, } from '../lib/types.ts';
+const { proposals } = Astro.props as { proposals: ProposalSummaryView[] };
+const cards = ([['divisive', 'Most divisive proposal'], ['approved', 'Most approved proposal'], ['active', 'Most active proposal']] as const).map(([key, label]) => ({key, label, proposal: rankProposals(proposals, key)[0]}));
+---
+<section class="proposal-highlights" aria-label="Proposal highlights">
+  {cards.map(({key, label, proposal: p}) => <article>
+    <h2>{label}</h2>
+    {p ? <>
+      <h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3>
+      <p>{key === 'active' ? `${proposalMetrics(p).activity} contributions · ${p.votes.total} ballots + ${p.commentCount} discussion posts` : `${Math.round((proposalMetrics(p).approval ?? 0) * 100)}% approval · ${p.votes.approve} approve / ${p.votes.reject} reject / ${p.votes.abstain} abstain`}</p>
+    </> : <p>{key === 'active' ? 'No activity yet.' : 'Needs at least five approve/reject votes.'}</p>}
+    <small>{key === 'divisive' ? 'Closest approve/reject split; at least five decisive votes.' : key === 'approved' ? 'Highest approve share of approve/reject votes; at least five decisive votes. This is not an adoption result.' : 'All-time ballots plus discussion posts. Amendment ballots excluded.'}</small>
+  </article>)}
+</section>
+<style>
+.proposal-highlights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1.5rem 0}.proposal-highlights article{padding:1.25rem;border:1px solid var(--horizon-line,#ded6e7);border-radius:.75rem;background:var(--horizon-lavender-soft,#f8f5fc)}h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em}h3{font-family:Newsreader,Georgia,serif;font-size:1.4rem;margin:.6rem 0}p,small{line-height:1.5}small{display:block;color:#54465f;font-size:.78rem}@media(max-width:760px){.proposal-highlights{grid-template-columns:1fr}}
+</style>

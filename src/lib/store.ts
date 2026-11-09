@@ -21,6 +21,8 @@ import type {
 } from "./types.ts";
 import { createHash, randomUUID } from "node:crypto";
 
+import { ballotExpired } from "./ballot-deadline.ts";
+
 export const PENDING_VOTE_PREFERENCES = "pending_vote_preferences";
 
 export function getDefaultProvenanceLabel(
@@ -260,6 +262,7 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     ballotRevisionId: raw.ballotRevisionId
       ? String(raw.ballotRevisionId)
       : undefined,
+    ballotClosesAt: raw.ballotClosesAt ? new Date(raw.ballotClosesAt) : undefined,
     implementationNote: raw.implementationNote
       ? String(raw.implementationNote)
       : undefined,
@@ -1384,6 +1387,7 @@ export async function castVote(
         "Active membership in this proposal's jurisdiction branch is required to vote.",
       );
   }
+  if (ballotExpired(proposal)) throw new Error("This ballot has closed.");
   const amendmentId =
     typeof body.amendmentId === "string" ? body.amendmentId.trim() : "";
   if (amendmentId) {
@@ -1413,6 +1417,7 @@ export async function castVote(
       throw new Error(
         "This amendment ballot is not bound to the current immutable wording revision.",
       );
+    if (ballotExpired({ballotClosesAt:amendment.ballotClosesAt})) throw new Error("This amendment ballot has closed.");
     const rawChoice =
       typeof body.choice === "string" ? body.choice.trim().toLowerCase() : "";
     if (!["approve", "abstain", "reject", "do-not-approve"].includes(rawChoice))
@@ -1459,6 +1464,7 @@ export async function castVote(
   if (proposal.stage !== "decide") {
     throw new Error("This proposal is not currently in the Decide stage.");
   }
+  if (ballotExpired(proposal)) throw new Error("This ballot has closed.");
 
   let ballotRevisionId = proposal.ballotRevisionId;
   if (ballotRevisionId) {
@@ -1623,6 +1629,7 @@ export async function savePendingVotePreference(
   if (proposal.stage !== "decide") {
     throw new Error("This proposal is not currently in the Decide stage.");
   }
+  if (ballotExpired(proposal)) throw new Error("This ballot has closed.");
 
   let ballotRevisionId = proposal.ballotRevisionId;
   if (!ballotRevisionId) {
@@ -1717,7 +1724,7 @@ export async function promotePendingVotePreferences(
       .findOne({ proposalId: item.proposalId });
     if (!rawProposal) continue;
     const proposal = normalizeProposalDoc(rawProposal);
-    if (proposal.stage !== "decide") continue;
+    if (proposal.stage !== "decide" || ballotExpired(proposal)) continue;
 
     // Enforce identical branch electorate eligibility as castVote
     if (proposal.jurisdictionBranchId) {
@@ -1858,7 +1865,7 @@ export async function listOutstandingDecisions(
   const activeMemberships = new Set(memberships.map(({ branchId }) => branchId));
   const recognisedBranches = new Set(branches.map(({ branchId }) => branchId));
   return decisions.filter((decision) => {
-    if (voted.has(decision.proposalId)) return false;
+    if (voted.has(decision.proposalId) || ballotExpired(decision)) return false;
     const branchId = decision.jurisdictionBranchId;
     return !branchId || (activeMemberships.has(branchId) && recognisedBranches.has(branchId));
   });
@@ -2050,3 +2057,4 @@ export const listPolicies = listProposals;
 export const getPolicyDetail = getProposalDetail;
 export const savePolicy = saveProposal;
 export const deletePolicy = deleteProposal;
+

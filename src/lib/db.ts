@@ -1,3 +1,4 @@
+import { ensureDigestCohort } from "./digest-preferences.ts";
 import { ensureVoteStorage, PROPOSAL_VOTES } from "./vote-storage.ts";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import { createHash } from "node:crypto";
@@ -97,6 +98,13 @@ async function ensureSeeded(db: Db): Promise<void> {
 }
 
 export async function initializeDatabase(db: Db): Promise<void> {
+  await ensureDigestCohort(db);
+  await Promise.all([
+    db.collection("engagement_email_preferences").createIndex({memberId:1}, {unique:true}),
+    db.collection("engagement_email_outbox").createIndex({providerId:1}),
+    db.collection("engagement_email_outbox").createIndex({memberId:1,createdAt:-1}),
+    db.collection("engagement_email_events").createIndex({providerId:1}),
+  ]);
   try {
     await ensureVoteStorage(db);
     await Promise.all([
@@ -529,3 +537,4 @@ function getMemoryDb(): Db {
   if (!sharedMemoryDb) sharedMemoryDb = createMemoryDb();
   return sharedMemoryDb;
 }
+

@@ -1,5 +1,40 @@
 [
   {
+    "hash": "eb5f365",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "email",
+    "summary": "Send yourself a sample Engage digest from administration",
+    "details": "Administrators can test Horizon emails before reminders begin, with sample data, safe demo unsubscribe, duplicate-send protection and separate delivery receipts."
+  },
+  {
+    "hash": "bc6409f",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "notifications",
+    "summary": "Manage account, Engage digest and general communication preferences separately",
+    "details": "Existing accounts default to digests on; new accounts opt in. Onboarding explains reminders, defaults, unsubscribe and reporting. Existing opt-outs and bounce suppressions are preserved."
+  },
+  {
+    "hash": "7a56a95",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "engagement",
+    "summary": "Follow ballot deadlines, proposal rankings and member reminders",
+    "details": "Adds closing-soon queues in My Engage, opt-in Horizon email digests, unsubscribe controls and delivery reporting."
+  },
+  {
+    "hash": "0b8b375",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "settings",
+    "summary": "Save the configured source repository URL"
+  },
+  {
     "hash": "2167573",
     "date": "2026-11-09",
     "type": "feat",

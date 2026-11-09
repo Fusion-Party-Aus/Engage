@@ -1,4 +1,5 @@
 ---
+import { ballotExpired, ballotDeadlineLabel } from '../../lib/ballot-deadline.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
 import PortableText from '../../components/PortableText.astro';
@@ -90,7 +91,7 @@ const [relatedBranches, allAmendmentRevisions] = await Promise.all([
 ]);
 const branchNameFor = (branchId?: string) =>
   branchId ? String(relatedBranches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
-const canVoteOnProposal = Boolean(user?.canParticipate && (!proposal?.jurisdictionBranchId || (branchEligibility && branchElectorate)));
+const canVoteOnProposal = Boolean(proposal && !ballotExpired(proposal) && user?.canParticipate && (!proposal?.jurisdictionBranchId || (branchEligibility && branchElectorate)));
 for (const amendment of amendmentRows) {
   const history = allAmendmentRevisions.filter((row: any) => row.amendmentId === amendment.amendmentId);
   amendment.revisionHistory = history;
@@ -181,12 +182,12 @@ const isResolution = proposal
   ? proposal.kind === 'resolution' || proposal.proposalId.toUpperCase().startsWith('GOV-')
   : false;
 
-const ballotState = proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
+const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
 const eligibilityLabel = !user
   ? 'Sign in to check eligibility'
   : !user.canParticipate
     ? 'Membership verification pending'
-    : proposal?.stage !== 'decide'
+    : proposal?.stage !== 'decide' || ballotExpired(proposal)
       ? 'Ballot not currently open'
       : canVoteOnProposal
         ? proposal?.jurisdictionBranchId
@@ -368,7 +369,9 @@ const initialsFor = (name: string) =>
           ]} role="region" aria-label="Your immediate next action">
             <div class="next-action-bar__copy">
               <span class="next-action-bar__kicker">
-                {proposal.stage === 'decide'
+                {proposal.stage === 'decide' && ballotExpired(proposal)
+                  ? 'Voting has closed. Review the tally and recorded decision.'
+                  : proposal.stage === 'decide'
                   ? myVote
                     ? '✓ Action complete'
                     : myPendingVote
@@ -383,7 +386,9 @@ const initialsFor = (name: string) =>
                     : 'Stage 4 · Implementation'}
               </span>
               <strong class="next-action-bar__title">
-                {proposal.stage === 'decide'
+                {proposal.stage === 'decide' && ballotExpired(proposal)
+                  ? 'Voting has closed. Review the tally and recorded decision.'
+                  : proposal.stage === 'decide'
                   ? myVote
                     ? `You voted "${myVote[0]!.toUpperCase() + myVote.slice(1)}" on ${ballotRevisionLabel}. You can change your vote while the ballot is open.`
                     : myPendingVote
@@ -405,7 +410,7 @@ const initialsFor = (name: string) =>
               </strong>
             </div>
             <div class="next-action-bar__actions">
-              {proposal.stage === 'decide' ? (
+              {proposal.stage === 'decide' && ballotExpired(proposal) ? <a href="#proposal-vote" class="next-action-btn is-primary">Review ballot &amp; decision →</a> : proposal.stage === 'decide' ? (
                 canVoteOnProposal ? (
                   <a href="#proposal-vote" class="next-action-btn is-primary">
                     {myVote ? 'Review or update vote →' : 'Cast your vote now →'}
@@ -1140,6 +1145,7 @@ const initialsFor = (name: string) =>
                 </span>
               </div>
 
+              {proposal.ballotClosesAt && <p><strong>{ballotExpired(proposal) ? "Voting closed" : "Voting closes"}:</strong> {ballotDeadlineLabel(proposal.ballotClosesAt)}</p>}
               <dl class="rail-kv">
                 <div>
                   <dt>Your status</dt>
@@ -1204,7 +1210,7 @@ const initialsFor = (name: string) =>
                     initialPendingChoice={myPendingVote}
                     initialPendingReason={myPendingReason}
                     initialTally={votes}
-                    open={proposal.stage === 'decide'}
+                    open={proposal.stage === 'decide' && !ballotExpired(proposal)}
                     canVote={canVoteOnProposal}
                     isGuest={!user}
                     isPendingMember={Boolean(user && !user.canParticipate && user.status === 'pending')}
@@ -3348,4 +3354,5 @@ const initialsFor = (name: string) =>
     }
   }
 </style>
+
 
