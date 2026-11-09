@@ -1,4 +1,6 @@
 ---
+import { safeMemberReturn } from '../../lib/return-destination.ts';
+import { memberNextAction, recordLifecycle } from '../../lib/member-lifecycle.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import LegalAcceptanceGate from '../../components/legal/LegalAcceptanceGate.astro';
 import { Badge } from '../../components/ui/badge';
@@ -32,10 +34,10 @@ import {
 } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import EmailPreferences from '../../components/member/EmailPreferences.astro';
-import { ballotExpired, ballotDeadlineLabel } from '../../lib/ballot-deadline.ts';
+import { ballotExpired, ballotDeadlineLabel, closesWithinSevenDays } from '../../lib/ballot-deadline.ts';
 import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
-import { digestBallots } from '../../lib/engagement-email.ts';
-import { listOutstandingDecisions, listProposals, listUserActivity } from '../../lib/store.ts';
+import { outstandingBallots, type DigestBallot } from '../../lib/engagement-email.ts';
+import { listProposals, listUserActivity } from '../../lib/store.ts';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -49,7 +51,6 @@ const [db, user] = await Promise.all([
 const [
   activity,
   memberTimelineEvents,
-  awaitingDecision,
   memberBranches,
   visibleProposals,
   allCatchUpGroups,
@@ -58,7 +59,6 @@ const [
   ? await Promise.all([
       listUserActivity(db, user.memberId),
       listMemberActivityStream(db, user.memberId),
-      user.canParticipate ? listOutstandingDecisions(db, user.memberId, user) : Promise.resolve([]),
       user.activeBranchIds?.length
         ? db
             .collection('branches')
@@ -73,14 +73,21 @@ const [
         .countDocuments({ userId: user.memberId })
         .catch(() => 0),
     ])
-  : [null, [] as ActivityTimelineEvent[], [], [], [], [] as MemberCatchUpGroup[], 0];
+  : [null, [] as ActivityTimelineEvent[], [], [], [] as MemberCatchUpGroup[], 0];
 
-const [emailPreference, closingSoon, existingDigestMembers] = user ? await Promise.all([
+const [emailPreference, outstandingBallotsForMember, existingDigestMembers] = user ? await Promise.all([
  db.collection('engagement_email_preferences').findOne({memberId:user.memberId}),
- digestBallots(db,user,visibleProposals),
+ outstandingBallots(db,user,visibleProposals),
  ensureDigestCohort(db),
 ]) : [null, [], new Set<string>()];
+const outstandingProposalIds=new Set(outstandingBallotsForMember.filter(b=>b.key.startsWith('proposal:')).map(b=>b.proposalId));
+const awaitingDecision=visibleProposals.filter(p=>outstandingProposalIds.has(p.proposalId));
+const closingSoon=outstandingBallotsForMember.filter((b):b is DigestBallot=>Boolean(b.closesAt && closesWithinSevenDays({ballotClosesAt:b.closesAt})));
+const outstandingAmendments=outstandingBallotsForMember.filter(b=>b.key.startsWith('amendment:'));
 const existingDigestMember = Boolean(user && existingDigestMembers.has(user.memberId));
+if (user) await recordLifecycle(db,user.memberId,'my_engage_viewed',new Date(),new Date().toISOString().slice(0,10));
+const nextAction = user ? memberNextAction(user.status,user.canParticipate,activity?.votes.length ?? 0,outstandingBallotsForMember.length) : null;
+const persistentEngageUrl = new URL('/member/',env.PUBLIC_ORIGIN || env.BETTER_AUTH_URL || Astro.url.origin).href;
 const involvedIds = new Set([...(activity?.proposals ?? []).map(p=>p.proposalId), ...(activity?.votes ?? []).map(v=>v.proposalId), ...(activity?.comments ?? []).map(c=>c.proposalId)]);
 const lifecycleItems = visibleProposals.filter(p=>involvedIds.has(p.proposalId) && (p.stage === 'implement' || p.stage === 'archived' || ballotExpired(p))).sort((a,b)=>new Date(b.updatedAt).getTime()-new Date(a.updatedAt).getTime()).slice(0,8);
 const memberTimeline = buildActivityTimeline(memberTimelineEvents);
@@ -172,10 +179,7 @@ const memberView = requestedView === 'activity' || requestedView === 'account' |
 
 // Contextual Intent Preservation (Message Match & Safe Same-Origin Redirect)
 const rawReturnTo = Astro.url.searchParams.get('returnTo')?.trim() ?? '';
-const safeReturnTo =
-  rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//') && !rawReturnTo.startsWith('/api/')
-    ? rawReturnTo
-    : '/member/';
+const safeReturnTo = safeMemberReturn(rawReturnTo, Astro.url.searchParams.get('source') === 'verification' ? '/member/?intent=vote&source=verification#outstanding-ballots' : '/member/');
 const rawIntent = Astro.url.searchParams.get('intent')?.trim() ?? '';
 const intentLabel =
   rawIntent === 'vote'
@@ -319,6 +323,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                       </div>
                     </details>
 
+                    <p class="signin-expiry-note">New accounts have optional Engage digests off. After signing in, choose whether to receive ballot reminders in onboarding or My Engage → Notifications. Verification and sign-in messages are separate.</p>
                     <div class="signin-submit-row">
                       <Button type="submit" className="signin-submit-btn">
                         <Mail className="size-4" aria-hidden="true" />
@@ -350,6 +355,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                         <option value="administrator">National Administrator (admin@local.test)</option>
                       </NativeSelect>
                     </Field>
+                    <p class="signin-expiry-note">New accounts have optional Engage digests off. After signing in, choose whether to receive ballot reminders in onboarding or My Engage → Notifications. Verification and sign-in messages are separate.</p>
                     <div class="signin-submit-row">
                       <Button type="submit" variant="outline">Sign in locally</Button>
                       <p id="dev-status" class="form-status" role="status" aria-live="polite"></p>
@@ -455,7 +461,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               </Button>
             )}
             <Button href="/proposals/?stage=decide" size="sm">
-              Browse ballots ({awaitingDecision.length})
+              Browse ballots ({outstandingBallotsForMember.length})
             </Button>
           </div>
         </header>
@@ -476,6 +482,17 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           </Alert>
         )}
 
+        <section class="lifecycle-card" aria-labelledby="lifecycle-heading">
+          <h2 id="lifecycle-heading">{nextAction?.title}</h2>
+          <p>{nextAction?.detail}</p>
+          <Button href={nextAction?.href}>{nextAction?.title} <ArrowRight className="size-4" aria-hidden="true" /></Button>
+          <div class="engage-bookmark">
+            <label for="engage-url">Find Engage again — bookmark or copy this address</label>
+            <input id="engage-url" readonly value={persistentEngageUrl} />
+            <button type="button" id="copy-engage-url">Copy Engage URL</button>
+            <p id="copy-engage-status" role="status" aria-live="polite"></p>
+          </div>
+        </section>
         <LegalAcceptanceGate />
 
         <!-- Guided Member Onboarding & Activation Flow -->
@@ -558,6 +575,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               {closingSoon.length ? <ul>{closingSoon.map(b=><li><a href={b.href}>{b.title}</a><p>Closes {ballotDeadlineLabel(b.closesAt)}</p></li>)}</ul> : <p>You have no unvoted eligible ballots closing within seven days.</p>}
             </section>
             <!-- 1. Open Ballots Queue -->
+            <div id="outstanding-ballots" tabindex="-1"></div>
             <AttentionQueue
               items={outstandingItems}
               canParticipate={Boolean(user.canParticipate)}
@@ -566,6 +584,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               totalEligibleCount={totalEligibleOpenBallotsCount}
             />
 
+            {outstandingAmendments.length > 0 && <section class="member-panel" aria-labelledby="amendment-ballots-heading">
+              <h2 id="amendment-ballots-heading">Amendment ballots awaiting your vote</h2>
+              <ul>{outstandingAmendments.map(b=><li><a href={b.href}>{b.title}</a><p>{b.closesAt ? `Closes ${ballotDeadlineLabel(b.closesAt)}` : 'No closing date set'}</p></li>)}</ul>
+            </section>}
             <section class="member-panel" aria-label="Decisions you took part in">
               <h2>After your participation</h2>
               <p>Follow what happened to proposals you authored, discussed or voted on.</p>
@@ -767,6 +789,15 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 </SiteLayout>
 
 <script>
+  document.querySelector('#copy-engage-url')?.addEventListener('click', async () => {
+    const input=document.querySelector<HTMLInputElement>('#engage-url');
+    const status=document.querySelector<HTMLElement>('#copy-engage-status');
+    if (!input || !status) return;
+    try { await navigator.clipboard.writeText(input.value); status.textContent='Engage URL copied.'; }
+    catch { input.focus(); input.select(); status.textContent='Select and copy the address above.'; }
+  });
+
+  import { safeMemberReturn } from '../../lib/return-destination.ts';
   import { trackEngage } from '../../lib/analytics.ts';
   import { createAuthClient } from 'better-auth/client';
   import { magicLinkClient } from 'better-auth/client/plugins';
@@ -782,10 +813,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 
   const signinShell = document.querySelector<HTMLElement>('.signin-shell');
   const rawReturnAttr = signinShell?.dataset.returnTo || '/member/';
-  const safeCallbackURL =
-    rawReturnAttr.startsWith('/') && !rawReturnAttr.startsWith('//') && !rawReturnAttr.startsWith('/api/')
-      ? rawReturnAttr
-      : '/member/';
+  const safeCallbackURL = safeMemberReturn(rawReturnAttr);
 
   function analyticsCallback(method: 'email' | 'google') {
     const callback = new URL(safeCallbackURL, location.origin);
@@ -1936,3 +1964,13 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 </style>
 
 
+
+<style>
+.lifecycle-card {padding:1.5rem;border:1px solid var(--border,#d9cfe6);border-radius:1rem;margin-block:1.5rem;background:var(--card,#fff);color:var(--foreground,#271047)}
+.lifecycle-card h2 {font-family:Newsreader,Georgia,serif;font-size:2rem;line-height:1.2}
+.lifecycle-card p {margin-block:.75rem}
+.engage-bookmark {margin-top:1.5rem;display:flex;flex-wrap:wrap;gap:.75rem;align-items:center}
+.engage-bookmark label {flex-basis:100%}
+.engage-bookmark input {min-width:0;width:100%;max-width:30rem;padding:.75rem;border:1px solid #89769e;border-radius:.4rem;background:transparent}
+.engage-bookmark button {padding:.75rem 1rem;border:1px solid #89769e;border-radius:.4rem}
+</style>

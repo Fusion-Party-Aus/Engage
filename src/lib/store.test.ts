@@ -205,6 +205,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
           slug: proposalId,
           title: proposalId,
           stage,
+          ballotRevisionId: "r1",
           space: "General",
         });
     }
@@ -212,6 +213,8 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       .collection("proposal_votes")
       .insertOne({
         proposalId: "open-voted",
+        ballotId: "proposal:open-voted",
+        revisionId: "r1",
         memberId: memberUser.memberId,
         choice: "approve",
       });
@@ -236,6 +239,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
         slug: proposal.proposalId,
         title: proposal.proposalId,
         stage: "decide",
+        ballotRevisionId: "r1",
         space: "General",
       });
     }

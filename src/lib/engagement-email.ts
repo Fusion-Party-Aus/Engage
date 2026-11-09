@@ -1,3 +1,4 @@
+import { recordLifecycle } from "./member-lifecycle.ts";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { Db } from "mongodb";
 import type { PlatformEnv, ProposalSummaryView, SessionUser } from "./types.ts";
@@ -28,16 +29,27 @@ export function readUnsubscribeToken(token: string, secret: string): string | nu
   try { const data = JSON.parse(Buffer.from(payload, "base64url").toString()); return data.v === 1 && typeof data.memberId === "string" ? data.memberId : null; } catch { return null; }
 }
 export type DigestBallot = { key:string; title:string; href:string; closesAt:Date; proposalId:string };
+function digestCta(origin:string, href:string) {
+  const url=new URL(href,origin);
+  url.searchParams.set('source','digest');
+  return url.href;
+}
 export function renderDigest(name: string, ballots: DigestBallot[], origin: string, unsubscribeUrl: string, existingDefault = false) {
   const subscriptionExplanation = existingDefault ? "Ballot reminders were enabled for your existing Engage account. You can turn them off at any time." : "You receive this because you enabled Engage ballot reminders.";
   const e = escapeEmailHtml;
-  const text = `Hello ${name || "member"},\n\n${ballots.length} ballot(s) close within seven days and still need your vote.\n\n` + ballots.map(b=>`${b.title}\nCloses ${ballotDeadlineLabel(b.closesAt)}\n${origin}${b.href}`).join("\n\n") + `\n\nMy Engage: ${origin}/member/\nEmail preferences: ${origin}/member/?view=notifications\nUnsubscribe: ${unsubscribeUrl}\n\n${subscriptionExplanation} Voting is optional; review the exact wording before deciding.`;
-  const html = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Engage ballot digest</title></head><body style="margin:0;background:#f2eef9;color:#271047;font-family:Outfit,Arial,sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="600" style="width:100%;max-width:600px;background:#fff;border-radius:12px" cellpadding="0" cellspacing="0"><tr><td style="background:#32105a;color:white;padding:28px;border-bottom:6px solid #00c9d2"><p style="margin:0;font-size:12px;letter-spacing:3px">FUSION · HORIZON</p><p style="font-family:Newsreader,Georgia,serif;font-size:38px;margin:8px 0 0">Engage</p></td></tr><tr><td style="padding:28px"><h1 style="font-family:Newsreader,Georgia,serif;font-size:30px;line-height:1.15">A few decisions need your voice.</h1><p>Hello ${e(name || "member")},</p><p>These ${ballots.length} ballot(s) close within seven days. You haven’t voted on them yet.</p>${ballots.map(b=>`<div style="border-top:1px solid #ded6e7;padding:22px 0"><h2 style="font-family:Newsreader,Georgia,serif;font-size:24px;margin:0 0 10px">${e(b.title)}</h2><p style="font-size:14px;line-height:1.6">Closes ${e(ballotDeadlineLabel(b.closesAt))}</p><a style="display:inline-block;background:#00c9d2;color:#271047;padding:12px 20px;border-radius:24px;font-weight:bold;text-decoration:none" href="${e(origin + b.href)}">Read the wording &amp; vote →</a></div>`).join("")}<p style="line-height:1.6">Voting is optional. Your choice is yours—review the exact wording and supporting discussion before deciding.</p><p><a href="${origin}/member/" style="color:#32105a">Open My Engage →</a></p></td></tr><tr><td style="padding:24px 28px;background:#f8f5fc;font-size:12px;line-height:1.7;color:#54465f">Fusion Party Australia · Engage member participation<br>${e(subscriptionExplanation)} <a href="${origin}/member/?view=notifications">Email preferences</a> · <a href="${e(unsubscribeUrl)}">Unsubscribe from reminders</a><br>Unsubscribing affects Engage digests only; account notifications, general communications and membership are separate.</td></tr></table></td></tr></table></body></html>`;
+  const text = `Hello ${name || "member"},\n\n${ballots.length} ballot(s) close within seven days and still need your vote.\n\n` + ballots.map(b=>`${b.title}\nCloses ${ballotDeadlineLabel(b.closesAt)}\n${digestCta(origin,b.href)}`).join("\n\n") + `\n\nMy Engage: ${origin}/member/\nEmail preferences: ${origin}/member/?view=notifications\nUnsubscribe: ${unsubscribeUrl}\n\n${subscriptionExplanation} Voting is optional; review the exact wording before deciding.`;
+  const html = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Engage ballot digest</title></head><body style="margin:0;background:#f2eef9;color:#271047;font-family:Outfit,Arial,sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="600" style="width:100%;max-width:600px;background:#fff;border-radius:12px" cellpadding="0" cellspacing="0"><tr><td style="background:#32105a;color:white;padding:28px;border-bottom:6px solid #00c9d2"><p style="margin:0;font-size:12px;letter-spacing:3px">FUSION · HORIZON</p><p style="font-family:Newsreader,Georgia,serif;font-size:38px;margin:8px 0 0">Engage</p></td></tr><tr><td style="padding:28px"><h1 style="font-family:Newsreader,Georgia,serif;font-size:30px;line-height:1.15">A few decisions need your voice.</h1><p>Hello ${e(name || "member")},</p><p>These ${ballots.length} ballot(s) close within seven days. You haven’t voted on them yet.</p>${ballots.map(b=>`<div style="border-top:1px solid #ded6e7;padding:22px 0"><h2 style="font-family:Newsreader,Georgia,serif;font-size:24px;margin:0 0 10px">${e(b.title)}</h2><p style="font-size:14px;line-height:1.6">Closes ${e(ballotDeadlineLabel(b.closesAt))}</p><a style="display:inline-block;background:#00c9d2;color:#271047;padding:12px 20px;border-radius:24px;font-weight:bold;text-decoration:none" href="${e(digestCta(origin,b.href))}">Read the wording &amp; vote →</a></div>`).join("")}<p style="line-height:1.6">Voting is optional. Your choice is yours—review the exact wording and supporting discussion before deciding.</p><p><a href="${origin}/member/" style="color:#32105a">Open My Engage →</a></p></td></tr><tr><td style="padding:24px 28px;background:#f8f5fc;font-size:12px;line-height:1.7;color:#54465f">Fusion Party Australia · Engage member participation<br>${e(subscriptionExplanation)} <a href="${origin}/member/?view=notifications">Email preferences</a> · <a href="${e(unsubscribeUrl)}">Unsubscribe from reminders</a><br>Unsubscribing affects Engage digests only; account notifications, general communications and membership are separate.</td></tr></table></td></tr></table></body></html>`;
   return {subject:`Engage: ${ballots.length} ballot${ballots.length === 1 ? "" : "s"} closing soon`, text, html};
 }
 
+export type OutstandingBallot = Omit<DigestBallot,'closesAt'> & {closesAt?:Date};
+export async function digestBallots(db:Db,user:SessionUser,proposals:ProposalSummaryView[],now=new Date()):Promise<DigestBallot[]> {
+  return (await outstandingBallots(db,user,proposals,now))
+    .filter((b):b is DigestBallot=>Boolean(b.closesAt && closesWithinSevenDays({ballotClosesAt:b.closesAt},now)));
+}
+
 /** The same visibility, verified membership and recognised branch electorate boundaries as voting. */
-export async function digestBallots(db: Db, user: SessionUser, proposals: ProposalSummaryView[], now = new Date()): Promise<DigestBallot[]> {
+export async function outstandingBallots(db: Db, user: SessionUser, proposals: ProposalSummaryView[], now = new Date()): Promise<OutstandingBallot[]> {
   if (!user.canParticipate) return [];
   const [memberships, branches, votes, amendments] = await Promise.all([
     db.collection("branch_memberships").find({memberId:user.memberId, status:"active"}).project({branchId:1}).toArray(),
@@ -48,20 +60,20 @@ export async function digestBallots(db: Db, user: SessionUser, proposals: Propos
   const memberBranches = new Set(memberships.map(m=>m.branchId));
   const recognised = new Set(branches.map(b=>b.branchId));
   const viewer = {...user, activeBranchIds:[...memberBranches] as string[]};
-  const result: DigestBallot[] = [];
+  const result: OutstandingBallot[] = [];
   for (const p of proposals) {
     if (p.stage !== "decide" || ballotExpired(p,now) || !p.ballotRevisionId || !canViewProposal(p, viewer)) continue;
     if (p.jurisdictionBranchId && (!memberBranches.has(p.jurisdictionBranchId) || !recognised.has(p.jurisdictionBranchId))) continue;
-    if (closesWithinSevenDays(p, now) && !votes.some(v=>v.ballotId === proposalBallotId(p.proposalId) && v.revisionId === p.ballotRevisionId)) {
-      result.push({key:`proposal:${p.proposalId}:${p.ballotRevisionId}:${new Date(p.ballotClosesAt!).toISOString()}`, proposalId:p.proposalId, title:p.title, href:`/proposals/${encodeURIComponent(p.slug)}/#proposal-vote`, closesAt:new Date(p.ballotClosesAt!)});
+    if (!votes.some(v=>v.ballotId === proposalBallotId(p.proposalId) && v.revisionId === p.ballotRevisionId)) {
+      result.push({key:`proposal:${p.proposalId}:${p.ballotRevisionId}:${p.ballotClosesAt ? new Date(p.ballotClosesAt).toISOString() : "open"}`, proposalId:p.proposalId, title:p.title, href:`/proposals/${encodeURIComponent(p.slug)}/#proposal-vote`, closesAt:p.ballotClosesAt ? new Date(p.ballotClosesAt) : undefined});
     }
     for (const a of amendments.filter(a=>a.proposalId === p.proposalId && a.ballotRevisionId === p.ballotRevisionId && a.baseRevisionId === p.ballotRevisionId && a.currentRevisionId === a.ballotAmendmentRevisionId)) {
       const closesAt = a.ballotClosesAt || p.ballotClosesAt;
-      if (!a.ballotAmendmentRevisionId || !closesWithinSevenDays({ballotClosesAt:closesAt}, now) || votes.some(v=>v.ballotId === `amendment:${a.amendmentId}` && v.revisionId === a.ballotRevisionId && v.amendmentRevisionId === a.ballotAmendmentRevisionId)) continue;
-      result.push({key:`amendment:${a.amendmentId}:${a.ballotAmendmentRevisionId}:${new Date(closesAt).toISOString()}`, proposalId:p.proposalId, title:`Amendment: ${a.title || p.title}`, href:`/proposals/${encodeURIComponent(p.slug)}/#deliberation`, closesAt:new Date(closesAt)});
+      if (!a.ballotAmendmentRevisionId || ballotExpired({ballotClosesAt:closesAt}, now) || votes.some(v=>v.ballotId === `amendment:${a.amendmentId}` && v.revisionId === a.ballotRevisionId && v.amendmentRevisionId === a.ballotAmendmentRevisionId)) continue;
+      result.push({key:`amendment:${a.amendmentId}:${a.ballotAmendmentRevisionId}:${closesAt ? new Date(closesAt).toISOString() : "open"}`, proposalId:p.proposalId, title:`Amendment: ${a.title || p.title}`, href:`/proposals/${encodeURIComponent(p.slug)}/#deliberation`, closesAt:closesAt ? new Date(closesAt) : undefined});
     }
   }
-  return result.sort((a,b)=>a.closesAt.getTime()-b.closesAt.getTime());
+  return result.sort((a,b)=>(a.closesAt?.getTime() ?? Infinity)-(b.closesAt?.getTime() ?? Infinity));
 }
 
 /** A scheduler invokes this in bounded batches. Never retries an ambiguous external send automatically. */
@@ -128,6 +140,9 @@ export async function recordEmailEvent(db:Db, eventId:string, event:{type:string
     // Ignore unrelated sign-in mail after a day, allowing early engagement events time to correlate.
     if (Date.now() - new Date(now).getTime() > 86400000) await db.collection<any>("engagement_email_events").updateOne({_id:eventId},{$set:{processed:true,unmatched:true}});
     return;
+  }
+  if (message.kind === "verification" && ["email.delivered","email.bounced","email.failed"].includes(event.type)) {
+    await recordLifecycle(db,message.memberId,`verification_notification_${event.type.slice(6)}`,now,message.verificationStatus);
   }
   const field = event.type.replace("email.","");
   await outbox.updateOne({_id:message._id},{$set:{[`${field}At`]:now}});

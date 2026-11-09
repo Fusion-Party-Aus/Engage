@@ -100,6 +100,7 @@ async function ensureSeeded(db: Db): Promise<void> {
 export async function initializeDatabase(db: Db): Promise<void> {
   await ensureDigestCohort(db);
   await Promise.all([
+    db.collection("engagement_lifecycle_events").createIndex({memberId:1,event:1,at:1}),
     db.collection("engagement_email_preferences").createIndex({memberId:1}, {unique:true}),
     db.collection("engagement_email_outbox").createIndex({providerId:1}),
     db.collection("engagement_email_outbox").createIndex({memberId:1,createdAt:-1}),
@@ -391,6 +392,10 @@ export function createMemoryDb(): Db {
           if (key in doc !== Boolean(cond.$exists)) return false;
           continue;
         }
+        if ("$nin" in cond) {
+          if (cond.$nin.includes(val)) return false;
+          continue;
+        }
         if ("$ne" in cond) {
           if (val === cond.$ne) return false;
           continue;
@@ -473,6 +478,9 @@ export function createMemoryDb(): Db {
         },
         insertOne: async (doc: Record<string, any>) => {
           const _id = doc._id ?? new ObjectId();
+          if (store.some(existing => String(existing._id) === String(_id))) {
+            throw Object.assign(new Error('Duplicate _id'), {code:11000});
+          }
           const record = { ...doc, _id };
           store.push(record);
           return { insertedId: _id, acknowledged: true };
@@ -482,12 +490,14 @@ export function createMemoryDb(): Db {
           update: {
             $set?: Record<string, any>;
             $setOnInsert?: Record<string, any>;
+            $unset?: Record<string, any>;
           },
           options?: { upsert?: boolean },
         ) => {
           const idx = store.findIndex((doc) => matchesFilter(doc, filter));
           if (idx >= 0) {
             if (update.$set) Object.assign(store[idx]!, update.$set);
+            for (const field of Object.keys(update.$unset || {})) delete store[idx]![field];
             return { matchedCount: 1, modifiedCount: 1, acknowledged: true };
           }
           if (options?.upsert) {

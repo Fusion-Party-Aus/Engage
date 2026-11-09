@@ -47,7 +47,7 @@ test("verification reports email delivery without undoing account changes", asyn
     assert.equal(updated.status, 200);
     assert.equal(
       ((await updated.json()) as { notification: string }).notification,
-      "failed",
+      "held",
     );
     shouldFail = false;
     const unchanged = await PATCH({
@@ -72,7 +72,7 @@ test("verification reports email delivery without undoing account changes", asyn
     } as never);
     assert.equal(
       ((await reenabled.json()) as { notification: string }).notification,
-      "sent",
+      "not-needed",
     );
     const preverified = await POST({
       request: request("POST", {

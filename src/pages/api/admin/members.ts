@@ -2,44 +2,8 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { listMembers, saveMember } from "../../../lib/store.ts";
-import type { PlatformEnv } from "../../../lib/types.ts";
-
-import { notificationEnabled } from "../../../lib/digest-preferences.ts";
+import { sendVerificationNotice } from "../../../lib/verification-email.ts";
 export const prerender = false;
-
-async function sendVerificationNotice(
-  env: PlatformEnv,
-  email: unknown,
-  name: unknown,
-): Promise<"sent" | "failed"> {
-  if (
-    typeof email !== "string" ||
-    !env.RESEND_API_KEY ||
-    !env.AUTH_EMAIL_FROM ||
-    !env.BETTER_AUTH_URL
-  )
-    return "failed";
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${env.RESEND_API_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        from: env.AUTH_EMAIL_FROM,
-        to: [email],
-        subject: "Your Engage membership is verified",
-        text: `Hello ${typeof name === "string" && name ? name : "member"},\n\nYour membership has been verified. You can now participate in open decisions on Engage.\n\n${env.BETTER_AUTH_URL}/member/`,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    return response.ok ? "sent" : "failed";
-  } catch (error) {
-    console.error("Membership verification email failed to send.", error);
-    return "failed";
-  }
-}
 
 export const GET: APIRoute = async ({ request, url, locals }) => {
   const env = runtimeEnv(locals);
@@ -75,16 +39,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const body = (await request.json()) as Record<string, unknown>;
     const db = await getDatabase(env);
     const result = await saveMember(db, user, body, true);
-    const notification =
-      body.status === "verified" && body.disabled !== true
-        ? await sendVerificationNotice(
-            env,
-            typeof body.email === "string"
-              ? body.email.trim().toLowerCase()
-              : body.email,
-            body.name,
-          )
-        : "not-needed";
+    const notification = body.status === "verified" && body.disabled !== true
+      ? await sendVerificationNotice(db, env, result.memberId, "verified") : "not-needed";
     return Response.json({ ...result, notification }, { status: 201 });
   } catch (error) {
     return Response.json(
@@ -135,10 +91,10 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       willBeVerified &&
       willBeEnabled &&
       (!wasVerified || account?.disabled === true);
-    const preference = activated ? await db.collection("engagement_email_preferences").findOne({memberId}) : null;
-    const notification = activated && notificationEnabled(preference,"essential")
-      ? await sendVerificationNotice(env, account?.email, account?.name)
-      : "not-needed";
+    const notification = activated
+      ? await sendVerificationNotice(db, env, memberId, "verified")
+      : body.status === "suspended" && wasVerified
+        ? await sendVerificationNotice(db, env, memberId, "suspended") : "not-needed";
     return Response.json({ ...result, notification });
   } catch (error) {
     return Response.json(

@@ -40,3 +40,13 @@ export function notificationPreferenceChanges(form: FormData) {
   if (category === "engage") return {digestEnabled:form.get("digestEnabled") === "true"};
   throw new Error("Unknown notification category");
 }
+
+export type EngageConsentState = 'explicit-opt-in' | 'explicit-opt-out' | 'legacy-unrecorded' | 'new-unrecorded' | 'suppressed' | 'unclassified-unrecorded';
+/** Preference provenance is distinct from effective legacy defaults and lawful-basis assessment. */
+export function engageConsentState(preference: DigestPreference | null, legacyMember: boolean | null): EngageConsentState {
+  if (preference?.suppressed) return 'suppressed';
+  if (preference?.digestEnabled === false || preference?.unsubscribedAt && preference.digestEnabled !== true) return 'explicit-opt-out';
+  if (preference?.digestEnabled === true) return 'explicit-opt-in';
+  if (legacyMember === null) return 'unclassified-unrecorded';
+  return legacyMember ? 'legacy-unrecorded' : 'new-unrecorded';
+}

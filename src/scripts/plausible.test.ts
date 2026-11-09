@@ -60,3 +60,14 @@ test('custom events on staging remain disabled even when called directly', () =>
   `), []);
 });
 
+
+test('lifecycle interaction events never carry identity or ballot choices', () => {
+ const calls=runTracker('engage.fusionparty.org.au', `
+   const { trackEngage } = await import('./src/lib/analytics.ts');
+   for (const name of ['my_engage_viewed','verification_cta_clicked','digest_cta_clicked']) trackEngage(name,{memberId:'private-id',email:'member@example.test',choice:'reject',token:'secret'});
+ `);
+ for (const name of ['my_engage_viewed','verification_cta_clicked','digest_cta_clicked']) {
+   const event=calls.find(c=>c.n===name); assert.ok(event); assert.deepEqual(event.p,{});
+ }
+ assert.ok(!JSON.stringify(calls).includes('member@example.test'));
+});

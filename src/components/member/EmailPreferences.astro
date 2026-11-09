@@ -1,6 +1,15 @@
 ---
-import { digestEnabled } from "../../lib/digest-preferences.ts";
+import { digestEnabled, engageConsentState } from "../../lib/digest-preferences.ts";
 const { preference, saved = false, existingMember = false } = Astro.props;
+const consent=engageConsentState(preference,existingMember);
+const consentLabel={
+ 'explicit-opt-in':'You have opted in to Engage participation emails.',
+ 'explicit-opt-out':'You have opted out of Engage participation emails.',
+ 'legacy-unrecorded':'Your account predates notification preferences. No explicit choice is recorded; Engage participation emails use the legacy opt-out setting where permitted. You can change this below.',
+ 'new-unrecorded':'No opt-in is recorded. Optional Engage digests stay off until you choose them.',
+ 'unclassified-unrecorded':'Your registration cohort needs review; no explicit email preference is recorded.',
+ 'suppressed':'Email delivery is restricted after a bounce, complaint or other delivery restriction.',
+}[consent];
 ---
 <section class="email-preferences" aria-labelledby="notifications-heading">
  <h2 id="notifications-heading">Notifications</h2>
@@ -18,6 +27,7 @@ const { preference, saved = false, existingMember = false } = Astro.props;
  <section aria-labelledby="engage-notifications-heading">
   <h3 id="engage-notifications-heading">Engage digests</h3>
   <p>Summaries of activity on Engage: unvoted proposals, participation updates and ballots closing within seven days. Current reminder digests include eligible ballots you haven’t voted on, with each ballot reminded once.</p>
+  <p>{consentLabel}</p>
   <p>{existingMember ? "Digests were enabled for existing Engage accounts. Turn them off here or unsubscribe in any digest." : "Digests stay off for new accounts until you opt in."}</p>
   {preference?.suppressed ? <p>Digest delivery is paused after a bounce or spam complaint. Contact an administrator to resolve delivery.</p> : <form method="post" action="/api/email/preferences">
    <input type="hidden" name="category" value="engage" />

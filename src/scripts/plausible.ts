@@ -3,6 +3,13 @@ import { initAnalytics, trackEngage, resultBucket } from '../lib/analytics.ts';
 if (initAnalytics()) {
   // The server confirms the session before counting a redirect as a completed sign-in.
   const arrival = new URL(location.href);
+  if (arrival.pathname === '/member/' && document.body.dataset.analyticsSignedIn === 'yes') trackEngage('my_engage_viewed');
+  const source=arrival.searchParams.get('source');
+  if (source === 'verification' || source === 'digest') {
+    trackEngage(source === 'verification' ? 'verification_cta_clicked' : 'digest_cta_clicked');
+    arrival.searchParams.delete('source');
+    history.replaceState(history.state, '', arrival.href);
+  }
   const signinMethod = arrival.searchParams.get('analytics_signin');
   if (signinMethod === 'email' || signinMethod === 'google') {
     if (document.body.dataset.analyticsSignedIn === 'yes') {
