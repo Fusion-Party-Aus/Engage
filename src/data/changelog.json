@@ -1,5 +1,22 @@
 [
   {
+    "hash": "5bb7e82",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add audited platform settings and branch hierarchy validation",
+    "details": "Replace the raw JSON platform settings form with a task-based settings workspace. Administrators can manage visibility, public features, social channels and the branch website directory, with server-side URL validation, read-only infrastructure notes and a recorded change history that supports restoring earlier values. Enforce branch parent kinds on the server so states and territories sit under National and local branches sit under a state or territory. Add coverage for the settings API, audit history, restore behaviour and branch hierarchy rules."
+  },
+  {
+    "hash": "b808f0b",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record durable migrations and branch seed"
+  },
+  {
     "hash": "e2137a5",
     "date": "2026-11-09",
     "type": "feat",
@@ -646,23 +663,5 @@
     "category": "ops",
     "scope": "platform",
     "summary": "Run application checks with real MongoDB integration tests"
-  },
-  {
-    "hash": "27e5601",
-    "date": "2026-10-24",
-    "type": "docs",
-    "category": "docs",
-    "scope": "platform",
-    "summary": "Reconcile Reclaim MVP and ongoing Engage delivery",
-    "details": "Record the superseding Node/Docker/MongoDB architecture without rewriting the historical Workers/D1 decision. Separate M1 code gaps, deployment verification and governance approval from retained M2 commitments. Preserve accepted member-only discussion and separate Election Officer duties as M1 requirements."
-  },
-  {
-    "hash": "20b4552",
-    "date": "2026-10-24",
-    "type": "fix",
-    "category": "fix",
-    "scope": "platform",
-    "summary": "Serialize vote admission with ballot closure",
-    "details": "Use a common ballot write in MongoDB transactions to order admission and closure, rechecking the current ballot and database cutoff on retries. Keep current selections, permanent results and retryable publication. Configure the existing Mongo service as a single-node replica set and preserve the synthetic preview path. Real MongoDB regressions cover stalled requests, deadlines, concurrent closure, revotes, suspension, audit rollback and repeated finalisation."
   }
 ]
