@@ -1868,10 +1868,13 @@ export async function listOutstandingDecisions(
   db: Db,
   memberId: string,
   user?: SessionUser | null,
+  availableProposals?: ProposalSummaryView[],
 ): Promise<ProposalSummaryView[]> {
   if (user && !user.canParticipate) return [];
   const [decisions, votes] = await Promise.all([
-    listProposals(db, { stage: "decide", user }),
+    availableProposals
+      ? Promise.resolve(availableProposals.filter((proposal) => proposal.stage === "decide"))
+      : listProposals(db, { stage: "decide", user }),
     db.collection<VoteRecord>(PROPOSAL_VOTES).find({ memberId }).toArray(),
   ]);
   const branchIds = [...new Set(

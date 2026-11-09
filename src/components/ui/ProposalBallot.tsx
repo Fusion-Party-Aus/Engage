@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { trackEngage } from '../../lib/analytics.ts';
-import { ArrowRight, CheckCircle2, Clock, Copy, Check, Loader2, Lock } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock, Loader2, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from './badge';
 import { Button } from './button';
@@ -76,7 +76,6 @@ export default function ProposalBallot({
   const [error, setError] = useState('');
   const [justVoted, setJustVoted] = useState(false);
   const [justSavedPending, setJustSavedPending] = useState(false);
-  const [copiedShare, setCopiedShare] = useState(false);
 
   // Restore guest's selected choice from URL query (`?choice=approve`) or sessionStorage
   useEffect(() => {
@@ -140,6 +139,7 @@ export default function ProposalBallot({
         if (result.votes) setTally(result.votes);
         setJustVoted(true);
         setMessage('Your vote was recorded.');
+        window.dispatchEvent(new CustomEvent('engage:vote-saved', { detail: { choice: choiceLabel(selected) } }));
       }
     } catch (submitError) {
       trackEngage('contribution_result', { action: 'ballot', outcome: 'failed' });
@@ -151,18 +151,6 @@ export default function ProposalBallot({
       );
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function copyShareLink() {
-    try {
-      const shareUrl = `${window.location.origin}${proposalSlug ? `/proposals/${proposalSlug}/` : window.location.pathname}`;
-      await navigator.clipboard.writeText(shareUrl);
-      trackEngage('share_copied');
-      setCopiedShare(true);
-      window.setTimeout(() => setCopiedShare(false), 2500);
-    } catch {
-      // Ignore clipboard failures
     }
   }
 
@@ -264,12 +252,12 @@ export default function ProposalBallot({
                       Sign in to save your &ldquo;{choiceLabel(selected)}&rdquo; vote
                     </strong>
                     <p className="m-0 text-xs leading-relaxed text-[var(--horizon-muted)]">
-                      Sign in with your passkey or a 1-click email link. Verified members cast their ballot immediately; new accounts have their vote stored pending membership verification by an administrator.
+                      Verified membership is required. If verification is pending, your choice is saved until it can be recorded.
                     </p>
                   </div>
                 </div>
                 <Button href={guestSignInHref} size="sm" className="w-full justify-center">
-                  Sign in to lock in &ldquo;{choiceLabel(selected)}&rdquo;
+                  Sign in to save vote
                   <ArrowRight className="size-3.5" aria-hidden="true" />
                 </Button>
               </div>
@@ -379,31 +367,7 @@ export default function ProposalBallot({
               </p>
 
 
-              <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
-                <a
-                  href="#deliberation"
-                  className="text-[var(--horizon-purple-deep)] hover:underline"
-                >
-                  Share your reasoning in discussion →
-                </a>
-                <button
-                  type="button"
-                  onClick={copyShareLink}
-                  className="inline-flex items-center gap-1 rounded border border-[var(--horizon-line)] bg-white px-2 py-1 text-xs font-semibold text-[var(--horizon-purple-deep)] hover:bg-[var(--horizon-lavender)]"
-                >
-                  {copiedShare ? (
-                    <>
-                      <Check className="size-3" aria-hidden="true" />
-                      <span>Link copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="size-3" aria-hidden="true" />
-                      <span>Share ballot</span>
-                    </>
-                  )}
-                </button>
-              </div>
+
             </div>
           ) : savedPendingChoice && !canVote ? (
             <div className="grid gap-1.5">
@@ -414,7 +378,7 @@ export default function ProposalBallot({
                 </span>
               </p>
               <p className="m-0 text-xs leading-relaxed text-[var(--horizon-muted)]">
-                Your ballot choice is stored against this wording revision and will be formally recorded as soon as an administrator verifies your Fusion membership (while voting remains open).
+                Your vote will be recorded when your membership is verified, provided voting is still open.
               </p>
             </div>
           ) : (
@@ -427,8 +391,8 @@ export default function ProposalBallot({
         <nav aria-label="Ballot navigation" className="grid gap-2 border-t border-border pt-4">
           {nextBallot ? (
             <>
-              <a href={`/proposals/${nextBallot.slug}/#proposal-vote`} className="inline-flex min-h-11 items-center gap-2 font-semibold text-primary hover:underline">
-                Next ballot · {nextBallot.remainingCount} remaining
+              <a href={`/proposals/${nextBallot.slug}/#proposal-vote`} className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--horizon-purple-deep)] hover:underline">
+                Next ballot · {nextBallot.remainingCount + (savedChoice ? 0 : 1)} remaining
                 <ArrowRight className="size-4" aria-hidden="true" />
               </a>
               <span className="text-sm text-muted-foreground">{nextBallot.title}</span>

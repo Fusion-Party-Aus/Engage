@@ -181,11 +181,6 @@ const isResolution = proposal
   : false;
 
 const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
-const eligibilityLabel = !user
-  ? 'Sign in to check eligibility'
-  : proposal?.stage !== 'decide' || ballotExpired(proposal)
-    ? 'Ballot not currently open'
-    : eligibility?.label ?? 'Eligibility unavailable';
 
 const policyStatusLabel = policyRecord
   ? `${String(policyRecord.status ?? 'adopted')} · ${String(policyRecord.publicationStatus ?? 'unpublished')}`
@@ -352,7 +347,6 @@ const initialsFor = (name: string) =>
 
           <h1 class="proposal-hero__title">{proposal.title}</h1>
 
-          <p class="proposal-hero__summary">{proposal.summary}</p>
 
           <!-- Immediate Next Action Banner (Zero-Friction Entry Point) -->
           <div class:list={[
@@ -386,13 +380,13 @@ const initialsFor = (name: string) =>
                   ? 'Voting has closed. Review the tally and recorded decision.'
                   : proposal.stage === 'decide'
                   ? myVote
-                    ? `You voted "${myVote[0]!.toUpperCase() + myVote.slice(1)}" on ${ballotRevisionLabel}. You can change your vote while the ballot is open.`
+                    ? `Your vote: ${myVote[0]!.toUpperCase() + myVote.slice(1)}. You can change it until voting closes.`
                     : myPendingVote
                       ? `Your "${myPendingVote[0]!.toUpperCase() + myPendingVote.slice(1)}" choice is saved on ${ballotRevisionLabel} and will be formally recorded once an administrator verifies your membership.`
                       : canVoteOnProposal
-                        ? `Your ballot is currently unrecorded. Cast your vote (Approve, Abstain, or Reject) on ${ballotRevisionLabel}.`
+                        ? 'Review the proposal and cast your vote.'
                         : !user
-                          ? 'Preview and select your ballot choice now—sign in to record your vote (or queue it pending membership verification).'
+                          ? 'Sign in to save your vote.'
                           : user.status === 'pending'
                             ? `Save your ballot choice on ${ballotRevisionLabel} now—it will be stored pending membership verification by an administrator.`
                             : eligibility?.level === 'follower' || eligibility?.level === 'not-connected'
@@ -400,7 +394,7 @@ const initialsFor = (name: string) =>
                               : 'Verify your membership or branch eligibility to vote in this ballot.'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
                     ? user?.canParticipate
-                      ? 'Add your stance (Support, Concern, or Wording suggestion) or propose a formal amendment before voting opens.'
+                      ? 'Join the discussion or suggest a wording change.'
                       : 'Sign in as a verified member to post a discussion stance or propose a wording amendment.'
                     : policyRecord
                       ? `Adopted into the Policy Registry (${String(policyRecord.policyId)}). Inspect the official policy record.`
@@ -617,8 +611,10 @@ const initialsFor = (name: string) =>
             )}
 
             <!-- Key Commitments -->
+            <section class="decision-content" aria-label="Proposal summary and commitments">
+              <p class="decision-summary">{proposal.summary}</p>
             {proposal.outcomes.length > 0 && (
-              <section class="doc-section" aria-labelledby="outcomes-heading">
+              <section aria-labelledby="outcomes-heading">
                 <div class="doc-section__header">
                   <div>
                     <h2 id="outcomes-heading">Key commitments</h2>
@@ -627,7 +623,6 @@ const initialsFor = (name: string) =>
                   <span class="doc-count tabular">{proposal.outcomes.length} {proposal.outcomes.length === 1 ? 'commitment' : 'commitments'}</span>
                 </div>
 
-                <p>{proposal.summary}</p>
                 <ol class="commitments-list">
                   {proposal.outcomes.map((item, idx) => (
                     <li class="commitment-item">
@@ -638,6 +633,85 @@ const initialsFor = (name: string) =>
                 </ol>
               </section>
             )}
+
+            <section id="proposal-vote" class:list={['rail-card', 'rail-ballot', { 'is-open': proposal.stage === 'decide' }]}>
+              <div class="rail-card__head">
+                <div>
+                  <h2>Member ballot</h2>
+                </div>
+                <span class:list={['stage-badge', proposal.stage === 'decide' ? 'stage-badge--decide' : 'stage-badge--muted']}>
+                  {ballotState}
+                </span>
+              </div>
+
+              {proposal.ballotClosesAt && <p><strong>{ballotExpired(proposal) ? "Voting closed" : "Voting closes"}:</strong> {ballotDeadlineLabel(proposal.ballotClosesAt)}</p>}
+              <details class="ballot-record">
+                <summary>Ballot record</summary>
+                <p>Wording: {ballotRevisionLabel}</p>
+                {ballotResult && <p>Returning officer result: {ballotResultLabel}</p>}
+              </details>
+
+              {proposal.stage === 'decide' && !canVoteOnProposal && (
+                <div class="rail-notice">
+                  {eligibility?.level === 'follower' || eligibility?.level === 'not-connected' || eligibility?.level === 'branch-unavailable' ? (
+                    <div class="rail-notice__row">
+                      <p>{eligibility.reason}</p>
+                      {eligibility.level !== 'branch-unavailable' && (
+                        <Button href="/member/?view=branches" variant="outline" size="sm">My branches</Button>
+                      )}
+                    </div>
+                  ) : user ? (
+                    <div class="rail-notice__row">
+                      <p>
+                        {myPendingVote
+                          ? 'Your ballot choice is saved and will be recorded once an administrator verifies your membership.'
+                          : 'Your membership is awaiting verification. You can save your ballot choice below now and it will be recorded once verified.'}
+                      </p>
+                      <Button href="/member/" variant="outline" size="sm">Account</Button>
+                    </div>
+                  ) : (
+                    <div class="rail-notice__row">
+                      <p>
+                        {votes.total > 0
+                          ? `Join ${votes.total} verified ${votes.total === 1 ? 'vote' : 'votes'} on this revision—choose your option below or sign in to record your ballot.`
+                          : 'Choose your option below to preview your ballot, or sign in with your passkey or email link to vote.'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {proposal.stage === 'decide' || votes.total > 0 ? (
+                <div class="rail-ballot__widget">
+                  <ProposalBallot
+                    client:load
+                    proposalId={proposal.proposalId}
+                    proposalSlug={proposal.slug}
+                    proposalTitle={proposal.title}
+                    initialChoice={myVote}
+                    initialReason={myReason}
+                    initialPendingChoice={myPendingVote}
+                    initialPendingReason={myPendingReason}
+                    initialTally={votes}
+                    open={proposal.stage === 'decide' && !ballotExpired(proposal)}
+                    canVote={canVoteOnProposal}
+                    ineligibleReason={!canVoteOnProposal ? eligibility?.reason : undefined}
+                    isGuest={!user}
+                    isPendingMember={Boolean(user && !user.canParticipate && user.status === 'pending')}
+                    nextBallot={nextBallotInfo}
+                  />
+                </div>
+              ) : (
+                <p class="rail-muted">
+                  Formal voting has not opened yet. Join the member discussion or propose a wording amendment while this proposal is in deliberation.
+                </p>
+              )}
+
+              <BallotPrivacyNotice />
+            </section>
+
+
+            </section>
 
             <!-- Rationale & Context -->
             {(proposal.details || proposal.detailHtml) && (
@@ -1138,104 +1212,6 @@ const initialsFor = (name: string) =>
           <!-- Right Rail: Formal Member Ballot, Decision Chain & Activity -->
           <aside class="proposal-rail" aria-label="Formal member ballot, decision chain, and related proposals">
             <!-- 1. Formal Member Ballot Card -->
-            <section id="proposal-vote" class:list={['rail-card', 'rail-ballot', { 'is-open': proposal.stage === 'decide' }]}>
-              <div class="rail-card__head">
-                <div>
-                  <span class="rail-eyebrow">Formal governance vote</span>
-                  <h3>Member Ballot</h3>
-                </div>
-                <span class:list={['stage-badge', proposal.stage === 'decide' ? 'stage-badge--decide' : 'stage-badge--muted']}>
-                  {ballotState}
-                </span>
-              </div>
-
-              {proposal.ballotClosesAt && <p><strong>{ballotExpired(proposal) ? "Voting closed" : "Voting closes"}:</strong> {ballotDeadlineLabel(proposal.ballotClosesAt)}</p>}
-              <dl class="rail-kv">
-                <div>
-                  <dt>Your status</dt>
-                  <dd>
-                    {myVote ? (
-                      <strong class="status-voted">You have voted ({myVote[0]!.toUpperCase() + myVote.slice(1)})</strong>
-                    ) : myPendingVote ? (
-                      <strong>Queued: {myPendingVote[0]!.toUpperCase() + myPendingVote.slice(1)} (Pending verification)</strong>
-                    ) : canVoteOnProposal && proposal.stage === 'decide' ? (
-                      <strong>Unrecorded ({eligibilityLabel})</strong>
-                    ) : (
-                      <strong>{eligibilityLabel}</strong>
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Bound wording</dt>
-                  <dd>{ballotRevisionLabel}</dd>
-                </div>
-                {ballotResult && (
-                  <div>
-                    <dt>Returning officer result</dt>
-                    <dd><strong>{ballotResultLabel}</strong></dd>
-                  </div>
-                )}
-              </dl>
-
-              {proposal.stage === 'decide' && !canVoteOnProposal && (
-                <div class="rail-notice">
-                  {eligibility?.level === 'follower' || eligibility?.level === 'not-connected' || eligibility?.level === 'branch-unavailable' ? (
-                    <div class="rail-notice__row">
-                      <p>{eligibility.reason}</p>
-                      {eligibility.level !== 'branch-unavailable' && (
-                        <Button href="/member/?view=branches" variant="outline" size="sm">My branches</Button>
-                      )}
-                    </div>
-                  ) : user ? (
-                    <div class="rail-notice__row">
-                      <p>
-                        {myPendingVote
-                          ? 'Your ballot choice is saved and will be recorded once an administrator verifies your membership.'
-                          : 'Your membership is awaiting verification. You can save your ballot choice below now and it will be recorded once verified.'}
-                      </p>
-                      <Button href="/member/" variant="outline" size="sm">Account</Button>
-                    </div>
-                  ) : (
-                    <div class="rail-notice__row">
-                      <p>
-                        {votes.total > 0
-                          ? `Join ${votes.total} verified ${votes.total === 1 ? 'vote' : 'votes'} on this revision—choose your option below or sign in to record your ballot.`
-                          : 'Choose your option below to preview your ballot, or sign in with your passkey or email link to vote.'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {proposal.stage === 'decide' || votes.total > 0 ? (
-                <div class="rail-ballot__widget">
-                  <ProposalBallot
-                    client:load
-                    proposalId={proposal.proposalId}
-                    proposalSlug={proposal.slug}
-                    proposalTitle={proposal.title}
-                    initialChoice={myVote}
-                    initialReason={myReason}
-                    initialPendingChoice={myPendingVote}
-                    initialPendingReason={myPendingReason}
-                    initialTally={votes}
-                    open={proposal.stage === 'decide' && !ballotExpired(proposal)}
-                    canVote={canVoteOnProposal}
-                    ineligibleReason={!canVoteOnProposal ? eligibility?.reason : undefined}
-                    isGuest={!user}
-                    isPendingMember={Boolean(user && !user.canParticipate && user.status === 'pending')}
-                    nextBallot={nextBallotInfo}
-                  />
-                </div>
-              ) : (
-                <p class="rail-muted">
-                  Formal voting has not opened yet. Join the member discussion or propose a wording amendment while this proposal is in deliberation.
-                </p>
-              )}
-
-              <BallotPrivacyNotice />
-            </section>
-
             <!-- 2. Decision & Ratification Chain -->
             <section class="rail-card">
               <div class="rail-card__head">
@@ -1315,6 +1291,14 @@ const initialsFor = (name: string) =>
 </SiteLayout>
 
 <script>
+  window.addEventListener('engage:vote-saved', (event) => {
+    const choice = (event as CustomEvent<{ choice: string }>).detail.choice;
+    const title = document.querySelector('.next-action-bar__title');
+    if (title) title.textContent = `Your vote: ${choice}. You can change it until voting closes.`;
+    const action = document.querySelector('.next-action-bar a[href="#proposal-vote"]');
+    if (action) action.textContent = 'Review your vote →';
+  });
+
   import { trackEngage } from '../../lib/analytics.ts';
   // Staff stage selector with ballot integrity confirmation
   const stageSelect = document.getElementById('staff-stage-select') as HTMLSelectElement | null;
@@ -1656,6 +1640,12 @@ const initialsFor = (name: string) =>
 </script>
 
 <style>
+  .decision-content { border-top: 1px solid var(--horizon-line); padding: clamp(1.25rem, 2.2vw, 1.75rem); padding-bottom: 0; }
+  .decision-summary { font-size: 1.15rem; line-height: 1.65; margin: 0 0 1.5rem; }
+  #proposal-vote { scroll-margin-top: 6rem; border: 0; border-radius: 0; box-shadow: none; padding: 1.5rem 0; margin-top: 1.5rem; border-top: 1px solid var(--horizon-line); }
+  .ballot-record { font-size: .875rem; margin-bottom: 1rem; }
+  .ballot-record summary { cursor: pointer; }
+
   .proposal-detail-page {
     padding-top: 1.25rem;
     padding-bottom: 4rem;
@@ -2089,7 +2079,6 @@ const initialsFor = (name: string) =>
     width: 1.55rem;
     height: 1.55rem;
     border-radius: 999px;
-    background: #ede8f8;
     color: var(--horizon-purple);
     font-size: 0.72rem;
     font-weight: 700;
@@ -2369,10 +2358,7 @@ const initialsFor = (name: string) =>
     grid-template-columns: 2.2rem minmax(0, 1fr);
     gap: 0.75rem;
     align-items: start;
-    padding: 0.9rem 1rem;
-    background: #faf9fd;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
+    padding: 0.5rem 0;
   }
 
   .commitment-num {
@@ -2382,7 +2368,6 @@ const initialsFor = (name: string) =>
     width: 1.85rem;
     height: 1.85rem;
     border-radius: 0.5rem;
-    background: #ede8f8;
     color: var(--horizon-purple);
     font-size: 0.8rem;
     font-weight: 700;
@@ -2726,7 +2711,6 @@ const initialsFor = (name: string) =>
     width: 2.25rem;
     height: 2.25rem;
     border-radius: 999px;
-    background: #ede8f8;
     color: var(--horizon-purple);
     font-size: 0.78rem;
     font-weight: 700;
@@ -3073,7 +3057,8 @@ const initialsFor = (name: string) =>
     margin-bottom: 0.1rem;
   }
 
-  .rail-card__head h3 {
+  .rail-card__head h3,
+  .rail-card__head h2 {
     margin: 0;
     font-family: 'Newsreader', Georgia, serif;
     font-size: 1.2rem;

@@ -17,7 +17,7 @@ import {
   setBranchFollowing,
   verifyBranchMember,
 } from "./branch-participation.ts";
-import { castVote, listOutstandingDecisions, saveProposal } from "./store.ts";
+import { castVote, listOutstandingDecisions, listProposals, saveProposal } from "./store.ts";
 import { PROPOSAL_VOTES } from "./vote-storage.ts";
 import type { SessionUser } from "./types.ts";
 
@@ -256,6 +256,8 @@ describe("branch participation: following and verified membership", () => {
       user.memberId,
       user,
     );
+    const reused = await listOutstandingDecisions(db, user.memberId, user, await listProposals(db, { user }));
+    assert.deepEqual(reused.map((item) => item.proposalId), outstanding.map((item) => item.proposalId), 'reusing discovery data preserves electorate filtering');
     assert.equal(
       outstanding.some((item) => item.proposalId === "national-ballot"),
       true,

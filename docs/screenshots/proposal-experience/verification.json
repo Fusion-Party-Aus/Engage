@@ -1,0 +1,20 @@
+[
+  {
+    "version": "after",
+    "device": "desktop",
+    "errors": [],
+    "voteSaved": true,
+    "voteUpdated": true
+  },
+  {
+    "version": "after",
+    "device": "mobile",
+    "errors": [],
+    "voteSaved": true,
+    "voteUpdated": true
+  },
+  {
+    "version": "after",
+    "completion": true
+  }
+]

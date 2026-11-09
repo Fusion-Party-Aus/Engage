@@ -1,6 +1,6 @@
 ---
+import { discoveryFocus } from '../../lib/proposal-discovery.ts';
 import { ballotDeadlineLabel, ballotExpired } from '../../lib/ballot-deadline.ts';
-import ProposalHighlights from '../../components/ProposalHighlights.astro';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -35,33 +35,38 @@ const siteConfig = await getSiteConfig(db, env);
 const initialQuery = (Astro.url.searchParams.get('q') ?? '').trim();
 const initialSpace = (Astro.url.searchParams.get('space') ?? Astro.url.searchParams.get('category') ?? 'all').trim();
 const initialBranch = (Astro.url.searchParams.get('branch') ?? 'all').trim();
-const initialFocus = (Astro.url.searchParams.get('focus') ?? ((Astro.url.searchParams.get('stage') ?? Astro.url.searchParams.get('status')) === 'decide' && user?.canParticipate ? 'needs-vote' : 'all')).trim();
+const initialFocus = discoveryFocus(Astro.url.searchParams, Boolean(user?.canParticipate));
 const initialSort = (Astro.url.searchParams.get('sort') ?? 'priority').trim();
 const branches = (await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()).map(({ branchId, name }) => ({ branchId, name }));
 const rawStage = (Astro.url.searchParams.get('stage') ?? Astro.url.searchParams.get('status') ?? 'all').trim();
 const initialStage = rawStage === 'all' ? 'all' : normalizeStage(rawStage);
 
-const [allAvailableProposals, myOutstandingVotes, myVotesRaw] = await Promise.all([
+const [allAvailableProposals, myVotesRaw, joinedComments] = await Promise.all([
   listProposals(db, {
     includeArchived: Boolean(user?.isStaff),
     user,
   }),
-  user?.canParticipate ? listOutstandingDecisions(db, user.memberId, user) : Promise.resolve([]),
   user
     ? db
         .collection(PROPOSAL_VOTES)
         .find({ memberId: user.memberId })
-        .project({ proposalId: 1, ballotId: 1 })
+        .project({ proposalId: 1, ballotId: 1, revisionId: 1 })
         .toArray()
     : Promise.resolve([]),
+  user ? db.collection('comments').find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray() : Promise.resolve([]),
 ]);
 
+const myOutstandingVotes = user?.canParticipate
+  ? await listOutstandingDecisions(db, user.memberId, user, allAvailableProposals)
+  : [];
+
 const baseProposals = allAvailableProposals.filter((p) => p.stage !== 'archived');
+
+const joinedIds = new Set(joinedComments.map((comment) => String(comment.proposalId)));
 
 const queryLower = initialQuery.toLowerCase();
 const rawProposals = allAvailableProposals.filter((p) => {
   if (initialSpace && initialSpace !== 'all' && p.space !== initialSpace) return false;
-  if (initialStage && initialStage !== 'all' && p.stage !== initialStage) return false;
   if (
     initialBranch &&
     initialBranch !== 'all' &&
@@ -79,22 +84,23 @@ const rawProposals = allAvailableProposals.filter((p) => {
 const outstandingIds = new Set(myOutstandingVotes.map((item) => item.proposalId));
 const votedProposalIds = new Set(
   myVotesRaw
-    .filter((v: any) => v.proposalId && v.ballotId === proposalBallotId(String(v.proposalId)))
+    .filter((v: any) => v.proposalId && v.ballotId === proposalBallotId(String(v.proposalId)) && allAvailableProposals.some((proposal) => proposal.proposalId === String(v.proposalId) && proposal.ballotRevisionId === v.revisionId))
     .map((v: any) => String(v.proposalId)),
 );
 
-const focusFiltered = rawProposals.filter((proposal) => {
+const countDataset = rawProposals.filter((proposal) => {
   if (initialFocus === 'needs-vote') {
     return outstandingIds.has(proposal.proposalId);
   }
   if (initialFocus === 'discussion') {
-    return proposal.stage === 'deliberate';
-  }
-  if (initialFocus === 'recent') {
-    return true;
+    return joinedIds.has(proposal.proposalId);
   }
   return true;
 });
+
+const focusFiltered = countDataset.filter((proposal) =>
+  initialStage === 'all' || (proposal.stage === initialStage && (initialStage !== 'decide' || Boolean(proposal.ballotRevisionId) && !ballotExpired(proposal))),
+);
 
 const effectiveSort = initialFocus === 'recent' && initialSort === 'priority' ? 'recent' : initialSort;
 
@@ -145,54 +151,46 @@ const pageUrl = (page: number) => buildFilterUrl({ page: String(page) });
 
 const spaces = [...new Set(baseProposals.map((p) => p.space))].sort();
 
+
 const stageCounts = {
-  all: baseProposals.length,
-  propose: baseProposals.filter((p) => p.stage === 'propose').length,
-  deliberate: baseProposals.filter((p) => p.stage === 'deliberate').length,
-  decide: baseProposals.filter((p) => p.stage === 'decide').length,
-  implement: baseProposals.filter((p) => p.stage === 'implement').length,
+  all: countDataset.length,
+  propose: countDataset.filter((p) => p.stage === 'propose').length,
+  deliberate: countDataset.filter((p) => p.stage === 'deliberate').length,
+  decide: countDataset.filter((p) => p.stage === 'decide' && p.ballotRevisionId && !ballotExpired(p)).length,
+  implement: countDataset.filter((p) => p.stage === 'implement').length,
 };
 
 const stageTabs: Array<{
   id: 'all' | ProposalStage;
   label: string;
   count: number;
-  description: string;
 }> = [
   {
     id: 'all',
     label: 'All',
     count: stageCounts.all,
-    description: 'All public proposals across every governance stage.',
   },
   {
     id: 'propose',
     label: 'Ideas',
     count: stageCounts.propose,
-    description: 'Early-stage ideas submitted for initial feedback.',
   },
   {
     id: 'deliberate',
     label: 'Discussion',
     count: stageCounts.deliberate,
-    description: 'Proposals open for member contributions and wording amendments.',
   },
   {
     id: 'decide',
     label: 'Voting',
     count: stageCounts.decide,
-    description: 'Proposals with an active ballot bound to a frozen wording revision.',
   },
   {
     id: 'implement',
     label: 'Implementation',
     count: stageCounts.implement,
-    description: 'Decisions being processed for ratification and policy publication.',
   },
 ];
-
-const activeStageMeta =
-  stageTabs.find((tab) => tab.id === initialStage) ?? stageTabs[0]!;
 
 const stageVariant = (s: ProposalStage) => {
   if (s === 'propose') return 'warning' as const;
@@ -239,7 +237,6 @@ const hasActiveFilters =
         </div>
       </header>
 
-      <ProposalHighlights proposals={baseProposals} />
 
       <!-- Workflow Tabs & Personal Relevance Shortcuts -->
       <div class="workflow-bar">
@@ -249,7 +246,7 @@ const hasActiveFilters =
               const isCurrent = initialStage === tab.id;
               return (
                 <a
-                  href={buildFilterUrl({ stage: tab.id, focus: Astro.url.searchParams.has('focus') ? initialFocus : null, page: '1' })}
+                  href={buildFilterUrl({ stage: tab.id, focus: initialFocus === 'needs-vote' && tab.id !== 'decide' ? null : Astro.url.searchParams.has('focus') ? initialFocus : null, page: '1' })}
                   class:list={['workflow-tab', { 'is-active': isCurrent }]}
                   aria-current={isCurrent ? 'page' : undefined}
                 >
@@ -260,16 +257,13 @@ const hasActiveFilters =
             })}
           </nav>
 
-
         </div>
-
 
       </div>
 
       <!-- Search & Quiet Secondary Filters -->
       <form data-analytics-collection="proposals" data-analytics-results={visibleProposals.length} id="proposals-filter-form" class="search-controls" role="search" method="get" action="/proposals/">
         {initialStage !== 'all' && <input type="hidden" name="stage" value={initialStage} />}
-
 
         <div class="search-row">
           <label for="proposal-search" class="sr-only">Search proposals by title, topic or ID</label>
@@ -297,6 +291,7 @@ const hasActiveFilters =
               <NativeSelect id="proposal-focus" name="focus" defaultValue={initialFocus} data-auto-submit>
                 <option value="all">All proposals</option>
                 {user?.canParticipate && <option value="needs-vote">Needs my vote</option>}
+                {user && <option value="discussion">Discussions I’ve joined</option>}
                 <option value="recent">Recently updated</option>
               </NativeSelect>
             </div>
@@ -372,9 +367,10 @@ const hasActiveFilters =
       <!-- Spacious Proposal List -->
       {visibleProposals.length === 0 ? (
         <div class="empty-register">
-          <h2>No proposals match these filters</h2>
-          <p>Try clearing your search query or switching back to all workflow stages.</p>
-          <Button href="/proposals/" variant="outline" size="sm">Clear filters</Button>
+          <h2>{initialFocus === 'needs-vote' && myOutstandingVotes.length === 0 ? "You're up to date" : 'No matching proposals'}</h2>
+          {initialFocus === 'needs-vote' && myOutstandingVotes.length === 0 ? (
+            <Button href={buildFilterUrl({ stage: 'decide', focus: 'all', q: null, branch: null, space: null })} variant="outline" size="sm">Browse active ballots</Button>
+          ) : <Button href="/proposals/" variant="outline" size="sm">Clear filters</Button>}
         </div>
       ) : (
         <div class="proposal-list" role="list" id="proposal-list">
@@ -408,8 +404,6 @@ const hasActiveFilters =
                 <!-- Line 1: Topic Context (left) + Stage Pill (right) -->
                 <div class="proposal-item__eyebrow">
                   <div class="proposal-item__context">
-                    <span class="proposal-item__id tabular">{item.proposalId}</span>
-                    <span aria-hidden="true">·</span>
                     <a
                       class="proposal-item__space"
                       href={buildFilterUrl({ space: item.space, page: '1' })}
@@ -449,7 +443,7 @@ const hasActiveFilters =
                         <span class="participation-dot" aria-hidden="true">·</span>
                         <span class="participation-stat is-ballot">
                           <Vote className="size-3.5" aria-hidden="true" />
-                          Formal ballot · {item.votes.total} {item.votes.total === 1 ? 'ballot cast' : 'ballots cast'}
+                          {item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'}
                         </span>
                       </>
                     )}
@@ -658,45 +652,6 @@ const hasActiveFilters =
     border-radius: 999px;
     background: var(--horizon-lavender);
     color: var(--horizon-purple-deep);
-  }
-
-  .personal-shortcuts {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-    padding-bottom: 0.4rem;
-  }
-
-  .shortcut-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.24rem 0.65rem;
-    border-radius: 999px;
-    border: 1px solid var(--horizon-line);
-    background: var(--horizon-lavender-soft);
-    color: var(--horizon-muted);
-    font-size: 0.76rem;
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .shortcut-pill:hover {
-    border-color: #b7a2df;
-    color: var(--horizon-purple-deep);
-  }
-
-  .shortcut-pill.is-active {
-    background: var(--horizon-purple);
-    border-color: var(--horizon-purple);
-    color: #ffffff;
-  }
-
-  .workflow-caption {
-    margin: 0;
-    font-size: 0.82rem;
-    color: var(--horizon-muted);
   }
 
   /* Search & Secondary Filters */
@@ -1015,5 +970,4 @@ const hasActiveFilters =
     }
   }
 </style>
-
 
