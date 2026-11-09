@@ -1,5 +1,29 @@
 [
   {
+    "hash": "b5207f2",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Implement approved reading and voting journey"
+  },
+  {
+    "hash": "41b4682",
+    "date": "2026-11-09",
+    "type": "docs",
+    "category": "docs",
+    "scope": "proposals",
+    "summary": "Record approved design reset and requirements audit"
+  },
+  {
+    "hash": "99a9ea0",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Include voting status safeguard"
+  },
+  {
     "hash": "7560540",
     "date": "2026-11-09",
     "type": "fix",
@@ -638,29 +662,5 @@
     "category": "improvement",
     "scope": "platform",
     "summary": "Simplify Engage into unified CRUD app with redesigned member and admin UX"
-  },
-  {
-    "hash": "c1f724c",
-    "date": "2026-10-25",
-    "type": "style",
-    "category": "improvement",
-    "scope": "platform",
-    "summary": "Remove unnecessary administration accent borders"
-  },
-  {
-    "hash": "fbf5a0b",
-    "date": "2026-10-25",
-    "type": "docs",
-    "category": "docs",
-    "scope": "platform",
-    "summary": "Record B1 draft review checkpoint"
-  },
-  {
-    "hash": "d46d756",
-    "date": "2026-10-25",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Add policy-centred M1 administration workspace"
   }
 ]
