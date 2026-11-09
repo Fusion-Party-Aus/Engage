@@ -1,5 +1,13 @@
 [
   {
+    "hash": "71a98bb",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "analytics",
+    "summary": "Install Plausible tracker package"
+  },
+  {
     "hash": "b98af1d",
     "date": "2026-11-08",
     "type": "feat",
