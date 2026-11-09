@@ -1,5 +1,21 @@
 [
   {
+    "hash": "7560540",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "voting",
+    "summary": "Refresh proposal hero after saving a vote"
+  },
+  {
+    "hash": "a17770f",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record proposal participation redesign"
+  },
+  {
     "hash": "fc8d130",
     "date": "2026-11-09",
     "type": "feat",
@@ -646,21 +662,5 @@
     "category": "feature",
     "scope": "platform",
     "summary": "Add policy-centred M1 administration workspace"
-  },
-  {
-    "hash": "a4de58f",
-    "date": "2026-10-24",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Address PR Review findings"
-  },
-  {
-    "hash": "34dfb7b",
-    "date": "2026-10-24",
-    "type": "fix",
-    "category": "fix",
-    "scope": "platform",
-    "summary": "Reject editorial labels as domains regardless of case"
   }
 ]
