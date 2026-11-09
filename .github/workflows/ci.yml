@@ -56,6 +56,20 @@ jobs:
       - name: Node and real MongoDB voting/authentication regressions
         run: pnpm test
       - run: pnpm build
+      - name: Desktop and mobile member lifecycle verification
+        env:
+          ENGAGE_PLAYWRIGHT_MODULE: ${{ runner.temp }}/engage-browser/node_modules/playwright/index.mjs
+        run: |
+          npm install --prefix "$RUNNER_TEMP/engage-browser" --no-save --no-package-lock playwright@1.57.0
+          node "$RUNNER_TEMP/engage-browser/node_modules/playwright/cli.js" install --with-deps chromium
+          node scripts/member-lifecycle-browser.mjs
+      - name: Save synthetic lifecycle screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: member-lifecycle-screenshots
+          path: docs/screenshots/member-lifecycle/
+          if-no-files-found: ignore
       - name: MongoDB logs on failure
         if: failure()
         run: docker logs engage-ci-mongo
