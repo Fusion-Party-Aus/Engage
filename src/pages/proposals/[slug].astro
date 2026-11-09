@@ -622,11 +622,12 @@ const initialsFor = (name: string) =>
                 <div class="doc-section__header">
                   <div>
                     <h2 id="outcomes-heading">Key commitments</h2>
-                    <p class="doc-section__sub">Specific actions and policy positions this proposal commits Fusion to adopt.</p>
+
                   </div>
                   <span class="doc-count tabular">{proposal.outcomes.length} {proposal.outcomes.length === 1 ? 'commitment' : 'commitments'}</span>
                 </div>
 
+                <p>{proposal.summary}</p>
                 <ol class="commitments-list">
                   {proposal.outcomes.map((item, idx) => (
                     <li class="commitment-item">

@@ -35,7 +35,7 @@ const siteConfig = await getSiteConfig(db, env);
 const initialQuery = (Astro.url.searchParams.get('q') ?? '').trim();
 const initialSpace = (Astro.url.searchParams.get('space') ?? Astro.url.searchParams.get('category') ?? 'all').trim();
 const initialBranch = (Astro.url.searchParams.get('branch') ?? 'all').trim();
-const initialFocus = (Astro.url.searchParams.get('focus') ?? 'all').trim();
+const initialFocus = (Astro.url.searchParams.get('focus') ?? ((Astro.url.searchParams.get('stage') ?? Astro.url.searchParams.get('status')) === 'decide' && user?.canParticipate ? 'needs-vote' : 'all')).trim();
 const initialSort = (Astro.url.searchParams.get('sort') ?? 'priority').trim();
 const branches = (await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()).map(({ branchId, name }) => ({ branchId, name }));
 const rawStage = (Astro.url.searchParams.get('stage') ?? Astro.url.searchParams.get('status') ?? 'all').trim();
@@ -128,7 +128,7 @@ const buildFilterUrl = (overrides: Record<string, string | null>) => {
   for (const [k, v] of Object.entries(overrides)) {
     if (
       !v ||
-      v === 'all' ||
+      (v === 'all' && k !== 'focus') ||
       (k === 'sort' && v === 'priority') ||
       (k === 'page' && v === '1')
     ) {
@@ -246,10 +246,10 @@ const hasActiveFilters =
         <div class="workflow-tabs-row">
           <nav class="workflow-tabs" aria-label="Filter proposals by workflow stage">
             {stageTabs.map((tab) => {
-              const isCurrent = initialStage === tab.id && initialFocus === 'all';
+              const isCurrent = initialStage === tab.id;
               return (
                 <a
-                  href={buildFilterUrl({ stage: tab.id, focus: null, page: '1' })}
+                  href={buildFilterUrl({ stage: tab.id, focus: Astro.url.searchParams.has('focus') ? initialFocus : null, page: '1' })}
                   class:list={['workflow-tab', { 'is-active': isCurrent }]}
                   aria-current={isCurrent ? 'page' : undefined}
                 >
@@ -260,51 +260,16 @@ const hasActiveFilters =
             })}
           </nav>
 
-          <div class="personal-shortcuts" role="group" aria-label="Quick focus filters">
-            {user?.canParticipate && (
-              <a
-                href={buildFilterUrl({
-                  focus: initialFocus === 'needs-vote' ? null : 'needs-vote',
-                  stage: 'decide',
-                  page: '1',
-                })}
-                class:list={['shortcut-pill', { 'is-active': initialFocus === 'needs-vote' }]}
-              >
-                Needs your vote
-                <span class="tabular">{myOutstandingVotes.length}</span>
-              </a>
-            )}
-            <a
-              href={buildFilterUrl({
-                focus: initialFocus === 'discussion' ? null : 'discussion',
-                stage: 'deliberate',
-                page: '1',
-              })}
-              class:list={['shortcut-pill', { 'is-active': initialFocus === 'discussion' }]}
-            >
-              Join the discussion
-              <span class="tabular">{stageCounts.deliberate}</span>
-            </a>
-            <a
-              href={buildFilterUrl({
-                focus: initialFocus === 'recent' ? null : 'recent',
-                sort: 'recent',
-                page: '1',
-              })}
-              class:list={['shortcut-pill', { 'is-active': initialFocus === 'recent' || effectiveSort === 'recent' }]}
-            >
-              Recently updated
-            </a>
-          </div>
+
         </div>
 
-        <p class="workflow-caption">{activeStageMeta.description}</p>
+
       </div>
 
       <!-- Search & Quiet Secondary Filters -->
       <form data-analytics-collection="proposals" data-analytics-results={visibleProposals.length} id="proposals-filter-form" class="search-controls" role="search" method="get" action="/proposals/">
         {initialStage !== 'all' && <input type="hidden" name="stage" value={initialStage} />}
-        {initialFocus !== 'all' && <input type="hidden" name="focus" value={initialFocus} />}
+
 
         <div class="search-row">
           <label for="proposal-search" class="sr-only">Search proposals by title, topic or ID</label>
@@ -328,18 +293,11 @@ const hasActiveFilters =
         <div class="secondary-filters-row">
           <div class="quiet-filters">
             <div class="quiet-select-wrap">
-              <label for="proposal-stage-select" class="sr-only">Stage</label>
-              <NativeSelect
-                id="proposal-stage-select"
-                name="stage"
-                defaultValue={initialStage}
-                data-auto-submit
-              >
-                <option value="all">All stages</option>
-                <option value="propose">Ideas ({stageCounts.propose})</option>
-                <option value="deliberate">Discussion ({stageCounts.deliberate})</option>
-                <option value="decide">Voting ({stageCounts.decide})</option>
-                <option value="implement">Implementation ({stageCounts.implement})</option>
+              <label for="proposal-focus" class="sr-only">Participation</label>
+              <NativeSelect id="proposal-focus" name="focus" defaultValue={initialFocus} data-auto-submit>
+                <option value="all">All proposals</option>
+                {user?.canParticipate && <option value="needs-vote">Needs my vote</option>}
+                <option value="recent">Recently updated</option>
               </NativeSelect>
             </div>
 

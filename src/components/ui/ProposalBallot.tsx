@@ -287,7 +287,7 @@ export default function ProposalBallot({
                   </span>
                 }
                 htmlFor="ballot-reason"
-                label="Reason (optional)"
+                label="Why? (optional)"
               >
                 <Input
                   disabled={!canInteractWithToggle}
@@ -372,26 +372,12 @@ export default function ProposalBallot({
             <div className="grid gap-2">
               <p className="m-0 flex items-center gap-1.5 font-semibold text-[var(--horizon-success-ink)]">
                 <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
-                <span>Vote recorded ({choiceLabel(savedChoice)}).</span>
+                <span>Vote saved: {choiceLabel(savedChoice)}</span>
               </p>
               <p className="m-0 text-xs text-[var(--horizon-muted)]">
-                Your ballot is bound to this wording snapshot. You can update your choice anytime while voting stays open.
+                You can change your vote until voting closes.
               </p>
 
-              {nextBallot ? (
-                <div className="mt-0.5 rounded-md border border-[var(--horizon-line)] bg-white p-2.5">
-                  <span className="block text-[11px] font-bold text-[var(--horizon-purple)] tabular-nums">
-                    Up next · {nextBallot.remainingCount} {nextBallot.remainingCount === 1 ? 'ballot' : 'ballots'} left for you
-                  </span>
-                  <a
-                    href={`/proposals/${nextBallot.slug}/#proposal-vote`}
-                    className="mt-0.5 inline-flex items-center gap-1 text-xs font-bold text-[var(--horizon-purple-deep)] hover:underline"
-                  >
-                    <span>{nextBallot.title}</span>
-                    <ArrowRight className="size-3.5 shrink-0" aria-hidden="true" />
-                  </a>
-                </div>
-              ) : null}
 
               <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
                 <a
@@ -435,6 +421,23 @@ export default function ProposalBallot({
             <p className="m-0">{message}</p>
           )}
         </div>
+      )}
+
+      {open && canVote && (
+        <nav aria-label="Ballot navigation" className="grid gap-2 border-t border-border pt-4">
+          {nextBallot ? (
+            <>
+              <a href={`/proposals/${nextBallot.slug}/#proposal-vote`} className="inline-flex min-h-11 items-center gap-2 font-semibold text-primary hover:underline">
+                Next ballot · {nextBallot.remainingCount} remaining
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </a>
+              <span className="text-sm text-muted-foreground">{nextBallot.title}</span>
+            </>
+          ) : (
+            <p className="m-0 text-sm">{savedChoice ? "You're up to date" : 'This is your last outstanding ballot.'}</p>
+          )}
+          <a href="/proposals/?stage=decide&focus=all" className="text-sm underline underline-offset-4">All active ballots</a>
+        </nav>
       )}
 
       <Separator />
