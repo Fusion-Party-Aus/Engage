@@ -1,0 +1,44 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import AdminMigrations from '../../../components/AdminMigrations';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+import { ShieldAlert } from 'lucide-react';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { getMigrationStatus, type MigrationStatus } from '../../../lib/migrations.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/', 302);
+const allowed = Boolean(user.isAdmin);
+if (!allowed) Astro.response.status = 403;
+
+let migrations: MigrationStatus[] = [];
+if (allowed) {
+  const db = await getDatabase(env);
+  migrations = await getMigrationStatus(db);
+}
+---
+
+<AdminLayout
+  title="Database migrations"
+  description="Apply safely recorded database migrations and add missing standard branches."
+  section="migrations"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  {!allowed ? (
+    <Alert variant="destructive">
+      <ShieldAlert />
+      <AlertTitle>Access required</AlertTitle>
+      <AlertDescription>A national administrator can run database migrations.</AlertDescription>
+    </Alert>
+  ) : (
+    <AdminMigrations client:load initial={migrations} />
+  )}
+</AdminLayout>

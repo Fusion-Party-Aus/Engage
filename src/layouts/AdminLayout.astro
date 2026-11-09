@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import {
   BookOpen,
   ChevronRight,
+  Database,
   FileText,
   GitBranch,
   Home,
@@ -25,7 +26,7 @@ import '../styles/admin.css';
 interface Props {
   title: string;
   description: string;
-  section?: 'overview' | 'proposals' | 'members' | 'branches' | 'policies' | 'settings';
+  section?: 'overview' | 'proposals' | 'members' | 'branches' | 'policies' | 'settings' | 'migrations';
   isAdmin?: boolean;
   isBranchAdmin?: boolean;
   hideIntro?: boolean;
@@ -42,6 +43,7 @@ const governanceItems = [
   { key: 'branches', href: '/admin/branches/', label: 'Branch governance', icon: GitBranch, show: isAdmin || isBranchAdmin },
   { key: 'policies', href: '/admin/policies/', label: 'Adopt & publish', icon: BookOpen, show: isAdmin },
   { key: 'settings', href: '/admin/settings/', label: 'Platform settings', icon: Settings, show: isAdmin },
+  { key: 'migrations', href: '/admin/migrations/', label: 'Migrations', icon: Database, show: isAdmin },
 ].filter((item) => item.show);
 
 const siteItems = [

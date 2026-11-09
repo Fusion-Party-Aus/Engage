@@ -274,6 +274,13 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .collection("site_settings_events")
         .createIndex({ createdAt: -1 })
         .catch(() => {}),
+      db
+        .collection("data_migrations")
+        .createIndex(
+          { migrationId: 1 },
+          { unique: true, name: "data_migration_unique" },
+        )
+        .catch(() => {}),
     ]);
 
     const now = new Date();

@@ -61,15 +61,27 @@ Ballot records remain bound to their immutable wording revisions. Revoking membe
 
 Existing verified memberships are facts and are never converted into followers. The migration is additive and restartable.
 
+The primary path is **Admin → Migrations**, available to national administrators. The page shows a live preview of both migrations, their last recorded result and any error. Each run is stored in `data_migrations` with a run count, start time, completion time and actor, so an interrupted operation can be retried safely from the same page.
+
+1. **Standard branches** adds Fusion National and the state and territory branches only when they are missing. Existing branches are never renamed, re-parented or un-recognised.
+2. **Branch participation** is blocked until the standard branches exist. It then performs the additive participation migration described below.
+
+Use **Run pending migrations** to run both in order, or apply them individually. Nothing is deleted by either operation.
+
+The same operations remain available for automated deployment:
+
 ```bash
-# Preview the changes. No writes are made.
+# Preview the participation changes. No data writes are made.
 npm run branches:participation-migrate -- --dry-run
 
-# Apply:
+# Apply the participation migration:
 npm run branches:participation-migrate
+
+# Seed the standard branches and National scope for existing verified members:
+npm run branches:migrate
 ```
 
-The migration:
+The participation migration:
 
 1. Adds `engage-legacy` source and `legacy-record` verification metadata to existing verified branch memberships without changing status or role.
 2. Adds a following preference for each active legacy branch membership so existing members keep the branch discovery they had before the split. If a subscription already exists, it is left untouched.

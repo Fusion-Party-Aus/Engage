@@ -1,5 +1,6 @@
 import { MongoClient } from "mongodb";
-import { DEFAULT_STATE_SITES } from "../src/lib/site-config.ts";
+import { ensureNationalBranchAssignment } from "../src/lib/branch-participation.ts";
+import { seedStandardBranches } from "../src/lib/migrations.ts";
 
 const uri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB_NAME;
@@ -9,43 +10,20 @@ const client = new MongoClient(uri);
 await client.connect();
 try {
   const db = client.db(dbName);
-  const branches = DEFAULT_STATE_SITES.map((site) => ({
-    branchId: `branch-${site.code.toLowerCase()}`,
-    name: site.name,
-    kind: site.code === "NAT" ? "national" : site.code === "ACT" || site.code === "NT" ? "territory" : "state",
-    recognised: true,
-    websiteHref: site.websiteHref,
-    updatedAt: new Date(),
-  }));
-  for (const branch of branches) {
-    await db.collection("branches").updateOne(
-      { branchId: branch.branchId },
-      { $setOnInsert: branch },
-      { upsert: true },
-    );
-  }
-  const nationalBranchId = "branch-nat";
-  const members = await db.collection("memberships").find({ status: "verified" }, { projection: { memberId: 1 } }).toArray();
+  const result = await seedStandardBranches(db);
+  const members = await db
+    .collection("memberships")
+    .find({ status: "verified" }, { projection: { memberId: 1 } })
+    .toArray();
+  let nationalScopes = 0;
   for (const member of members) {
-    // National governance scope is a following preference, not a verified
-    // organisational membership fact. It must never certify party membership.
-    await db.collection("branch_subscriptions").updateOne(
-      { memberId: member.memberId, branchId: nationalBranchId },
-      {
-        $setOnInsert: {
-          memberId: member.memberId,
-          branchId: nationalBranchId,
-          status: "following",
-          source: "migration",
-          autoAssignedNational: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      },
-      { upsert: true },
-    );
+    if (await ensureNationalBranchAssignment(db, member.memberId)) {
+      nationalScopes += 1;
+    }
   }
-  console.log(`Seeded ${branches.length} branches and ensured National scope for ${members.length} verified members.`);
+  console.log(
+    `Standard branches: ${result.created} added, ${result.existing} already present. National scope recorded for ${nationalScopes} verified member(s).`,
+  );
 } finally {
   await client.close();
 }
