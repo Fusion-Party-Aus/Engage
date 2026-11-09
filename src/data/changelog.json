@@ -1,12 +1,37 @@
 [
   {
+    "hash": "a727732",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "branches",
+    "summary": "Separate branch following from verified membership",
+    "details": "Members choose the branches they follow during onboarding and in My Engage. Authorised administrators verify followers as members in a focused Branch governance workspace. Branch subscriptions are now Engage-owned preferences, while verified organisational membership stays in branch_memberships with source, verification and audit metadata. National governance is included for every verified account and never removed by branch preferences. Existing members without branch connections receive national scope silently and a one-time state branch invitation. Eligibility is decided in one service used by proposal pages, ballot submission, pending-vote promotion and digests. Followers can discover branch activity but cannot vote. Revocation requires a reason and preserves historical votes and the person's following preference. The migration backfills legacy membership metadata, adds subscriptions without duplicating them, assigns open proposals without branch context to national governance, and leaves branch-owned and archived records untouched. The Underground CRM boundary is implemented through applyExternalMembership: external membership facts can update organisational membership but never branch subscriptions, and local administrators cannot silently override CRM-sourced records. Tests cover national defaults, follow/unfollow idempotency, source integrity, permissions, migration, parent/child eligibility and new proposal defaults."
+  },
+  {
+    "hash": "ba482d0",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the member engagement admin repair"
+  },
+  {
     "hash": "34166c8",
     "date": "2026-11-09",
     "type": "fix",
     "category": "fix",
     "scope": "engagement",
-    "summary": "Repair admin test email behind the proxy and clarify delivery reporting",
-    "details": "Add responsive engagement cards, safe test receipts and a read-only eligibility preview. Keep unknown historical ballot availability explicit."
+    "summary": "Repair proxy test sends and clarify admin delivery reporting",
+    "details": "Use JSON and the configured public origin to prevent the reverse proxy from rejecting admin test email before provider submission. Separate explicit provider rejection from uncertain sends, expose safe self-only receipts, and keep test bounces isolated from member preferences. Replace raw engagement reporting with responsive cards, period controls, a read-only audience preview and expandable diagnostics. Historical ballot opportunity coverage remains explicitly unavailable. Validation: 144 tests passed, 15 optional tests skipped; Astro check and build passed; mocked-provider HTTP and DOM interaction checks passed. Browser screenshots and authenticated production delivery remain blocked and are documented."
+  },
+  {
+    "hash": "69ca17a",
+    "date": "2026-11-09",
+    "type": "docs",
+    "category": "docs",
+    "scope": "member",
+    "summary": "Record passing lifecycle checks and campaign review materials"
   },
   {
     "hash": "8d457fc",
@@ -57,13 +82,29 @@
     "summary": "Connect verification, participation and legacy consent journeys"
   },
   {
+    "hash": "ee47cdf",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record administrator test email delivery"
+  },
+  {
     "hash": "eb5f365",
     "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "email",
-    "summary": "Send yourself a sample Engage digest from administration",
-    "details": "Administrators can test Horizon emails before reminders begin, with sample data, safe demo unsubscribe, duplicate-send protection and separate delivery receipts."
+    "summary": "Let administrators send themselves a sample digest",
+    "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
+  },
+  {
+    "hash": "cfbf459",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record notification preferences and digest rollout defaults"
   },
   {
     "hash": "bc6409f",
@@ -71,8 +112,17 @@
     "type": "feat",
     "category": "feature",
     "scope": "notifications",
-    "summary": "Manage account, Engage digest and general communication preferences separately",
-    "details": "Existing accounts default to digests on; new accounts opt in. Onboarding explains reminders, defaults, unsubscribe and reporting. Existing opt-outs and bounce suppressions are preserved."
+    "summary": "Separate email preferences and explain rollout defaults",
+    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
+  },
+  {
+    "hash": "79d916a",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "engagement",
+    "summary": "Reconcile delivery backlogs before sending reminders",
+    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
   },
   {
     "hash": "7a56a95",
@@ -80,8 +130,8 @@
     "type": "feat",
     "category": "feature",
     "scope": "engagement",
-    "summary": "Follow ballot deadlines, proposal rankings and member reminders",
-    "details": "Adds closing-soon queues in My Engage, opt-in Horizon email digests, unsubscribe controls and delivery reporting."
+    "summary": "Add proposal rankings, ballot deadlines and member reminders",
+    "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
   },
   {
     "hash": "0b8b375",
@@ -90,6 +140,14 @@
     "category": "fix",
     "scope": "settings",
     "summary": "Save the configured source repository URL"
+  },
+  {
+    "hash": "6fad513",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record granular analytics improvements"
   },
   {
     "hash": "2167573",
@@ -117,7 +175,7 @@
   },
   {
     "hash": "b98af1d",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "time",
@@ -125,7 +183,7 @@
   },
   {
     "hash": "5de3c91",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "participation",
@@ -133,7 +191,7 @@
   },
   {
     "hash": "46f1b9b",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "fix",
     "category": "fix",
     "scope": "branches",
@@ -141,7 +199,7 @@
   },
   {
     "hash": "c14ee07",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "member",
@@ -149,7 +207,7 @@
   },
   {
     "hash": "31e34df",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "member",
@@ -157,7 +215,7 @@
   },
   {
     "hash": "ac9bb41",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "deploy",
@@ -165,7 +223,7 @@
   },
   {
     "hash": "c6edce0",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "docs",
     "category": "docs",
     "scope": "audit",
@@ -173,7 +231,7 @@
   },
   {
     "hash": "3098b44",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "ui",
@@ -181,7 +239,7 @@
   },
   {
     "hash": "99f0153",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "changelog",
@@ -189,7 +247,7 @@
   },
   {
     "hash": "71a6351",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "perf",
     "category": "improvement",
     "scope": "server",
@@ -197,7 +255,7 @@
   },
   {
     "hash": "3512e0a",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "workspaces",
@@ -205,7 +263,7 @@
   },
   {
     "hash": "f58e150",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "proposals",
@@ -213,7 +271,7 @@
   },
   {
     "hash": "ff1f0a8",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "walkthrough",
@@ -221,7 +279,7 @@
   },
   {
     "hash": "0a291c4",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "editor",
@@ -229,7 +287,7 @@
   },
   {
     "hash": "d6f09b0",
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "type": "feat",
     "category": "feature",
     "scope": "settings",
@@ -237,7 +295,7 @@
   },
   {
     "hash": "e7d793a",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "docs",
     "category": "docs",
     "scope": "release",
@@ -246,7 +304,7 @@
   },
   {
     "hash": "4660690",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "docs",
     "category": "docs",
     "scope": "release",
@@ -255,7 +313,7 @@
   },
   {
     "hash": "2b85970",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "ui",
@@ -264,7 +322,7 @@
   },
   {
     "hash": "153e909",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "docs",
     "category": "docs",
     "scope": "release",
@@ -273,7 +331,7 @@
   },
   {
     "hash": "33cc170",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "legal",
@@ -282,7 +340,7 @@
   },
   {
     "hash": "0dff758",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "fix",
     "category": "fix",
     "scope": "app",
@@ -291,7 +349,7 @@
   },
   {
     "hash": "60e0679",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "governance",
@@ -300,7 +358,7 @@
   },
   {
     "hash": "1b973fa",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "docs",
     "category": "docs",
     "scope": "deploy",
@@ -308,7 +366,7 @@
   },
   {
     "hash": "cffc1a0",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "docs",
     "category": "docs",
     "scope": "deploy",
@@ -316,7 +374,7 @@
   },
   {
     "hash": "ef8e9a8",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "docs",
     "category": "docs",
     "scope": "deploy",
@@ -324,7 +382,7 @@
   },
   {
     "hash": "3280da3",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -332,7 +390,7 @@
   },
   {
     "hash": "6e2cc5e",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -340,7 +398,7 @@
   },
   {
     "hash": "a65c66d",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -348,7 +406,7 @@
   },
   {
     "hash": "09de77b",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -356,7 +414,7 @@
   },
   {
     "hash": "0ad210b",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "chore",
     "category": "ops",
     "scope": "ops",
@@ -365,7 +423,7 @@
   },
   {
     "hash": "47e5f9b",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "fix",
     "category": "fix",
     "scope": "security",
@@ -374,7 +432,7 @@
   },
   {
     "hash": "c8f957f",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "web",
@@ -383,7 +441,7 @@
   },
   {
     "hash": "5c55df2",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "registry",
@@ -392,7 +450,7 @@
   },
   {
     "hash": "9e76480",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "governance",
@@ -401,7 +459,7 @@
   },
   {
     "hash": "19389e0",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "feat",
     "category": "feature",
     "scope": "ui",
@@ -410,7 +468,7 @@
   },
   {
     "hash": "2ffd083",
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "type": "chore",
     "category": "ops",
     "scope": "deploy",
@@ -493,7 +551,7 @@
   },
   {
     "hash": "c1f724c",
-    "date": "2026-10-24",
+    "date": "2026-10-25",
     "type": "style",
     "category": "improvement",
     "scope": "platform",
@@ -501,7 +559,7 @@
   },
   {
     "hash": "fbf5a0b",
-    "date": "2026-10-24",
+    "date": "2026-10-25",
     "type": "docs",
     "category": "docs",
     "scope": "platform",
@@ -509,7 +567,7 @@
   },
   {
     "hash": "d46d756",
-    "date": "2026-10-24",
+    "date": "2026-10-25",
     "type": "feat",
     "category": "feature",
     "scope": "platform",
@@ -554,7 +612,7 @@
     "category": "ops",
     "scope": "platform",
     "summary": "Use database time for cutoff regression deadlines",
-    "details": "Docker verification exposed a 15 ms Mac/VM offset: host-created expired deadlines could still be in MongoDB\u2019s future. Set these two regression deadlines using MongoDB time, matching the existing admission rule. All seven cutoff tests pass against Docker MongoDB without changing application behaviour."
+    "details": "Docker verification exposed a 15 ms Mac/VM offset: host-created expired deadlines could still be in MongoDB’s future. Set these two regression deadlines using MongoDB time, matching the existing admission rule. All seven cutoff tests pass against Docker MongoDB without changing application behaviour."
   },
   {
     "hash": "09a97df",
@@ -605,61 +663,5 @@
     "category": "feature",
     "scope": "platform",
     "summary": "Preserve policy review presentation and preview improvements"
-  },
-  {
-    "hash": "bacd10e",
-    "date": "2026-10-24",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Add Google authentication and manual Engage membership verification"
-  },
-  {
-    "hash": "c467a5f",
-    "date": "2026-10-24",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Verify provenance uncertainty, synthetic fixture isolation, Engage lifecycle, and dynamic publication"
-  },
-  {
-    "hash": "a914e02",
-    "date": "2026-10-24",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Use branch-neutral prototype home hero"
-  },
-  {
-    "hash": "f9bb50f",
-    "date": "2026-10-24",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Refine policy platform copy and Horizon marks"
-  },
-  {
-    "hash": "0574309",
-    "date": "2026-10-24",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Use Newsreader and clarify adoption decisions"
-  },
-  {
-    "hash": "713401d",
-    "date": "2026-10-24",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Switch preview to self-hosted Docker stack"
-  },
-  {
-    "hash": "3ca06b8",
-    "date": "2026-10-24",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Build Horizon policy platform preview"
   }
 ]
