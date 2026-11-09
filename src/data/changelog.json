@@ -1,5 +1,21 @@
 [
   {
+    "hash": "fc8d130",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Connect policy reading with voting and simplify discovery"
+  },
+  {
+    "hash": "dede16c",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record proposal experience changes"
+  },
+  {
     "hash": "1c13678",
     "date": "2026-11-09",
     "type": "feat",
@@ -646,21 +662,5 @@
     "category": "fix",
     "scope": "platform",
     "summary": "Reject editorial labels as domains regardless of case"
-  },
-  {
-    "hash": "bcd7f10",
-    "date": "2026-10-24",
-    "type": "fix",
-    "category": "fix",
-    "scope": "platform",
-    "summary": "Separate policy taxonomy and protect member discussion"
-  },
-  {
-    "hash": "9958afe",
-    "date": "2026-10-24",
-    "type": "docs",
-    "category": "docs",
-    "scope": "platform",
-    "summary": "Record Docker deployment and recovery verification"
   }
 ]
