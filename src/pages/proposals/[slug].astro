@@ -59,7 +59,7 @@ const feedbackStatusVariant = (status: string) =>
 const proposal = detail?.proposal;
 const [
   revisions,
-  policyRecord,
+  rawPolicyRecord,
   ballotResult,
   relatedProposals,
   amendmentRows,
@@ -81,6 +81,9 @@ const [
         : Promise.resolve([]),
     ])
   : [[], null, null, [], [], []];
+
+const isResolution = proposal ? isGovernanceResolution(proposal) : false;
+const policyRecord = !isResolution ? rawPolicyRecord : null;
 
 const ballotRevision = proposal?.ballotRevisionId
   ? revisions.find((revision: any) => revision.revisionId === proposal.ballotRevisionId)
@@ -235,8 +238,6 @@ const stanceCounts = {
 };
 
 const votes = proposal?.votes ?? { approve: 0, abstain: 0, reject: 0, total: 0 };
-
-const isResolution = proposal ? isGovernanceResolution(proposal) : false;
 
 const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
 

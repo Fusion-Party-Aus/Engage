@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { createHash, randomUUID } from "node:crypto";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { isGovernanceResolution } from "../../../../lib/store.ts";
 
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -35,6 +36,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return Response.json(
         { error: "Proposal revision not found." },
         { status: 404 },
+      );
+    if (isGovernanceResolution(proposal as { kind?: string; proposalId?: string }))
+      return Response.json(
+        {
+          error:
+            "Governance resolutions cannot be ratified into the Policy Registry. Record the resolution outcome or implementation notes on the proposal instead.",
+        },
+        { status: 409 },
       );
     if (proposal.stage !== "implement")
       return Response.json(

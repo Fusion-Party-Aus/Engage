@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -66,6 +67,33 @@ export const POST: APIRoute = async ({ request, locals }) => {
         {
           error:
             "Published source and adopted successor policies are required.",
+        },
+        { status: 409 },
+      );
+    const [oldProposal, successorProposal] = await Promise.all([
+      db
+        .collection("proposals")
+        .findOne({ proposalId: String(oldPolicy.proposalId ?? policyId) }),
+      db
+        .collection("proposals")
+        .findOne({
+          proposalId: String(successor.proposalId ?? successorPolicyId),
+        }),
+    ]);
+    if (
+      isPolicyRegistryRecordForResolution(
+        oldPolicy as { policyId?: string; proposalId?: string; kind?: string },
+        oldProposal as { kind?: string; proposalId?: string } | null,
+      ) ||
+      isPolicyRegistryRecordForResolution(
+        successor as { policyId?: string; proposalId?: string; kind?: string },
+        successorProposal as { kind?: string; proposalId?: string } | null,
+      )
+    )
+      return Response.json(
+        {
+          error:
+            "Governance resolutions cannot be superseded through the Policy Registry.",
         },
         { status: 409 },
       );

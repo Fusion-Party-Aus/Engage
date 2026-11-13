@@ -16,7 +16,7 @@ import {
 import { canIncludeProposalInAdminReport } from '../../lib/admin-reporting.ts';
 import { canViewIdentifiableBallots, getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { isGovernanceResolution, listProposals } from '../../lib/store.ts';
+import { isGovernanceResolution, isPolicyRegistryRecordForResolution, listProposals } from '../../lib/store.ts';
 import { groupParticipationFeed, type ParticipationActivity } from '../../lib/participation-feed.ts';
 import { PROPOSAL_VOTES } from '../../lib/vote-storage.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
@@ -169,7 +169,14 @@ const [ballotResults, registry, scopedBranches] = await Promise.all([
 const branchNames = new Map(scopedBranches.map((branch: any) => [String(branch.branchId), String(branch.name)]));
 const ballotProgressRows = buildBallotProgressRows(proposals, branchNames);
 const expiredBallots = ballotProgressRows.filter((row) => row.bound && row.expired);
-const ratifiedIds = new Set(registry.map((policy) => policy.proposalId));
+const eligibleRegistry = registry.filter(
+  (policy: any) =>
+    !isPolicyRegistryRecordForResolution(
+      policy,
+      proposalMap.get(String(policy.proposalId ?? policy.policyId ?? '')),
+    ),
+);
+const ratifiedIds = new Set(eligibleRegistry.map((policy) => policy.proposalId));
 const awaitingRatification = ballotResults
   .filter((result) => !ratifiedIds.has(result.proposalId))
   .map((result) => proposalMap.get(result.proposalId))
@@ -187,7 +194,9 @@ const resolutionsAwaitingOutcome = ballotResults
         !proposal.supersededByProposalId,
     ),
   );
-const awaitingPublication = user.isAdmin ? registry.filter((policy) => policy.status === 'adopted' && policy.publicationStatus === 'unpublished') : [];
+const awaitingPublication = user.isAdmin
+  ? eligibleRegistry.filter((policy) => policy.status === 'adopted' && policy.publicationStatus === 'unpublished')
+  : [];
 const proposalIds = proposals.map((proposal) => proposal.proposalId);
 const activeDeliberationIds = proposals
   .filter((proposal) => proposal.stage === 'deliberate' || proposal.stage === 'decide')

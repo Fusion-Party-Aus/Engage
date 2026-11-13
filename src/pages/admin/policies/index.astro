@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { listProposals } from '../../../lib/store.ts';
+import { isGovernanceResolution, isPolicyRegistryRecordForResolution, listProposals } from '../../../lib/store.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import Field from '../../../components/admin/Field.astro';
@@ -38,20 +38,31 @@ const db = await getDatabase(env);
 const rawQuery = (Astro.url.searchParams.get('q') ?? '').trim();
 const q = rawQuery.toLowerCase();
 const publicationFilter = Astro.url.searchParams.get('publication') ?? 'all';
-const branches = user.isAdmin ? await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray() : [];
-const policies = user.isAdmin ? await db.collection('policy_registry').find({}).sort({ ratifiedAt: -1, policyId: 1 }).toArray() : [];
+const [branches, rawPolicies, proposals, resultRows] = user.isAdmin
+  ? await Promise.all([
+      db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
+      db.collection('policy_registry').find({}).sort({ ratifiedAt: -1, policyId: 1 }).toArray(),
+      listProposals(db, { includeArchived: true }),
+      db.collection('ballot_results').find({ result: 'successful' }).sort({ recordedAt: -1 }).toArray(),
+    ])
+  : [[], [], [], []];
+const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
+const policies = rawPolicies.filter(
+  (policy: any) =>
+    !isPolicyRegistryRecordForResolution(
+      policy,
+      proposalMap.get(String(policy.proposalId ?? policy.policyId ?? '')),
+    ),
+);
 const filteredPolicies = policies.filter(
   (policy: any) =>
     (!q || `${policy.title} ${policy.policyId} ${policy.jurisdiction ?? ''} ${policy.category ?? ''}`.toLowerCase().includes(q)) &&
     (publicationFilter === 'all' || policy.publicationStatus === publicationFilter),
 );
-const proposals = user.isAdmin ? await listProposals(db, { includeArchived: true }) : [];
-const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
-const resultRows = user.isAdmin ? await db.collection('ballot_results').find({ result: 'successful' }).sort({ recordedAt: -1 }).toArray() : [];
 const awaitingRatification = resultRows
   .filter((result) => !policies.some((policy: any) => policy.proposalId === result.proposalId))
   .map((result) => ({ ...result, proposal: proposalMap.get(result.proposalId) }))
-  .filter((row) => row.proposal && row.proposal.kind !== 'resolution' && !row.proposal.proposalId.startsWith('GOV-'));
+  .filter((row) => row.proposal && !isGovernanceResolution(row.proposal));
 
 const ratificationBranches = branches;
 const successorOptions = policies.filter((policy: any) => policy.status === 'adopted');

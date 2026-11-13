@@ -4,14 +4,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { isPolicyRegistryRecordForResolution } from '../../lib/store.ts';
 export const prerender = false;
 const policyId = Astro.params.slug ?? '';
 const db = await getDatabase(runtimeEnv(Astro.locals));
-const policy = await db.collection('policy_registry').findOne({ policyId, publicationStatus: { $in: ['published', 'withdrawn', 'superseded'] } });
+const rawPolicy = await db.collection('policy_registry').findOne({ policyId, publicationStatus: { $in: ['published', 'withdrawn', 'superseded'] } });
+const sourceProposal = rawPolicy?.proposalId ? await db.collection('proposals').findOne({ proposalId: rawPolicy.proposalId }) : null;
+const policy =
+  rawPolicy &&
+  !isPolicyRegistryRecordForResolution(
+    rawPolicy as any,
+    sourceProposal as { kind?: string; proposalId?: string } | null,
+  )
+    ? rawPolicy
+    : null;
 if (!policy) Astro.response.status = 404;
 const branch = policy?.jurisdictionBranchId ? await db.collection('branches').findOne({ branchId: policy.jurisdictionBranchId }) : null;
 const authority = policy?.governanceAuthorityBranchId ? await db.collection('branches').findOne({ branchId: policy.governanceAuthorityBranchId }) : null;
-const sourceProposal = policy?.proposalId ? await db.collection('proposals').findOne({ proposalId: policy.proposalId }) : null;
 const sourceResult = policy?.proposalId ? await db.collection('ballot_results').findOne({ proposalId: policy.proposalId }) : null;
 const revisions = policy?.revisionIds ?? [policy?.revisionId].filter(Boolean);
 const statusLabel = policy?.publicationStatus === 'published' ? 'Published policy' : policy?.publicationStatus === 'withdrawn' ? 'Withdrawn from publication' : 'Superseded policy';

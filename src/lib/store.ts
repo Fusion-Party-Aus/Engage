@@ -34,12 +34,32 @@ export const PENDING_VOTE_PREFERENCES = "pending_vote_preferences";
 
 export function isGovernanceResolution(proposal: {
   kind?: string;
-  proposalId: string;
+  proposalId?: string;
+  policyId?: string;
 }): boolean {
-  return (
-    proposal.kind === "resolution" ||
-    proposal.proposalId.toUpperCase().startsWith("GOV-")
-  );
+  const id = String(proposal.proposalId ?? proposal.policyId ?? "");
+  return normalizeKind(proposal.kind, id) === "resolution";
+}
+
+export function isPolicyProposal(proposal: {
+  kind?: string;
+  proposalId?: string;
+  policyId?: string;
+}): boolean {
+  return !isGovernanceResolution(proposal);
+}
+
+export function isPolicyRegistryRecordForResolution(
+  policy: { policyId?: string; proposalId?: string; kind?: string },
+  linkedProposal?: { kind?: string; proposalId?: string } | null,
+): boolean {
+  if (linkedProposal) {
+    return isGovernanceResolution(linkedProposal);
+  }
+  return isGovernanceResolution({
+    kind: policy.kind,
+    proposalId: String(policy.proposalId ?? policy.policyId ?? ""),
+  });
 }
 
 export function getDefaultProvenanceLabel(

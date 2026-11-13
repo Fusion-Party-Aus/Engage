@@ -84,7 +84,7 @@ for (const amendment of amendmentRows) {
   const current = amendment.revisionHistory.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
 }
-const [ballotResult, policy, relatedProposals, branches, visibleOtherProposals] = proposal
+const [ballotResult, rawPolicy, relatedProposals, branches, visibleOtherProposals] = proposal
   ? await Promise.all([
       db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
@@ -101,6 +101,7 @@ const allOtherProposals = proposal
     )
   : [];
 const isResolution = Boolean(proposal && isGovernanceResolution(proposal));
+const policy = isResolution ? null : rawPolicy;
 
 const branchNameFor = (branchId?: string) =>
   branchId ? String(branches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';

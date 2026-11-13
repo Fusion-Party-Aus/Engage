@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
 
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -23,6 +24,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return Response.json(
         { error: "Ratified policy not found." },
         { status: 404 },
+      );
+    const linkedProposal = await db
+      .collection("proposals")
+      .findOne({ proposalId: String(policy.proposalId ?? policyId) });
+    if (
+      isPolicyRegistryRecordForResolution(
+        policy as { policyId?: string; proposalId?: string; kind?: string },
+        linkedProposal as { kind?: string; proposalId?: string } | null,
+      )
+    )
+      return Response.json(
+        {
+          error:
+            "Governance resolutions cannot be published in the Policy Registry.",
+        },
+        { status: 409 },
       );
     if (
       policy.status !== "adopted" ||

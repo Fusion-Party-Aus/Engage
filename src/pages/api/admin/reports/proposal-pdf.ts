@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
-import { getProposalDetail } from "../../../../lib/store.ts";
+import { getProposalDetail, isGovernanceResolution } from "../../../../lib/store.ts";
 import { buildProposalPdfReport } from "../../../../lib/proposal-pdf.ts";
 
 export const prerender = false;
@@ -48,7 +48,7 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
     }
   }
 
-  const [branches, ballotResult, policyRecord, ballotBindEvent] = await Promise.all([
+  const [branches, ballotResult, rawPolicyRecord, ballotBindEvent] = await Promise.all([
     db.collection("branches").find({}).toArray(),
     db.collection("ballot_results").findOne({ proposalId: proposal.proposalId }),
     db.collection("policy_registry").findOne({ proposalId: proposal.proposalId }),
@@ -56,6 +56,7 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
       .collection("ballot_binding_events")
       .findOne({ proposalId: proposal.proposalId }, { sort: { createdAt: 1 } }),
   ]);
+  const policyRecord = isGovernanceResolution(proposal) ? null : rawPolicyRecord;
 
   const branchNameFor = (branchId?: string) =>
     branchId
