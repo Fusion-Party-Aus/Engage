@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { OPEN_BALLOT_EXPIRY_DEADLINE } from "./ballot-deadline.ts";
 import {
   renderContributionResponseEmail,
@@ -9,6 +10,7 @@ import {
   renderNewBallotEmail,
   renderReengagementEmail,
 } from "./email-templates.ts";
+import { renderVerification } from "./verification-email.ts";
 
 const origin = "https://engage.fusionparty.org.au";
 const unsub = `${origin}/api/email/unsubscribe?token=demo.token`;
@@ -113,5 +115,18 @@ describe("responsive & accessible Engage email templates", () => {
     );
     assert.match(membership.subject, /Your membership is verified/);
     assert.match(membership.html, /Open My Engage/);
+
+    const verification = renderVerification("Ethan", origin, true);
+    for (const mail of [digest, newBallot, midPeriod, reengage, contrib, membership, verification]) {
+      assert.doesNotMatch(mail.html, /horizon/i, "Email HTML must not expose internal Horizon design system name");
+      assert.doesNotMatch(mail.text, /horizon/i, "Email text must not expose internal Horizon design system name");
+      assert.match(mail.html, /FUSION PARTY AUSTRALIA/);
+      assert.match(mail.html, /Engage/);
+    }
+
+    const manifest = readFileSync("public/manifest.webmanifest", "utf8");
+    const sw = readFileSync("public/sw.js", "utf8");
+    assert.doesNotMatch(manifest, /horizon/i);
+    assert.doesNotMatch(sw, /horizon/i);
   });
 });
