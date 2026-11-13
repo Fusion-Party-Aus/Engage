@@ -361,11 +361,25 @@ export async function listProposals(
     includeDrafts?: boolean;
     branch?: string;
     user?: SessionUser | null;
+    /**
+     * List pages do not render the long rationale. Set false only when the
+     * caller also does not search on `details`; the summary view then omits it.
+     */
+    includeDetails?: boolean;
   } = {},
 ): Promise<ProposalSummaryView[]> {
   const rawProposals = await db
     .collection<ProposalRecord>("proposals")
-    .find({})
+    .find(
+      {},
+      {
+        // `detailHtml` is rendered only on the single-proposal view.
+        projection: {
+          detailHtml: 0,
+          ...(options.includeDetails === false ? { details: 0 } : {}),
+        },
+      },
+    )
     .sort({ proposalId: 1 })
     .toArray();
 
@@ -2870,6 +2884,7 @@ export async function promotePendingVotePreferences(
 export async function listUserActivity(
   db: Db,
   memberId: string,
+  availableProposals?: ProposalSummaryView[],
 ): Promise<{
   proposals: ProposalRecord[];
   comments: Array<
@@ -2885,7 +2900,9 @@ export async function listUserActivity(
 }> {
   const cryptoConfig = loadBallotCryptoConfig(process.env);
   const [proposals, comments] = await Promise.all([
-    db.collection<ProposalRecord>("proposals").find({}).toArray(),
+    availableProposals
+      ? Promise.resolve(availableProposals)
+      : db.collection<ProposalRecord>("proposals").find({}).toArray(),
     db
       .collection<CommentRecord>("comments")
       .find({ memberId })
@@ -2930,18 +2947,37 @@ export async function listOutstandingDecisions(
   memberId: string,
   user?: SessionUser | null,
   availableProposals?: ProposalSummaryView[],
+  memberVotes?: Awaited<ReturnType<typeof findMemberVotes>> | Promise<Awaited<ReturnType<typeof findMemberVotes>>>,
 ): Promise<ProposalSummaryView[]> {
   if (user && !user.canParticipate) return [];
   const cryptoConfig = loadBallotCryptoConfig(process.env);
   const decisions = availableProposals
     ? availableProposals.filter((proposal) => proposal.stage === "decide")
-    : await listProposals(db, { stage: "decide", user });
-  const votes = await findMemberVotes(
-    db,
-    memberId,
-    decisions.map((d) => proposalBallotId(d.proposalId)),
-    cryptoConfig,
-  );
+    : (await db
+        .collection<ProposalRecord>("proposals")
+        .find(
+          { stage: "decide" },
+          { projection: { detailHtml: 0, details: 0 } },
+        )
+        .sort({ proposalId: 1 })
+        .toArray())
+        .map((proposal) => ({
+          ...normalizeProposalDoc(proposal),
+          commentCount: 0,
+          votes: { approve: 0, abstain: 0, reject: 0, total: 0 },
+        }))
+        .filter(
+          (proposal) =>
+            user === undefined || canViewProposal(proposal, user ?? null),
+        );
+  const votes =
+    (memberVotes ? await memberVotes : undefined) ??
+    (await findMemberVotes(
+      db,
+      memberId,
+      decisions.map((d) => proposalBallotId(d.proposalId)),
+      cryptoConfig,
+    ));
   const branchIds = [...new Set(
     decisions
       .map((decision) => decision.jurisdictionBranchId)

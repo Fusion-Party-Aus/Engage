@@ -29,7 +29,7 @@ import {
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
 import { listMemberNotifications } from '../../lib/notifications.ts';
 import { getVapidConfig, listMemberPushSubscriptions } from '../../lib/web-push.ts';
-import { buildMemberCatchUp, listMemberActivityStream, type MemberCatchUpGroup } from '../../lib/member-activity.ts';
+import { buildMemberCatchUp, listMemberActivityStream, loadMemberActivityInputs, type MemberCatchUpGroup } from '../../lib/member-activity.ts';
 import {
   devLoginEnabled,
   emailLoginConfigured,
@@ -62,26 +62,25 @@ const [db, user] = await Promise.all([
 // scope silently. This is a following preference, never a verified membership.
 if (user) await ensureNationalBranchAssignment(db, user.memberId);
 
-const [
-  activity,
-  memberTimelineEvents,
-  branchProfile,
-  visibleProposals,
-  allCatchUpGroups,
-  userPasskeyCount,
-] = user
+const [memberActivityInputs, branchProfile, visibleProposals, userPasskeyCount] = user
   ? await Promise.all([
-      listUserActivity(db, user.memberId),
-      listMemberActivityStream(db, user.memberId),
+      loadMemberActivityInputs(db, user.memberId),
       getMemberBranchProfile(db, user.memberId),
-      listProposals(db, { user }),
-      buildMemberCatchUp(db, user.memberId, new Date(0), user),
+      listProposals(db, { user, includeDetails: false }),
       db
         .collection('passkey')
         .countDocuments({ userId: user.memberId })
         .catch(() => 0),
     ])
-  : [null, [] as ActivityTimelineEvent[], null as MemberBranchProfile | null, [] as any[], [] as MemberCatchUpGroup[], 0];
+  : [null, null as MemberBranchProfile | null, [] as any[], 0];
+
+const [activity, memberTimelineEvents, allCatchUpGroups] = user
+  ? await Promise.all([
+      listUserActivity(db, user.memberId, visibleProposals),
+      listMemberActivityStream(db, user.memberId, memberActivityInputs ?? undefined),
+      buildMemberCatchUp(db, user.memberId, new Date(0), user, memberActivityInputs ?? undefined),
+    ])
+  : [null, [] as ActivityTimelineEvent[], [] as MemberCatchUpGroup[]];
 
 const connectedBranches = branchProfile?.connected ?? [];
 const memberBranches = connectedBranches.filter((branch) => !branch.included);
@@ -549,7 +548,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         <!-- Guided Member Onboarding & Activation Flow -->
         <div class="overview-only">
           <MemberOnboarding
-            client:load
+            client:visible
             name={user.name}
             email={user.email}
             status={user.status}
@@ -572,7 +571,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           />
           {followableBranchCount === 0 && verifiedBranchCount === 0 && (
             <BranchChooser
-              client:load
+              client:visible
               mode="invite"
               memberKey={user.memberId}
               branches={branchChoices}
@@ -891,7 +890,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               {activity && (
                 <div class="member-timeline-card">
                   <ActivityTimeline
-                    client:load
+                    client:visible
                     groups={memberTimeline}
                     title="Your participation log"
                     description="Votes, ideas, contributions, amendments, and endorsements you recorded, newest first."
@@ -929,9 +928,9 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         <p class="my-6"><a href="/sense-box/">Share a local concern in Sense Box →</a></p>
         <!-- VIEW 3: MY BRANCHES -->
         <div class="branches-only">
-          <BranchMemberships client:load branches={branchChoices} verified={user.status === "verified"} />
+          <BranchMemberships client:visible branches={branchChoices} verified={user.status === "verified"} />
           <BranchChooser
-            client:load
+            client:visible
             mode="manage"
             memberKey={user.memberId}
             branches={branchChoices}
@@ -942,7 +941,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         {memberView === 'account' && (
           <div class="account-settings" id="account-settings">
             <MemberSettings
-              client:load
+              client:visible
               name={user.name}
               email={user.email}
               role={user.role}

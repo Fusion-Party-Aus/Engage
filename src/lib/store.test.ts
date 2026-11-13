@@ -1073,6 +1073,21 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       ),
       true,
     );
+    // List projection changes must not alter visibility. A summary-only list
+    // still hides private drafts from anonymous readers and shows them to an
+    // authorised administrator.
+    assert.equal(
+      (await listProposals(db, { user: null, includeDetails: false })).some(
+        (item) => item.proposalId === proposal.proposalId,
+      ),
+      false,
+    );
+    assert.equal(
+      (await listProposals(db, { user: adminUser, includeDetails: false })).some(
+        (item) => item.proposalId === proposal.proposalId,
+      ),
+      true,
+    );
   });
 
   it("locks branch authority and publication scope after a ballot begins", async () => {
