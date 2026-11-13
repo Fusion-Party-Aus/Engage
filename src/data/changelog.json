@@ -1,5 +1,21 @@
 [
   {
+    "hash": "4d4c38e",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "notifications",
+    "summary": "Surface contribution responses and catch-up alerts in header and My Engage"
+  },
+  {
+    "hash": "a955120",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record review fixes and comment composer update"
+  },
+  {
     "hash": "631c7cf",
     "date": "2026-11-13",
     "type": "fix",
@@ -639,21 +655,5 @@
     "scope": "governance",
     "summary": "Bind legacy ballots to immutable wording revisions",
     "details": "Add a deterministic, transactional bulk migration for existing Decide-stage ballots and their votes. The migration inventories wording against the deployment baseline, fails closed on ambiguity, supports dry-run and explicit apply, records attributable binding events, and is idempotent. Reuse the shared binding path in the admin review endpoint and expose human-readable revision labels while keeping exact identifiers in audit views. Rehearsed against a restored 414-document production clone: 37 ballots and 194 votes preserved, 0 ambiguous, 0 conflicting, 37 idempotent on retry."
-  },
-  {
-    "hash": "1b973fa",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Note token revocation and private-repo poller requirement"
-  },
-  {
-    "hash": "cffc1a0",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Record end-to-end poller verification and staging access"
   }
 ]
