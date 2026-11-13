@@ -86,8 +86,15 @@ const hasRegistryRecords = records.length > 0;
           <h2>{records.length ? (showHistory ? 'No past records match this search' : 'No current policies match this search') : showHistory ? 'No past policy records in Engage yet' : 'No official policy records in Engage yet'}</h2>
           <p>{records.length ? 'Try a different search or filter.' : showHistory ? 'Withdrawn and superseded records will appear here when they are brought into Engage.' : 'Engage does not yet hold the authoritative records of Fusion’s adopted policies. Their absence here does not mean Fusion has no adopted policy. Policies remain available through the party’s official channels, and proposals on this site are not ratified policy.'}</p>
           <div class="grid justify-items-start gap-2">
-            <Button href="/proposals/" variant="outline">Browse proposals</Button>
-            <a href="https://www.fusionparty.org.au/" rel="noreferrer noopener">Visit Fusion Party Australia</a>
+            <div class="flex flex-wrap items-center gap-3">
+              <Button href="https://www.fusionparty.org.au/policy/" target="_blank" rel="noreferrer noopener">
+                Read current official policies on fusionparty.org.au ↗
+              </Button>
+              <Button href="/proposals/" variant="outline">Browse Engage proposals</Button>
+            </div>
+            <p class="text-xs text-muted-foreground m-0">
+              Temporary link to Fusion’s current national website while Engage’s authoritative policy registry is populated.
+            </p>
           </div>
         </CardContent>
       </Card>
