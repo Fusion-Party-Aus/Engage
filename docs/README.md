@@ -29,6 +29,7 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Act as an autonomous agent | [guides/agent-guide.md](guides/agent-guide.md) |
 | Know what is actually shipped | [status/capability-matrix.md](status/capability-matrix.md) |
 | Know what is broken or undecided | [status/known-gaps.md](status/known-gaps.md) |
+| Understand a proposed direction | [rfc/README.md](rfc/README.md) |
 
 ## Documentation map
 
@@ -51,9 +52,12 @@ docs/
 ├── guides/
 │   ├── contributing.md               # Change protocol and quality gates
 │   └── agent-guide.md                # Orientation, invariants, traps, recipes
-└── status/
-    ├── capability-matrix.md          # Implemented / partial / planned
-    └── known-gaps.md                 # Defects, risks and open decisions
+├── status/
+│   ├── capability-matrix.md          # Implemented / partial / planned
+│   └── known-gaps.md                 # Defects, risks and open decisions
+└── rfc/
+    ├── README.md                     # RFC status, structure and rules
+    └── 0001-…                        # Proposed platform evolution RFC
 ```
 
 ## Relationship to other documents
@@ -63,6 +67,7 @@ docs/
 - **`DESIGN.md`** defines the Horizon implementation contract: tokens, typography, components and layout.
 - **`docs/governance/`**, **`docs/architecture/`** and **`docs/integrations/`** contain earlier focused specifications. They remain useful for detail, but this set is the entry point and resolves their status.
 - **`docs/research/`** is evidence and option analysis, not a commitment. Nothing in it is implemented merely because it is documented.
+- **`docs/rfc/`** contains proposed directions and decision records. An RFC is not current behaviour and is not an implementation authorisation. Where an RFC and this documentation set disagree about what is shipped, this set and the code are authoritative.
 - Dated audits, release records and migration inventories are historical. They describe the system at a point in time and must not be read as current state.
 
 ## Status vocabulary
