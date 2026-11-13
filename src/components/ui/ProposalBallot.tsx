@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { trackEngage } from '../../lib/analytics.ts';
 import {
   ballotDeadlineDateLabel,
-  ballotDeadlineLabel,
   ballotExpired,
+  formatLocalDeadline,
+  formatRelativeDeadline,
 } from '../../lib/ballot-deadline.ts';
 import { ArrowRight, CheckCircle2, Clock, Loader2, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -83,6 +84,11 @@ export default function ProposalBallot({
   const [error, setError] = useState('');
   const [justVoted, setJustVoted] = useState(false);
   const [justSavedPending, setJustSavedPending] = useState(false);
+  const [clientNow, setClientNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setClientNow(new Date());
+  }, [ballotClosesAt]);
 
   // Restore guest's selected choice from URL query (`?choice=approve`) or sessionStorage
   useEffect(() => {
@@ -198,12 +204,21 @@ export default function ProposalBallot({
               <Clock className="mt-0.5 size-4 shrink-0 text-[var(--horizon-purple)]" aria-hidden="true" />
               <div className="grid gap-0.5">
                 <span className="font-semibold">
-                  {ballotExpired({ ballotClosesAt }) ? 'Voting closed' : 'Voting closes'}{' '}
-                  {ballotDeadlineDateLabel(ballotClosesAt)}
+                  {ballotExpired({ ballotClosesAt }, clientNow ?? undefined)
+                    ? 'Voting closed'
+                    : 'Voting closes'}{' '}
+                  {clientNow
+                    ? formatRelativeDeadline(ballotClosesAt, clientNow)
+                    : ballotDeadlineDateLabel(ballotClosesAt)}
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  {ballotDeadlineLabel(ballotClosesAt)}
-                </span>
+                <time
+                  dateTime={ballotClosesAt}
+                  className="text-xs text-muted-foreground"
+                >
+                  {clientNow
+                    ? formatLocalDeadline(ballotClosesAt)
+                    : `${ballotDeadlineDateLabel(ballotClosesAt)} (your local time)`}
+                </time>
               </div>
             </div>
           )}

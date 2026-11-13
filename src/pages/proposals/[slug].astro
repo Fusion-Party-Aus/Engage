@@ -1,6 +1,6 @@
 ---
 import { recordLifecycle } from '../../lib/member-lifecycle.ts';
-import { ballotExpired, ballotDeadlineLabel } from '../../lib/ballot-deadline.ts';
+import { ballotExpired } from '../../lib/ballot-deadline.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
 import StanceSelector from '../../components/ui/stance-selector';
@@ -783,7 +783,6 @@ const initialsFor = (name: string) =>
                 </span>
               </div>
 
-              {proposal.ballotClosesAt && <p><strong>{ballotExpired(proposal) ? "Voting closed" : "Voting closes"}:</strong> {ballotDeadlineLabel(proposal.ballotClosesAt)}</p>}
               <details id="ballot-context" class="ballot-context" open>
                 <summary>What you’re deciding</summary>
                 <p>{proposal.summary}</p>

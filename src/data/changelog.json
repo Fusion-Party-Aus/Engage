@@ -1,11 +1,19 @@
 [
   {
-    "hash": "df6f110",
+    "hash": "6f4021f",
     "date": "2026-11-13",
     "type": "fix",
     "category": "fix",
     "scope": "ballots",
-    "summary": "Look up encrypted votes by blind index in member queues and activity"
+    "summary": "Show single relative ballot deadline in viewer's local timezone"
+  },
+  {
+    "hash": "14ae304",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Look up encrypted votes by blind index in member queues and activity (#45)"
   },
   {
     "hash": "32edbcc",
@@ -651,13 +659,5 @@
     "category": "docs",
     "scope": "deploy",
     "summary": "Document Coolify staging, production cutover, and poller"
-  },
-  {
-    "hash": "3280da3",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Bake Mongo helpers into Coolify staging image"
   }
 ]
