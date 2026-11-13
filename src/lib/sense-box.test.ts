@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createMemoryDb } from './db.ts';
-import { submitSense, listSense, reviewSense, claimSenseSlot } from './sense-box.ts';
+import { submitSense, listSense, reviewSense, claimSenseSlot, senseDestinations } from './sense-box.ts';
 import type { SessionUser } from './types.ts';
 const admin = { memberId:'organiser', isAdmin:false, branchAdminIds:['branch-vic'] } as SessionUser;
 const input = { requestId:'12345678-1234-4234-8234-123456789abc', branchId:'branch-vic', title:'Better regional transport', detail:'More frequent trains would help our community.', locality:'Bendigo', topic:'transport', consent:true };
@@ -50,4 +50,13 @@ test('database-backed intake throttle bounds parallel requests and keeps raw add
   assert.equal(outcomes.filter(x=>x.status==='fulfilled').length,10);
   assert.equal(JSON.stringify(await db.collection('sense_limits').find({}).toArray()).includes('192.0.2.1'),false);
   await claimSenseSlot(db,'192.0.2.1','test-secret',1600000);
+});
+
+test('fresh installation accepts a local concern into the selected branch inbox without creating membership', async () => {
+ const db=createMemoryDb();
+ assert.equal((await senseDestinations(db)).length,8);
+ await submitSense(db,{...input,title:'The buses in my suburb are terrible'});
+ assert.equal((await listSense(db,admin,{status:'new'})).items[0]?.title,'The buses in my suburb are terrible');
+ assert.equal(await db.collection('branch_memberships').countDocuments(),0);
+ assert.equal(await db.collection('branches').countDocuments(),0);
 });

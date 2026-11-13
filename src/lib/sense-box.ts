@@ -1,5 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 import { ObjectId, type Db } from 'mongodb';
+import { STANDARD_BRANCHES } from './migrations.ts';
 import type { SessionUser } from './types.ts';
 import { SENSE_TOPICS, SENSE_STATUSES, type SenseItem, type SenseInbox } from './sense-box-options.ts';
 
@@ -46,8 +47,9 @@ export async function submitSense(db: Db, body: Record<string, unknown>, rate?: 
     locality:text(body.locality ?? '', 'Suburb or town',0,100),
     topic:choice(body.topic,SENSE_TOPICS,'topic'),
   };
-  const branch = await db.collection('branches').findOne({branchId,recognised:true,kind:{$in:['state','territory']}});
-  if (!branch) throw new SenseError('That state or territory is not available. Please choose another.',409);
+  const branch = await db.collection('branches').findOne({branchId});
+  const standard = STANDARD_BRANCHES.find(b => b.branchId === branchId && ['state','territory'].includes(b.kind));
+  if (branch ? branch.recognised !== true || !['state','territory'].includes(branch.kind) : !standard) throw new SenseError('That state or territory is not available. Please choose another.',409);
   const _id = new ObjectId(createHash('sha256').update(body.requestId).digest('hex').slice(0,24));
   const fingerprint = createHash('sha256').update(JSON.stringify(content)).digest('hex');
   const existing = await db.collection('sense_submissions').findOne({_id});
@@ -103,4 +105,15 @@ export async function reviewSense(db: Db, user: SessionUser, body: Record<string
   if (!Number.isSafeInteger(body.version) || Number(body.version) < 0) throw new SenseError('Reload this submission and try again.');
   const result = await db.collection('sense_submissions').updateOne({submissionId,branchId,version:body.version},{$set:{status,version:Number(body.version)+1,reviewedBy:user.memberId,reviewedAt:new Date()}});
   if (!result.matchedCount) throw new SenseError('This submission changed or is no longer available. Refresh the inbox and try again.',409);
+}
+
+/** Listening destinations do not create branch membership or governance authority. */
+export async function senseDestinations(db: Db) {
+  const rows = await db.collection('branches').find({}).project({branchId:1,name:1,kind:1,recognised:1}).toArray();
+  const merged = new Map(STANDARD_BRANCHES.filter(b=>['state','territory'].includes(b.kind)).map(b=>[b.branchId,{branchId:b.branchId,name:b.name}]));
+  for (const row of rows) {
+    if (row.recognised === true && ['state','territory'].includes(row.kind)) merged.set(String(row.branchId),{branchId:String(row.branchId),name:String(row.name)});
+    else merged.delete(String(row.branchId));
+  }
+  return [...merged.values()].sort((a,b)=>a.name.localeCompare(b.name));
 }

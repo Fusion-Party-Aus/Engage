@@ -2,7 +2,7 @@
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import {getSessionUser} from '../../../lib/auth.ts';
 import {getDatabase,runtimeEnv} from '../../../lib/db.ts';
-import {listSense} from '../../../lib/sense-box.ts';
+import {listSense,senseDestinations} from '../../../lib/sense-box.ts';
 import {SENSE_TOPICS,SENSE_STATUSES} from '../../../lib/sense-box-options.ts';
 export const prerender=false;
 Astro.response.headers.set('Cache-Control','private, no-store');
@@ -11,7 +11,8 @@ if(!user)return Astro.redirect('/member/');
 if(!user.isAdmin&&!user.branchAdminIds?.length)return new Response('Branch organiser access required.',{status:403});
 const db=await getDatabase(env);
 const inbox=await listSense(db,user,Object.fromEntries(Astro.url.searchParams));
-const branches=await db.collection('branches').find(user.isAdmin?{}:{branchId:{$in:user.branchAdminIds!}}).project({branchId:1,name:1}).toArray();
+const destinations=await senseDestinations(db);
+const branches=user.isAdmin?destinations:destinations.filter(b=>user.branchAdminIds?.includes(b.branchId));
 ---
 <AdminLayout title="Sense Box" description="Review community priorities and explore ideas for proposals." section="branches" isAdmin={user.isAdmin} isBranchAdmin={user.isBranchAdmin}>
 <form class="flex flex-wrap gap-4 mb-6"><label>Branch<select name="branchId" class="block border rounded p-2 bg-background"><option value="">All your branches</option>{branches.map(b=><option value={b.branchId} selected={Astro.url.searchParams.get('branchId')===b.branchId}>{b.name}</option>)}</select></label><label>Topic<select name="topic" class="block border rounded p-2 bg-background"><option value="">All topics</option>{Object.entries(SENSE_TOPICS).map(([key,label])=><option value={key} selected={Astro.url.searchParams.get('topic')===key}>{label} ({inbox.topics[key]||0})</option>)}</select></label><label>Status<select name="status" class="block border rounded p-2 bg-background"><option value="">All statuses</option>{Object.entries(SENSE_STATUSES).map(([key,label])=><option value={key} selected={Astro.url.searchParams.get('status')===key}>{label}</option>)}</select></label><button class="border rounded-full px-5 self-end py-2">Filter</button></form>
