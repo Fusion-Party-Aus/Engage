@@ -86,7 +86,7 @@ const [ballotResult, policy, relatedProposals, branches, allOtherProposals] = pr
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
       db.collection('proposals').find({ space: proposal.space, proposalId: { $ne: proposal.proposalId } }).limit(4).toArray(),
       db.collection('branches').find({}).sort({ name: 1 }).toArray(),
-      db.collection('proposals').find({ proposalId: { $ne: proposal.proposalId } }).project({ proposalId: 1, title: 1, slug: 1, stage: 1 }).sort({ updatedAt: -1 }).limit(100).toArray(),
+      db.collection('proposals').find({ proposalId: { $ne: proposal.proposalId } }).project({ proposalId: 1, title: 1 }).sort({ updatedAt: -1 }).toArray(),
     ])
   : [null, null, [], [], []];
 const isResolution = Boolean(proposal && (proposal.kind === 'resolution' || proposal.proposalId.startsWith('GOV-')));
@@ -615,7 +615,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                     <strong>Outcome notes, supersession &amp; archiving</strong>
                   </div>
                   <p class="admin-inline-note">
-                    Record implementation or decision outcomes, link a successor {isResolution ? 'motion' : 'proposal'} if superseded, or archive resolved records without altering historical votes or revisions.
+                    Record implementation or decision outcomes, link a successor {isResolution ? 'motion' : 'proposal'} if superseded, or archive resolved records without altering historical votes or revisions. Linking a successor records supersession only — it does not automatically archive this record; use Archive if you also want to close and hide it from general member lists.
                   </p>
                   <form class="proposal-outcome-form grid gap-3" data-proposal-id={proposal.proposalId}>
                     <Field label="Implementation / decision outcome note" htmlFor={`outcome-note-${proposal.proposalId}`}>
@@ -629,19 +629,19 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                       />
                     </Field>
                     <div class="admin-form-grid">
-                      <Field label={`Superseded by (optional)`} htmlFor={`superseded-by-${proposal.proposalId}`}>
-                        <NativeSelect
+                      <Field label="Superseded by proposal ID (optional)" htmlFor={`superseded-by-${proposal.proposalId}`}>
+                        <Input
                           id={`superseded-by-${proposal.proposalId}`}
                           name="supersededByProposalId"
+                          list={`superseded-list-${proposal.proposalId}`}
                           defaultValue={proposal.supersededByProposalId ?? ''}
-                        >
-                          <option value="">Not superseded</option>
+                          placeholder="Search or enter proposal ID (leave blank to clear)"
+                        />
+                        <datalist id={`superseded-list-${proposal.proposalId}`}>
                           {allOtherProposals.map((other: any) => (
-                            <option value={other.proposalId}>
-                              {other.proposalId} · {other.title}
-                            </option>
+                            <option value={other.proposalId}>{other.title}</option>
                           ))}
-                        </NativeSelect>
+                        </datalist>
                       </Field>
                       <Field label="Supersession note (optional)" htmlFor={`superseded-note-${proposal.proposalId}`}>
                         <Input

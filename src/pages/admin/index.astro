@@ -157,7 +157,7 @@ const adminTimelineEvents: ActivityTimelineEvent[] = recentActivity.slice(0, 30)
 const adminTimeline = buildActivityTimeline(adminTimelineEvents);
 
 const activeBallotsNeedingReview = proposals.filter((proposal) => proposal.stage === 'decide' && !proposal.ballotRevisionId);
-const [ballotResults, registry, scopedBranches, activeBranchMemberships] = await Promise.all([
+const [ballotResults, registry, scopedBranches] = await Promise.all([
   db.collection('ballot_results').find({ result: 'successful' }).toArray(),
   user.isAdmin ? db.collection('policy_registry').find({}).toArray() : Promise.resolve([]),
   user.isStaff
@@ -165,14 +165,16 @@ const [ballotResults, registry, scopedBranches, activeBranchMemberships] = await
     : user.isBranchAdmin
       ? db.collection('branches').find({ branchId: { $in: user.branchAdminIds ?? [] } }).sort({ name: 1 }).toArray()
       : Promise.resolve([]),
-  db.collection('branch_memberships').find({ status: 'active' }).project({ branchId: 1 }).toArray(),
 ]);
 const branchNames = new Map(scopedBranches.map((branch: any) => [String(branch.branchId), String(branch.name)]));
-const verifiedCountsByBranch = new Map<string, number>();
-for (const row of activeBranchMemberships as any[]) {
-  const id = String(row.branchId ?? '');
-  if (id) verifiedCountsByBranch.set(id, (verifiedCountsByBranch.get(id) ?? 0) + 1);
-}
+const scopedBranchIds = scopedBranches.map((branch: any) => String(branch.branchId));
+const branchCountPairs = await Promise.all(
+  scopedBranchIds.map(async (branchId) => [
+    branchId,
+    await db.collection('branch_memberships').countDocuments({ status: 'active', branchId }),
+  ] as const),
+);
+const verifiedCountsByBranch = new Map<string, number>(branchCountPairs);
 const ballotProgressRows = buildBallotProgressRows(proposals, branchNames);
 const branchSummaryRows = buildBranchSummaryRows(proposals, scopedBranches as any[], verifiedCountsByBranch);
 const ratifiedIds = new Set(registry.map((policy) => policy.proposalId));

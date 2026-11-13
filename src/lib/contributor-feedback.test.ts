@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { getDatabase } from "./db.ts";
-import { addComment, saveProposal, setCommentFeedback } from "./store.ts";
+import { addComment, getProposalDetail, saveProposal, setCommentFeedback } from "./store.ts";
 import type { SessionUser } from "./types.ts";
 
 const adminUser: SessionUser = {
@@ -90,8 +90,59 @@ describe("contributor feedback and proposal supersession", () => {
     const cleared = await setCommentFeedback(db, adminUser, {
       commentId: comment.commentId,
       status: "clear",
+      note: "Superseded by revision 3.",
     });
     assert.equal(cleared.feedback, null);
+    assert.equal(cleared.feedbackHistory.length, 3);
+    assert.equal(cleared.feedbackHistory[0]?.action, "incorporated");
+    assert.equal(cleared.feedbackHistory[1]?.action, "deferred");
+    assert.equal(cleared.feedbackHistory[2]?.action, "cleared");
+
+    const storedComment = await db
+      .collection("comments")
+      .findOne({ commentId: comment.commentId });
+    assert.equal(storedComment?.feedbackHistory?.length, 3);
+  });
+
+  it("enforces proposal visibility on supersession targets when fetched for public/unauthorised viewers", async () => {
+    const env = { APP_MODE: "development" };
+    const db = await getDatabase(env);
+
+    const publicProposal = await saveProposal(db, adminUser, {
+      title: "Public Proposal With Private Successor",
+      space: "Governance",
+      summary: "Publicly visible proposal.",
+      outcomes: ["Outcome 1"],
+      details: "Public details.",
+    });
+
+    const privateSuccessor = await saveProposal(db, adminUser, {
+      title: "Confidential Draft Successor",
+      space: "Governance",
+      summary: "Private successor draft.",
+      outcomes: ["Outcome 2"],
+      details: "Private details.",
+      publicationScope: "private",
+    });
+
+    await saveProposal(db, adminUser, {
+      proposalId: publicProposal.proposalId,
+      supersededByProposalId: privateSuccessor.proposalId,
+    });
+
+    const publicViewOfSuccessor = await getProposalDetail(
+      db,
+      privateSuccessor.proposalId,
+      otherMember,
+    );
+    assert.equal(publicViewOfSuccessor, null);
+
+    const adminViewOfSuccessor = await getProposalDetail(
+      db,
+      privateSuccessor.proposalId,
+      adminUser,
+    );
+    assert.equal(adminViewOfSuccessor?.proposal.title, "Confidential Draft Successor");
   });
 
   it("allows recording supersession metadata on a locked proposal without altering substantive wording", async () => {

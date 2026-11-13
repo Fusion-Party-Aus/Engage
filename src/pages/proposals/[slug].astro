@@ -33,14 +33,10 @@ const detail = await getProposalDetail(db, Astro.params.slug ?? '', user);
 if (!detail) {
   Astro.response.status = 404;
 }
-const supersededByProposal = detail?.proposal?.supersededByProposalId
-  ? await db
-      .collection('proposals')
-      .findOne(
-        { proposalId: detail.proposal.supersededByProposalId },
-        { projection: { proposalId: 1, title: 1, slug: 1 } },
-      )
+const supersededByDetail = detail?.proposal?.supersededByProposalId
+  ? await getProposalDetail(db, detail.proposal.supersededByProposalId, user)
   : null;
+const supersededByProposal = supersededByDetail?.proposal ?? null;
 const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
 const feedbackStatusLabel = (status: string) =>
   status === 'incorporated'
@@ -381,7 +377,7 @@ const initialsFor = (name: string) =>
                   <a href={`/proposals/${supersededByProposal.slug}/`}>{supersededByProposal.proposalId} · {supersededByProposal.title}</a>.
                 </>
               ) : (
-                <>This record has been superseded by {proposal.supersededByProposalId}.</>
+                <>This record has been superseded.</>
               )}
               {proposal.supersededByNote && <span> {proposal.supersededByNote}</span>}
             </div>
@@ -929,23 +925,35 @@ const initialsFor = (name: string) =>
                   </p>
                 </div>
 
-                <!-- Stance Filter Pills -->
-                <div class="stance-filters" role="group" aria-label="Filter contributions by stance">
-                  <button type="button" class="stance-pill is-active" data-stance="all" aria-pressed="true">
-                    All <span class="tabular">{stanceCounts.all}</span>
-                  </button>
-                  <button type="button" class="stance-pill" data-stance="support" aria-pressed="false">
-                    <ThumbsUp aria-hidden="true" className="size-3.5" /> Support <span class="tabular">{stanceCounts.support}</span>
-                  </button>
-                  <button type="button" class="stance-pill" data-stance="concern" aria-pressed="false">
-                    <AlertCircle aria-hidden="true" className="size-3.5" /> Concern <span class="tabular">{stanceCounts.concern}</span>
-                  </button>
-                  <button type="button" class="stance-pill" data-stance="amendment" aria-pressed="false">
-                    <PenLine aria-hidden="true" className="size-3.5" /> Wording <span class="tabular">{stanceCounts.amendment}</span>
-                  </button>
-                  <button type="button" class="stance-pill" data-stance="comment" aria-pressed="false">
-                    <MessageCircle aria-hidden="true" className="size-3.5" /> Comment <span class="tabular">{stanceCounts.comment}</span>
-                  </button>
+                <!-- Stance Filter Pills + Sort -->
+                <div class="deliberation-controls">
+                  <div class="stance-filters" role="group" aria-label="Filter contributions by stance">
+                    <button type="button" class="stance-pill is-active" data-stance="all" aria-pressed="true">
+                      All <span class="tabular">{stanceCounts.all}</span>
+                    </button>
+                    <button type="button" class="stance-pill" data-stance="support" aria-pressed="false">
+                      <ThumbsUp aria-hidden="true" className="size-3.5" /> Support <span class="tabular">{stanceCounts.support}</span>
+                    </button>
+                    <button type="button" class="stance-pill" data-stance="concern" aria-pressed="false">
+                      <AlertCircle aria-hidden="true" className="size-3.5" /> Concern <span class="tabular">{stanceCounts.concern}</span>
+                    </button>
+                    <button type="button" class="stance-pill" data-stance="amendment" aria-pressed="false">
+                      <PenLine aria-hidden="true" className="size-3.5" /> Wording <span class="tabular">{stanceCounts.amendment}</span>
+                    </button>
+                    <button type="button" class="stance-pill" data-stance="comment" aria-pressed="false">
+                      <MessageCircle aria-hidden="true" className="size-3.5" /> Comment <span class="tabular">{stanceCounts.comment}</span>
+                    </button>
+                  </div>
+                  {comments.length > 1 && (
+                    <div class="comment-sort">
+                      <label for="comment-sort-select" class="sr-only">Sort contributions</label>
+                      <select id="comment-sort-select" data-comment-sort>
+                        <option value="top">Top endorsed</option>
+                        <option value="newest">Newest first</option>
+                        <option value="oldest" selected>Oldest first</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -976,6 +984,114 @@ const initialsFor = (name: string) =>
                 </div>
               )}
 
+              <!-- Reddit-style Top Contribution Composer -->
+              {user?.canParticipate ? (
+                <form id="comment-form" class="comment-composer" data-proposal-id={proposal.proposalId}>
+                  <div class="comment-composer__box">
+                    <label for="comment-body-input" class="sr-only">Join the discussion</label>
+                    <textarea
+                      id="comment-body-input"
+                      name="body"
+                      required
+                      minlength={5}
+                      maxlength={4000}
+                      rows={3}
+                      placeholder="Join the conversation — share support, raise an implementation concern, or suggest wording..."
+                    ></textarea>
+
+                    <div class="comment-composer__toolbar">
+                      <div class="stance-radio-group" role="radiogroup" aria-label="Contribution stance">
+                        <label class="stance-label stance-label--comment">
+                          <input type="radio" name="stance" value="comment" checked />
+                          <span><MessageCircle aria-hidden="true" className="size-3.5" /> Comment</span>
+                        </label>
+                        <label class="stance-label stance-label--support">
+                          <input type="radio" name="stance" value="support" />
+                          <span><Check aria-hidden="true" className="size-3.5" /> Support</span>
+                        </label>
+                        <label class="stance-label stance-label--concern">
+                          <input type="radio" name="stance" value="concern" />
+                          <span><AlertCircle aria-hidden="true" className="size-3.5" /> Concern</span>
+                        </label>
+                        <label class="stance-label stance-label--amendment">
+                          <input type="radio" name="stance" value="amendment" />
+                          <span><PenLine aria-hidden="true" className="size-3.5" /> Wording</span>
+                        </label>
+                      </div>
+
+                      <div class="comment-composer__submit">
+                        <span id="comment-char-count" class="comment-char-count tabular">0 / 4000</span>
+                        <span id="comment-status-msg" class="tabular form-status" role="status" aria-live="polite"></span>
+                        <Button type="submit" size="sm" id="comment-submit-btn">
+                          Post
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="stance-starters" aria-label="Quick stance starters">
+                    <span class="stance-starters__hint">Prompts:</span>
+                    <button
+                      type="button"
+                      class="starter-chip"
+                      data-starter-stance="support"
+                      data-starter-placeholder="What makes this proposal valuable or effective? Share the evidence or outcomes you support..."
+                    >
+                      I support this because…
+                    </button>
+                    <button
+                      type="button"
+                      class="starter-chip"
+                      data-starter-stance="concern"
+                      data-starter-placeholder="What unintended consequence, cost, or implementation risk should members consider?"
+                    >
+                      Implementation concern…
+                    </button>
+                    <button
+                      type="button"
+                      class="starter-chip"
+                      data-starter-stance="amendment"
+                      data-starter-placeholder="Which sentence or commitment should be clarified, and what wording do you suggest?"
+                    >
+                      Suggested wording tweak…
+                    </button>
+                    <button
+                      type="button"
+                      class="starter-chip"
+                      data-starter-stance="comment"
+                      data-starter-placeholder="Ask a clarifying question or share context for other members..."
+                    >
+                      Clarifying question…
+                    </button>
+                  </div>
+                </form>
+              ) : user ? (
+                <div class="participation-notice">
+                  <div>
+                    <strong>Membership verification pending</strong>
+                    <p>Your account is awaiting membership verification before posting contributions.</p>
+                  </div>
+                  <Button href="/member/" variant="outline" size="sm">Check status</Button>
+                </div>
+              ) : (
+                <div class="participation-notice">
+                  <div>
+                    <strong>Have a perspective on this proposal?</strong>
+                    <p>
+                      {comments.length > 0
+                        ? `Join ${comments.length} member ${comments.length === 1 ? 'contribution' : 'contributions'}—sign in with a passkey or 1-click email link to add your stance or endorse feedback.`
+                        : 'Sign in with a passkey or 1-click email link to share the first member perspective on this proposal.'}
+                    </p>
+                  </div>
+                  <Button
+                    href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#deliberation`)}&intent=deliberate&title=${encodeURIComponent(proposal.title)}`}
+                    size="sm"
+                  >
+                    Sign in to participate
+                  </Button>
+                </div>
+              )}
+
               <!-- Contributions Thread -->
               <div id="comments-list" class="comments-thread">
                 {comments.length === 0 ? (
@@ -988,7 +1104,13 @@ const initialsFor = (name: string) =>
                     const canDelete = isAuthor || user?.isStaff;
                     const hasEndorsed = user && c.upvotes.includes(user.memberId);
                     return (
-                      <article class="comment-card" data-stance={c.stance} data-comment-id={c.commentId}>
+                      <article
+                        class="comment-card"
+                        data-stance={c.stance}
+                        data-comment-id={c.commentId}
+                        data-upvotes={c.upvotes.length}
+                        data-created-at={new Date(c.createdAt).getTime()}
+                      >
                         <span class="comment-avatar" aria-hidden="true">{initialsFor(c.authorName || 'Member')}</span>
                         <div class="comment-box">
                           <div class="comment-card__head">
@@ -1018,6 +1140,16 @@ const initialsFor = (name: string) =>
                                 <span>Endorse</span>
                                 <span class="endorse-count tabular">{c.upvotes.length}</span>
                               </button>
+
+                              {user?.canParticipate && (
+                                <button
+                                  type="button"
+                                  class="reply-btn"
+                                  data-reply-author={c.authorName}
+                                >
+                                  Reply
+                                </button>
+                              )}
 
                               {canDelete && (
                                 <button
@@ -1056,6 +1188,25 @@ const initialsFor = (name: string) =>
                             )}
                           </div>
 
+                          {c.feedbackHistory && (c.feedbackHistory.length > 1 || (!c.feedback && c.feedbackHistory.length > 0)) && (
+                            <details class="comment-feedback-history">
+                              <summary>Response history ({c.feedbackHistory.length})</summary>
+                              <ul>
+                                {c.feedbackHistory.map((entry) => (
+                                  <li>
+                                    <strong>{entry.action === 'cleared' ? 'Cleared' : feedbackStatusLabel(entry.action)}</strong>
+                                    {entry.note ? ` — ${entry.note}` : ''} · {entry.updatedByName} (
+                                    {new Date(entry.updatedAt).toLocaleDateString('en-AU', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })})
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
+
                           {canRespondToFeedback && (
                             <details class="comment-feedback-drawer">
                               <summary>{c.feedback ? 'Update response' : 'Record response'}</summary>
@@ -1088,113 +1239,6 @@ const initialsFor = (name: string) =>
                   })
                 )}
               </div>
-
-              <!-- Contribution Input Form -->
-              {user?.canParticipate ? (
-                <form id="comment-form" class="comment-form" data-proposal-id={proposal.proposalId}>
-                  <div class="comment-form__top">
-                    <span class="comment-form__label">Add your contribution</span>
-                    <div class="stance-radio-group" role="radiogroup" aria-label="Contribution stance">
-                      <label class="stance-label stance-label--support">
-                        <input type="radio" name="stance" value="support" />
-                        <span><Check aria-hidden="true" className="size-3.5" /> Support</span>
-                      </label>
-                      <label class="stance-label stance-label--concern">
-                        <input type="radio" name="stance" value="concern" />
-                        <span><AlertCircle aria-hidden="true" className="size-3.5" /> Concern</span>
-                      </label>
-                      <label class="stance-label stance-label--amendment">
-                        <input type="radio" name="stance" value="amendment" />
-                        <span><PenLine aria-hidden="true" className="size-3.5" /> Wording suggestion</span>
-                      </label>
-                      <label class="stance-label stance-label--comment">
-                        <input type="radio" name="stance" value="comment" checked />
-                        <span><MessageCircle aria-hidden="true" className="size-3.5" /> Comment</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div class="stance-starters" aria-label="Quick stance starters">
-                    <span class="stance-starters__hint">Quick start:</span>
-                    <button
-                      type="button"
-                      class="starter-chip"
-                      data-starter-stance="support"
-                      data-starter-placeholder="What makes this proposal valuable or effective? Share the evidence or outcomes you support..."
-                    >
-                      I support this because…
-                    </button>
-                    <button
-                      type="button"
-                      class="starter-chip"
-                      data-starter-stance="concern"
-                      data-starter-placeholder="What unintended consequence, cost, or implementation risk should members consider?"
-                    >
-                      Implementation concern…
-                    </button>
-                    <button
-                      type="button"
-                      class="starter-chip"
-                      data-starter-stance="amendment"
-                      data-starter-placeholder="Which sentence or commitment should be clarified, and what wording do you suggest?"
-                    >
-                      Suggested wording tweak…
-                    </button>
-                    <button
-                      type="button"
-                      class="starter-chip"
-                      data-starter-stance="comment"
-                      data-starter-placeholder="Ask a clarifying question or share context for other members..."
-                    >
-                      Clarifying question…
-                    </button>
-                  </div>
-
-                  <Field label="Your contribution" htmlFor="comment-body-input" className="sr-only-label">
-                    <Textarea
-                      id="comment-body-input"
-                      name="body"
-                      required
-                      minLength={5}
-                      maxLength={4000}
-                      rows={3}
-                      placeholder="Share constructive analysis, raise an implementation concern, or propose improved wording..."
-                    />
-                  </Field>
-
-                  <div class="comment-form__actions">
-                    <span id="comment-status-msg" class="tabular form-status" role="status" aria-live="polite"></span>
-                    <Button type="submit" size="sm" id="comment-submit-btn">
-                      Post contribution
-                    </Button>
-                  </div>
-                </form>
-              ) : user ? (
-                <div class="participation-notice">
-                  <div>
-                    <strong>Membership verification pending</strong>
-                    <p>Your account is awaiting membership verification before posting contributions.</p>
-                  </div>
-                  <Button href="/member/" variant="outline" size="sm">Check status</Button>
-                </div>
-              ) : (
-                <div class="participation-notice">
-                  <div>
-                    <strong>Have a perspective on this proposal?</strong>
-                    <p>
-                      {comments.length > 0
-                        ? `Join ${comments.length} member ${comments.length === 1 ? 'contribution' : 'contributions'}—sign in with a passkey or 1-click email link to add your stance or endorse feedback.`
-                        : 'Sign in with a passkey or 1-click email link to share the first member perspective on this proposal.'}
-                    </p>
-                  </div>
-                  <Button
-                    href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#deliberation`)}&intent=deliberate&title=${encodeURIComponent(proposal.title)}`}
-                    size="sm"
-                  >
-                    Sign in to participate
-                  </Button>
-                </div>
-              )}
             </section>
 
             <!-- Wording Revision Log & Provenance -->
@@ -1696,9 +1740,12 @@ const initialsFor = (name: string) =>
             </div>
           </div>
         `;
-        commentsList?.appendChild(article);
+        commentsList?.prepend(article);
         const textarea = document.getElementById('comment-body-input') as HTMLTextAreaElement | null;
-        if (textarea) textarea.value = '';
+        if (textarea) {
+          textarea.value = '';
+          textarea.dispatchEvent(new Event('input'));
+        }
         commentStatusMsg.textContent = 'Contribution posted!';
       } catch (err: any) {
         trackEngage('contribution_result', { action: 'deliberation', outcome: 'failed' });
@@ -1708,6 +1755,53 @@ const initialsFor = (name: string) =>
       }
     });
   }
+
+  // Reddit-style composer helpers: live character count, Cmd/Ctrl+Enter submit, Reply & Sort
+  const commentTextarea = document.getElementById('comment-body-input') as HTMLTextAreaElement | null;
+  const charCountEl = document.getElementById('comment-char-count');
+  if (commentTextarea && charCountEl) {
+    const syncCount = () => {
+      charCountEl.textContent = `${commentTextarea.value.length} / 4000`;
+    };
+    commentTextarea.addEventListener('input', syncCount);
+    commentTextarea.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        commentForm?.requestSubmit();
+      }
+    });
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('[data-reply-author]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const author = btn.dataset.replyAuthor;
+      if (!commentTextarea || !author) return;
+      const prefix = `@${author} `;
+      if (!commentTextarea.value.startsWith(prefix)) {
+        commentTextarea.value = `${prefix}${commentTextarea.value}`;
+        commentTextarea.dispatchEvent(new Event('input'));
+      }
+      commentTextarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      commentTextarea.focus();
+    });
+  });
+
+  const sortSelect = document.querySelector<HTMLSelectElement>('[data-comment-sort]');
+  sortSelect?.addEventListener('change', () => {
+    if (!commentsList) return;
+    const cards = Array.from(commentsList.querySelectorAll<HTMLElement>('.comment-card'));
+    const mode = sortSelect.value;
+    cards.sort((a, b) => {
+      if (mode === 'top') {
+        return Number(b.dataset.upvotes || 0) - Number(a.dataset.upvotes || 0);
+      }
+      if (mode === 'newest') {
+        return Number(b.dataset.createdAt || 0) - Number(a.dataset.createdAt || 0);
+      }
+      return Number(a.dataset.createdAt || 0) - Number(b.dataset.createdAt || 0);
+    });
+    for (const card of cards) commentsList.appendChild(card);
+  });
 
   // Author / administrator contribution feedback (zero-reload)
   document.querySelectorAll<HTMLFormElement>('.comment-feedback-form').forEach((form) => {
@@ -3563,7 +3657,6 @@ const initialsFor = (name: string) =>
     margin: 0.75rem 0 0;
     padding: 0.75rem 1rem;
     border: 1px solid var(--horizon-line);
-    border-left: 3px solid var(--horizon-warn-ink);
     border-radius: 0.45rem;
     background: var(--horizon-warn-bg);
     color: var(--horizon-warn-ink);
@@ -3690,6 +3783,117 @@ const initialsFor = (name: string) =>
   .comment-feedback-status {
     font-size: 0.78rem;
     color: var(--horizon-muted);
+  }
+
+  .comment-feedback-history {
+    margin-top: 0.45rem;
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+
+  .comment-feedback-history > summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .comment-feedback-history ul {
+    margin: 0.35rem 0 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .deliberation-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .comment-sort select {
+    height: 2rem;
+    padding: 0 0.65rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 999px;
+    background: var(--horizon-white);
+    color: var(--horizon-purple);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .comment-composer {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0.25rem 0 1.25rem;
+  }
+
+  .comment-composer__box {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: var(--horizon-white);
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+  }
+
+  .comment-composer__box:focus-within {
+    border-color: var(--horizon-focus);
+  }
+
+  .comment-composer__box textarea {
+    display: block;
+    width: 100%;
+    min-height: 5.25rem;
+    padding: 0.85rem 1rem 0.6rem;
+    border: 0;
+    background: transparent;
+    color: var(--horizon-purple-deep);
+    font: inherit;
+    font-size: 0.94rem;
+    line-height: 1.55;
+    resize: vertical;
+  }
+
+  .comment-composer__box textarea:focus {
+    outline: none;
+  }
+
+  .comment-composer__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.55rem 0.85rem;
+    border-top: 1px solid var(--horizon-line);
+    background: var(--horizon-lavender-soft);
+  }
+
+  .comment-composer__submit {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .comment-char-count {
+    font-size: 0.76rem;
+    color: var(--horizon-muted);
+  }
+
+  .reply-btn {
+    border: 0;
+    background: transparent;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+    cursor: pointer;
+  }
+
+  .reply-btn:hover {
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple);
   }
 </style>
 

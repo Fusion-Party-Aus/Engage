@@ -6,6 +6,7 @@ import type {
   CommentRecord,
   CommentStance,
   ContributionFeedback,
+  ContributionFeedbackHistoryEntry,
   ContributionFeedbackStatus,
   MemberRecord,
   MembershipStatus,
@@ -1456,7 +1457,10 @@ export async function setCommentFeedback(
   db: Db,
   user: SessionUser,
   body: Record<string, unknown>,
-): Promise<{ feedback: ContributionFeedback | null }> {
+): Promise<{
+  feedback: ContributionFeedback | null;
+  feedbackHistory: ContributionFeedbackHistoryEntry[];
+}> {
   const commentId =
     typeof body.commentId === "string" ? body.commentId.trim() : "";
   if (!commentId) throw new Error("Comment ID is required.");
@@ -1489,23 +1493,51 @@ export async function setCommentFeedback(
     );
   }
 
-  if (rawStatus === "clear") {
-    await col.updateOne({ commentId }, { $unset: { feedback: "" } });
-    return { feedback: null };
-  }
-
   const note =
     typeof body.note === "string" ? body.note.trim().slice(0, 500) : "";
+  const updatedAt = new Date();
+  const updatedByName = user.name || "Author";
+  const priorHistory = Array.isArray(existing.feedbackHistory)
+    ? existing.feedbackHistory
+    : [];
+
+  if (rawStatus === "clear") {
+    const entry: ContributionFeedbackHistoryEntry = {
+      action: "cleared",
+      ...(note ? { note } : {}),
+      updatedBy: user.memberId,
+      updatedByName,
+      updatedAt,
+    };
+    const feedbackHistory = [...priorHistory, entry];
+    await col.updateOne(
+      { commentId },
+      { $unset: { feedback: "" }, $set: { feedbackHistory } },
+    );
+    return { feedback: null, feedbackHistory };
+  }
+
   const feedback: ContributionFeedback = {
     status: rawStatus as ContributionFeedbackStatus,
     ...(note ? { note } : {}),
     updatedBy: user.memberId,
-    updatedByName: user.name || "Author",
-    updatedAt: new Date(),
+    updatedByName,
+    updatedAt,
   };
+  const entry: ContributionFeedbackHistoryEntry = {
+    action: feedback.status,
+    ...(note ? { note } : {}),
+    updatedBy: user.memberId,
+    updatedByName,
+    updatedAt,
+  };
+  const feedbackHistory = [...priorHistory, entry];
 
-  await col.updateOne({ commentId }, { $set: { feedback } });
-  return { feedback };
+  await col.updateOne(
+    { commentId },
+    { $set: { feedback, feedbackHistory } },
+  );
+  return { feedback, feedbackHistory };
 }
 
 export async function castVote(

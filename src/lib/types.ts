@@ -204,6 +204,14 @@ export interface ContributionFeedback {
   updatedAt: Date;
 }
 
+export interface ContributionFeedbackHistoryEntry {
+  action: ContributionFeedbackStatus | "cleared";
+  note?: string;
+  updatedBy: string;
+  updatedByName: string;
+  updatedAt: Date;
+}
+
 export interface CommentRecord {
   commentId: string;
   proposalId: string;
@@ -214,6 +222,7 @@ export interface CommentRecord {
   upvotes: string[];
   upvoteEvents?: Array<{ memberId: string; at: Date }>;
   feedback?: ContributionFeedback;
+  feedbackHistory?: ContributionFeedbackHistoryEntry[];
   createdAt: Date;
 }
 
