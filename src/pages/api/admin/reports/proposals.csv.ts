@@ -2,7 +2,10 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { listProposals } from "../../../../lib/store.ts";
-import { proposalsSummaryToCsv } from "../../../../lib/admin-reporting.ts";
+import {
+  canIncludeProposalInAdminReport,
+  proposalsSummaryToCsv,
+} from "../../../../lib/admin-reporting.ts";
 
 export const prerender = false;
 
@@ -23,22 +26,15 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const stage = (url.searchParams.get("stage") ?? "all").trim();
   const branchFilter = (url.searchParams.get("branch") ?? "all").trim();
   const search = (url.searchParams.get("q") ?? "").trim();
-  const branchAdminIds = user.branchAdminIds ?? [];
 
-  const [allProposals, branches] = await Promise.all([
+  const [allProposals, branches, ballotResults] = await Promise.all([
     listProposals(db, { includeArchived: true, stage, search, user }),
     db.collection("branches").find({}).toArray(),
+    db.collection("ballot_results").find({}).project({ proposalId: 1 }).toArray(),
   ]);
 
   const scoped = allProposals.filter((proposal) => {
-    const inAdminScope =
-      user.isStaff ||
-      [
-        proposal.originatingBranchId,
-        proposal.governanceAuthorityBranchId,
-        proposal.jurisdictionBranchId,
-      ].some((id) => Boolean(id && branchAdminIds.includes(id)));
-    if (!inAdminScope) return false;
+    if (!canIncludeProposalInAdminReport(user, proposal)) return false;
     if (!branchFilter || branchFilter === "all") return true;
     return [
       proposal.originatingBranchId,
@@ -50,7 +46,10 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const branchNames = new Map(
     branches.map((branch: any) => [String(branch.branchId), String(branch.name)]),
   );
-  const csv = proposalsSummaryToCsv(scoped, branchNames);
+  const recordedResultIds = new Set(
+    ballotResults.map((row: any) => String(row.proposalId)),
+  );
+  const csv = proposalsSummaryToCsv(scoped, branchNames, recordedResultIds);
 
   return new Response(csv, {
     status: 200,

@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
+import { canIncludeProposalInAdminReport } from '../../lib/admin-reporting.ts';
 import { canViewIdentifiableBallots, getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { isGovernanceResolution, listProposals } from '../../lib/store.ts';
@@ -42,12 +43,11 @@ if (!user) return Astro.redirect('/member/', 302);
 if (!user.isStaff && !user.isBranchAdmin) Astro.response.status = 403;
 
 const db = await getDatabase(env);
-const rawProposals = user.isStaff
-  ? await listProposals(db, { includeArchived: true })
-  : user.isBranchAdmin
-    ? (await Promise.all((user.branchAdminIds ?? []).map((branch) => listProposals(db, { includeArchived: true, branch })))).flat()
-    : [];
-const proposals = [...new Map(rawProposals.map((proposal) => [proposal.proposalId, proposal])).values()];
+const proposals = (user.isStaff || user.isBranchAdmin)
+  ? (await listProposals(db, { includeArchived: true, user })).filter((proposal) =>
+      canIncludeProposalInAdminReport(user, proposal),
+    )
+  : [];
 
 const stageCounts = {
   propose: proposals.filter((p) => p.stage === 'propose').length,

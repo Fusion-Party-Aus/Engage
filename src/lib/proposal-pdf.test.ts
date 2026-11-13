@@ -187,7 +187,10 @@ test("proposal PDF endpoint enforces authentication, branch scope, and returns a
     assert.equal(adminRes.status, 200);
     assert.equal(adminRes.headers.get("content-type"), "application/pdf");
     const pdfBuf = new Uint8Array(await adminRes.arrayBuffer());
-    assert.ok(Buffer.from(pdfBuf).toString("latin1").startsWith("%PDF-1.4"));
+    const pdfStr = Buffer.from(pdfBuf).toString("latin1");
+    assert.ok(pdfStr.startsWith("%PDF-1.4"));
+    assert.ok(pdfStr.includes("Authorised governance administrators"));
+    assert.ok(pdfStr.includes("individual member votes are omitted"));
   } finally {
     process.env.APP_MODE = prevMode;
   }

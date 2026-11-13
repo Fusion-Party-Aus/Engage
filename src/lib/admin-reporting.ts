@@ -1,6 +1,30 @@
 import { ballotExpired } from "./ballot-deadline.ts";
-import { isGovernanceResolution } from "./store.ts";
-import type { BranchRecord, ProposalSummaryView } from "./types.ts";
+import { canManageBranchProposal } from "./auth.ts";
+import {
+  canReviewArchivedProposal,
+  canViewProposal,
+  isGovernanceResolution,
+} from "./store.ts";
+import type { BranchRecord, ProposalSummaryView, SessionUser } from "./types.ts";
+
+/**
+ * Determine whether an administrator or branch administrator may include a
+ * proposal in administrative reports, dashboards, or exports.
+ *
+ * Aligns with `canManageBranchProposal` and `canReviewArchivedProposal` so
+ * branch administrators only see proposals originating in their assigned
+ * branch(es) and never see private or archived records from other branches.
+ */
+export function canIncludeProposalInAdminReport(
+  user: SessionUser,
+  proposal: ProposalSummaryView,
+): boolean {
+  if (!canViewProposal(proposal, user)) return false;
+  if (proposal.stage === "archived" && !canReviewArchivedProposal(proposal, user)) {
+    return false;
+  }
+  return canManageBranchProposal(user, proposal);
+}
 
 export interface BallotProgressRow {
   proposalId: string;
@@ -139,6 +163,7 @@ function escapeCsvCell(value: unknown): string {
 export function proposalsSummaryToCsv(
   proposals: ProposalSummaryView[],
   branchNames: Map<string, string>,
+  recordedResultProposalIds?: Set<string>,
 ): string {
   const headers = [
     "proposalId",
@@ -148,6 +173,7 @@ export function proposalsSummaryToCsv(
     "space",
     "branch",
     "ballotBound",
+    "ballotStatus",
     "ballotClosesAt",
     "approveVotes",
     "abstainVotes",
@@ -165,6 +191,13 @@ export function proposalsSummaryToCsv(
       ? (branchNames.get(branchId) ?? branchId)
       : "Party-wide";
     const kind = isGovernanceResolution(proposal) ? "resolution" : "policy";
+    const ballotStatus = recordedResultProposalIds?.has(proposal.proposalId)
+      ? "result_recorded"
+      : proposal.stage === "decide" && !ballotExpired(proposal)
+        ? "open_interim"
+        : proposal.votes.total > 0 || proposal.ballotRevisionId
+          ? "closed_pending_outcome"
+          : "not_open";
     const row = [
       proposal.proposalId,
       proposal.title,
@@ -173,6 +206,7 @@ export function proposalsSummaryToCsv(
       proposal.space,
       branchName,
       proposal.ballotRevisionId ? "yes" : "no",
+      ballotStatus,
       proposal.ballotClosesAt
         ? new Date(proposal.ballotClosesAt).toISOString()
         : "",
