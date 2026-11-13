@@ -39,6 +39,7 @@ import {
 } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import EmailPreferences from '../../components/member/EmailPreferences.astro';
+import { Turnstile } from '../../components/ui/turnstile';
 import { ballotExpired, ballotDeadlineLabel, closesWithinSevenDays } from '../../lib/ballot-deadline.ts';
 import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
 import { outstandingBallots, type DigestBallot } from '../../lib/engagement-email.ts';
@@ -53,6 +54,9 @@ export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
 
 const env = runtimeEnv(Astro.locals);
+// The widget renders nothing when no site key is configured; the server decides
+// whether a challenge is required. See docs/security/turnstile.md.
+const turnstileSiteKey = String(env.PUBLIC_TURNSTILE_SITE_KEY ?? '').trim();
 const [db, user] = await Promise.all([
   getDatabase(env),
   getSessionUser(Astro.request, env),
@@ -340,7 +344,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 )}
 
                 {emailAvailable && (
-                  <form id="email-signin-form" class="signin-email-form" novalidate>
+                  <form id="email-signin-form" class="signin-email-form" novalidate data-turnstile={turnstileSiteKey ? 'required' : 'off'}>
                     <Field label="Membership email address" htmlFor="signin-email">
                       <Input
                         id="signin-email"
@@ -375,6 +379,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                     </details>
 
                     <p class="signin-expiry-note">New accounts have optional Engage digests off. After signing in, choose whether to receive ballot reminders in onboarding or My Engage → Notifications. Verification and sign-in messages are separate.</p>
+                    <Turnstile client:load siteKey={turnstileSiteKey} action="signin" />
                     <div class="signin-submit-row">
                       <Button type="submit" className="signin-submit-btn">
                         <Mail className="size-4" aria-hidden="true" />
@@ -983,6 +988,16 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 
   const authClient = createAuthClient({
     plugins: [magicLinkClient(), passkeyClient()],
+    fetchOptions: {
+      // Attach the Turnstile token to auth requests. Only the protected
+      // routes inspect it; passkey and session calls ignore the header.
+      onRequest: (context) => {
+        const token = document.querySelector<HTMLInputElement>(
+          '#email-signin-form [name="cf-turnstile-response"]',
+        )?.value;
+        if (token) context.headers.set('x-turnstile-token', token);
+      },
+    },
   });
 
   const PASSKEY_ENROLLED_KEY = 'engage_passkey_enrolled';
@@ -1203,6 +1218,14 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
   emailForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!emailStatus || !emailForm.reportValidity()) return;
+    const turnstileRequired = emailForm.dataset.turnstile === 'required';
+    const turnstileToken = emailForm.querySelector<HTMLInputElement>(
+      '[name="cf-turnstile-response"]',
+    )?.value;
+    if (turnstileRequired && !turnstileToken) {
+      setEmailMessage('Complete the verification check and try again.', 'error');
+      return;
+    }
     const btn = emailForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     btn.disabled = true;
     trackEngage('signin_attempted', { method: 'email' });
@@ -1219,6 +1242,8 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
       });
       trackEngage('signin_result', { method: 'email', outcome: result.error ? result.error.code === 'NAME_REQUIRED' ? 'name_required' : 'failed' : 'link_sent' });
       if (result.error) {
+        // A consumed or failed token cannot be reused; request a fresh one.
+        window.dispatchEvent(new Event('engage:turnstile-reset'));
         if (result.error.code === 'NAME_REQUIRED') {
           setEmailMessage(
             'Welcome! Because this is your first sign-in with this email, please enter your full name so an administrator can verify your Fusion membership.',
@@ -1230,12 +1255,17 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           const nameInput = emailForm.querySelector<HTMLInputElement>('[name="name"]')!;
           nameInput.required = true;
           nameInput.focus();
+        } else if (result.error.code === 'TURNSTILE_REQUIRED' || result.error.code === 'TURNSTILE_INVALID' || result.error.code === 'TURNSTILE_EXPIRED') {
+          setEmailMessage('The verification check didn’t pass. Complete it again, then retry.', 'error');
         } else if (result.error.status === 429) {
-          setEmailMessage('Too many attempts. Please wait a minute and try again.', 'error');
+          setEmailMessage('Too many attempts. Please wait a few minutes and try again.', 'error');
+        } else if (result.error.status === 503) {
+          setEmailMessage('Verification is temporarily unavailable. Try again in a moment.', 'error');
         } else {
           setEmailMessage('Could not send sign-in link. Please try again shortly.', 'error');
         }
       } else {
+        window.dispatchEvent(new Event('engage:turnstile-reset'));
         try {
           localStorage.setItem(KNOWN_EMAIL_KEY, emailValue);
         } catch {
@@ -1247,6 +1277,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         );
       }
     } catch {
+      window.dispatchEvent(new Event('engage:turnstile-reset'));
       trackEngage('signin_result', { method: 'email', outcome: 'failed' });
       setEmailMessage('Could not send sign-in link. Please try again shortly.', 'error');
     } finally {
