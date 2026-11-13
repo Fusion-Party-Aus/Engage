@@ -1,5 +1,6 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import { STANDARD_BRANCHES } from '../../lib/migrations.ts';
 import SenseBox from '../../components/SenseBox';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { senseDestinations } from '../../lib/sense-box.ts';
@@ -7,7 +8,7 @@ export const prerender=false;
 const db=await getDatabase(runtimeEnv(Astro.locals));
 const branches=await senseDestinations(db);
 const requested=Astro.url.searchParams.get('branch') || `branch-${(Astro.url.searchParams.get('state') || '').toLowerCase()}`;
-const initialBranch=branches.some(b=>b.branchId===requested)?requested:'';
+const initialBranch=branches.find(b=>b.branchId===requested)?.branchId || branches.find(b=>b.name===STANDARD_BRANCHES.find(s=>s.branchId===requested)?.name)?.branchId || '';
 ---
 <SiteLayout title="Sense Box · Engage" description="Tell Fusion what matters to your community. Share a concern, suggestion or local priority in your state or territory." canonical="/sense-box/">
 <div class="page-wrap section-space sense-page">

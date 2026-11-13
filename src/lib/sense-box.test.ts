@@ -54,9 +54,17 @@ test('database-backed intake throttle bounds parallel requests and keeps raw add
 
 test('fresh installation accepts a local concern into the selected branch inbox without creating membership', async () => {
  const db=createMemoryDb();
- assert.equal((await senseDestinations(db)).length,8);
+ assert.equal((await senseDestinations(db)).length,9);
  await submitSense(db,{...input,title:'The buses in my suburb are terrible'});
  assert.equal((await listSense(db,admin,{status:'new'})).items[0]?.title,'The buses in my suburb are terrible');
  assert.equal(await db.collection('branch_memberships').countDocuments(),0);
  assert.equal(await db.collection('branches').countDocuments(),0);
+});
+
+test('National concerns reach the existing National branch rather than a duplicate identity',async()=>{
+ const db=createMemoryDb();
+ await db.collection('branches').insertOne({branchId:'original-national',kind:'national',name:'Fusion National',recognised:true});
+ assert.equal((await senseDestinations(db)).filter(b=>b.name==='Fusion National').length,1);
+ await submitSense(db,{...input,branchId:'branch-nat'});
+ assert.equal((await db.collection('sense_submissions').findOne({}))?.branchId,'original-national');
 });

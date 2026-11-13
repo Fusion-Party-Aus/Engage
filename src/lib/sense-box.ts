@@ -39,7 +39,13 @@ export async function claimSenseSlot(db: Db, address: string, secret: string, no
 export async function submitSense(db: Db, body: Record<string, unknown>, rate?: {address:string; secret:string}): Promise<string> {
   if (body.consent !== true) throw new SenseError('Please agree to how Fusion will use your input.');
   if (typeof body.requestId !== 'string' || !uuid.test(body.requestId)) throw new SenseError('Please reload the form and try again.');
-  const branchId = text(body.branchId,'State or territory',1,100);
+  let branchId = text(body.branchId,'Branch',1,100);
+  const destination=(await senseDestinations(db)).find(b=>b.branchId===branchId);
+  if(!destination) {
+    const standard=STANDARD_BRANCHES.find(b=>b.branchId===branchId);
+    const mapped=standard && (await senseDestinations(db)).find(b=>b.name===standard.name);
+    if(mapped) branchId=mapped.branchId;
+  }
   const content = {
     branchId,
     title:text(body.title,'Your priority',5,120),
@@ -48,8 +54,8 @@ export async function submitSense(db: Db, body: Record<string, unknown>, rate?: 
     topic:choice(body.topic,SENSE_TOPICS,'topic'),
   };
   const branch = await db.collection('branches').findOne({branchId});
-  const standard = STANDARD_BRANCHES.find(b => b.branchId === branchId && ['state','territory'].includes(b.kind));
-  if (branch ? branch.recognised !== true || !['state','territory'].includes(branch.kind) : !standard) throw new SenseError('That state or territory is not available. Please choose another.',409);
+  const standard = STANDARD_BRANCHES.find(b => b.branchId === branchId && ['national','state','territory'].includes(b.kind));
+  if (branch ? branch.recognised !== true || !['national','state','territory'].includes(branch.kind) : !standard) throw new SenseError('That state or territory is not available. Please choose another.',409);
   const _id = new ObjectId(createHash('sha256').update(body.requestId).digest('hex').slice(0,24));
   const fingerprint = createHash('sha256').update(JSON.stringify(content)).digest('hex');
   const existing = await db.collection('sense_submissions').findOne({_id});
@@ -110,9 +116,13 @@ export async function reviewSense(db: Db, user: SessionUser, body: Record<string
 /** Listening destinations do not create branch membership or governance authority. */
 export async function senseDestinations(db: Db) {
   const rows = await db.collection('branches').find({}).project({branchId:1,name:1,kind:1,recognised:1}).toArray();
-  const merged = new Map(STANDARD_BRANCHES.filter(b=>['state','territory'].includes(b.kind)).map(b=>[b.branchId,{branchId:b.branchId,name:b.name}]));
+  const merged = new Map(STANDARD_BRANCHES.map(b=>[b.branchId,{branchId:b.branchId,name:b.name}]));
+  for (const standard of STANDARD_BRANCHES) {
+    const existing=rows.find(row=>row.kind===standard.kind && String(row.name).trim().toLowerCase()===standard.name.toLowerCase());
+    if(existing && existing.branchId!==standard.branchId) merged.delete(standard.branchId);
+  }
   for (const row of rows) {
-    if (row.recognised === true && ['state','territory'].includes(row.kind)) merged.set(String(row.branchId),{branchId:String(row.branchId),name:String(row.name)});
+    if (row.recognised === true && ['national','state','territory'].includes(row.kind)) merged.set(String(row.branchId),{branchId:String(row.branchId),name:String(row.name)});
     else merged.delete(String(row.branchId));
   }
   return [...merged.values()].sort((a,b)=>a.name.localeCompare(b.name));

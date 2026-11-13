@@ -62,22 +62,21 @@ export interface StandardBranchPreview {
 export async function previewStandardBranches(
   db: Db,
 ): Promise<StandardBranchPreview> {
-  const ids = STANDARD_BRANCHES.map((branch) => branch.branchId);
-  const rows = await db
-    .collection("branches")
-    .find({ branchId: { $in: ids } })
-    .project({ branchId: 1 })
-    .toArray();
-  const existing = new Set(rows.map((row: any) => String(row.branchId)));
-  const missing = STANDARD_BRANCHES.filter(
-    (branch) => !existing.has(branch.branchId),
-  );
+  const rows = await db.collection("branches").find({}).toArray();
+  const missing = STANDARD_BRANCHES.filter(branch => !matchingStandardBranch(rows,branch));
+  const existing = new Set(STANDARD_BRANCHES.filter(branch => matchingStandardBranch(rows,branch)).map(b=>b.branchId));
   return {
     total: STANDARD_BRANCHES.length,
     existing: existing.size,
     missing: missing.length,
     missingNames: missing.map((branch) => branch.name),
   };
+}
+
+function matchingStandardBranch(rows: Record<string, any>[], branch: StandardBranchDefinition) {
+  const candidates=rows.filter(row=>row.branchId===branch.branchId || (row.kind===branch.kind && String(row.name).trim().toLowerCase()===branch.name.toLowerCase()));
+  if(candidates.length>1) throw new Error(`Duplicate ${branch.name} branches need reconciliation before this migration can continue.`);
+  return candidates[0];
 }
 
 /**
@@ -92,7 +91,12 @@ export async function seedStandardBranches(db: Db): Promise<{
   let created = 0;
   let existing = 0;
   const now = new Date();
+  const rows=await db.collection("branches").find({}).toArray();
+  // Resolve all identities before writing; ambiguous existing branches fail closed.
+  const matches=new Map(STANDARD_BRANCHES.map(branch=>[branch.branchId,matchingStandardBranch(rows,branch)]));
+  const nationalId=String(matches.get("branch-nat")?.branchId ?? "branch-nat");
   for (const branch of STANDARD_BRANCHES) {
+    if(matches.get(branch.branchId)) { existing++; continue; }
     try {
       const result = await db.collection("branches").updateOne(
         { branchId: branch.branchId },
@@ -102,7 +106,7 @@ export async function seedStandardBranches(db: Db): Promise<{
             name: branch.name,
             kind: branch.kind,
             ...(branch.parentBranchId
-              ? { parentBranchId: branch.parentBranchId }
+              ? { parentBranchId: nationalId }
               : {}),
             recognised: true,
             websiteHref: branch.websiteHref,

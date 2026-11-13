@@ -189,3 +189,13 @@ describe("durable database migrations", () => {
     assert.equal(payload.migrations.length, 2);
   });
 });
+
+it('reuses existing National and Victoria identities when seeding standard branches',async()=>{
+ const db=createMemoryDb();
+ await db.collection('branches').insertOne({branchId:'existing-national',name:'Fusion National',kind:'national',recognised:true});
+ await db.collection('branches').insertOne({branchId:'existing-victoria',name:'Fusion Victoria',kind:'state',recognised:true,parentBranchId:'existing-national'});
+ assert.equal((await previewStandardBranches(db)).missing,7);
+ await seedStandardBranches(db);
+ assert.equal(await db.collection('branches').countDocuments(),9);
+ assert.equal((await db.collection('branches').findOne({branchId:'branch-nsw'}))?.parentBranchId,'existing-national');
+});
