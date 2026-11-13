@@ -2,13 +2,14 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { canManageBranchBallot } from "../../../../lib/auth.ts";
+import { hasPermission } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin)
+  if (!user.isAdmin && !user.isBranchAdmin && !hasPermission(user, "amendments.manage_ballot"))
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -60,7 +61,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "Endorsed amendment wording revision is missing or changed." },
         { status: 409 },
       );
+    const branchScope =
+      typeof proposal.governanceAuthorityBranchId === "string"
+        ? proposal.governanceAuthorityBranchId
+        : undefined;
     if (
+      !hasPermission(user, "amendments.manage_ballot", branchScope) ||
       !canManageBranchBallot(user, {
         governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
         jurisdictionBranchId: proposal.jurisdictionBranchId,

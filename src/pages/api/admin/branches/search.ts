@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser, canAdministerBranch } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { branchesWithPermission, hasPermission } from "../../../../lib/rbac.ts";
 import { listMembers, listProposals } from "../../../../lib/store.ts";
 import { BRANCH_MEMBERSHIPS, BRANCH_SUBSCRIPTIONS } from "../../../../lib/branch-participation.ts";
 
@@ -30,8 +31,14 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const headers = { "cache-control": "private, no-store" };
 
   if (type === "member") {
+    const scoped = branchesWithPermission(user, "branches.verify_members");
+    if (!scoped.national && scoped.branchIds.length === 0)
+      return Response.json(
+        { error: "Branch administrator access required." },
+        { status: 403 },
+      );
     if (q.length < 2) return Response.json({ results: [] }, { headers });
-    const branches = user.isAdmin
+    const branches = scoped.national
       ? branchId
         ? [branchId]
         : (
@@ -43,13 +50,13 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
           ).map((row: any) => String(row.branchId))
       : branchId
         ? [branchId]
-        : (user.branchAdminIds ?? []);
-    if (!user.isAdmin && branchId && !canAdministerBranch(user, branchId))
+        : scoped.branchIds;
+    if (!scoped.national && branchId && !canAdministerBranch(user, branchId))
       return Response.json(
         { error: "You are not authorised to search this branch." },
         { status: 403 },
       );
-    if (!user.isAdmin && !branches.length)
+    if (!scoped.national && !branches.length)
       return Response.json({ results: [] }, { headers });
 
     const [subscriptions, memberships] = await Promise.all([
@@ -89,7 +96,7 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   }
 
   if (type === "proposal") {
-    if (!user.isAdmin)
+    if (!user.isAdmin && !hasPermission(user, "branches.refer_proposals"))
       return Response.json(
         { error: "Only a national administrator can refer proposals." },
         { status: 403 },

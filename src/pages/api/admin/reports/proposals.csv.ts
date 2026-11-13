@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { branchesWithPermission } from "../../../../lib/rbac.ts";
 import { listProposals } from "../../../../lib/store.ts";
 import {
   canIncludeProposalInAdminReport,
@@ -15,7 +16,8 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   if (!user) {
     return Response.json({ error: "Sign in required." }, { status: 401 });
   }
-  if (!user.isStaff && !user.isBranchAdmin) {
+  const exportScope = branchesWithPermission(user, "reports.export");
+  if (!exportScope.national && exportScope.branchIds.length === 0) {
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },

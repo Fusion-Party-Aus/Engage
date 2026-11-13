@@ -14,7 +14,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin)
+  if (
+    !user.isAdmin &&
+    !user.isBranchAdmin &&
+    !hasPermission(user, "ballots.record_result")
+  )
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },

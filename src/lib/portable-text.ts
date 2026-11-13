@@ -29,12 +29,12 @@ export function parseInline(text: string): string {
     '<img class="portable-inline-image" src="$2" alt="$1" loading="lazy" />',
   );
 
-  // Markdown links: [text](https://...) or [text](/relative/path)
+  // Markdown links: [text](https://...) or [text](/relative/path) (reject protocol-relative //...)
   out = out.replace(
     /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
     '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
   );
-  out = out.replace(/\[([^\]]+)\]\((\/[^\s)]*)\)/g, '<a href="$2">$1</a>');
+  out = out.replace(/\[([^\]]+)\]\((\/(?!\/)[^\s)]*)\)/g, '<a href="$2">$1</a>');
 
   // Bold: **text** or __text__
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");

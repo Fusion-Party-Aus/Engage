@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { ObjectId } from "mongodb";
 import { getSessionUser } from "../../../lib/auth.ts";
 import {
   parsePagination,
@@ -6,7 +7,7 @@ import {
   toMemberAccountDto,
 } from "../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
-import { requireApiPermission } from "../../../lib/rbac.ts";
+import { hasPermission, requireApiPermission } from "../../../lib/rbac.ts";
 import { listMembers, saveMember } from "../../../lib/store.ts";
 import { sendVerificationNotice } from "../../../lib/verification-email.ts";
 export const prerender = false;
@@ -49,7 +50,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const result = await saveMember(db, user!, body, true);
     const notification = body.status === "verified" && body.disabled !== true
       ? await sendVerificationNotice(db, env, result.memberId, "verified") : "not-needed";
-    return Response.json({ ...result, notification }, { status: 201 });
+    return privateJson({ ...result, notification }, { status: 201 });
   } catch (error) {
     return Response.json(
       {
@@ -64,28 +65,35 @@ export const POST: APIRoute = async ({ request, locals }) => {
 export const PATCH: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin)
-    return Response.json(
-      { error: "Administrator access required." },
-      { status: 403 },
-    );
+  const denied = requireApiPermission(user, "members.verify", {
+    message: "Administrator access required.",
+  });
+  if (denied || !user) {
+    return denied ?? privateJson({ error: "Sign in required." }, { status: 401 });
+  }
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
+    if (body.role !== undefined && !hasPermission(user, "roles.manage")) {
+      return privateJson(
+        { error: "Role management permission required to change member roles." },
+        { status: 403 },
+      );
+    }
     const db = await getDatabase(env);
     const memberId = typeof body.memberId === "string" ? body.memberId : "";
-    const wasVerified = memberId
-      ? await db
-          .collection("memberships")
-          .findOne({ memberId, status: "verified" })
-      : null;
-    const account = memberId
-      ? await db
-          .collection("user")
-          .findOne({ _id: new (await import("mongodb")).ObjectId(memberId) })
-      : null;
+    if (!ObjectId.isValid(memberId)) {
+      return privateJson(
+        { error: "Choose a valid member account." },
+        { status: 400 },
+      );
+    }
+    const wasVerified = await db
+      .collection("memberships")
+      .findOne({ memberId, status: "verified" });
+    const account = await db
+      .collection("user")
+      .findOne({ _id: new ObjectId(memberId) });
     const result = await saveMember(db, user, body, false);
     const willBeVerified =
       body.status === undefined
@@ -103,9 +111,9 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       ? await sendVerificationNotice(db, env, memberId, "verified")
       : body.status === "suspended" && wasVerified
         ? await sendVerificationNotice(db, env, memberId, "suspended") : "not-needed";
-    return Response.json({ ...result, notification });
+    return privateJson({ ...result, notification });
   } catch (error) {
-    return Response.json(
+    return privateJson(
       {
         error:
           error instanceof Error ? error.message : "Could not update account.",

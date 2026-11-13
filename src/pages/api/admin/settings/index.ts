@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { hasPermission } from "../../../../lib/rbac.ts";
+import { resolvePublicOrigin } from "../../../../lib/public-origin.ts";
 import {
   getSiteConfig,
   listSiteConfigEvents,
@@ -16,15 +17,10 @@ const READ_ONLY_KEYS = ["backupSummary", "handoverSummary", "docsUrl", "repoUrl"
 const SECTIONS = ["visibility", "features", "social", "directory", "general"];
 const noStore = { "cache-control": "private, no-store" };
 
-function sameOrigin(request: Request): boolean {
+function sameOrigin(request: Request, env: ReturnType<typeof runtimeEnv>): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return true;
-  try {
-    return new URL(origin).host === new URL(request.url).host ||
-      origin === request.headers.get("x-forwarded-origin");
-  } catch {
-    return false;
-  }
+  return origin === resolvePublicOrigin({ env, requestUrl: request.url });
 }
 
 async function authorise(request: Request, locals: unknown) {
@@ -55,7 +51,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
 export const PATCH: APIRoute = async ({ request, locals }) => {
   const { env, user, error } = await authorise(request, locals);
   if (error) return error;
-  if (!sameOrigin(request))
+  if (!sameOrigin(request, env))
     return Response.json({ error: "Cross-site requests are not allowed." }, { status: 403 });
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -90,7 +86,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
 export const POST: APIRoute = async ({ request, locals }) => {
   const { env, user, error } = await authorise(request, locals);
   if (error) return error;
-  if (!sameOrigin(request))
+  if (!sameOrigin(request, env))
     return Response.json({ error: "Cross-site requests are not allowed." }, { status: 403 });
   try {
     const body = (await request.json()) as { eventId?: string };
