@@ -1,5 +1,37 @@
 [
   {
+    "hash": "f8b1d04",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "rbac",
+    "summary": "Add configurable scoped roles, permission evaluation, and admin UI"
+  },
+  {
+    "hash": "01c6a42",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Enforce archived proposal review permission on GET /api/amendments"
+  },
+  {
+    "hash": "ec15e83",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rbac",
+    "summary": "Document RBAC audit, permission matrix, and configurable roles spec"
+  },
+  {
+    "hash": "66c8d65",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record governance transparency sprint"
+  },
+  {
     "hash": "554d0bf",
     "date": "2026-11-13",
     "type": "fix",
@@ -624,37 +656,5 @@
     "category": "docs",
     "scope": "deploy",
     "summary": "Note token revocation and private-repo poller requirement"
-  },
-  {
-    "hash": "cffc1a0",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Record end-to-end poller verification and staging access"
-  },
-  {
-    "hash": "ef8e9a8",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Document Coolify staging, production cutover, and poller"
-  },
-  {
-    "hash": "3280da3",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Bake Mongo helpers into Coolify staging image"
-  },
-  {
-    "hash": "6e2cc5e",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Use classic builder for Coolify builds (DNS workaround)"
   }
 ]
