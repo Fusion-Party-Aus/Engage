@@ -16,6 +16,8 @@ import {
   LEGACY_MODERATOR_PERMISSIONS,
   canGrantPermissionSet,
   hasPermission,
+  normalisePlatformRoles,
+  primaryPlatformRole,
 } from "./rbac.ts";
 import type {
   CommentRecord,
@@ -295,6 +297,9 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
       : undefined,
     stage,
     kind,
+    ...(typeof raw.scope === "string" && raw.scope.trim()
+      ? { scope: raw.scope.trim() }
+      : {}),
     originatingBranchId: raw.originatingBranchId
       ? String(raw.originatingBranchId)
       : undefined,
@@ -2636,11 +2641,11 @@ export async function listMembers(
       .toArray(),
   ]);
 
-  const roleMap = new Map<string, UserRole>();
+  const rolesMap = new Map<string, UserRole[]>();
   for (const r of roles) {
-    if (r.role === "administrator" || !roleMap.has(r.memberId)) {
-      roleMap.set(r.memberId, r.role);
-    }
+    const list = rolesMap.get(r.memberId) ?? [];
+    if (!list.includes(r.role)) list.push(r.role);
+    rolesMap.set(r.memberId, list);
   }
   const statusMap = new Map<string, MembershipStatus>(
     memberships.map((m) => [m.memberId, m.status]),
@@ -2676,11 +2681,15 @@ export async function listMembers(
   return users
     .map((u) => {
       const memberId = String(u._id);
+      const platformRoles = normalisePlatformRoles(
+        rolesMap.get(memberId) ?? [],
+      );
       return {
         memberId,
         name: String(u.name ?? ""),
         email: String(u.email ?? ""),
-        role: roleMap.get(memberId) ?? "member",
+        role: primaryPlatformRole(platformRoles),
+        roles: platformRoles,
         status: statusMap.get(memberId) ?? "pending",
         disabled: Boolean(u.disabled),
         emailVerified: Boolean(u.emailVerified),
@@ -2696,7 +2705,7 @@ export async function listMembers(
     .filter(
       (m) =>
         !q ||
-        `${m.name} ${m.email} ${m.role} ${m.status} ${(m.delegatedRoles ?? []).join(" ")} ${(m.branchAdministratorOf ?? []).join(" ")}`
+        `${m.name} ${m.email} ${m.role} ${(m.roles ?? []).join(" ")} ${m.status} ${(m.delegatedRoles ?? []).join(" ")} ${(m.branchAdministratorOf ?? []).join(" ")}`
           .toLowerCase()
           .includes(q),
     );
@@ -2713,7 +2722,9 @@ export async function saveMember(
     body.name !== undefined ||
     body.status !== undefined ||
     body.disabled !== undefined;
-  const changingRole = body.role !== undefined;
+  const rolesProvided = body.roles !== undefined;
+  const roleProvided = body.role !== undefined;
+  const changingRole = rolesProvided || roleProvided;
   if (changingMembership && !hasPermission(actor, "members.verify")) {
     throw new Error("Member verification permission required.");
   }
@@ -2731,26 +2742,40 @@ export async function saveMember(
     throw new Error("Enter a full name (2–100 characters).");
   }
 
-  const role = body.role !== undefined ? String(body.role) : undefined;
-  if (
-    role !== undefined &&
-    !["member", "moderator", "administrator"].includes(role)
-  ) {
-    throw new Error("Choose Member, Moderator or National Administrator.");
+  let requestedRoles: UserRole[] | undefined;
+  if (rolesProvided) {
+    if (!Array.isArray(body.roles)) {
+      throw new Error("Choose a valid set of platform roles.");
+    }
+    requestedRoles = normalisePlatformRoles(body.roles);
+    if (roleProvided) {
+      const single = normalisePlatformRoles([String(body.role)]);
+      if (single.join(",") !== requestedRoles.join(",")) {
+        throw new Error("Choose one set of platform roles.");
+      }
+    }
+  } else if (roleProvided) {
+    requestedRoles = normalisePlatformRoles([String(body.role)]);
   }
-  if (role !== undefined && !hasPermission(actor, "roles.manage")) {
-    throw new Error(
-      "Role management permission is required to change a platform role.",
-    );
-  }
+
   // Anti-escalation: a delegated role manager cannot promote anyone into a
   // system role whose permissions they do not personally hold.
-  if (role === "administrator" && !canGrantPermissionSet(actor, ALL_NATIONAL_PERMISSIONS)) {
+  const actorIsNationalAdministrator = canGrantPermissionSet(
+    actor,
+    ALL_NATIONAL_PERMISSIONS,
+  );
+  if (
+    requestedRoles?.includes("administrator") &&
+    !actorIsNationalAdministrator
+  ) {
     throw new Error(
       "You cannot grant National Administrator because you do not hold all national permissions.",
     );
   }
-  if (role === "moderator" && !canGrantPermissionSet(actor, LEGACY_MODERATOR_PERMISSIONS)) {
+  if (
+    requestedRoles?.includes("moderator") &&
+    !canGrantPermissionSet(actor, LEGACY_MODERATOR_PERMISSIONS)
+  ) {
     throw new Error(
       "You cannot grant Moderator because you do not hold all moderator permissions.",
     );
@@ -2810,7 +2835,7 @@ export async function saveMember(
     );
     if (
       targetIsAdministrator &&
-      !canGrantPermissionSet(actor, ALL_NATIONAL_PERMISSIONS)
+      !actorIsNationalAdministrator
     ) {
       throw new Error(
         "Only a national administrator can change a national administrator account.",
@@ -2819,7 +2844,9 @@ export async function saveMember(
     if (
       memberId === actor.memberId &&
       (disabled === true ||
-        (role !== undefined && role !== "administrator") ||
+        (actorIsNationalAdministrator &&
+          requestedRoles !== undefined &&
+          !requestedRoles.includes("administrator")) ||
         (status !== undefined && status !== "verified"))
     ) {
       throw new Error("You cannot remove your own administrator access.");
@@ -2836,23 +2863,29 @@ export async function saveMember(
     );
   }
 
-  if (role !== undefined) {
-    await db.collection("application_roles").deleteMany({ memberId });
-    if (role !== "member") {
-      await db
-        .collection("application_roles")
-        .updateOne(
-          { memberId, role },
-          {
-            $setOnInsert: {
-              memberId,
-              role,
-              grantedAt: now,
-              grantedBy: actor.memberId,
-            },
+  if (requestedRoles !== undefined) {
+    const roleCollection = db.collection("application_roles");
+    const desired = requestedRoles.filter((item) => item !== "member");
+    const desiredSet = new Set<string>(desired);
+    const existingRoles = await roleCollection.find({ memberId }).toArray();
+    for (const row of existingRoles) {
+      if (!desiredSet.has(String(row.role))) {
+        await roleCollection.deleteOne({ _id: row._id });
+      }
+    }
+    for (const role of desired) {
+      await roleCollection.updateOne(
+        { memberId, role },
+        {
+          $setOnInsert: {
+            memberId,
+            role,
+            grantedAt: now,
+            grantedBy: actor.memberId,
           },
-          { upsert: true },
-        );
+        },
+        { upsert: true },
+      );
     }
   }
 

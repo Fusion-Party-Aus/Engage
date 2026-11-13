@@ -19,11 +19,6 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin)
-    return Response.json(
-      { error: "Branch administrator access required." },
-      { status: 403 },
-    );
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 80);
   const type = url.searchParams.get("type");
   const branchId = url.searchParams.get("branchId") ?? "";

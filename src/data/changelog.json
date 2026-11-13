@@ -1,5 +1,21 @@
 [
   {
+    "hash": "55711e2",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Allow national RBAC grants in branch search and preserve scope on read"
+  },
+  {
+    "hash": "eead05a",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot after notification popover"
+  },
+  {
     "hash": "d9313bb",
     "date": "2026-11-13",
     "type": "feat",
@@ -640,21 +656,5 @@
     "category": "feature",
     "scope": "changelog",
     "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
-  },
-  {
-    "hash": "3512e0a",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "workspaces",
-    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
   }
 ]
