@@ -1,5 +1,13 @@
 [
   {
+    "hash": "db6d4b8",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Show single relative ballot deadline in viewer's local timezone (#47)"
+  },
+  {
     "hash": "14ae304",
     "date": "2026-11-13",
     "type": "fix",
@@ -650,13 +658,5 @@
     "category": "feature",
     "scope": "analytics",
     "summary": "Measure Engage navigation and participation outcomes"
-  },
-  {
-    "hash": "e41ac7d",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "analytics",
-    "summary": "Initialize Plausible tracking on production"
   }
 ]
