@@ -2,9 +2,11 @@
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import {
   ArrowLeft,
+  ArrowRight,
   BookOpen,
   Calendar,
   CheckCircle2,
+  FileDown,
   FileText,
   Gavel,
   GitBranch,
@@ -104,6 +106,7 @@ const branchNameFor = (branchId?: string) =>
 const unresolvedAmendments = amendmentRows.filter((amendment: any) =>
   ['proposed', 'conflict', 'stale', 'ready', 'endorsed', 'voting'].includes(String(amendment.status)),
 ).length;
+const unrespondedComments = comments.filter((comment) => !comment.feedback).length;
 
 const stageLabel = (stage: string) =>
   stage === 'decide' ? '3. Decide' : stage === 'deliberate' ? '2. Deliberate' : stage === 'implement' ? '4. Implement' : stage === 'archived' ? 'Archived' : '1. Propose';
@@ -148,10 +151,92 @@ const policyState = policy
     : 'Not yet adopted';
 
 const publicUrl = proposal ? `/proposals/${proposal.slug}/` : '/proposals/';
+const pdfUrl = proposal ? `/api/admin/reports/proposal-pdf?proposalId=${encodeURIComponent(proposal.proposalId)}` : '';
 const pct = (value: number) =>
   proposal?.votes.total ? Math.round((value / proposal.votes.total) * 100) : 0;
 const formatDate = (value: unknown) =>
   value ? new Date(String(value)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : notRecorded;
+
+const nextAction = (() => {
+  if (!proposal) return null;
+  if (proposal.stage === 'decide' && !proposal.ballotRevisionId) {
+    return {
+      variant: 'warning' as const,
+      title: 'Next step: Bind reviewed ballot wording',
+      description: canManageBallot
+        ? 'Member votes are open, but no wording snapshot is bound yet. Bind the reviewed revision before recording an outcome.'
+        : 'This ballot needs a national administrator or matching branch authority to bind the reviewed wording revision.',
+      href: canManageBallot ? '#bind-ballot' : undefined,
+      cta: 'Bind wording',
+    };
+  }
+  if (proposal.stage === 'decide' && proposal.ballotRevisionId && !ballotResult) {
+    return {
+      variant: 'info' as const,
+      title: 'Ballot open for member voting',
+      description: isResolution
+        ? 'Once voting closes, record the formal ballot outcome below.'
+        : 'Once voting closes, record the formal ballot outcome below. A successful policy vote still requires separate ratification.',
+      href: canManageBallot ? '#record-outcome' : undefined,
+      cta: 'Record outcome',
+    };
+  }
+  if (ballotResult?.result === 'successful' && !isResolution && !policy) {
+    return {
+      variant: 'info' as const,
+      title: 'Next step: Formal ratification',
+      description: 'This policy proposal passed its ballot. Complete formal ratification in the Policy Registry before publication.',
+      href: user.isAdmin ? '/admin/policies/' : undefined,
+      cta: 'Open policy registry',
+    };
+  }
+  if (policy?.status === 'adopted' && policy?.publicationStatus === 'unpublished') {
+    return {
+      variant: 'warning' as const,
+      title: 'Next step: Authorise publication',
+      description: 'This policy is ratified but still private. Authorise publication in the Policy Registry to make it public.',
+      href: user.isAdmin ? `/admin/policies/#policy-${policy.policyId}` : undefined,
+      cta: 'Authorise publication',
+    };
+  }
+  if (ballotResult?.result === 'successful' && isResolution && !proposal.implementationNote && !proposal.supersededByProposalId && proposal.stage !== 'archived') {
+    return {
+      variant: 'info' as const,
+      title: 'Next step: Record resolution outcome',
+      description: 'This governance motion passed its ballot. Record an implementation note, link a successor motion, or archive when complete.',
+      href: canManageProposal ? '#outcome-notes' : undefined,
+      cta: 'Record outcome',
+    };
+  }
+  if (unresolvedAmendments > 0) {
+    return {
+      variant: 'warning' as const,
+      title: `${unresolvedAmendments} amendment${unresolvedAmendments === 1 ? '' : 's'} awaiting review`,
+      description: 'Review or resolve open amendments before advancing or binding ballot wording.',
+      href: '#record-amendments',
+      cta: 'Review amendments',
+    };
+  }
+  if (unrespondedComments > 0 && (proposal.stage === 'deliberate' || proposal.stage === 'decide')) {
+    return {
+      variant: 'info' as const,
+      title: `${unrespondedComments} member contribution${unrespondedComments === 1 ? '' : 's'} awaiting response`,
+      description: 'Record whether member feedback was incorporated, considered, deferred, or declined.',
+      href: '#record-discussion',
+      cta: 'Respond to contributions',
+    };
+  }
+  return null;
+})();
+
+const outcomeSectionOpen = Boolean(
+  proposal &&
+    (proposal.stage === 'implement' ||
+      proposal.stage === 'archived' ||
+      ballotResult ||
+      proposal.implementationNote ||
+      proposal.supersededByProposalId),
+);
 
 const adminChain = proposal
   ? [
@@ -348,6 +433,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
               Revise as new {isResolution ? 'motion' : 'proposal'}
             </Button>
           )}
+          <Button href={pdfUrl} variant="outline" size="sm"><FileDown />PDF report</Button>
           <Button href={publicUrl} variant="outline" size="sm"><FileText />Public view</Button>
         </div>
       </div>
@@ -357,11 +443,30 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
         <div class="project-header__badges">
           <span class="tabular project-id">{proposal.proposalId}</span>
           <Badge variant={stageTone(proposal.stage)}>{stageLabel(proposal.stage)}</Badge>
-          <Badge variant="outline">{isResolution ? 'Governance resolution' : 'Policy proposal'}</Badge>
+          <Badge variant={isResolution ? 'secondary' : 'outline'}>
+            {isResolution ? 'Governance resolution · outcome & archival' : 'Policy proposal · ballot → ratification → registry'}
+          </Badge>
           <Badge variant="muted">{proposal.space}</Badge>
         </div>
         <h1>{proposal.title}</h1>
       </header>
+
+      {nextAction && (
+        <Alert variant={nextAction.variant}>
+          <CheckCircle2 />
+          <div class="flex flex-wrap items-center justify-between gap-3 w-full">
+            <div class="grid gap-1">
+              <AlertTitle>{nextAction.title}</AlertTitle>
+              <AlertDescription>{nextAction.description}</AlertDescription>
+            </div>
+            {nextAction.href && (
+              <Button href={nextAction.href} size="sm" variant="outline" className="shrink-0">
+                {nextAction.cta}<ArrowRight />
+              </Button>
+            )}
+          </div>
+        </Alert>
+      )}
 
       <!-- Project Detail 1: 4-Column Hairline Stat Strip -->
       <div class="project-detail-strip" aria-label="Proposal operational metrics">
@@ -546,7 +651,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 
               <!-- Inline Ballot Wording Binding Form -->
               {canManageBallot && proposal.stage === 'decide' && !proposal.ballotRevisionId && (
-                <div class="admin-action-box">
+                <div id="bind-ballot" class="admin-action-box">
                   <div class="admin-action-box__head">
                     <Lock className="size-4" aria-hidden="true" />
                     <strong>Bind ballot wording revision</strong>
@@ -587,34 +692,43 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 
               <!-- Inline Ballot Outcome Form -->
               {canManageBallot && proposal.stage === 'decide' && (
-                <div class="admin-action-box">
-                  <div class="admin-action-box__head">
-                    <Gavel className="size-4" aria-hidden="true" />
-                    <strong>Record formal ballot outcome</strong>
+                proposal.ballotRevisionId ? (
+                  <div id="record-outcome" class="admin-action-box">
+                    <div class="admin-action-box__head">
+                      <Gavel className="size-4" aria-hidden="true" />
+                      <strong>Record formal ballot outcome</strong>
+                    </div>
+                    <p class="admin-inline-note">
+                      Apply the organisation&apos;s constitutional rules to record the ballot result against frozen revision <code>{String(proposal.ballotRevisionId).slice(0, 12)}</code>.
+                    </p>
+                    <form class="ballot-result-form grid gap-3" data-proposal-id={proposal.proposalId}>
+                      <div class="admin-form-grid">
+                        <Field label="Outcome" htmlFor={`ballot-result-${proposal.proposalId}`}>
+                          <NativeSelect defaultValue={ballotResult?.result ?? ''} id={`ballot-result-${proposal.proposalId}`} name="result" required>
+                            <option value="">Choose outcome</option>
+                            <option value="successful">Successful</option>
+                            <option value="unsuccessful">Unsuccessful</option>
+                            <option value="inconclusive">Inconclusive</option>
+                          </NativeSelect>
+                        </Field>
+                        <Field label="Decision event reference" htmlFor={`ballot-event-${proposal.proposalId}`}>
+                          <Input id={`ballot-event-${proposal.proposalId}`} name="decisionEventId" defaultValue={ballotResult?.decisionEventId ?? ''} required maxLength={200} placeholder="e.g. BALLOT-2026-11" />
+                        </Field>
+                      </div>
+                      <div class="admin-actions">
+                        <Button size="sm" type="submit">Record ballot outcome</Button>
+                        <span class="admin-status" role="status" aria-live="polite"></span>
+                      </div>
+                    </form>
                   </div>
-                  <p class="admin-inline-note">
-                    Apply the organisation&apos;s constitutional rules to record the ballot result against frozen revision <code>{proposal.ballotRevisionId ? String(proposal.ballotRevisionId).slice(0, 12) : 'unbound'}</code>.
-                  </p>
-                  <form class="ballot-result-form grid gap-3" data-proposal-id={proposal.proposalId}>
-                    <div class="admin-form-grid">
-                      <Field label="Outcome" htmlFor={`ballot-result-${proposal.proposalId}`}>
-                        <NativeSelect defaultValue={ballotResult?.result ?? ''} id={`ballot-result-${proposal.proposalId}`} name="result" required>
-                          <option value="">Choose outcome</option>
-                          <option value="successful">Successful</option>
-                          <option value="unsuccessful">Unsuccessful</option>
-                          <option value="inconclusive">Inconclusive</option>
-                        </NativeSelect>
-                      </Field>
-                      <Field label="Decision event reference" htmlFor={`ballot-event-${proposal.proposalId}`}>
-                        <Input id={`ballot-event-${proposal.proposalId}`} name="decisionEventId" defaultValue={ballotResult?.decisionEventId ?? ''} required maxLength={200} placeholder="e.g. BALLOT-2026-11" />
-                      </Field>
-                    </div>
-                    <div class="admin-actions">
-                      <Button size="sm" type="submit" disabled={!proposal.ballotRevisionId}>Record ballot outcome</Button>
-                      <span class="admin-status" role="status" aria-live="polite"></span>
-                    </div>
-                  </form>
-                </div>
+                ) : (
+                  <details id="record-outcome" class="admin-subform-disclosure">
+                    <summary>Record formal ballot outcome (requires bound wording first)</summary>
+                    <p class="admin-inline-note mt-3">
+                      Bind a reviewed wording revision above before recording the ballot outcome.
+                    </p>
+                  </details>
+                )
               )}
 
               {!canManageBallot && (
@@ -624,67 +738,69 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
               )}
 
               {canManageProposal && (
-                <div id="outcome-notes" class="admin-action-box">
-                  <div class="admin-action-box__head">
-                    <ListChecks className="size-4" aria-hidden="true" />
-                    <strong>Outcome notes, supersession &amp; archiving</strong>
+                <details id="outcome-notes" class="admin-subform-disclosure" open={outcomeSectionOpen}>
+                  <summary>
+                    <ListChecks className="size-4 inline mr-1.5 align-text-bottom" aria-hidden="true" />
+                    Outcome notes, supersession &amp; archiving
+                  </summary>
+                  <div class="grid gap-3 pt-3">
+                    <p class="admin-inline-note">
+                      Record implementation or decision outcomes, link a successor {isResolution ? 'motion' : 'proposal'} if superseded, or archive resolved records without altering historical votes or revisions. Linking a successor records supersession only — it does not automatically archive this record.
+                    </p>
+                    <form class="proposal-outcome-form grid gap-3" data-proposal-id={proposal.proposalId}>
+                      <Field label="Implementation / decision outcome note" htmlFor={`outcome-note-${proposal.proposalId}`}>
+                        <Textarea
+                          id={`outcome-note-${proposal.proposalId}`}
+                          name="implementationNote"
+                          rows={2}
+                          maxLength={1000}
+                          defaultValue={proposal.implementationNote ?? ''}
+                          placeholder="Summarise the recorded decision, implementation steps, or reason for closing."
+                        />
+                      </Field>
+                      <div class="admin-form-grid">
+                        <Field label="Superseded by proposal ID (optional)" htmlFor={`superseded-by-${proposal.proposalId}`}>
+                          <Input
+                            id={`superseded-by-${proposal.proposalId}`}
+                            name="supersededByProposalId"
+                            list={`superseded-list-${proposal.proposalId}`}
+                            defaultValue={proposal.supersededByProposalId ?? ''}
+                            placeholder="Search or enter proposal ID (leave blank to clear)"
+                          />
+                          <datalist id={`superseded-list-${proposal.proposalId}`}>
+                            {allOtherProposals.map((other: any) => (
+                              <option value={other.proposalId}>{other.title}</option>
+                            ))}
+                          </datalist>
+                        </Field>
+                        <Field label="Supersession note (optional)" htmlFor={`superseded-note-${proposal.proposalId}`}>
+                          <Input
+                            id={`superseded-note-${proposal.proposalId}`}
+                            name="supersededByNote"
+                            maxLength={500}
+                            defaultValue={proposal.supersededByNote ?? ''}
+                            placeholder="e.g. Replaced by updated 2026 motion"
+                          />
+                        </Field>
+                      </div>
+                      <div class="admin-actions">
+                        <Button size="sm" type="submit">Save outcome &amp; status</Button>
+                        {proposal.stage !== 'archived' && (
+                          <Button
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                            data-archive-proposal={proposal.proposalId}
+                            data-title={proposal.title}
+                          >
+                            Archive {isResolution ? 'motion' : 'proposal'}
+                          </Button>
+                        )}
+                        <span class="admin-status" role="status" aria-live="polite"></span>
+                      </div>
+                    </form>
                   </div>
-                  <p class="admin-inline-note">
-                    Record implementation or decision outcomes, link a successor {isResolution ? 'motion' : 'proposal'} if superseded, or archive resolved records without altering historical votes or revisions. Linking a successor records supersession only — it does not automatically archive this record; use Archive if you also want to close and hide it from general member lists.
-                  </p>
-                  <form class="proposal-outcome-form grid gap-3" data-proposal-id={proposal.proposalId}>
-                    <Field label="Implementation / decision outcome note" htmlFor={`outcome-note-${proposal.proposalId}`}>
-                      <Textarea
-                        id={`outcome-note-${proposal.proposalId}`}
-                        name="implementationNote"
-                        rows={2}
-                        maxLength={1000}
-                        defaultValue={proposal.implementationNote ?? ''}
-                        placeholder="Summarise the recorded decision, implementation steps, or reason for closing."
-                      />
-                    </Field>
-                    <div class="admin-form-grid">
-                      <Field label="Superseded by proposal ID (optional)" htmlFor={`superseded-by-${proposal.proposalId}`}>
-                        <Input
-                          id={`superseded-by-${proposal.proposalId}`}
-                          name="supersededByProposalId"
-                          list={`superseded-list-${proposal.proposalId}`}
-                          defaultValue={proposal.supersededByProposalId ?? ''}
-                          placeholder="Search or enter proposal ID (leave blank to clear)"
-                        />
-                        <datalist id={`superseded-list-${proposal.proposalId}`}>
-                          {allOtherProposals.map((other: any) => (
-                            <option value={other.proposalId}>{other.title}</option>
-                          ))}
-                        </datalist>
-                      </Field>
-                      <Field label="Supersession note (optional)" htmlFor={`superseded-note-${proposal.proposalId}`}>
-                        <Input
-                          id={`superseded-note-${proposal.proposalId}`}
-                          name="supersededByNote"
-                          maxLength={500}
-                          defaultValue={proposal.supersededByNote ?? ''}
-                          placeholder="e.g. Replaced by updated 2026 motion"
-                        />
-                      </Field>
-                    </div>
-                    <div class="admin-actions">
-                      <Button size="sm" type="submit">Save outcome &amp; status</Button>
-                      {proposal.stage !== 'archived' && (
-                        <Button
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                          data-archive-proposal={proposal.proposalId}
-                          data-title={proposal.title}
-                        >
-                          Archive {isResolution ? 'motion' : 'proposal'}
-                        </Button>
-                      )}
-                      <span class="admin-status" role="status" aria-live="polite"></span>
-                    </div>
-                  </form>
-                </div>
+                </details>
               )}
             </div>
           </section>
@@ -815,7 +931,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
             <div class="project-panel-head">
               <div>
                 <h2 id="record-discussion-heading">Member deliberation log</h2>
-                <p>Informal stances and wording suggestions posted by verified members.</p>
+                <p>Informal stances and wording suggestions posted by verified members. Record how feedback was addressed.</p>
               </div>
               <Button href={`${publicUrl}#deliberation`} variant="outline" size="sm"><MessageSquare />Open public thread</Button>
             </div>
@@ -824,18 +940,72 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                 <p class="admin-inline-note">No member contributions are recorded.</p>
               ) : (
                 <ol class="admin-record-comments">
-                  {comments.map((comment) => (
-                    <li>
-                      <div class="admin-record-comment__head">
-                        <strong>{comment.authorName}</strong>
-                        <Badge variant={comment.stance === 'support' ? 'success' : comment.stance === 'concern' ? 'destructive' : comment.stance === 'amendment' ? 'warning' : 'muted'}>
-                          {comment.stance}
-                        </Badge>
-                        <time class="tabular" datetime={new Date(comment.createdAt).toISOString()}>{formatDate(comment.createdAt)}</time>
-                      </div>
-                      <p>{comment.body}</p>
-                    </li>
-                  ))}
+                  {comments.map((comment) => {
+                    const fb = comment.feedback;
+                    const fbHistory = comment.feedbackHistory ?? [];
+                    const fbVariant = fb?.status === 'incorporated' ? 'success' : fb?.status === 'considered' ? 'info' : fb?.status === 'deferred' ? 'warning' : 'outline';
+                    return (
+                      <li data-comment-item={comment.commentId}>
+                        <div class="admin-record-comment__head">
+                          <strong>{comment.authorName}</strong>
+                          <Badge variant={comment.stance === 'support' ? 'success' : comment.stance === 'concern' ? 'destructive' : comment.stance === 'amendment' ? 'warning' : 'muted'}>
+                            {comment.stance}
+                          </Badge>
+                          {fb && (
+                            <Badge variant={fbVariant}>Response: {fb.status}</Badge>
+                          )}
+                          <time class="tabular" datetime={new Date(comment.createdAt).toISOString()}>{formatDate(comment.createdAt)}</time>
+                        </div>
+                        <p>{comment.body}</p>
+                        {fb && (
+                          <p class="text-xs text-muted-foreground mt-2 mb-0">
+                            <strong>{fb.updatedByName}</strong> marked <em>{fb.status}</em>
+                            {fb.note ? `: “${fb.note}”` : ''} · {formatDate(fb.updatedAt)}
+                          </p>
+                        )}
+                        {fbHistory.length > 1 && (
+                          <details class="mt-2 text-xs text-muted-foreground">
+                            <summary class="cursor-pointer font-medium">Response history ({fbHistory.length})</summary>
+                            <ul class="mt-1 space-y-1 pl-4">
+                              {fbHistory.map((entry) => (
+                                <li>
+                                  <strong>{entry.action}</strong> by {entry.updatedByName} ({formatDate(entry.updatedAt)})
+                                  {entry.note ? ` — ${entry.note}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                        {canManageProposal && (
+                          <details class="admin-subform-disclosure mt-2">
+                            <summary>{fb ? 'Update contribution response' : 'Respond to contribution'}</summary>
+                            <form class="comment-feedback-form mt-3 grid gap-3" data-comment-id={comment.commentId}>
+                              <div class="admin-form-grid">
+                                <Field label="Outcome" htmlFor={`feedback-status-${comment.commentId}`}>
+                                  <NativeSelect defaultValue={fb?.status ?? 'considered'} id={`feedback-status-${comment.commentId}`} name="status" required>
+                                    <option value="incorporated">Incorporated</option>
+                                    <option value="considered">Considered</option>
+                                    <option value="deferred">Deferred</option>
+                                    <option value="declined">Declined</option>
+                                  </NativeSelect>
+                                </Field>
+                                <Field label="Response note (optional)" htmlFor={`feedback-note-${comment.commentId}`}>
+                                  <Input id={`feedback-note-${comment.commentId}`} name="note" maxLength={500} defaultValue={fb?.note ?? ''} placeholder="Explain how this contribution was handled" />
+                                </Field>
+                              </div>
+                              <div class="admin-actions">
+                                <Button variant="outline" size="sm" type="submit">Save response</Button>
+                                {fb && (
+                                  <Button variant="outline" size="sm" type="button" data-clear-feedback={comment.commentId}>Clear response</Button>
+                                )}
+                                <span class="admin-status" role="status" aria-live="polite"></span>
+                              </div>
+                            </form>
+                          </details>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
             </div>
@@ -1148,6 +1318,51 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
       }
     }),
   );
+
+  // Inline contribution feedback forms
+  document.querySelectorAll<HTMLFormElement>('.comment-feedback-form').forEach((form) => {
+    const commentId = form.dataset.commentId;
+    const status = form.querySelector<HTMLElement>('[role="status"]');
+    const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const clearBtn = form.querySelector<HTMLButtonElement>('[data-clear-feedback]');
+
+    const sendFeedback = async (payload: Record<string, unknown>) => {
+      if (!commentId) return;
+      if (submitBtn) submitBtn.disabled = true;
+      if (clearBtn) clearBtn.disabled = true;
+      if (status) status.textContent = 'Saving…';
+      try {
+        const response = await fetch('/api/comments', {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ commentId, ...payload }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Could not save contribution response.');
+        if (status) status.textContent = 'Response saved.';
+        location.reload();
+      } catch (error) {
+        if (status) status.textContent = error instanceof Error ? error.message : 'Could not save contribution response.';
+        if (submitBtn) submitBtn.disabled = false;
+        if (clearBtn) clearBtn.disabled = false;
+      }
+    };
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const fields = new FormData(form);
+      void sendFeedback({
+        status: String(fields.get('status') ?? ''),
+        note: String(fields.get('note') ?? ''),
+      });
+    });
+
+    clearBtn?.addEventListener('click', () => {
+      void sendFeedback({ status: 'clear' });
+    });
+  });
 
   // Inline ballot bind form
   document.querySelectorAll<HTMLFormElement>('.ballot-bind-form').forEach((form) =>
