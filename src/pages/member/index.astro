@@ -11,6 +11,7 @@ import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
 import MemberSettings from '../../components/member/MemberSettings';
 import MemberOnboarding from '../../components/member/MemberOnboarding';
+import BranchMemberships from '../../components/member/BranchMemberships';
 import BranchChooser from '../../components/member/BranchChooser';
 import ActivityTimeline from '../../components/blocks/timeline-3';
 import AttentionQueue from '../../components/member/AttentionQueue.astro';
@@ -833,8 +834,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           </div>
         </div>
 
+        <p class="my-6"><a href="/sense-box/">Share a local concern in Sense Box →</a></p>
         <!-- VIEW 3: MY BRANCHES -->
         <div class="branches-only">
+          <BranchMemberships client:load branches={branchChoices} verified={user.status === "verified"} />
           <BranchChooser
             client:load
             mode="manage"

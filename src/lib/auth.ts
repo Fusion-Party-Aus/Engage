@@ -285,6 +285,8 @@ export async function getSessionUser(
       let branchAdminIds: string[] = [];
       try {
         const db = await getDatabase(env);
+        const { ensureNationalMembership } = await import('./branch-participation.ts');
+        await ensureNationalMembership(db,memberId);
         const [memberships, subscriptions] = await Promise.all([
           db
             .collection<{ branchId: string; branchRole?: string; status: string }>(
@@ -377,6 +379,10 @@ export async function getSessionUser(
         ? "moderator"
         : "member";
     const status: MembershipStatus = membershipDoc?.status ?? "pending";
+    if(status === 'verified') {
+      const {ensureNationalMembership} = await import('./branch-participation.ts');
+      await ensureNationalMembership(db,memberId);
+    }
     const verifiedBranchIds = branchMembershipRows.map((row) => row.branchId);
     const followedBranchIds = subscriptionRows.map((row) => row.branchId);
     // Discovery uses the union: a verified member keeps branch visibility even

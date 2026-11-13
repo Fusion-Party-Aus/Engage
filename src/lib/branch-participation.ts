@@ -14,8 +14,8 @@ import type {
  *  - `branch_subscriptions` is an Engage-owned personal preference. A person may
  *    follow or stop following a branch at any time.
  *  - `branch_memberships` is an organisational fact. It records that a branch
- *    has verified the person's membership. Only an authorised administrator (or
- *    a trusted external authority) may change it.
+ *    has verified the person's membership. Verified members can choose their geographic and constituent membership;
+ *    administrators and external authorities can also maintain membership facts.
  *
  * Voting eligibility reads only the membership fact. Following a branch grants
  * discovery, never a ballot. Keeping these collections separate is what allows
@@ -1441,4 +1441,48 @@ export async function migrateBranchParticipation(
     preservedMemberships: active.length,
     assignedProposals,
   };
+}
+
+/** Member-initiated membership; a per-person database lock serialises switches.
+ * A process crash leaves a fail-closed lock for an operator to clear after
+ * confirming no change is running. Never expire a lock during a live switch. */
+export async function chooseBranchMembership(db: Db, user: SessionUser, input: {branchId: string; join: boolean; resident?: boolean}) {
+  if (user.status !== 'verified') throw new BranchParticipationError('Verify your Fusion membership before joining a branch.',403,'verification-required');
+  const branch = await db.collection('branches').findOne({branchId:input.branchId,recognised:true});
+  if (!branch || !['state','territory','constituent'].includes(branch.kind)) throw new BranchParticipationError('Choose an available branch.',400,'branch-unavailable');
+  const geographic = ['state','territory'].includes(branch.kind);
+  if (input.join && geographic && input.resident !== true) throw new BranchParticipationError('Confirm that you live in this state or territory.',400,'residence-required');
+  const locks = db.collection('branch_membership_locks');
+  const { ObjectId } = await import('mongodb');
+  const { createHash } = await import('node:crypto');
+  const _id = new ObjectId(createHash('sha256').update(user.memberId).digest('hex').slice(0,24));
+  try { await locks.insertOne({_id,createdAt:new Date()}); }
+  catch (error) { if ((error as {code?:number}).code !== 11000) throw error; throw new BranchParticipationError('A membership change is already in progress. Try again shortly.',409,'membership-busy'); }
+  try {
+    const branches = await db.collection('branches').find({kind:{$in:geographic?['state','territory']:['constituent']}}).project({branchId:1}).toArray();
+    const memberships = await db.collection(BRANCH_MEMBERSHIPS).find({memberId:user.memberId,status:'active',branchId:{$in:branches.map(b=>b.branchId)}}).toArray();
+    const now=new Date();
+    for (const membership of memberships) {
+      if (input.join && membership.branchId===input.branchId) continue;
+      if (!input.join && membership.branchId!==input.branchId) continue;
+      const after={status:'revoked',revokedAt:now,revokedBy:user.memberId,revocationReason:'Member changed their branch membership.'};
+      await recordMembershipEvent(db,{branchId:String(membership.branchId),memberId:user.memberId,actorId:user.memberId,action:'self-left',before:membership,after});
+      await db.collection(BRANCH_MEMBERSHIPS).updateOne({memberId:user.memberId,branchId:membership.branchId},{$set:after});
+    }
+    if(input.join) {
+      const existing=await db.collection(BRANCH_MEMBERSHIPS).findOne({memberId:user.memberId,branchId:input.branchId});
+      if(existing?.status!=='active') {
+        const after={memberId:user.memberId,branchId:input.branchId,status:'active',branchRole:'member',source:LOCAL_MEMBERSHIP_SOURCE,verifiedAt:now,verifiedBy:user.memberId,updatedAt:now,verification:{method:geographic?'member-declared-residence':'member-choice',verifiedAt:now}};
+        await recordMembershipEvent(db,{branchId:input.branchId,memberId:user.memberId,actorId:user.memberId,action:'self-joined',before:existing,after});
+        await db.collection(BRANCH_MEMBERSHIPS).updateOne({memberId:user.memberId,branchId:input.branchId},{$set:after},{upsert:true});
+      }
+    }
+    return await getMemberBranchProfile(db,user.memberId);
+  } finally { await locks.deleteOne({_id}); }
+}
+
+export async function ensureNationalMembership(db: Db, memberId: string) {
+  const national=await db.collection('branches').findOne({kind:'national',recognised:true});
+  if(!national)return;
+  await db.collection(BRANCH_MEMBERSHIPS).updateOne({memberId,branchId:national.branchId},{$setOnInsert:{memberId,branchId:national.branchId,status:'active',branchRole:'member',source:LOCAL_MEMBERSHIP_SOURCE,verifiedAt:new Date(),verification:{method:'verified-fusion-member'}}},{upsert:true});
 }

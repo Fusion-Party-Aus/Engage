@@ -1,8 +1,10 @@
+import { resolvePublicOrigin } from '../../../lib/public-origin.ts';
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import {
   BranchParticipationError,
+  chooseBranchMembership,
   ensureNationalBranchAssignment,
   getMemberBranchProfile,
   listBranchOptions,
@@ -69,7 +71,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const body = (await request.json()) as Record<string, unknown>;
     const db = await getDatabase(env);
     let profile;
-    if (Array.isArray(body.branchIds)) {
+    if (body.action === 'membership' && typeof body.branchId === 'string' && typeof body.join === 'boolean') {
+      if (request.headers.get('origin') !== resolvePublicOrigin({env,requestUrl:request.url})) throw new BranchParticipationError('Please update membership from Engage.',403,'origin-required');
+      profile = await chooseBranchMembership(db,user,{branchId:body.branchId,join:body.join,resident:body.resident===true});
+    } else if (Array.isArray(body.branchIds)) {
       profile = await saveBranchFollowing(db, user.memberId, body.branchIds);
     } else if (typeof body.branchId === "string" && body.branchId.trim()) {
       profile = await setBranchFollowing(

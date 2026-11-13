@@ -176,7 +176,7 @@ function BranchGroups({
                         <strong className="block text-sm">{branch.name}</strong>
                         <span className="block text-xs text-[var(--horizon-muted)]">
                           {branch.parentName && branch.kind === 'constituent'
-                            ? `Local branch · part of ${branch.parentName}`
+                            ? `Constituent branch · part of ${branch.parentName}`
                             : branch.parentName
                               ? `Part of ${branch.parentName}`
                               : 'State branch'}
@@ -341,7 +341,7 @@ export default function BranchChooser(props: Props) {
     setFeedback({
       tone: 'success',
       text: following
-        ? `You now follow ${branch.name}. Branch administrators decide who is a verified member.`
+        ? `You now follow ${branch.name}. You can manage membership separately in My branches.`
         : `You no longer follow ${branch.name}.${branch.verified ? ' Your verified membership is unchanged.' : ''}`,
     });
   }
@@ -385,7 +385,7 @@ export default function BranchChooser(props: Props) {
             </h2>
             <p className="mt-1 max-w-[65ch] text-sm text-[var(--horizon-muted)]">
               Choose your state or territory so relevant proposals and discussions appear in My Engage.
-              You can add local branches any time from My branches. Following does not automatically make you a verified member.
+              You can add local branches any time from My branches. Manage membership separately in My branches.
             </p>
           </div>
           <Button type="button" variant="ghost" size="sm" onClick={skipSelection}>
@@ -478,7 +478,7 @@ export default function BranchChooser(props: Props) {
                 <div className="min-w-0">
                   <strong className="block text-sm">{branch.name}</strong>
                   <span className="block text-xs text-[var(--horizon-muted)]">
-                    {branch.parentName && branch.kind === 'constituent' ? `Local branch · part of ${branch.parentName}` : branch.included ? 'National governance' : 'Branch'}
+                    {branch.parentName && branch.kind === 'constituent' ? `Constituent branch · part of ${branch.parentName}` : branch.included ? 'National governance' : 'Branch'}
                   </span>
                 </div>
                 <BranchStatus branch={branch} />

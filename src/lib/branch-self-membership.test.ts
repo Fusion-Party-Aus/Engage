@@ -1,0 +1,23 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createMemoryDb} from './db.ts';
+import {chooseBranchMembership,ensureNationalMembership} from './branch-participation.ts';
+import type {SessionUser} from './types.ts';
+const user={memberId:'person',status:'verified'} as SessionUser;
+test('verified members join, switch and leave geographic and constituent branches independently',async()=>{
+ const db=createMemoryDb();
+ for(const [branchId,kind] of [['nat','national'],['vic','state'],['nsw','state'],['pirate','constituent'],['science','constituent']])await db.collection('branches').insertOne({branchId,kind,name:branchId,recognised:true});
+ await ensureNationalMembership(db,user.memberId);
+ await assert.rejects(chooseBranchMembership(db,user,{branchId:'vic',join:true}));
+ await assert.rejects(chooseBranchMembership(db,{...user,status:'pending'},{branchId:'pirate',join:true}));
+ await chooseBranchMembership(db,user,{branchId:'vic',join:true,resident:true});
+ await chooseBranchMembership(db,user,{branchId:'pirate',join:true});
+ await Promise.allSettled(['nsw','vic'].map(branchId=>chooseBranchMembership(db,user,{branchId,join:true,resident:true})));
+ await chooseBranchMembership(db,user,{branchId:'science',join:true});
+ const active=await db.collection('branch_memberships').find({memberId:user.memberId,status:'active'}).toArray();
+ assert.equal(active.length,3);assert.equal(active.filter(r=>['vic','nsw'].includes(r.branchId)).length,1);assert.ok(active.some(r=>r.branchId==='science'));
+ await chooseBranchMembership(db,user,{branchId:'science',join:false});
+ assert.equal(await db.collection('branch_memberships').countDocuments({memberId:user.memberId,status:'active'}),2);
+ assert.equal(await db.collection('proposal_votes').countDocuments(),0);
+ assert.ok(await db.collection('branch_membership_events').countDocuments()>0);
+});

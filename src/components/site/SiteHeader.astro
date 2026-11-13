@@ -16,6 +16,7 @@ const primaryCtaHref = siteConfig?.primaryCtaHref || '/proposals/new/';
 const showPrimaryCta = siteConfig?.showPrimaryCtaInHeader !== false;
 
 const links = [
+  { href: '/sense-box/', label: 'Sense Box', icon: 'info', current: path.startsWith('/sense-box'), star: false },
   ...(showPrimaryCta
     ? [
         {
