@@ -323,6 +323,27 @@ test(
         assert.equal(doc.memberId, undefined);
         assert.equal(doc.choice, undefined);
       }
+
+      // Verify outstandingBallots & listMemberActivityStream recognise encrypted votes
+      Object.assign(process.env, rotatedEnv);
+      const { listProposals } = await import("./store.ts");
+      const { outstandingBallots } = await import("./engagement-email.ts");
+      const { listMemberActivityStream } = await import("./member-activity.ts");
+      const proposalsForCheck = await listProposals(db, { user: memberA });
+      const openDecide = proposalsForCheck.filter(
+        (p) => p.stage === "decide" && p.proposalId === "PROP-ENC-1",
+      );
+      const remaining = await outstandingBallots(db, memberA, openDecide);
+      assert.equal(
+        remaining.length,
+        0,
+        "encrypted vote must exclude ballot from outstandingBallots",
+      );
+      const stream = await listMemberActivityStream(db, memberA.memberId);
+      assert.ok(
+        stream.some((e) => e.kind === "vote"),
+        "encrypted vote must appear with decrypted choice in member activity stream",
+      );
     } finally {
       for (const [k, v] of Object.entries(prevEnv)) {
         if (v === undefined) delete process.env[k];

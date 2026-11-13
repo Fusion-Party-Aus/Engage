@@ -2,7 +2,24 @@ import type { Db } from "mongodb";
 import type { ActivityTimelineEvent } from "./activity-timeline.ts";
 import { canViewProposal } from "./store.ts";
 import type { ProposalRecord, SessionUser } from "./types.ts";
-import { PROPOSAL_VOTES } from "./vote-storage.ts";
+import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
+import { findMemberVotes, proposalBallotId } from "./vote-storage.ts";
+
+async function findAllMemberVotes(db: Db, memberId: string) {
+  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  if (!cryptoConfig) {
+    return findMemberVotes(db, memberId, [], null);
+  }
+  const [proposals, amendments] = await Promise.all([
+    db.collection("proposals").find({}).project({ proposalId: 1 }).toArray(),
+    db.collection("amendments").find({}).project({ amendmentId: 1 }).toArray(),
+  ]);
+  const ballotIds = [
+    ...proposals.map((p) => proposalBallotId(String(p.proposalId))),
+    ...amendments.map((a) => `amendment:${String(a.amendmentId)}`),
+  ];
+  return findMemberVotes(db, memberId, ballotIds, cryptoConfig);
+}
 
 const asDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -55,7 +72,7 @@ export async function listMemberActivityStream(
 ): Promise<ActivityTimelineEvent[]> {
   const [votes, ownComments, endorsedComments, amendments, authoredProposals] =
     await Promise.all([
-      db.collection(PROPOSAL_VOTES).find({ memberId }).toArray(),
+      findAllMemberVotes(db, memberId),
       db.collection("comments").find({ memberId }).toArray(),
       db
         .collection("comments")
@@ -443,7 +460,7 @@ export async function buildMemberCatchUp(
 ): Promise<MemberCatchUpGroup[]> {
   const [votes, ownComments, endorsedComments, amendments, authoredProposals] =
     await Promise.all([
-      db.collection(PROPOSAL_VOTES).find({ memberId }).toArray(),
+      findAllMemberVotes(db, memberId),
       db.collection("comments").find({ memberId }).toArray(),
       db
         .collection("comments")

@@ -17,8 +17,9 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { loadBallotCryptoConfig } from '../../lib/ballot-crypto.ts';
 import { listOutstandingDecisions, listProposals, normalizeStage } from '../../lib/store.ts';
-import { PROPOSAL_VOTES, proposalBallotId } from '../../lib/vote-storage.ts';
+import { findMemberVotes, proposalBallotId } from '../../lib/vote-storage.ts';
 import { getSiteConfig } from '../../lib/site-config.ts';
 import { rankProposals } from '../../lib/proposal-metrics.ts';
 import type { ProposalStage } from '../../lib/types.ts';
@@ -46,24 +47,27 @@ if (initialStage === 'decide' && (Astro.url.searchParams.has('focus') || Astro.u
 }
 const joinedOnly = Astro.url.searchParams.get('joined') === '1' || initialFocus === 'discussion';
 
-const [allAvailableProposals, myVotesRaw, joinedComments] = await Promise.all([
+const [allAvailableProposals, joinedComments] = await Promise.all([
   listProposals(db, {
     includeArchived: Boolean(user?.isStaff),
     user,
   }),
-  user
-    ? db
-        .collection(PROPOSAL_VOTES)
-        .find({ memberId: user.memberId })
-        .project({ proposalId: 1, ballotId: 1, revisionId: 1 })
-        .toArray()
-    : Promise.resolve([]),
   user ? db.collection('comments').find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray() : Promise.resolve([]),
 ]);
 
-const myOutstandingVotes = user?.canParticipate
-  ? await listOutstandingDecisions(db, user.memberId, user, allAvailableProposals)
-  : [];
+const [myVotesRaw, myOutstandingVotes] = await Promise.all([
+  user
+    ? findMemberVotes(
+        db,
+        user.memberId,
+        allAvailableProposals.map((p) => proposalBallotId(p.proposalId)),
+        loadBallotCryptoConfig(env),
+      )
+    : Promise.resolve([]),
+  user?.canParticipate
+    ? listOutstandingDecisions(db, user.memberId, user, allAvailableProposals)
+    : Promise.resolve([]),
+]);
 
 const baseProposals = allAvailableProposals.filter((p) => p.stage !== 'archived');
 
