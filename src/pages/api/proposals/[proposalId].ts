@@ -1,5 +1,12 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
+import {
+  privateJson,
+  toBallotVoteDto,
+  toCommentDto,
+  toProposalDetailDto,
+  toProposalListItemDto,
+} from "../../../lib/api-contracts.ts";
 import { ballotRecordsForViewer } from "../../../lib/ballot-privacy.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { requireLegalAcceptance } from "../../../lib/legal-acceptance.ts";
@@ -20,19 +27,30 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
   const id = params.proposalId ?? params.policyId ?? "";
   const detail = await getProposalDetail(db, id, user);
   if (!detail)
-    return Response.json({ error: "Proposal not found." }, { status: 404 });
-  const votesList = ballotRecordsForViewer(detail.votesList, user);
-  return Response.json(
-    { ...detail, votesList },
-    { headers: { "cache-control": "private, no-store" } },
+    return privateJson({ error: "Proposal not found." }, { status: 404 });
+  const votesList = ballotRecordsForViewer(detail.votesList, user).map((v) =>
+    toBallotVoteDto(v as any, user),
   );
+  return privateJson({
+    proposal: toProposalDetailDto(detail.proposal),
+    comments: detail.comments.map((c) => toCommentDto(c, user)),
+    votesList,
+    myVote: detail.myVote,
+    myReason: detail.myReason,
+    ...(detail.myPendingVote !== undefined
+      ? { myPendingVote: detail.myPendingVote }
+      : {}),
+    ...(detail.myPendingReason !== undefined
+      ? { myPendingReason: detail.myPendingReason }
+      : {}),
+  });
 };
 
 export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
+    return privateJson({ error: "Sign in required." }, { status: 401 });
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -41,9 +59,14 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     if (gate) return gate;
     const id = params.proposalId ?? params.policyId ?? "";
     const proposal = await saveProposal(db, user, { ...body, proposalId: id });
-    return Response.json({ proposal, policy: proposal });
+    const dto = toProposalListItemDto({
+      ...proposal,
+      commentCount: 0,
+      votes: { approve: 0, abstain: 0, reject: 0, total: 0 },
+    });
+    return privateJson({ proposal: dto, policy: dto });
   } catch (error) {
-    return Response.json(
+    return privateJson(
       {
         error:
           error instanceof Error ? error.message : "Could not update proposal.",
@@ -57,15 +80,15 @@ export const DELETE: APIRoute = async ({ params, request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
+    return privateJson({ error: "Sign in required." }, { status: 401 });
 
   try {
     const db = await getDatabase(env);
     const id = params.proposalId ?? params.policyId ?? "";
     await deleteProposal(db, user, id);
-    return Response.json({ ok: true });
+    return privateJson({ ok: true });
   } catch (error) {
-    return Response.json(
+    return privateJson(
       {
         error:
           error instanceof Error ? error.message : "Could not delete proposal.",

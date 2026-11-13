@@ -1,11 +1,178 @@
 [
   {
-    "hash": "06dd133",
+    "hash": "a24be08",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "auth",
+    "summary": "Support multiple roles and a grouped scope select",
+    "details": "Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips."
+  },
+  {
+    "hash": "ada97c2",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Allow national RBAC grants in branch search and preserve scope on read"
+  },
+  {
+    "hash": "eead05a",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot after notification popover"
+  },
+  {
+    "hash": "d9313bb",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "site",
+    "summary": "Open notifications in a header popover",
+    "details": "The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu."
+  },
+  {
+    "hash": "69ee0e8",
+    "date": "2026-11-13",
+    "type": "test",
+    "category": "ops",
+    "scope": "ci",
+    "summary": "Update member lifecycle browser check for unified notification center"
+  },
+  {
+    "hash": "233988d",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record authorisation consolidation"
+  },
+  {
+    "hash": "8e5f9ab",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "auth",
+    "summary": "Separate participation, voting and administration",
+    "details": "Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work."
+  },
+  {
+    "hash": "6850011",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot after status pages"
+  },
+  {
+    "hash": "66dc64d",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "site",
+    "summary": "Add branded 403, 404 and 500 error pages"
+  },
+  {
+    "hash": "7af887e",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Handle rotated blind-index upserts and proxy-safe CSRF origins"
+  },
+  {
+    "hash": "20373bd",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record permission resolution consolidation"
+  },
+  {
+    "hash": "f809655",
+    "date": "2026-11-13",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "auth",
+    "summary": "Unify legacy administrative permission resolution"
+  },
+  {
+    "hash": "1836213",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballots",
+    "summary": "Add AES-256-GCM encrypted vote storage, blind indexing, and migration"
+  },
+  {
+    "hash": "b3f69d5",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Harden RBAC boundaries, CSRF origin checks, and markdown links"
+  },
+  {
+    "hash": "d77fdd2",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot after proposal scope changes"
+  },
+  {
+    "hash": "dd4b251",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Use an accessible scope selector",
+    "details": "Replace the native proposal-scope dropdown with the existing ToggleGroup primitive, giving a single National option, consistently named states and territories, visible focus, keyboard navigation and responsive wrapping. Default to the member's authorised branch where one applies and submit the canonical scope key rather than a display label."
+  },
+  {
+    "hash": "7e64b76",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Separate geographic scope from branch identity",
+    "details": "Add a canonical proposal scope model with stable keys (national, nsw, vic, ...) and consistent labels from the site's state configuration. Branch records remain the organisational identity; legacy records resolve to the canonical scope without being rewritten. Server validation now rejects display labels, non-string or conflicting scopes and ambiguous duplicate geography, and enforces branch administration independently of the rendered controls."
+  },
+  {
+    "hash": "9c27e4b",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "api",
+    "summary": "Enforce minimal response DTOs, ballot privacy, and bounded pagination"
+  },
+  {
+    "hash": "e0b85f8",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record cross-industry research"
+  },
+  {
+    "hash": "ff5e240",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "research",
+    "summary": "Add cross-industry product and UX research",
+    "details": "Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence."
+  },
+  {
+    "hash": "787160a",
     "date": "2026-11-13",
     "type": "fix",
     "category": "fix",
     "scope": "branding",
-    "summary": "Remove internal Horizon label from public and verification emails"
+    "summary": "Remove internal Horizon label from public and verification emails (#24)",
+    "details": "* fix(branding): remove internal Horizon label from public and verification emails * chore(changelog): update changelog snapshot"
   },
   {
     "hash": "baae42d",
@@ -490,172 +657,5 @@
     "category": "feature",
     "scope": "ui",
     "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
-  },
-  {
-    "hash": "3512e0a",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "workspaces",
-    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
-  },
-  {
-    "hash": "f58e150",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
-  },
-  {
-    "hash": "e7d793a",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record Engage production cutover and verification",
-    "details": "Record the approved cutover of 4660690... to the prebuilt image, the final quiescent backup and off-host checksum, the 37-ballot/194-vote migration and preservation comparison, image and route verification, and the retained rollback state."
-  },
-  {
-    "hash": "4660690",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record member ballot refinement verification",
-    "details": "Record the approved ballot hierarchy: segmented control, single results block, zero-vote empty state, compact privacy line, full-width action and 390px browser validation. Full route matrix 109/109 and dedicated ballot checks 14/14."
-  },
-  {
-    "hash": "2b85970",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Refine member ballot hierarchy and voting control",
-    "details": "Replace the tall three-card radio composition with a single-row shadcn/Radix segmented control for Approve, Abstain and Reject. The primary action is full-width with a matching radius, uses a neutral disabled treatment and reserves the Horizon accent for an enabled vote. Move results into one compact block, show a simple empty state for zero-vote ballots, reduce the privacy disclosure to a persistent one-line notice, and move revision metadata into a small readable line. Keep selected state, keyboard navigation, existing votes and closed-ballot read-only behaviour."
-  },
-  {
-    "hash": "153e909",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Integrate Coolify cutover evidence and final verification record",
-    "details": "Merge the deployment workstream documentation with the release: storage and prebuilt-image verification, no-rebuild deployment path, quiescent backup helper, staging verification, rollback procedure and approval-gated cutover checklist. Distinguish the 2026-11-08 rehearsal image from the final release identity so the artifact cannot be mistaken for the approved cutover image. Add the production-readiness audit, application handover and final integrated verification record. Ignore the preserved research corpus."
-  },
-  {
-    "hash": "33cc170",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "legal",
-    "summary": "Integrate Privacy Policy, Terms of Use and acceptance controls",
-    "details": "Add owner-authorised legal documents at /privacy/ and /terms/ with the confirmed operator, ABN, registered party name, contact and correspondence address. The documents are explicit about identifiable ballots, national administrator access, small-ballot re-identification risk, retention limits, third-party processors and administrative ballot controls, and remain noindex while publication is pending. Add a server-side acceptance record, API and member gate, and enforce the gate on vote, comment, endorsement, proposal and amendment writes. Activation is interlocked: the gate remains inactive until both documents are published with real effective dates and LEGAL_ACCEPTANCE_ENABLED is set. Add the ballot-context privacy notice, footer and sign-in legal links, and regression tests."
-  },
-  {
-    "hash": "0dff758",
-    "date": "2026-11-08",
-    "type": "fix",
-    "category": "fix",
-    "scope": "app",
-    "summary": "Complete release-candidate remediation and Horizon UI integration",
-    "details": "- make startup seeding insert-only so restarts do not rewrite updatedAt - remove Astro experimental React children to stop double-escaped entities and SSR attribute warnings - use a trusted public origin for canonicals and public API Link headers - show human-readable revision labels to members while retaining exact IDs in audit views - make the empty policy registry an explicit, accurate state and relabel navigation and calls to action - complete the shared header, footer, feature grid and member settings workspace on the Horizon/shadcn foundation"
-  },
-  {
-    "hash": "60e0679",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "governance",
-    "summary": "Bind legacy ballots to immutable wording revisions",
-    "details": "Add a deterministic, transactional bulk migration for existing Decide-stage ballots and their votes. The migration inventories wording against the deployment baseline, fails closed on ambiguity, supports dry-run and explicit apply, records attributable binding events, and is idempotent. Reuse the shared binding path in the admin review endpoint and expose human-readable revision labels while keeping exact identifiers in audit views. Rehearsed against a restored 414-document production clone: 37 ballots and 194 votes preserved, 0 ambiguous, 0 conflicting, 37 idempotent on retry."
-  },
-  {
-    "hash": "1b973fa",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Note token revocation and private-repo poller requirement"
-  },
-  {
-    "hash": "cffc1a0",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Record end-to-end poller verification and staging access"
-  },
-  {
-    "hash": "ef8e9a8",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Document Coolify staging, production cutover, and poller"
-  },
-  {
-    "hash": "3280da3",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Bake Mongo helpers into Coolify staging image"
-  },
-  {
-    "hash": "6e2cc5e",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Use classic builder for Coolify builds (DNS workaround)"
-  },
-  {
-    "hash": "a65c66d",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Build Coolify images on the coolify bridge network"
   }
 ]

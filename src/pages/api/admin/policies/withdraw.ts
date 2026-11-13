@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
+import { privateJson, toPublicationEventDto } from "../../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { requireApiPermission } from "../../../../lib/rbac.ts";
 import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
@@ -40,7 +41,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { status: 409 },
       );
     if (priorEvent?.status === "withdrawn")
-      return Response.json({ event: priorEvent }, { status: 200 });
+      return privateJson({ event: toPublicationEventDto(priorEvent) }, { status: 200 });
     const policy = await col.findOne({
       policyId,
       publicationStatus: { $in: ["published", "withdrawn"] },
@@ -122,11 +123,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { eventId: event.eventId },
         { $set: { status: "withdrawn", completedAt: new Date() } },
       );
-    return Response.json(
+    const finalEvent = await db
+      .collection("publication_events")
+      .findOne({ eventId: event.eventId });
+    return privateJson(
       {
-        event: await db
-          .collection("publication_events")
-          .findOne({ eventId: event.eventId }),
+        event: finalEvent ? toPublicationEventDto(finalEvent) : null,
       },
       { status: 201 },
     );

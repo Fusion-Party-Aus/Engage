@@ -13,9 +13,27 @@ export function ballotRecordsForViewer(
   votes: VoteRecord[],
   user: SessionUser | null | undefined,
 ): Array<Omit<VoteRecord, "memberId" | "authorName">> {
-  if (canViewIdentifiableBallots(user)) return votes;
+  if (canViewIdentifiableBallots(user)) {
+    return votes.map((vote) => ({
+      ballotId: vote.ballotId,
+      proposalId: vote.proposalId,
+      ...(vote.revisionId ? { revisionId: vote.revisionId } : {}),
+      memberId: vote.memberId,
+      authorName: vote.authorName,
+      choice: vote.choice,
+      ...(vote.reason ? { reason: vote.reason } : {}),
+      updatedAt: vote.updatedAt,
+    }));
+  }
   if (!user) return [];
   return votes
     .filter((vote) => vote.memberId === user.memberId)
-    .map(({ memberId: _memberId, authorName: _authorName, ...vote }) => vote);
+    .map((vote) => ({
+      ballotId: vote.ballotId,
+      proposalId: vote.proposalId,
+      ...(vote.revisionId ? { revisionId: vote.revisionId } : {}),
+      choice: vote.choice,
+      ...(vote.reason ? { reason: vote.reason } : {}),
+      updatedAt: vote.updatedAt,
+    }));
 }

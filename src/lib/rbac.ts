@@ -1,4 +1,4 @@
-import type { SessionUser } from "./types.ts";
+import type { SessionUser, UserRole } from "./types.ts";
 
 export type PermissionKey =
   | "proposals.view_archived"
@@ -272,6 +272,83 @@ export const LEGACY_BRANCH_ADMIN_PERMISSIONS: PermissionKey[] = [
   "reports.export",
 ];
 
+export interface PlatformRoleOption {
+  value: UserRole;
+  label: string;
+  description: string;
+}
+
+/**
+ * The three legacy platform roles are canonical system roles, not a separate
+ * role set. They are assigned through Member Management; custom roles are
+ * assigned through Roles & permissions; branch administration is assigned on a
+ * branch membership.
+ */
+export const PLATFORM_ROLE_OPTIONS: PlatformRoleOption[] = [
+  {
+    value: "member",
+    label: "Member",
+    description: "Verified participation with no administrative permissions.",
+  },
+  {
+    value: "moderator",
+    label: "Moderator",
+    description:
+      "Review proposals, moderate deliberation, respond to contributions, and view aggregate reports.",
+  },
+  {
+    value: "administrator",
+    label: "National Administrator",
+    description:
+      "Full national administration, policy ratification, member verification, and identifiable ballot access.",
+  },
+];
+
+export const PLATFORM_ROLE_LABELS: Record<UserRole, string> = {
+  member: "Member",
+  moderator: "Moderator",
+  administrator: "National Administrator",
+};
+
+const PLATFORM_ROLE_ORDER: UserRole[] = [
+  "member",
+  "moderator",
+  "administrator",
+];
+
+/** Normalise any submitted platform-role set. Member is always the base role. */
+export function normalisePlatformRoles(values: readonly unknown[]): UserRole[] {
+  const selected = new Set<UserRole>(["member"]);
+  for (const value of values) {
+    if (value === "moderator" || value === "administrator") {
+      selected.add(value);
+    } else if (value !== "member") {
+      throw new Error("Choose a valid platform role.");
+    }
+  }
+  return PLATFORM_ROLE_ORDER.filter((role) => selected.has(role));
+}
+
+/** Highest-precedence platform role for legacy single-role consumers. */
+export function primaryPlatformRole(roles: readonly UserRole[]): UserRole {
+  if (roles.includes("administrator")) return "administrator";
+  if (roles.includes("moderator")) return "moderator";
+  return "member";
+}
+
+export function canGrantPermissionSet(
+  user: SessionUser | null | undefined,
+  permissions: readonly PermissionKey[],
+  branchId?: string,
+): boolean {
+  return Boolean(
+    user &&
+      permissions.every((permission) =>
+        hasPermission(user, permission, branchId),
+      ),
+  );
+}
+
 export interface EffectivePermissionGrant {
   permission: PermissionKey;
   scopeType: PermissionScope;
@@ -314,57 +391,67 @@ export interface RoleAssignmentRecord {
 }
 
 /**
- * Compute legacy-compatible permission snapshot when `user.permissions` is not
- * pre-populated (for example in unit tests constructing synthetic SessionUser).
+ * Resolve legacy administrative facts without reading or changing membership.
+ * Session fallback and database resolution share the same capabilities and IDs.
  */
-function legacySnapshotForUser(user: SessionUser): EffectivePermissionsSnapshot {
-  const national = new Set<PermissionKey>();
+export function resolveLegacyPermissions(
+  roles: readonly string[],
+  memberships: ReadonlyArray<{
+    branchId: string;
+    branchRole?: string;
+    status: string;
+  }>,
+): EffectivePermissionsSnapshot {
+  const national: PermissionKey[] = roles.includes("administrator")
+    ? [...ALL_NATIONAL_PERMISSIONS]
+    : roles.includes("moderator")
+      ? [...LEGACY_MODERATOR_PERMISSIONS]
+      : [];
+  const roleId = roles.includes("administrator")
+    ? "system:national_administrator"
+    : "system:moderator";
+  const roleName = roles.includes("administrator")
+    ? "National Administrator"
+    : "Moderator";
+  const grants: EffectivePermissionGrant[] = national.map((permission) => ({
+    permission,
+    scopeType: "national",
+    sourceKind: "legacy-role",
+    roleId,
+    roleName,
+  }));
   const branches: Record<string, PermissionKey[]> = {};
-  const grants: EffectivePermissionGrant[] = [];
-
-  if (user.isAdmin || user.role === "administrator") {
-    for (const key of ALL_NATIONAL_PERMISSIONS) {
-      national.add(key);
-      grants.push({
-        permission: key,
-        scopeType: "national",
-        sourceKind: "legacy-role",
-        roleId: "legacy:administrator",
-        roleName: "National Administrator",
-      });
+  for (const membership of memberships) {
+    if (membership.status !== "active" || membership.branchRole !== "administrator") {
+      continue;
     }
-  } else if (user.isStaff || user.role === "moderator") {
-    for (const key of LEGACY_MODERATOR_PERMISSIONS) {
-      national.add(key);
-      grants.push({
-        permission: key,
-        scopeType: "national",
-        sourceKind: "legacy-role",
-        roleId: "legacy:moderator",
-        roleName: "Moderator",
-      });
-    }
-  }
-
-  for (const branchId of user.branchAdminIds ?? []) {
+    const branchId = membership.branchId;
     branches[branchId] = [...LEGACY_BRANCH_ADMIN_PERMISSIONS];
-    for (const key of LEGACY_BRANCH_ADMIN_PERMISSIONS) {
+    for (const permission of LEGACY_BRANCH_ADMIN_PERMISSIONS) {
       grants.push({
-        permission: key,
+        permission,
         scopeType: "branch",
         branchId,
         sourceKind: "legacy-branch-admin",
-        roleId: "legacy:branch-admin",
+        roleId: "system:branch_administrator",
         roleName: "Branch Administrator",
       });
     }
   }
+  return { national, branches, grants };
+}
 
-  return {
-    national: [...national],
-    branches,
-    grants,
-  };
+function legacySnapshotForUser(user: SessionUser): EffectivePermissionsSnapshot {
+  return resolveLegacyPermissions(
+    user.isAdmin || user.role === "administrator"
+      ? ["administrator"]
+      : user.isStaff || user.role === "moderator" ? ["moderator"] : [],
+    (user.branchAdminIds ?? []).map((branchId) => ({
+      branchId,
+      branchRole: "administrator",
+      status: "active",
+    })),
+  );
 }
 
 export function getEffectivePermissionsSnapshot(

@@ -91,7 +91,7 @@ export async function approveReengagementCampaign(
     { $setOnInsert: record },
     { upsert: true },
   );
-  return (await db.collection(REENGAGEMENT_CAMPAIGNS).findOne({ campaignId })) ?? record;
+  return (await db.collection(REENGAGEMENT_CAMPAIGNS).findOne({ campaignId }, { projection: { _id: 0 } })) ?? record;
 }
 
 export async function runApprovedReengagementBatch(

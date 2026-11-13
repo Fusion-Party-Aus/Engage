@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser, canAdministerBranch } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { branchesWithPermission } from "../../../../lib/rbac.ts";
 import {
   BranchParticipationError,
   countBranchParticipation,
@@ -45,7 +46,8 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const { env, user } = await admin(request, locals);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin)
+  const scoped = branchesWithPermission(user, "branches.verify_members");
+  if (!scoped.national && scoped.branchIds.length === 0)
     return Response.json(
       { error: "Branch administrator access required." },
       { status: 403 },
@@ -61,7 +63,7 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const db = await getDatabase(env);
   const branchIds = branchId
     ? [branchId]
-    : user.isAdmin
+    : scoped.national
       ? (
           await db
             .collection("branches")
@@ -69,11 +71,11 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
             .project({ branchId: 1 })
             .toArray()
         ).map((row: any) => String(row.branchId))
-      : (user.branchAdminIds ?? []);
+      : scoped.branchIds;
 
   const filter: Record<string, unknown> = { status: "active" };
   if (branchId) filter.branchId = branchId;
-  else if (!user.isAdmin) filter.branchId = { $in: branchIds };
+  else if (!scoped.national) filter.branchId = { $in: branchIds };
   if (memberId) filter.memberId = memberId;
   const [rows, members, people, counts] = await Promise.all([
     db

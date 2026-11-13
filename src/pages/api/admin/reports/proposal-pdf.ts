@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { branchesWithPermission, hasPermission } from "../../../../lib/rbac.ts";
 import { getProposalDetail, isGovernanceResolution } from "../../../../lib/store.ts";
 import { buildProposalPdfReport } from "../../../../lib/proposal-pdf.ts";
 
@@ -12,7 +13,8 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   if (!user) {
     return Response.json({ error: "Sign in required." }, { status: 401 });
   }
-  if (!user.isStaff && !user.isBranchAdmin) {
+  const exportScope = branchesWithPermission(user, "reports.export");
+  if (!exportScope.national && exportScope.branchIds.length === 0) {
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -35,17 +37,11 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   }
 
   const { proposal, comments } = detail;
-  if (!user.isStaff && !user.isAdmin) {
-    const allowed = Boolean(
-      proposal.originatingBranchId &&
-        (user.branchAdminIds ?? []).includes(proposal.originatingBranchId),
+  if (!hasPermission(user, "reports.export", proposal.originatingBranchId)) {
+    return Response.json(
+      { error: "Proposal is outside your branch administration scope." },
+      { status: 403 },
     );
-    if (!allowed) {
-      return Response.json(
-        { error: "Proposal is outside your branch administration scope." },
-        { status: 403 },
-      );
-    }
   }
 
   const [branches, ballotResult, rawPolicyRecord, ballotBindEvent] = await Promise.all([

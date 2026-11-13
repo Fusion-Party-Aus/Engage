@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getDatabase, runtimeEnv } from "../../../../../../lib/db.ts";
 import { publicJson } from "../../../../../../lib/public-api.ts";
+import { toPublicRevisionDto } from "../../../../../../lib/api-contracts.ts";
 export const prerender = false;
 export const GET: APIRoute = async ({ params, locals, request }) => {
   const env = runtimeEnv(locals);
@@ -14,7 +15,7 @@ export const GET: APIRoute = async ({ params, locals, request }) => {
     .findOne({ revisionId: params.version, proposalId: p.proposalId });
   if (!r)
     return Response.json({ error: "Version not found." }, { status: 404 });
-  const { _id, authorId, ...data } = r;
+  const data = toPublicRevisionDto(r);
   return publicJson(
     request,
     { data },

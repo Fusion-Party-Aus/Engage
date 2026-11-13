@@ -1,6 +1,8 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
+import { privateJson } from "../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
+import { resolvePublicOrigin } from "../../../lib/public-origin.ts";
 import {
   NOTIFICATION_TOPICS,
   getMemberNotificationPreferences,
@@ -26,26 +28,26 @@ function parseTopicMap(raw: unknown): Partial<Record<NotificationTopic, boolean>
 export const GET: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user) return Response.json({ error: "Sign in required" }, { status: 401 });
+  if (!user) return privateJson({ error: "Sign in required" }, { status: 401 });
 
   const db = await getDatabase(env);
   const preferences = await getMemberNotificationPreferences(db, user.memberId);
-  return Response.json({ ok: true, preferences });
+  return privateJson({ ok: true, preferences });
 };
 
 export const POST: APIRoute = async ({ request, locals, url }) => {
-  if (request.headers.get("origin") !== url.origin) {
-    return Response.json({ error: "Invalid origin" }, { status: 403 });
-  }
   const env = runtimeEnv(locals);
+  if (request.headers.get("origin") !== resolvePublicOrigin({ env, requestUrl: url })) {
+    return privateJson({ error: "Invalid origin" }, { status: 403 });
+  }
   const user = await getSessionUser(request, env);
-  if (!user) return Response.json({ error: "Sign in required" }, { status: 401 });
+  if (!user) return privateJson({ error: "Sign in required" }, { status: 401 });
 
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
-    return Response.json({ error: "Invalid JSON payload" }, { status: 400 });
+    return privateJson({ error: "Invalid JSON payload" }, { status: 400 });
   }
 
   const db = await getDatabase(env);
@@ -59,7 +61,7 @@ export const POST: APIRoute = async ({ request, locals, url }) => {
     (emailChanges && Object.values(emailChanges).includes(true)) || generalCommunicationsEnabled === true;
 
   if (existing?.suppressed && enablingEmail) {
-    return Response.json(
+    return privateJson(
       {
         error:
           "Email delivery is suppressed after a bounce or spam complaint. Contact an administrator to resolve delivery.",
@@ -75,5 +77,5 @@ export const POST: APIRoute = async ({ request, locals, url }) => {
   });
 
   const preferences = await getMemberNotificationPreferences(db, user.memberId);
-  return Response.json({ ok: true, preferences });
+  return privateJson({ ok: true, preferences });
 };

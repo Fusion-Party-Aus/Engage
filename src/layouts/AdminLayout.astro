@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { getSessionUser } from '../lib/auth.ts';
+import { PLATFORM_ROLE_LABELS, hasPermission } from '../lib/rbac.ts';
 import { runtimeEnv } from '../lib/db.ts';
 import '../styles/admin.css';
 
@@ -52,6 +53,8 @@ interface Props {
 const { title, description, section = 'policies', isAdmin = false, isBranchAdmin = false, hideIntro = false } = Astro.props;
 const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
 const canAccessAdmin = isAdmin || isBranchAdmin;
+const canViewMembers = hasPermission(user, 'members.view');
+const canManageRoles = hasPermission(user, 'roles.manage');
 
 const workspaceItems = [
   { key: 'overview', href: '/admin/', label: 'Overview', icon: LayoutDashboard, show: true },
@@ -61,8 +64,8 @@ const workspaceItems = [
 ].filter((item) => item.show);
 
 const peopleItems = [
-  { key: 'members', href: '/admin/members/', label: 'Members', icon: Users, show: isAdmin },
-  { key: 'roles', href: '/admin/roles/', label: 'Roles & permissions', icon: ShieldCheck, show: isAdmin },
+  { key: 'members', href: '/admin/members/', label: 'Members', icon: Users, show: isAdmin || canViewMembers },
+  { key: 'roles', href: '/admin/roles/', label: 'Roles & permissions', icon: ShieldCheck, show: isAdmin || canManageRoles },
   { key: 'branches', href: '/admin/branches/', label: 'Branches', icon: GitBranch, show: canAccessAdmin },
   { key: 'sense-box', href: '/admin/sense-box/', label: 'Sense Box', icon: LifeBuoy, show: canAccessAdmin },
 ].filter((item) => item.show);
@@ -96,7 +99,13 @@ const initials = displayName
   .slice(0, 2)
   .map((part) => part[0]?.toUpperCase())
   .join('') || 'A';
-const roleLabel = user?.isAdmin ? 'Administrator' : user?.isBranchAdmin ? 'Branch administrator' : 'Moderator';
+const roleLabels = (user?.roles ?? []).map(
+  (role) => PLATFORM_ROLE_LABELS[role] ?? role,
+);
+if (user?.isBranchAdmin) roleLabels.push('Branch administrator');
+if (!roleLabels.length && (canViewMembers || canManageRoles))
+  roleLabels.push('Delegated administrator');
+const roleLabel = roleLabels.join(' · ') || 'Moderator';
 ---
 
 <SiteLayout title={`${title} · Engage Admin`} description={description} noIndex workspace>

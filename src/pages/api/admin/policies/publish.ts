@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
+import { privateJson, toPublicationEventDto } from "../../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { requireApiPermission } from "../../../../lib/rbac.ts";
 import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
@@ -124,11 +125,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { eventId: event.eventId, status: "pending" },
         { $set: { status: "published", completedAt: new Date() } },
       );
-    return Response.json(
+    const savedEvent = await db
+      .collection("publication_events")
+      .findOne({ eventId: event.eventId });
+    return privateJson(
       {
-        event: await db
-          .collection("publication_events")
-          .findOne({ eventId: event.eventId }),
+        event: savedEvent ? toPublicationEventDto(savedEvent) : null,
       },
       { status: 201 },
     );

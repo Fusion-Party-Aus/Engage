@@ -7,26 +7,19 @@ import {
   getSessionUser,
   loginConfigured,
 } from "../../lib/auth.ts";
-import { getDatabase, runtimeEnv } from "../../lib/db.ts";
-import { listUserActivity } from "../../lib/store.ts";
+import { privateJson, toSessionIdentityDto } from "../../lib/api-contracts.ts";
+import { runtimeEnv } from "../../lib/db.ts";
 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  const activity = user
-    ? await listUserActivity(await getDatabase(env), user.memberId)
-    : null;
-  return Response.json(
-    {
-      identity: user,
-      membershipStatus: user?.status ?? null,
-      loginAvailable: loginConfigured(env) || devLoginEnabled(env),
-      activity,
-    },
-    { headers: { "cache-control": "private, no-store" } },
-  );
+  return privateJson({
+    identity: toSessionIdentityDto(user),
+    membershipStatus: user?.status ?? null,
+    loginAvailable: loginConfigured(env) || devLoginEnabled(env),
+  });
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {

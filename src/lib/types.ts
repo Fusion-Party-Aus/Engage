@@ -58,6 +58,11 @@ export interface PlatformEnv {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  BALLOT_ENCRYPTION_MODE?: string;
+  BALLOT_ENCRYPTION_KEYS?: string;
+  BALLOT_ENCRYPTION_ACTIVE_KEY_ID?: string;
+  BALLOT_BLIND_INDEX_KEY?: string;
+  BALLOT_BLIND_INDEX_ACTIVE_KEY_ID?: string;
 }
 
 export interface SessionUser {
@@ -65,6 +70,8 @@ export interface SessionUser {
   name: string;
   email: string;
   role: UserRole;
+  /** All platform system roles held by the member. Member is always present. */
+  roles?: UserRole[];
   status: MembershipStatus;
   canParticipate: boolean;
   isStaff: boolean;
@@ -168,6 +175,8 @@ export interface ProposalRecord {
   originatingBranchId?: string;
   governanceAuthorityBranchId?: string;
   jurisdictionBranchId?: string;
+  /** Canonical geographic proposal scope key. Branch identity stays separate. */
+  scope?: string;
   publicationScope?: "private" | "branch" | "national";
   ballotRevisionId?: string;
   ballotClosesAt?: Date;
@@ -273,9 +282,15 @@ export interface MemberRecord {
   name: string;
   email: string;
   role: UserRole;
+  /** All platform system roles held by the member. Member is always present. */
+  roles?: UserRole[];
   status: MembershipStatus;
   disabled: boolean;
   emailVerified: boolean;
   createdAt?: Date;
+  /** Branch-scoped administrator assignments (system Branch Administrator). */
+  branchAdministratorOf?: string[];
+  /** Active custom role assignments, including their branch scope. */
+  delegatedRoles?: string[];
 }
 

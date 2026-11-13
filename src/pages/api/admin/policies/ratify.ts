@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { createHash, randomUUID } from "node:crypto";
 import { getSessionUser } from "../../../../lib/auth.ts";
+import { privateJson, toRatifiedPolicyDto } from "../../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { requireApiPermission } from "../../../../lib/rbac.ts";
 import { isGovernanceResolution } from "../../../../lib/store.ts";
@@ -109,7 +110,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         priorPolicy.idempotencyKey === key &&
         priorPolicy.ratification?.decisionEventId === decisionEventId
       )
-        return Response.json({ policy: priorPolicy }, { status: 200 });
+        return privateJson({ policy: toRatifiedPolicyDto(priorPolicy) }, { status: 200 });
       return Response.json(
         { error: "A different revision is already ratified for this policy." },
         { status: 409 },
@@ -253,7 +254,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "A different revision is already ratified for this policy." },
         { status: 409 },
       );
-    return Response.json({ policy: existing }, { status: 201 });
+    return privateJson({ policy: toRatifiedPolicyDto(existing) }, { status: 201 });
   } catch (error) {
     return Response.json(
       {

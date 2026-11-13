@@ -36,6 +36,7 @@ interface MemberOption {
   name: string;
   email: string;
   role: string;
+  roles?: string[];
   status: string;
 }
 
@@ -394,7 +395,9 @@ export default function RolesManager({
                       </div>
                     ) : (
                       <span className="text-xs text-muted-foreground">
-                        Managed in Members / Branches
+                        {role.scope === "branch"
+                          ? "Assigned in Branches"
+                          : "Assigned in Members"}
                       </span>
                     )}
                   </TableCell>

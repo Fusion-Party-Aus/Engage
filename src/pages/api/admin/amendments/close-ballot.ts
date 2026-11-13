@@ -1,15 +1,17 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
-import { PROPOSAL_VOTES } from "../../../../lib/vote-storage.ts";
+import { loadBallotCryptoConfig } from "../../../../lib/ballot-crypto.ts";
+import { PROPOSAL_VOTES, decodeStoredVote } from "../../../../lib/vote-storage.ts";
 import { canManageBranchBallot } from "../../../../lib/auth.ts";
+import { hasPermission } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin)
+  if (!user.isAdmin && !user.isBranchAdmin && !hasPermission(user, "amendments.manage_ballot"))
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -52,7 +54,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "The source proposal ballot revision has changed." },
         { status: 409 },
       );
+    const branchScope =
+      typeof proposal.governanceAuthorityBranchId === "string"
+        ? proposal.governanceAuthorityBranchId
+        : undefined;
     if (
+      !hasPermission(user, "amendments.manage_ballot", branchScope) ||
       !canManageBranchBallot(user, {
         governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
         jurisdictionBranchId: proposal.jurisdictionBranchId,
@@ -62,14 +69,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "You are not authorised to close this branch ballot." },
         { status: 403 },
       );
+    const cryptoConfig = loadBallotCryptoConfig(env);
     const votes = await db
       .collection(PROPOSAL_VOTES)
       .find({ ballotId: `amendment:${amendmentId}` })
       .toArray();
     const tally = { approve: 0, abstain: 0, reject: 0, total: 0 };
     for (const vote of votes) {
-      if (vote.choice === "approve") tally.approve++;
-      else if (vote.choice === "abstain") tally.abstain++;
+      const decoded = decodeStoredVote(vote as Record<string, any>, cryptoConfig);
+      if (decoded.choice === "approve") tally.approve++;
+      else if (decoded.choice === "abstain") tally.abstain++;
       else tally.reject++;
       tally.total++;
     }

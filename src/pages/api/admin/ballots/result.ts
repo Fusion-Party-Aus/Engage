@@ -14,7 +14,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin)
+  if (
+    !user.isAdmin &&
+    !user.isBranchAdmin &&
+    !hasPermission(user, "ballots.record_result")
+  )
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -78,7 +82,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     authorityBranchId: branchScope,
     metadata: { result },
   });
-  return Response.json({ result: record }, { status: 201 });
+  const { _id: _resultId, ...publicResult } = record as unknown as Record<string, unknown>;
+  return Response.json(
+    { result: publicResult },
+    { status: 201, headers: { "cache-control": "private, no-store" } },
+  );
 } catch (error) {
   if (error instanceof BallotDomainError) {
     return Response.json({ error: error.message }, { status: error.status });

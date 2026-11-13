@@ -1,0 +1,203 @@
+---
+/**
+ * Shared content for status pages (403, 404, 500).
+ * Rendered inside SiteLayout for reachable errors, or ErrorLayout when the
+ * application shell itself may be unavailable.
+ */
+import { ArrowRight } from 'lucide-react';
+import { Button } from '../ui/button';
+
+interface Action {
+  href: string;
+  label: string;
+  variant?: 'default' | 'outline' | 'ghost';
+}
+
+interface SuggestedLink {
+  href: string;
+  label: string;
+  description?: string;
+}
+
+interface Props {
+  code: string;
+  label: string;
+  title: string;
+  description: string;
+  actions?: Action[];
+  links?: SuggestedLink[];
+}
+
+const { code, label, title, description, actions = [], links = [] } = Astro.props;
+---
+
+<div class="page-wrap error-page">
+  <p class="error-page__status">
+    <span class="error-page__code tabular">{code}</span>
+    <span class="error-page__label">{label}</span>
+  </p>
+
+  <h1>{title}</h1>
+  <p class="error-page__lead">{description}</p>
+
+  {actions.length > 0 && (
+    <div class="error-page__actions">
+      {actions.map((action) => (
+        <Button href={action.href} variant={action.variant ?? 'outline'}>
+          {action.label}
+        </Button>
+      ))}
+    </div>
+  )}
+
+  {links.length > 0 && (
+    <nav class="error-page__links" aria-label="Suggested pages">
+      <p class="error-page__links-label">Where to go next</p>
+      <ul>
+        {links.map((link) => (
+          <li>
+            <a href={link.href}>
+              <span class="error-page__link-text">
+                <strong>{link.label}</strong>
+                {link.description && <span>{link.description}</span>}
+              </span>
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )}
+</div>
+
+<style>
+  .error-page {
+    max-width: 46rem;
+    margin-inline: auto;
+    padding-top: clamp(3rem, 8vw, 5.5rem);
+    padding-bottom: clamp(3rem, 8vw, 5rem);
+    display: grid;
+    gap: 1rem;
+  }
+
+  .error-page__status {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0;
+  }
+
+  .error-page__code {
+    font: 600 clamp(2.1rem, 5vw, 2.9rem) / 1 Newsreader, Georgia, serif;
+    letter-spacing: -0.02em;
+    color: var(--horizon-purple);
+  }
+
+  .error-page__label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--horizon-muted);
+  }
+
+  .error-page h1 {
+    margin: 0;
+    font: 600 clamp(1.85rem, 4vw, 2.6rem) / 1.08 Newsreader, Georgia, serif;
+    letter-spacing: -0.02em;
+    color: var(--horizon-ink);
+  }
+
+  .error-page__lead {
+    margin: 0;
+    max-width: 56ch;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--horizon-muted);
+  }
+
+  .error-page__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.4rem;
+  }
+
+  .error-page__links {
+    margin-top: 1.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--horizon-line);
+  }
+
+  .error-page__links-label {
+    margin: 0 0 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--horizon-muted);
+  }
+
+  .error-page__links ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+  }
+
+  .error-page__links a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 0.25rem;
+    border-bottom: 1px solid var(--horizon-line);
+    color: var(--horizon-ink);
+    text-decoration: none;
+    transition: color 120ms ease;
+  }
+
+  .error-page__links a:hover {
+    color: var(--horizon-purple);
+  }
+
+  .error-page__links a:hover .error-page__link-text strong {
+    text-decoration: underline;
+  }
+
+  .error-page__links a:focus-visible {
+    outline: 2px solid var(--horizon-focus);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+
+  .error-page__link-text {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
+  .error-page__link-text strong {
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
+  .error-page__link-text span {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--horizon-muted);
+  }
+
+  .error-page__links svg {
+    flex: 0 0 auto;
+    color: var(--horizon-purple);
+  }
+
+  @media (max-width: 640px) {
+    .error-page__links ul {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

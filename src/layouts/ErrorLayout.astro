@@ -1,0 +1,99 @@
+---
+/**
+ * Minimal application shell for the 500 page.
+ *
+ * Deliberately free of database, session, and site-config lookups: when the
+ * server fails, the error page must still render. Uses the same Horizon tokens
+ * and type as the rest of Engage.
+ */
+import '@fontsource/newsreader/latin-400.css';
+import '@fontsource/newsreader/latin-600.css';
+import '@fontsource/outfit/latin-400.css';
+import '@fontsource/outfit/latin-500.css';
+import '@fontsource/outfit/latin-600.css';
+import '@fontsource/outfit/latin-700.css';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#32105a" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/fusion_horizon_logo_light.svg" type="image/svg+xml" />
+    <title>{title}</title>
+  </head>
+  <body class="error-shell">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <header class="error-shell__header">
+      <div class="page-wrap error-shell__header-inner">
+        <a class="error-shell__brand" href="/" aria-label="Engage home">
+          <img src="/fusion_horizon_logo_light.svg" alt="" width="32" height="32" />
+          <span>Engage</span>
+        </a>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <slot />
+    </main>
+
+    <footer class="error-shell__footer">
+      <div class="page-wrap">
+        <p>Fusion Party Australia</p>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  .error-shell {
+    background: var(--horizon-white);
+    color: var(--horizon-purple);
+  }
+
+  .error-shell__header {
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .error-shell__header-inner {
+    display: flex;
+    align-items: center;
+    min-height: 4.25rem;
+  }
+
+  .error-shell__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--horizon-purple);
+    text-decoration: none;
+    font: 600 1.15rem/1 Outfit, sans-serif;
+  }
+
+  .error-shell__brand:focus-visible {
+    outline: 2px solid var(--horizon-focus);
+    outline-offset: 3px;
+    border-radius: 0.3rem;
+  }
+
+  .error-shell__footer {
+    border-top: 1px solid var(--horizon-line);
+    padding-block: 1.25rem;
+  }
+
+  .error-shell__footer p {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+</style>

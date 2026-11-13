@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { resolvePublicOrigin } from "../../../../lib/public-origin.ts";
 import { PERMISSION_CATALOGUE, hasPermission } from "../../../../lib/rbac.ts";
 import {
   RbacError,
@@ -61,14 +62,14 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
 };
 
 export const POST: APIRoute = async ({ request, url, locals }) => {
+  const env = runtimeEnv(locals);
   const origin = request.headers.get("origin");
-  if (origin && origin !== url.origin) {
+  if (origin && origin !== resolvePublicOrigin({ env, requestUrl: url })) {
     return Response.json(
       { error: "Cross-site requests are not allowed." },
       { status: 403 },
     );
   }
-  const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user) {
     return Response.json({ error: "Sign in required." }, { status: 401 });
@@ -119,14 +120,14 @@ export const POST: APIRoute = async ({ request, url, locals }) => {
 };
 
 export const DELETE: APIRoute = async ({ request, url, locals }) => {
+  const env = runtimeEnv(locals);
   const origin = request.headers.get("origin");
-  if (origin && origin !== url.origin) {
+  if (origin && origin !== resolvePublicOrigin({ env, requestUrl: url })) {
     return Response.json(
       { error: "Cross-site requests are not allowed." },
       { status: 403 },
     );
   }
-  const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user) {
     return Response.json({ error: "Sign in required." }, { status: 401 });

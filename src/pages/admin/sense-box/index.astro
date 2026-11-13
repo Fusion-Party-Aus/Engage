@@ -21,7 +21,7 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
 const env = runtimeEnv(Astro.locals);
 const user = await getSessionUser(Astro.request, env);
 if (!user) return Astro.redirect('/member/');
-if (!user.isAdmin && !user.branchAdminIds?.length) return new Response('Branch organiser access required.', { status: 403 });
+if (!user.isAdmin && !user.branchAdminIds?.length) return Astro.rewrite('/403/');
 
 const db = await getDatabase(env);
 const inbox = await listSense(db, user, Object.fromEntries(Astro.url.searchParams));

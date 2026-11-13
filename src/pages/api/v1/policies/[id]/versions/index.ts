@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getDatabase, runtimeEnv } from "../../../../../../lib/db.ts";
 import { publicJson } from "../../../../../../lib/public-api.ts";
+import { toPublicRevisionDto } from "../../../../../../lib/api-contracts.ts";
 export const prerender = false;
 export const GET: APIRoute = async ({ params, locals, request, url }) => {
   const env = runtimeEnv(locals);
@@ -27,7 +28,7 @@ export const GET: APIRoute = async ({ params, locals, request, url }) => {
   return publicJson(
     request,
     {
-      data: page.map(({ _id, authorId, ...r }) => r),
+      data: page.map(toPublicRevisionDto),
       meta: {
         limit,
         nextCursor: hasMore ? String(page.at(-1)?.revisionId ?? "") : null,

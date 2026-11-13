@@ -6,7 +6,11 @@ import { magicLink } from "better-auth/plugins";
 import { createAuthMiddleware, APIError } from "better-auth/api";
 import { ObjectId, type Db } from "mongodb";
 import { getDatabase } from "./db.ts";
-import { hasPermission } from "./rbac.ts";
+import {
+  hasPermission,
+  normalisePlatformRoles,
+  primaryPlatformRole,
+} from "./rbac.ts";
 import { resolveMemberEffectivePermissions } from "./roles-store.ts";
 import type {
   MembershipStatus,
@@ -82,7 +86,10 @@ export function createEngageAuth(db: Db, env: PlatformEnv) {
     baseURL: env.BETTER_AUTH_URL!,
     // Use one canonical public origin for OAuth and magic-link callbacks.
     trustedOrigins: [env.BETTER_AUTH_URL!],
-    advanced: { useSecureCookies: isProduction(env) },
+    advanced: {
+      useSecureCookies: isProduction(env),
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip", "x-real-ip"] },
+    },
     secret: env.BETTER_AUTH_SECRET!,
     database: mongodbAdapter(db, { transaction: false }),
     hooks: {
@@ -209,12 +216,13 @@ function parseCookie(request: Request, name: string): string | null {
 
 export function createDevSessionCookie(
   role: "member" | "administrator",
+  secure = false,
 ): string {
-  return `${DEV_COOKIE}=${encodeURIComponent(role)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800`;
+  return `${DEV_COOKIE}=${encodeURIComponent(role)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${secure ? "; Secure" : ""}`;
 }
 
-export function clearDevSessionCookie(): string {
-  return `${DEV_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+export function clearDevSessionCookie(secure = false): string {
+  return `${DEV_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`;
 }
 
 export function canAdministerBranch(
@@ -252,7 +260,6 @@ export function canManageBranchBallot(
 ): boolean {
   if (
     user.isAdmin ||
-    user.isStaff ||
     hasPermission(user, "ballots.bind") ||
     hasPermission(user, "ballots.record_result") ||
     hasPermission(user, "amendments.manage_ballot")
@@ -333,6 +340,7 @@ export async function getSessionUser(
         name: isAdmin ? "Local Administrator" : "Local Verified Member",
         email: isAdmin ? "admin@local.test" : "member@local.test",
         role: isAdmin ? "administrator" : "member",
+        roles: isAdmin ? ["member", "administrator"] : ["member"],
         status: "verified",
         canParticipate: true,
         isStaff: isAdmin,
@@ -393,11 +401,8 @@ export async function getSessionUser(
       ]);
 
     const roles = rolesDocs.map((r) => r.role);
-    const role: UserRole = roles.includes("administrator")
-      ? "administrator"
-      : roles.includes("moderator")
-        ? "moderator"
-        : "member";
+    const platformRoles = normalisePlatformRoles(roles);
+    const role: UserRole = primaryPlatformRole(platformRoles);
     const status: MembershipStatus = membershipDoc?.status ?? "pending";
     if(status === 'verified') {
       const {ensureNationalMembership} = await import('./branch-participation.ts');
@@ -425,6 +430,7 @@ export async function getSessionUser(
       name: String(account.name || session.user.name || ""),
       email: String(account.email || session.user.email || ""),
       role,
+      roles: platformRoles,
       status,
       canParticipate: status === "verified",
       isStaff: role === "administrator" || role === "moderator",

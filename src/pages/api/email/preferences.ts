@@ -2,11 +2,14 @@ import { recordLifecycle } from "../../../lib/member-lifecycle.ts";
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
+import { resolvePublicOrigin } from "../../../lib/public-origin.ts";
 import { notificationPreferenceChanges } from "../../../lib/digest-preferences.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({request,locals,url}) => {
- if (request.headers.get("origin") !== url.origin) return Response.json({error:"Invalid origin"},{status:403});
- const env = runtimeEnv(locals), user = await getSessionUser(request,env);
+ const env = runtimeEnv(locals);
+ const publicOrigin = resolvePublicOrigin({env,requestUrl:url});
+ if (request.headers.get("origin") !== publicOrigin) return Response.json({error:"Invalid origin"},{status:403});
+ const user = await getSessionUser(request,env);
  if (!user) return Response.json({error:"Sign in required"},{status:401});
  const form = await request.formData();
  let changes;
@@ -17,5 +20,5 @@ export const POST: APIRoute = async ({request,locals,url}) => {
  await db.collection("engagement_email_preferences").updateOne({memberId:user.memberId},{$set:{memberId:user.memberId,...changes,preferenceSource:"member",updatedAt:new Date()}},{upsert:true});
  await db.collection("engagement_notification_events").insertOne({memberId:user.memberId,category:String(form.get("category") ?? "engage"),enabled:Object.values(changes)[0],source:"my-engage",at:new Date()});
  if (Object.hasOwn(changes,"digestEnabled") && existing?.digestEnabled !== changes.digestEnabled) await recordLifecycle(db,user.memberId,"digest_preferences_changed",new Date(),crypto.randomUUID());
- return Response.redirect(new URL("/member/?view=notifications&emailPreferences=saved",url),303);
+ return Response.redirect(new URL("/member/?view=notifications&emailPreferences=saved",publicOrigin),303);
 };

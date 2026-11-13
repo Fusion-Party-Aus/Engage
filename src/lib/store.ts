@@ -1,8 +1,24 @@
 import { recordLifecycle, recordParticipation, notePriorParticipation } from "./member-lifecycle.ts";
-import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
+import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
+import {
+  PROPOSAL_VOTES,
+  buildEncryptedVoteFields,
+  computeAllBlindIndexesForMember,
+  decodeStoredVote,
+  findMemberVotes,
+  proposalBallotId,
+} from "./vote-storage.ts";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { validPersonName } from "./auth.ts";
-import { hasPermission } from "./rbac.ts";
+import { RBAC_ASSIGNMENTS, RBAC_ROLES } from "./roles-store.ts";
+import {
+  ALL_NATIONAL_PERMISSIONS,
+  LEGACY_MODERATOR_PERMISSIONS,
+  canGrantPermissionSet,
+  hasPermission,
+  normalisePlatformRoles,
+  primaryPlatformRole,
+} from "./rbac.ts";
 import type {
   CommentRecord,
   CommentStance,
@@ -29,6 +45,10 @@ import type {
 import { createHash, randomUUID } from "node:crypto";
 
 import { ballotExpired } from "./ballot-deadline.ts";
+import {
+  geographicScopeForBranch,
+  parseProposalScopeInput,
+} from "./proposal-scope.ts";
 import {
   matterHasCapability,
   normalizeMatterType,
@@ -277,6 +297,9 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
       : undefined,
     stage,
     kind,
+    ...(typeof raw.scope === "string" && raw.scope.trim()
+      ? { scope: raw.scope.trim() }
+      : {}),
     originatingBranchId: raw.originatingBranchId
       ? String(raw.originatingBranchId)
       : undefined,
@@ -345,6 +368,7 @@ export async function listProposals(
 
   const allProposals = rawProposals.map(normalizeProposalDoc);
 
+  const cryptoConfig = loadBallotCryptoConfig(process.env);
   const [allComments, allVotes] = await Promise.all([
     db
       .collection<CommentRecord>("comments")
@@ -354,7 +378,16 @@ export async function listProposals(
     db
       .collection<VoteRecord>(PROPOSAL_VOTES)
       .find({})
-      .project({ proposalId: 1, policyId: 1, ballotId: 1, choice: 1 })
+      .project({
+        proposalId: 1,
+        policyId: 1,
+        ballotId: 1,
+        revisionId: 1,
+        amendmentRevisionId: 1,
+        choice: 1,
+        voterBlindIndex: 1,
+        voteEnvelope: 1,
+      })
       .toArray(),
   ]);
 
@@ -369,14 +402,15 @@ export async function listProposals(
     const id = v.proposalId || (v as any).policyId;
     if (!id) continue;
     if (v.ballotId !== proposalBallotId(id)) continue;
+    const decoded = decodeStoredVote(v as Record<string, any>, cryptoConfig);
     const current = voteMap.get(id) ?? {
       approve: 0,
       abstain: 0,
       reject: 0,
       total: 0,
     };
-    if (v.choice === "approve") current.approve += 1;
-    else if (v.choice === "abstain") current.abstain += 1;
+    if (decoded.choice === "approve") current.approve += 1;
+    else if (decoded.choice === "abstain") current.abstain += 1;
     else current.reject += 1;
     current.total += 1;
     voteMap.set(id, current);
@@ -543,9 +577,22 @@ export async function getProposalDetail(
     stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
     upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
   }));
-  const proposalVotes = votes.filter(
-    (vote) => vote.ballotId === proposalBallotId(proposal.proposalId),
-  );
+  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const currentBallotId = proposalBallotId(proposal.proposalId);
+  const myBlindIndexes =
+    user && cryptoConfig
+      ? new Set(
+          computeAllBlindIndexesForMember(
+            cryptoConfig,
+            currentBallotId,
+            user.memberId,
+          ),
+        )
+      : null;
+
+  const proposalVotes = votes
+    .filter((vote) => vote.ballotId === currentBallotId)
+    .map((vote) => decodeStoredVote(vote as Record<string, any>, cryptoConfig));
 
   const tally: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
   let myVote: VoteChoice | null = null;
@@ -556,7 +603,14 @@ export async function getProposalDetail(
     else if (v.choice === "abstain") tally.abstain += 1;
     else tally.reject += 1;
     tally.total += 1;
-    if (user && v.memberId === user.memberId) {
+    const isMine =
+      Boolean(user && v.memberId && v.memberId === user.memberId) ||
+      Boolean(
+        myBlindIndexes &&
+          v.voterBlindIndex &&
+          myBlindIndexes.has(v.voterBlindIndex),
+      );
+    if (isMine) {
       myVote = v.choice;
       myReason = v.reason ?? "";
     }
@@ -574,7 +628,7 @@ export async function getProposalDetail(
       votes: tally,
     },
     comments,
-    votesList: proposalVotes,
+    votesList: proposalVotes as unknown as VoteRecord[],
     myVote,
     myReason,
     myPendingVote,
@@ -629,8 +683,16 @@ export async function listProposalRevisions(
             : [{ field, before, after }];
         })
       : [{ field: "initial", before: null, after: revision.snapshot }];
-    const { _id, authorId, ...publicRevision } = revision;
-    return { ...publicRevision, changes };
+    return {
+      revisionId: String(revision.revisionId ?? ""),
+      proposalId: String(revision.proposalId ?? ""),
+      parentRevisionId: revision.parentRevisionId ?? null,
+      createdAt: revision.createdAt,
+      snapshot: revision.snapshot,
+      contentHash: String(revision.contentHash ?? ""),
+      ...(revision.provenance ? { provenance: revision.provenance } : {}),
+      changes,
+    };
   });
   return { proposalId: proposal.proposalId, revisions: data };
 }
@@ -657,6 +719,10 @@ export async function saveProposal(
     "publicationScope",
   ] as const;
   const branchAdminIds = user.branchAdminIds ?? [];
+  // Validate the submitted geographic scope before any permissions run. The
+  // canonical key is translated to an organisational branch identifier here,
+  // so a display label can never select a branch.
+  const submittedScope = await parseProposalScopeInput(db, body);
   const canManageExisting = Boolean(
     existing &&
     (user.isStaff ||
@@ -674,22 +740,15 @@ export async function saveProposal(
       throw new Error(
         "Only a national administrator may set governance authority, jurisdiction, or publication scope.",
       );
-    if (body.originatingBranchId !== undefined) {
-      const requestedOrigin = String(body.originatingBranchId ?? "").trim();
-      if (
-        !requestedOrigin ||
-        !branchAdminIds.includes(requestedOrigin) ||
-        (existing && requestedOrigin !== existing.originatingBranchId)
-      )
-        throw new Error(
-          "Only an administrator may assign a proposal origin in an explicitly delegated branch; proposal origin cannot be changed later.",
-        );
-    }
-    if (!existing && body.originatingBranchId !== undefined) {
-      const requestedOrigin = String(body.originatingBranchId).trim();
-      if (!(await db.collection("branches").findOne({ branchId: requestedOrigin, recognised: true })))
-        throw new Error("Proposal origin must be a recognised branch.");
-    }
+    // Choosing a destination is participation, not administration. Any
+    // verified member may submit into any recognised branch; this grants no
+    // voting eligibility and no administrative authority in that branch.
+    if (
+      existing?.originatingBranchId &&
+      submittedScope?.branchId &&
+      submittedScope.branchId !== existing.originatingBranchId
+    )
+      throw new Error("Proposal scope cannot be changed after it is set.");
   }
   const isGovernanceOperator = Boolean(user.isStaff || canManageExisting);
 
@@ -765,7 +824,9 @@ export async function saveProposal(
           (field) =>
             body[field] !== undefined &&
             body[field] !== (existing[field] ?? ""),
-        )
+        ) ||
+        (submittedScope?.branchId &&
+          submittedScope.branchId !== (existing.originatingBranchId ?? ""))
       ) {
         throw new Error(
           "Governance authority, jurisdiction and publication scope are locked once a ballot begins.",
@@ -1013,9 +1074,15 @@ export async function saveProposal(
   const now = new Date();
 
   let originatingBranchId =
-    typeof body.originatingBranchId === "string"
+    submittedScope?.branchId ??
+    (typeof body.originatingBranchId === "string"
       ? body.originatingBranchId.trim()
-      : existing?.originatingBranchId;
+      : existing?.originatingBranchId);
+  const scopeWasSubmitted =
+    typeof body.scope === "string" && Boolean(body.scope.trim());
+  let geographicScope = scopeWasSubmitted
+    ? submittedScope?.definition?.key
+    : existing?.scope;
   let governanceAuthorityBranchId =
     typeof body.governanceAuthorityBranchId === "string"
       ? body.governanceAuthorityBranchId.trim()
@@ -1055,13 +1122,31 @@ export async function saveProposal(
       governanceAuthorityBranchId ||= originatingBranchId;
       jurisdictionBranchId ||= originatingBranchId;
       publicationScope ||= "branch";
+      geographicScope ||= geographicScopeForBranch(originBranch)?.key;
     } else if (nationalBranchForDefault) {
       const nationalId = String(nationalBranchForDefault.branchId);
+      const hadOrigin = Boolean(originatingBranchId);
       originatingBranchId ||= nationalId;
       governanceAuthorityBranchId ||= nationalId;
       jurisdictionBranchId ||= nationalId;
       publicationScope ||= "national";
+      // A branch destination keeps its own geographic scope. Only a proposal
+      // with no branch destination defaults to National.
+      if (!hadOrigin)
+        geographicScope ||= geographicScopeForBranch(nationalBranchForDefault)?.key;
     }
+  }
+  if (!scopeWasSubmitted && originatingBranchId) {
+    // API clients may still submit an originating branch identifier. Derive the
+    // canonical geographic scope from the branch record rather than trusting a
+    // label, and keep legacy records untouched when it cannot be derived.
+    const originBranch = await db
+      .collection("branches")
+      .findOne({ branchId: originatingBranchId });
+    const derivedScope = originBranch
+      ? geographicScopeForBranch(originBranch)?.key
+      : undefined;
+    geographicScope = derivedScope ?? existing?.scope;
   }
   if (user.isAdmin) {
     for (const branchId of [
@@ -1080,20 +1165,16 @@ export async function saveProposal(
       throw new Error(
         "National publication requires an explicit governance authority branch.",
       );
-  } else if (
-    originatingBranchId &&
-    branchAdminIds.includes(originatingBranchId)
-  ) {
+  } else if (originatingBranchId) {
+    // Any verified member may submit into any recognised branch. Recognition is
+    // the only destination rule; it does not grant branch membership, voting
+    // eligibility, or administrative authority.
     if (
       !(await db
         .collection("branches")
         .findOne({ branchId: originatingBranchId, recognised: true }))
     )
-      throw new Error("Proposal origin must be a recognised assigned branch.");
-  } else if (!user.isAdmin && body.originatingBranchId !== undefined) {
-    throw new Error(
-      "An administrator must select a recognised proposal origin.",
-    );
+      throw new Error("Choose a recognised proposal scope.");
   }
 
   let provenance: PolicyProvenance | undefined = existing?.provenance;
@@ -1164,6 +1245,7 @@ export async function saveProposal(
       governanceAuthorityBranchId,
       jurisdictionBranchId,
       publicationScope,
+      scope: geographicScope,
       provenance,
       updatedAt: now,
     };
@@ -1182,8 +1264,12 @@ export async function saveProposal(
       governanceAuthorityBranchId: updated.governanceAuthorityBranchId,
       jurisdictionBranchId: updated.jurisdictionBranchId,
       publicationScope: updated.publicationScope,
+      ...(geographicScope ? { scope: geographicScope } : {}),
       updatedAt: now,
     };
+    const unsetFields: Record<string, 1> = {};
+    if (scopeWasSubmitted && !geographicScope) unsetFields.scope = 1;
+    if (user.isStaff && body.provenance === null) unsetFields.provenance = 1;
     if (user.isStaff && body.provenance !== undefined) {
       updateSet.provenance = provenance;
     }
@@ -1220,8 +1306,8 @@ export async function saveProposal(
         { proposalId: existing.proposalId, updatedAt: existing.updatedAt },
         {
           $set: updateSet,
-          ...(user.isStaff && body.provenance === null
-            ? { $unset: { provenance: 1 } }
+          ...(Object.keys(unsetFields).length
+            ? { $unset: unsetFields }
             : {}),
         },
         session ? { session } : undefined,
@@ -1290,6 +1376,7 @@ export async function saveProposal(
     governanceAuthorityBranchId,
     jurisdictionBranchId,
     publicationScope,
+    ...(geographicScope ? { scope: geographicScope } : {}),
     provenance,
     authorId: user.memberId,
     authorName: user.name || "Verified Member",
@@ -1913,11 +2000,100 @@ export async function setCommentFeedback(
   return { feedback, feedbackHistory };
 }
 
+async function upsertStoredVote(
+  db: Db,
+  cryptoConfig: ReturnType<typeof loadBallotCryptoConfig>,
+  input: {
+    ballotId: string;
+    proposalId: string;
+    revisionId: string;
+    amendmentId?: string;
+    amendmentRevisionId?: string;
+    memberId: string;
+    authorName: string;
+    choice: VoteChoice;
+    reason: string;
+  },
+): Promise<VoteTally> {
+  const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
+  const now = new Date();
+  if (cryptoConfig?.mode === "encrypt") {
+    const encryptedFields = buildEncryptedVoteFields(cryptoConfig, {
+      ...input,
+      updatedAt: now,
+    });
+    const allBlindIndexes = computeAllBlindIndexesForMember(
+      cryptoConfig,
+      input.ballotId,
+      input.memberId,
+    );
+    const existing = await votesCol.findOne({
+      ballotId: input.ballotId,
+      $or: [
+        { memberId: input.memberId },
+        { voterBlindIndex: { $in: allBlindIndexes } },
+      ],
+    } as any);
+    if (existing?._id) {
+      await votesCol.updateOne(
+        { _id: existing._id } as any,
+        {
+          $set: encryptedFields as any,
+          $unset: { memberId: "", authorName: "", choice: "", reason: "" },
+        },
+      );
+    } else {
+      await votesCol.updateOne(
+        {
+          ballotId: input.ballotId,
+          voterBlindIndex: encryptedFields.voterBlindIndex,
+        } as any,
+        { $set: encryptedFields as any },
+        { upsert: true },
+      );
+    }
+  } else {
+    await votesCol.updateOne(
+      { ballotId: input.ballotId, memberId: input.memberId },
+      {
+        $set: {
+          ballotId: input.ballotId,
+          proposalId: input.proposalId,
+          ...(input.amendmentId ? { amendmentId: input.amendmentId } : {}),
+          revisionId: input.revisionId,
+          ...(input.amendmentRevisionId
+            ? { amendmentRevisionId: input.amendmentRevisionId }
+            : {}),
+          memberId: input.memberId,
+          authorName: input.authorName,
+          choice: input.choice,
+          reason: input.reason,
+          updatedAt: now,
+        },
+      },
+      { upsert: true },
+    );
+  }
+
+  const allVotes = await votesCol.find({ ballotId: input.ballotId }).toArray();
+  const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
+  for (const v of allVotes) {
+    const decoded = decodeStoredVote(v as Record<string, any>, cryptoConfig);
+    if (decoded.choice === "approve") votes.approve += 1;
+    else if (decoded.choice === "abstain") votes.abstain += 1;
+    else votes.reject += 1;
+    votes.total += 1;
+  }
+  return votes;
+}
+
 export async function castVote(
   db: Db,
   user: SessionUser,
   body: Record<string, unknown>,
+  env?: Partial<import("./types.ts").PlatformEnv>,
 ): Promise<{ choice: VoteChoice; votes: VoteTally; amendmentId?: string }> {
+  const cryptoConfig = loadBallotCryptoConfig(env ?? process.env);
   if (!user.canParticipate) {
     throw new Error(
       "Your membership must be verified before you can participate in decisions.",
@@ -1986,37 +2162,19 @@ export async function castVote(
           ? "abstain"
           : "reject";
     const ballotId = `amendment:${amendmentId}`;
-    const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
-    await notePriorParticipation(db,user.memberId);
-    await votesCol.updateOne(
-      { ballotId, memberId: user.memberId },
-      {
-        $set: {
-          ballotId,
-          proposalId,
-          amendmentId,
-          revisionId: amendment.ballotRevisionId,
-          amendmentRevisionId: amendment.ballotAmendmentRevisionId,
-          memberId: user.memberId,
-          authorName: user.name || "Verified Member",
-          choice,
-          reason:
-            typeof body.reason === "string"
-              ? body.reason.trim().slice(0, 500)
-              : "",
-          updatedAt: new Date(),
-        },
-      },
-      { upsert: true },
-    );
-    const allVotes = await votesCol.find({ ballotId }).toArray();
-    const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
-    for (const vote of allVotes) {
-      if (vote.choice === "approve") votes.approve++;
-      else if (vote.choice === "abstain") votes.abstain++;
-      else votes.reject++;
-      votes.total++;
-    }
+    await notePriorParticipation(db, user.memberId);
+    const votes = await upsertStoredVote(db, cryptoConfig, {
+      ballotId,
+      proposalId,
+      amendmentId,
+      revisionId: amendment.ballotRevisionId,
+      amendmentRevisionId: amendment.ballotAmendmentRevisionId,
+      memberId: user.memberId,
+      authorName: user.name || "Verified Member",
+      choice,
+      reason:
+        typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "",
+    });
     await recordParticipation(db, user.memberId);
     return { choice, votes, amendmentId };
   }
@@ -2116,27 +2274,16 @@ export async function castVote(
   const reason =
     typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
 
-  const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
-  await notePriorParticipation(db,user.memberId);
-  await votesCol.updateOne(
-    {
-      ballotId: proposalBallotId(proposal.proposalId),
-      memberId: user.memberId,
-    },
-    {
-      $set: {
-        ballotId: proposalBallotId(proposal.proposalId),
-        proposalId: proposal.proposalId,
-        revisionId: ballotRevisionId,
-        memberId: user.memberId,
-        authorName: user.name || "Verified Member",
-        choice,
-        ...(reason ? { reason } : { reason: "" }),
-        updatedAt: new Date(),
-      },
-    },
-    { upsert: true },
-  );
+  await notePriorParticipation(db, user.memberId);
+  const votes = await upsertStoredVote(db, cryptoConfig, {
+    ballotId: proposalBallotId(proposal.proposalId),
+    proposalId: proposal.proposalId,
+    revisionId: ballotRevisionId,
+    memberId: user.memberId,
+    authorName: user.name || "Verified Member",
+    choice,
+    reason,
+  });
 
   // Clear any pending preference for this ballot now that a formal vote is recorded
   await db
@@ -2145,17 +2292,6 @@ export async function castVote(
       ballotId: proposalBallotId(proposal.proposalId),
       memberId: user.memberId,
     });
-
-  const allVotes = await votesCol
-    .find({ ballotId: proposalBallotId(proposal.proposalId) })
-    .toArray();
-  const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
-  for (const v of allVotes) {
-    if (v.choice === "approve") votes.approve += 1;
-    else if (v.choice === "abstain") votes.abstain += 1;
-    else votes.reject += 1;
-    votes.total += 1;
-  }
 
   await recordParticipation(db, user.memberId);
   return { choice, votes };
@@ -2363,19 +2499,21 @@ export async function listUserActivity(
     }
   >;
 }> {
-  const [proposals, comments, votes] = await Promise.all([
+  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const [proposals, comments] = await Promise.all([
     db.collection<ProposalRecord>("proposals").find({}).toArray(),
     db
       .collection<CommentRecord>("comments")
       .find({ memberId })
       .sort({ createdAt: -1 })
       .toArray(),
-    db
-      .collection<VoteRecord>(PROPOSAL_VOTES)
-      .find({ memberId })
-      .sort({ updatedAt: -1 })
-      .toArray(),
   ]);
+  const votes = await findMemberVotes(
+    db,
+    memberId,
+    proposals.map((p) => proposalBallotId(p.proposalId)),
+    cryptoConfig,
+  );
 
   const proposalMap = new Map(proposals.map((p) => [p.proposalId, p]));
 
@@ -2393,6 +2531,8 @@ export async function listUserActivity(
       const p = proposalMap.get(v.proposalId);
       return {
         ...v,
+        memberId: v.memberId ?? memberId,
+        authorName: v.authorName ?? "",
         proposalTitle: p?.title ?? v.proposalId,
         proposalSlug: p?.slug ?? v.proposalId,
         proposalStage: p?.stage ?? "deliberate",
@@ -2408,12 +2548,16 @@ export async function listOutstandingDecisions(
   availableProposals?: ProposalSummaryView[],
 ): Promise<ProposalSummaryView[]> {
   if (user && !user.canParticipate) return [];
-  const [decisions, votes] = await Promise.all([
-    availableProposals
-      ? Promise.resolve(availableProposals.filter((proposal) => proposal.stage === "decide"))
-      : listProposals(db, { stage: "decide", user }),
-    db.collection<VoteRecord>(PROPOSAL_VOTES).find({ memberId }).toArray(),
-  ]);
+  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const decisions = availableProposals
+    ? availableProposals.filter((proposal) => proposal.stage === "decide")
+    : await listProposals(db, { stage: "decide", user });
+  const votes = await findMemberVotes(
+    db,
+    memberId,
+    decisions.map((d) => proposalBallotId(d.proposalId)),
+    cryptoConfig,
+  );
   const branchIds = [...new Set(
     decisions
       .map((decision) => decision.jurisdictionBranchId)
@@ -2448,47 +2592,122 @@ export async function listMembers(
   db: Db,
   search = "",
 ): Promise<MemberRecord[]> {
-  const [users, roles, memberships] = await Promise.all([
+  const [
+    users,
+    roles,
+    memberships,
+    branchMemberships,
+    assignments,
+    roleDefinitions,
+    branches,
+  ] = await Promise.all([
     db.collection("user").find({}).sort({ createdAt: -1 }).toArray(),
     db
       .collection<{ memberId: string; role: UserRole }>("application_roles")
       .find({})
       .toArray(),
     db
-      .collection<{ memberId: string; status: MembershipStatus }>("memberships")
+      .collection<{
+        memberId: string;
+        status: MembershipStatus;
+      }>("memberships")
+      .find({})
+      .toArray(),
+    db
+      .collection<{
+        memberId: string;
+        branchId: string;
+        branchRole?: string;
+        status: string;
+      }>("branch_memberships")
+      .find({ status: "active", branchRole: "administrator" })
+      .toArray(),
+    db
+      .collection<{
+        memberId: string;
+        roleId: string;
+        branchId?: string | null;
+        status: string;
+      }>(RBAC_ASSIGNMENTS)
+      .find({ status: "active" })
+      .toArray(),
+    db
+      .collection<{ roleId: string; name: string }>(RBAC_ROLES)
+      .find({})
+      .toArray(),
+    db
+      .collection<{ branchId: string; name: string }>("branches")
       .find({})
       .toArray(),
   ]);
 
-  const roleMap = new Map<string, UserRole>();
+  const rolesMap = new Map<string, UserRole[]>();
   for (const r of roles) {
-    if (r.role === "administrator" || !roleMap.has(r.memberId)) {
-      roleMap.set(r.memberId, r.role);
-    }
+    const list = rolesMap.get(r.memberId) ?? [];
+    if (!list.includes(r.role)) list.push(r.role);
+    rolesMap.set(r.memberId, list);
   }
   const statusMap = new Map<string, MembershipStatus>(
     memberships.map((m) => [m.memberId, m.status]),
   );
+  const branchNameById = new Map(
+    branches.map((branch) => [branch.branchId, branch.name]),
+  );
+  const roleNameById = new Map(
+    roleDefinitions.map((role) => [role.roleId, role.name]),
+  );
+  const branchAdministratorOf = new Map<string, string[]>();
+  for (const membership of branchMemberships) {
+    const list = branchAdministratorOf.get(membership.memberId) ?? [];
+    list.push(
+      branchNameById.get(membership.branchId) ?? membership.branchId,
+    );
+    branchAdministratorOf.set(membership.memberId, list);
+  }
+  const delegatedRoles = new Map<string, string[]>();
+  for (const assignment of assignments) {
+    const name =
+      roleNameById.get(assignment.roleId) ?? assignment.roleId;
+    const branch = assignment.branchId
+      ? branchNameById.get(assignment.branchId) ?? assignment.branchId
+      : null;
+    const label = branch ? `${name} — ${branch}` : name;
+    const list = delegatedRoles.get(assignment.memberId) ?? [];
+    list.push(label);
+    delegatedRoles.set(assignment.memberId, list);
+  }
   const q = search.trim().toLowerCase();
 
   return users
     .map((u) => {
       const memberId = String(u._id);
+      const platformRoles = normalisePlatformRoles(
+        rolesMap.get(memberId) ?? [],
+      );
       return {
         memberId,
         name: String(u.name ?? ""),
         email: String(u.email ?? ""),
-        role: roleMap.get(memberId) ?? "member",
+        role: primaryPlatformRole(platformRoles),
+        roles: platformRoles,
         status: statusMap.get(memberId) ?? "pending",
         disabled: Boolean(u.disabled),
         emailVerified: Boolean(u.emailVerified),
         createdAt: u.createdAt instanceof Date ? u.createdAt : undefined,
+        ...(branchAdministratorOf.has(memberId)
+          ? { branchAdministratorOf: branchAdministratorOf.get(memberId) }
+          : {}),
+        ...(delegatedRoles.has(memberId)
+          ? { delegatedRoles: delegatedRoles.get(memberId) }
+          : {}),
       };
     })
     .filter(
       (m) =>
         !q ||
-        `${m.name} ${m.email} ${m.role} ${m.status}`.toLowerCase().includes(q),
+        `${m.name} ${m.email} ${m.role} ${(m.roles ?? []).join(" ")} ${m.status} ${(m.delegatedRoles ?? []).join(" ")} ${(m.branchAdministratorOf ?? []).join(" ")}`
+          .toLowerCase()
+          .includes(q),
     );
 }
 
@@ -2498,8 +2717,24 @@ export async function saveMember(
   body: Record<string, unknown>,
   create = false,
 ): Promise<{ memberId: string }> {
-  if (!actor.isAdmin) {
-    throw new Error("Administrator role required.");
+  const changingMembership =
+    create ||
+    body.name !== undefined ||
+    body.status !== undefined ||
+    body.disabled !== undefined;
+  const rolesProvided = body.roles !== undefined;
+  const roleProvided = body.role !== undefined;
+  const changingRole = rolesProvided || roleProvided;
+  if (changingMembership && !hasPermission(actor, "members.verify")) {
+    throw new Error("Member verification permission required.");
+  }
+  if (changingRole && !hasPermission(actor, "roles.manage")) {
+    throw new Error(
+      "Role management permission is required to change a platform role.",
+    );
+  }
+  if (!changingMembership && !changingRole) {
+    throw new Error("Choose a membership or role change.");
   }
 
   const name = body.name === undefined ? undefined : validPersonName(body.name);
@@ -2507,12 +2742,43 @@ export async function saveMember(
     throw new Error("Enter a full name (2–100 characters).");
   }
 
-  const role = body.role !== undefined ? String(body.role) : undefined;
+  let requestedRoles: UserRole[] | undefined;
+  if (rolesProvided) {
+    if (!Array.isArray(body.roles)) {
+      throw new Error("Choose a valid set of platform roles.");
+    }
+    requestedRoles = normalisePlatformRoles(body.roles);
+    if (roleProvided) {
+      const single = normalisePlatformRoles([String(body.role)]);
+      if (single.join(",") !== requestedRoles.join(",")) {
+        throw new Error("Choose one set of platform roles.");
+      }
+    }
+  } else if (roleProvided) {
+    requestedRoles = normalisePlatformRoles([String(body.role)]);
+  }
+
+  // Anti-escalation: a delegated role manager cannot promote anyone into a
+  // system role whose permissions they do not personally hold.
+  const actorIsNationalAdministrator = canGrantPermissionSet(
+    actor,
+    ALL_NATIONAL_PERMISSIONS,
+  );
   if (
-    role !== undefined &&
-    !["member", "moderator", "administrator"].includes(role)
+    requestedRoles?.includes("administrator") &&
+    !actorIsNationalAdministrator
   ) {
-    throw new Error("Choose Member, Moderator or Administrator.");
+    throw new Error(
+      "You cannot grant National Administrator because you do not hold all national permissions.",
+    );
+  }
+  if (
+    requestedRoles?.includes("moderator") &&
+    !canGrantPermissionSet(actor, LEGACY_MODERATOR_PERMISSIONS)
+  ) {
+    throw new Error(
+      "You cannot grant Moderator because you do not hold all moderator permissions.",
+    );
   }
 
   const status = body.status !== undefined ? String(body.status) : undefined;
@@ -2560,10 +2826,27 @@ export async function saveMember(
     if (!(await users.findOne({ _id: new ObjectId(memberId) }))) {
       throw new Error("Account not found.");
     }
+    const targetRoles = await db
+      .collection<{ role: UserRole }>("application_roles")
+      .find({ memberId })
+      .toArray();
+    const targetIsAdministrator = targetRoles.some(
+      (row) => row.role === "administrator",
+    );
+    if (
+      targetIsAdministrator &&
+      !actorIsNationalAdministrator
+    ) {
+      throw new Error(
+        "Only a national administrator can change a national administrator account.",
+      );
+    }
     if (
       memberId === actor.memberId &&
       (disabled === true ||
-        (role !== undefined && role !== "administrator") ||
+        (actorIsNationalAdministrator &&
+          requestedRoles !== undefined &&
+          !requestedRoles.includes("administrator")) ||
         (status !== undefined && status !== "verified"))
     ) {
       throw new Error("You cannot remove your own administrator access.");
@@ -2580,23 +2863,29 @@ export async function saveMember(
     );
   }
 
-  if (role !== undefined) {
-    await db.collection("application_roles").deleteMany({ memberId });
-    if (role !== "member") {
-      await db
-        .collection("application_roles")
-        .updateOne(
-          { memberId, role },
-          {
-            $setOnInsert: {
-              memberId,
-              role,
-              grantedAt: now,
-              grantedBy: actor.memberId,
-            },
+  if (requestedRoles !== undefined) {
+    const roleCollection = db.collection("application_roles");
+    const desired = requestedRoles.filter((item) => item !== "member");
+    const desiredSet = new Set<string>(desired);
+    const existingRoles = await roleCollection.find({ memberId }).toArray();
+    for (const row of existingRoles) {
+      if (!desiredSet.has(String(row.role))) {
+        await roleCollection.deleteOne({ _id: row._id });
+      }
+    }
+    for (const role of desired) {
+      await roleCollection.updateOne(
+        { memberId, role },
+        {
+          $setOnInsert: {
+            memberId,
+            role,
+            grantedAt: now,
+            grantedBy: actor.memberId,
           },
-          { upsert: true },
-        );
+        },
+        { upsert: true },
+      );
     }
   }
 
