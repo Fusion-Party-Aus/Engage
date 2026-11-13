@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ClientSession, Db } from "mongodb";
+import { resolveBallotElectorate, upsertMatterBallot } from "./ballots.ts";
+import { recordGovernanceEvent } from "./governance-relationships.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 
 export interface BindBallotInput {
@@ -211,6 +213,43 @@ export async function bindBallotToRevision(
     input.session,
     allowedStages,
   );
+
+  await upsertMatterBallot(
+    db,
+    {
+      ballotId,
+      matterId: proposalId,
+      matterType: typeof proposal.kind === "string" ? proposal.kind : undefined,
+      purpose: "matter_adoption",
+      revisionId,
+      electorate: resolveBallotElectorate(proposal),
+      governanceAuthorityBranchId:
+        typeof proposal.governanceAuthorityBranchId === "string"
+          ? proposal.governanceAuthorityBranchId
+          : undefined,
+      jurisdictionBranchId:
+        typeof proposal.jurisdictionBranchId === "string"
+          ? proposal.jurisdictionBranchId
+          : undefined,
+      status: proposal.stage === "decide" ? "open" : "closed",
+      closesAt: proposal.ballotClosesAt ? new Date(proposal.ballotClosesAt) : undefined,
+    },
+    input.session,
+  );
+  await recordGovernanceEvent(
+    db,
+    {
+      eventType: "ballot.bound",
+      matterId: proposalId,
+      ballotId,
+      revisionId,
+      decisionEventId,
+      actorId: input.actorId,
+      reason,
+    },
+    input.session,
+  );
+
   return { event, idempotent: false };
 }
 

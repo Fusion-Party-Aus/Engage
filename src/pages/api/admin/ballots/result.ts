@@ -1,7 +1,12 @@
 import type { APIRoute } from "astro";
-import { getSessionUser } from "../../../../lib/auth.ts";
+import { getSessionUser, canManageBranchBallot } from "../../../../lib/auth.ts";
+import {
+  BallotDomainError,
+  recordFormalDecision,
+} from "../../../../lib/ballots.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
-import { canManageBranchBallot } from "../../../../lib/auth.ts";
+import { recordGovernanceEvent } from "../../../../lib/governance-relationships.ts";
+import { hasPermission } from "../../../../lib/rbac.ts";
 
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -37,39 +42,48 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "Proposal must have an active, revision-bound ballot." },
         { status: 409 },
       );
-    if (
-      !canManageBranchBallot(user, {
-        governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
-        jurisdictionBranchId: proposal.jurisdictionBranchId,
-      })
-    )
-      return Response.json(
-        {
-          error:
-            "You are not authorised to record an outcome for this ballot. Branch ballots require explicitly matching authority and jurisdiction.",
-        },
-        { status: 403 },
-      );
-    const existing = await db
-      .collection("ballot_results")
-      .findOne({ proposalId });
-    if (existing)
-      return Response.json(
-        { error: "Ballot result is already recorded and cannot be replaced." },
-        { status: 409 },
-      );
-    const record = {
-      proposalId,
-      revisionId: proposal.ballotRevisionId,
-      result,
-      decisionEventId,
-      recordedBy: user.memberId,
-      recordedAt: new Date(),
-    };
-    await db.collection("ballot_results").insertOne(record);
-    return Response.json({ result: record }, { status: 201 });
-  } catch (error) {
+  const branchScope =
+    typeof proposal.governanceAuthorityBranchId === "string"
+      ? proposal.governanceAuthorityBranchId
+      : undefined;
+  if (
+    !hasPermission(user, "ballots.record_result", branchScope) ||
+    !canManageBranchBallot(user, {
+      governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
+      jurisdictionBranchId: proposal.jurisdictionBranchId,
+    })
+  )
     return Response.json(
+      {
+        error:
+          "You are not authorised to record an outcome for this ballot. Branch ballots require explicitly matching authority and jurisdiction.",
+      },
+      { status: 403 },
+    );
+  const record = await recordFormalDecision(db, {
+    matterId: proposalId,
+    revisionId: String(proposal.ballotRevisionId),
+    result: result as "successful" | "unsuccessful" | "inconclusive",
+    decisionEventId,
+    authorityBranchId: branchScope,
+    recordedBy: user.memberId,
+  });
+  await recordGovernanceEvent(db, {
+    eventType: "decision.recorded",
+    matterId: proposalId,
+    ballotId: record.ballotId,
+    revisionId: record.revisionId,
+    decisionEventId,
+    actorId: user.memberId,
+    authorityBranchId: branchScope,
+    metadata: { result },
+  });
+  return Response.json({ result: record }, { status: 201 });
+} catch (error) {
+  if (error instanceof BallotDomainError) {
+    return Response.json({ error: error.message }, { status: error.status });
+  }
+  return Response.json(
       {
         error:
           error instanceof Error
