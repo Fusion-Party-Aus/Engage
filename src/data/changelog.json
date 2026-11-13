@@ -1,5 +1,22 @@
 [
   {
+    "hash": "041c469",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "repo",
+    "summary": "Add CODEOWNERS for default review routing (#18)",
+    "details": "Every path defaults to @finneh4249 so pull requests are routed to a single accountable reviewer. Ownership is advisory only: the main ruleset keeps a one-approval requirement for all contributors."
+  },
+  {
+    "hash": "430bec4",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record Sense Box destination picker"
+  },
+  {
     "hash": "5549e0c",
     "date": "2026-11-13",
     "type": "feat",
@@ -641,23 +658,5 @@
     "scope": "registry",
     "summary": "Add versioned policy registry and public API v1",
     "details": "- add admin publication, ratification, withdrawal, supersession and reconciliation operations - expose published policy revisions, branches and categories through read-only API v1 with ETags and cursors - serve OpenAPI 3.1 metadata for the public catalogue - rebuild the public policy library and detail pages around publication status and exact approved wording - document governance and API contracts and add governance API regression tests"
-  },
-  {
-    "hash": "9e76480",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "governance",
-    "summary": "Add revisions, amendments, branch administration and ballot records",
-    "details": "- persist immutable proposal and amendment revisions with SHA-256 content hashes - bind ballots to frozen revisions and record immutable ballot results - add branch records, scoped memberships, referrals and branch access helpers - expand the store, data model and in-memory database for governance records - refresh the admin overview, proposal queue and branch administration screens - add governance, branch access, store and real-MongoDB regression tests - update the Reclaim baseline proposal data used for seeding"
-  },
-  {
-    "hash": "19389e0",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Adopt Horizon design system with shadcn and Radix primitives",
-    "details": "- add React, Tailwind v4 and shadcn configuration with Radix-based UI primitives - rebuild shared Horizon tokens, typography and admin styles around the new system - add Astro admin card, alert and field components - refresh public and admin layout shells and the PortableText renderer - document the Horizon design system and updated product direction"
   }
 ]
