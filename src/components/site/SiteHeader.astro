@@ -1,5 +1,6 @@
 ---
 import { Button } from '../ui/button';
+import NotificationBell from './NotificationBell.tsx';
 import type { SessionUser } from '../../lib/types.ts';
 import type { SiteConfig } from '../../lib/site-config.ts';
 
@@ -89,25 +90,19 @@ if (isStaff) {
       ))}
     </nav>
 
-    <div class="site-actions">
+    <div class:list={{ 'site-actions': true, 'site-actions--signed-in': Boolean(user) }}>
       {user ? (
         <>
-          <a
-            href="/member/?view=notifications"
-            class="site-notify-link"
-            aria-label="Notifications"
-            title="Notifications"
-          >
-            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-            </svg>
-          </a>
-          <Button href="/member/" size="sm" variant="outline" className="h-9 px-3.5 text-sm">My Engage</Button>
-          <Button className="site-signout" type="button" variant="ghost" size="sm" data-signout>Sign out</Button>
+          <NotificationBell client:load />
+          <div class="site-actions__account">
+            <Button href="/member/" size="sm" variant="outline" className="h-9 px-3.5 text-sm">My Engage</Button>
+            <Button className="site-signout" type="button" variant="ghost" size="sm" data-signout>Sign out</Button>
+          </div>
         </>
       ) : (
-        <Button href="/member/" size="sm" className="h-9 px-4 text-sm">Sign in</Button>
+        <div class="site-actions__account">
+          <Button href="/member/" size="sm" className="h-9 px-4 text-sm">Sign in</Button>
+        </div>
       )}
     </div>
 
@@ -143,7 +138,6 @@ if (isStaff) {
                 <strong>{user.name || user.email}</strong>
               </p>
               <Button href="/member/" className="w-full">My Engage</Button>
-              <Button href="/member/?view=notifications" variant="outline" className="w-full">Notifications</Button>
               <Button className="site-menu__signout" type="button" variant="ghost" className="w-full" data-signout>Sign out</Button>
             </>
           ) : (
@@ -310,33 +304,10 @@ if (isStaff) {
     border-left: 1px solid var(--horizon-line);
   }
 
-  .site-notify-link {
-    display: inline-flex;
+  .site-actions__account {
+    display: flex;
     align-items: center;
-    justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
-    border: 1px solid var(--horizon-line);
-    border-radius: 999px;
-    background: var(--horizon-white);
-    color: var(--horizon-purple);
-    text-decoration: none;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
-  }
-
-  .site-notify-link:hover {
-    background: var(--horizon-lavender);
-    border-color: var(--horizon-purple);
-  }
-
-  .site-notify-link svg {
-    width: 1.05rem;
-    height: 1.05rem;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+    gap: 0.75rem;
   }
 
   .site-signout {
@@ -475,15 +446,27 @@ if (isStaff) {
   @media (max-width: 860px) {
     .site-header__inner {
       min-height: 4rem;
+      gap: 0.85rem;
+    }
+
+    .brand {
+      margin-right: auto;
     }
 
     .site-nav,
-    .site-actions {
+    .site-actions__account,
+    .site-actions:not(.site-actions--signed-in) {
       display: none;
+    }
+
+    .site-actions {
+      padding-left: 0;
+      border-left: 0;
     }
 
     .site-menu {
       display: block;
+      margin-left: 0;
     }
   }
 
