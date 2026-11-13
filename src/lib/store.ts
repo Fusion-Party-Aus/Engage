@@ -29,6 +29,15 @@ import type {
 import { createHash, randomUUID } from "node:crypto";
 
 import { ballotExpired } from "./ballot-deadline.ts";
+import {
+  MATTER_SCHEMA_VERSION,
+  MatterValidationError,
+  assertMatterCapability,
+  isRegisteredMatterType,
+  matterHasCapability,
+  normalizeMatterType,
+  validateMatterTransition,
+} from "./matters.ts";
 
 export const PENDING_VOTE_PREFERENCES = "pending_vote_preferences";
 
@@ -46,7 +55,11 @@ export function isPolicyProposal(proposal: {
   proposalId?: string;
   policyId?: string;
 }): boolean {
-  return !isGovernanceResolution(proposal);
+  try {
+    return matterHasCapability(proposal, "supportsPolicyPublication");
+  } catch {
+    return false;
+  }
 }
 
 export function isPolicyRegistryRecordForResolution(
@@ -130,36 +143,16 @@ export function normalizeStage(
 }
 
 export function normalizeKind(value: unknown, proposalId = ""): ProposalKind {
-  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (raw === "resolution" || raw === "governance") return "resolution";
-  if (raw === "policy") return "policy";
-  if (proposalId.toUpperCase().startsWith("GOV-")) return "resolution";
-  return "policy";
+  return normalizeMatterType(value, proposalId) as ProposalKind;
 }
 
 export function validateStageTransition(
   fromStage: ProposalStage,
   toStage: ProposalStage,
+  kind: ProposalKind | string = "policy",
 ): void {
-  if (fromStage === toStage) return;
-  if (!VALID_STAGES.includes(toStage)) {
-    throw new Error(
-      `Invalid lifecycle stage: '${toStage}'. Must be propose, deliberate, decide, implement, or archived.`,
-    );
-  }
-  if (
-    fromStage === "propose" &&
-    (toStage === "decide" || toStage === "implement")
-  ) {
-    throw new Error(
-      "Proposals in Stage 1 (Propose) must undergo member deliberation before entering Decide or Implement.",
-    );
-  }
-  if (fromStage === "deliberate" && toStage === "implement") {
-    throw new Error(
-      "Proposals in Stage 2 (Deliberate) must be voted on in the Decide stage before entering Implement.",
-    );
-  }
+  const matterType = normalizeMatterType(kind);
+  validateMatterTransition(matterType, fromStage, toStage);
 }
 
 export function isProposalLocked(
@@ -263,7 +256,14 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
   const space = String(raw.space || raw.category || "General");
   const summary = String(raw.summary || raw.statement || "");
   const stage = normalizeStage(raw.stage || raw.status || "deliberate");
-  const kind = normalizeKind(raw.kind, proposalId);
+  let kind: ProposalKind | string = "policy";
+  try {
+    kind = normalizeKind(raw.kind, proposalId);
+  } catch {
+    kind = typeof raw.kind === "string" && raw.kind.trim()
+      ? raw.kind.trim().toLowerCase()
+      : "policy";
+  }
   return {
     proposalId,
     slug: String(raw.slug || slugify(raw.title || proposalId)),
@@ -721,7 +721,7 @@ export async function saveProposal(
         );
       }
       const targetStage = normalizeStage(rawStageInput, existing.stage);
-      validateStageTransition(existing.stage, targetStage);
+      validateStageTransition(existing.stage, targetStage, existing.kind);
       if (targetStage === "decide" && !user.isStaff && canManageExisting) {
         const branchId = existing.governanceAuthorityBranchId;
         if (
