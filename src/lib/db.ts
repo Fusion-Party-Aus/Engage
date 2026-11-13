@@ -101,7 +101,7 @@ export async function initializeDatabase(db: Db): Promise<void> {
   await ensureDigestCohort(db);
   await Promise.all([
     db.collection("sense_submissions").createIndex({branchId:1,createdAt:-1}),
-    db.collection("sense_limits").createIndex({expiresAt:1},{expireAfterSeconds:0}),
+    db.collection("rate_limits").createIndex({expiresAt:1},{expireAfterSeconds:0,name:"rate_limit_expiry"}),
   ]);
   await Promise.all([
     db.collection("engagement_lifecycle_events").createIndex({memberId:1,event:1,at:1}),
@@ -601,6 +601,7 @@ export function createMemoryDb(): Db {
           update: {
             $set?: Record<string, any>;
             $setOnInsert?: Record<string, any>;
+            $inc?: Record<string, number>;
             $unset?: Record<string, any>;
           },
           options?: { upsert?: boolean },
@@ -608,6 +609,10 @@ export function createMemoryDb(): Db {
           const idx = store.findIndex((doc) => matchesFilter(doc, filter));
           if (idx >= 0) {
             if (update.$set) Object.assign(store[idx]!, update.$set);
+            // Atomic in MongoDB; the in-memory preview only needs the semantics.
+            for (const [field, amount] of Object.entries(update.$inc ?? {})) {
+              store[idx]![field] = Number(store[idx]![field] ?? 0) + amount;
+            }
             for (const field of Object.keys(update.$unset || {})) delete store[idx]![field];
             return { matchedCount: 1, modifiedCount: 1, acknowledged: true };
           }
@@ -624,6 +629,9 @@ export function createMemoryDb(): Db {
             }
             if (update.$setOnInsert) Object.assign(doc, update.$setOnInsert);
             if (update.$set) Object.assign(doc, update.$set);
+            for (const [field, amount] of Object.entries(update.$inc ?? {})) {
+              doc[field] = Number(doc[field] ?? 0) + amount;
+            }
             store.push(doc);
             return {
               matchedCount: 0,
@@ -633,6 +641,45 @@ export function createMemoryDb(): Db {
             };
           }
           return { matchedCount: 0, modifiedCount: 0, acknowledged: true };
+        },
+        findOneAndUpdate: async (
+          filter: Record<string, any>,
+          update: {
+            $set?: Record<string, any>;
+            $setOnInsert?: Record<string, any>;
+            $inc?: Record<string, number>;
+            $unset?: Record<string, any>;
+          },
+          options?: { upsert?: boolean; returnDocument?: "before" | "after" },
+        ) => {
+          const idx = store.findIndex((doc) => matchesFilter(doc, filter));
+          if (idx >= 0) {
+            const before = { ...store[idx]! };
+            if (update.$set) Object.assign(store[idx]!, update.$set);
+            for (const [field, amount] of Object.entries(update.$inc ?? {})) {
+              store[idx]![field] = Number(store[idx]![field] ?? 0) + amount;
+            }
+            for (const field of Object.keys(update.$unset || {})) delete store[idx]![field];
+            return options?.returnDocument === "before" ? { ...before } : { ...store[idx]! };
+          }
+          if (!options?.upsert) return null;
+          const _id = new ObjectId();
+          const doc: Record<string, any> = { _id };
+          for (const [k, v] of Object.entries(filter)) {
+            if (
+              typeof v !== "object" ||
+              v instanceof ObjectId ||
+              v instanceof Date
+            )
+              doc[k] = v;
+          }
+          if (update.$setOnInsert) Object.assign(doc, update.$setOnInsert);
+          if (update.$set) Object.assign(doc, update.$set);
+          for (const [field, amount] of Object.entries(update.$inc ?? {})) {
+            doc[field] = Number(doc[field] ?? 0) + amount;
+          }
+          store.push(doc);
+          return { ...doc };
         },
         deleteOne: async (filter: Record<string, any>) => {
           const idx = store.findIndex((doc) => matchesFilter(doc, filter));

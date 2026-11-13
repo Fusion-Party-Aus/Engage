@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { ObjectId, type Db } from 'mongodb';
 import { STANDARD_BRANCHES } from './migrations.ts';
 import type { SessionUser } from './types.ts';
@@ -27,20 +27,10 @@ function scope(user: SessionUser) {
   return {branchId:{$in:allowed}};
 }
 
-// Atomic _id claims work across application instances; TTL removes the hashed network keys.
-export async function claimSenseSlot(db: Db, address: string, secret: string, now = Date.now()) {
-  const bucket = Math.floor(now / 600_000);
-  const key = createHmac('sha256',secret).update(`${bucket}:${address}`).digest('hex');
-  for (let slot = 0; slot < 10; slot++) {
-    try {
-      await db.collection('sense_limits').insertOne({ _id: new ObjectId(createHash('sha256').update(`${key}:${slot}`).digest('hex').slice(0,24)), expiresAt:new Date((bucket+2)*600_000) });
-      return;
-    } catch (error) { if ((error as {code?:number}).code !== 11000) throw error; }
-  }
-  throw new SenseError('Too many submissions from this connection. Please try again in 10 minutes.',429);
-}
+// Sense Box submissions are protected by the shared MongoDB fixed-window
+// limiter in `rate-limit.ts`; see `docs/security/turnstile.md`.
 
-export async function submitSense(db: Db, body: Record<string, unknown>, rate?: {address:string; secret:string}): Promise<string> {
+export async function submitSense(db: Db, body: Record<string, unknown>): Promise<string> {
   if (body.consent !== true) throw new SenseError('Please agree to how Fusion will use your input.');
   if (typeof body.requestId !== 'string' || !uuid.test(body.requestId)) throw new SenseError('Please reload the form and try again.');
   let branchId = text(body.branchId,'Branch',1,100);
@@ -67,7 +57,6 @@ export async function submitSense(db: Db, body: Record<string, unknown>, rate?: 
     if (existing.fingerprint !== fingerprint) throw new SenseError('This form has already used its submission reference. Reload to share another priority.',409);
     return String(existing.submissionId);
   }
-  if (rate) await claimSenseSlot(db,rate.address,rate.secret);
   try {
     await db.collection('sense_submissions').insertOne({
       _id, submissionId:body.requestId, ...content, fingerprint,
