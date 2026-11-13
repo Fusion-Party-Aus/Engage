@@ -141,8 +141,7 @@ magic-link sign-in form.
 `src/lib/rate-limit.ts` implements a MongoDB fixed-window counter. It is shared
 by every application instance, unlike a per-process memory limiter.
 
-- Collection: where the deployment already keeps operational data
-  (`rate_limits`).
+- Collection: `rate_limits` in the application database.
 - Document: `_id` (derived hash), `action`, `identifierHash`,
   `windowStart`, `expiresAt`, `count`.
 - Identifier: HMAC-SHA256 of `action:address` keyed with `RATE_LIMIT_SECRET`
