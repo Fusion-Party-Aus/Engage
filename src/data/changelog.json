@@ -1,5 +1,21 @@
 [
   {
+    "hash": "7efcbbb",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "sense-box",
+    "summary": "Accept local concerns before branch setup"
+  },
+  {
+    "hash": "f2b384d",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record Sense Box release"
+  },
+  {
     "hash": "8ec0cf1",
     "date": "2026-11-13",
     "type": "feat",
@@ -644,23 +660,5 @@
     "category": "ops",
     "scope": "platform",
     "summary": "Refactor proposal detail to 2-column layout with refined asset showcase and trim UI verbosity"
-  },
-  {
-    "hash": "465dc29",
-    "date": "2026-10-27",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Fix styling to strictly adhere to Horizon light editorial canvas",
-    "details": "- Replace dark-mode assumptions and light text (#fff, #e2e8f0) on light backgrounds with Horizon tokens - Eliminate elements that were invisible/white-on-white until hovered (link titles, buttons, cards) - Use authentic Horizon palette: deep violet (#32105a / #271047), lavender (#f2eef9 / #f8f5fc), cyan (#00c9d2), line (#ded6e7) - Style voting choices, deliberation stances, and 4-stage stepper with high-contrast text and crisp card surfaces"
-  },
-  {
-    "hash": "748ede0",
-    "date": "2026-10-27",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Overhaul participatory democracy platform: Decidim/Loomio 4-stage lifecycle",
-    "details": "- Structure lifecycle around Propose -> Deliberate -> Decide -> Implement - Redesign homepage with interactive 4-stage pipeline banner, active deliberations, open decision ballots, and participatory spaces - Add proposal detail page with 4-stage visual stepper, structured deliberation stances (support, concern, amendment, comment) and endorsements - Support voting on decisions with Approve / Abstain / Reject and optional reason - Support Stage 4 implementation tracking notes and officer updates - Rename /policies/ to /proposals/ with seamless backwards-compatible redirects - Fix MongoDB index creation to be conflict-safe with existing NUC indexes"
   }
 ]
