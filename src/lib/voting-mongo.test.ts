@@ -571,3 +571,91 @@ test(
     }
   },
 );
+
+test(
+  "admin stage transition may clear provenance without a MongoDB path conflict",
+  { skip: !uri },
+  async () => {
+    const client = await new MongoClient(uri!).connect();
+    const db = client.db(
+      `engage_vote_test_${crypto.randomUUID().replaceAll("-", "")}`,
+    );
+    try {
+      const now = new Date();
+      const proposalId = "POL-PROVENANCE";
+      await db.collection("proposals").insertOne({
+        proposalId,
+        slug: "provenance-clear",
+        title: "Provenance clearing check",
+        space: "Governance",
+        summary: "Clearing provenance must not conflict with the stage update.",
+        outcomes: ["One outcome"],
+        details: "Details",
+        kind: "policy",
+        stage: "deliberate",
+        authorId: "admin-1",
+        authorName: "National Admin",
+        createdAt: now,
+        updatedAt: now,
+        provenance: {
+          category: "new-proposal",
+          classification: "new-proposal",
+          label: "New proposal",
+          summary: "",
+          lineage: [],
+          valuesAlignment: [],
+        },
+      });
+      await db.collection("proposal_revisions").insertOne({
+        revisionId: "rev-provenance-1",
+        proposalId,
+        parentRevisionId: null,
+        authorId: "admin-1",
+        createdAt: now,
+        snapshot: {
+          title: "Provenance clearing check",
+          summary: "Clearing provenance must not conflict with the stage update.",
+          outcomes: ["One outcome"],
+          details: "Details",
+        },
+        contentHash: "rev-provenance-hash",
+      });
+
+      const updated = await saveProposal(
+        db,
+        {
+          memberId: "admin-1",
+          name: "National Admin",
+          email: "admin@fusionparty.org.au",
+          role: "administrator",
+          status: "verified",
+          canParticipate: true,
+          isStaff: true,
+          isAdmin: true,
+        },
+        {
+          proposalId,
+          title: "Provenance clearing check",
+          space: "Governance",
+          summary: "Clearing provenance must not conflict with the stage update.",
+          outcomes: ["One outcome"],
+          details: "Details",
+          kind: "policy",
+          stage: "decide",
+          ballotClosesAt: new Date(Date.now() + 30 * 86400_000).toISOString(),
+          provenance: null,
+        },
+      );
+
+      assert.equal(updated.stage, "decide");
+      assert.equal(updated.provenance, undefined);
+      const stored = await db.collection("proposals").findOne({ proposalId });
+      assert.equal(stored?.provenance, undefined);
+      assert.ok(stored?.ballotRevisionId);
+      assert.ok(stored?.ballotClosesAt instanceof Date);
+    } finally {
+      await db.dropDatabase();
+      await client.close();
+    }
+  },
+);

@@ -1450,8 +1450,9 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
     };
     const unsetFields: Record<string, 1> = {};
     if (scopeWasSubmitted && !geographicScope) unsetFields.scope = 1;
-    if (user.isStaff && body.provenance === null) unsetFields.provenance = 1;
-    if (user.isStaff && body.provenance !== undefined) {
+    if (user.isStaff && body.provenance === null) {
+      unsetFields.provenance = 1;
+    } else if (user.isStaff && body.provenance !== undefined) {
       updateSet.provenance = provenance;
     }
 
