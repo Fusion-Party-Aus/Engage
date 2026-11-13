@@ -310,6 +310,32 @@ export const PLATFORM_ROLE_LABELS: Record<UserRole, string> = {
   administrator: "National Administrator",
 };
 
+const PLATFORM_ROLE_ORDER: UserRole[] = [
+  "member",
+  "moderator",
+  "administrator",
+];
+
+/** Normalise any submitted platform-role set. Member is always the base role. */
+export function normalisePlatformRoles(values: readonly unknown[]): UserRole[] {
+  const selected = new Set<UserRole>(["member"]);
+  for (const value of values) {
+    if (value === "moderator" || value === "administrator") {
+      selected.add(value);
+    } else if (value !== "member") {
+      throw new Error("Choose a valid platform role.");
+    }
+  }
+  return PLATFORM_ROLE_ORDER.filter((role) => selected.has(role));
+}
+
+/** Highest-precedence platform role for legacy single-role consumers. */
+export function primaryPlatformRole(roles: readonly UserRole[]): UserRole {
+  if (roles.includes("administrator")) return "administrator";
+  if (roles.includes("moderator")) return "moderator";
+  return "member";
+}
+
 export function canGrantPermissionSet(
   user: SessionUser | null | undefined,
   permissions: readonly PermissionKey[],

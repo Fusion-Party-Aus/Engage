@@ -47,6 +47,7 @@ export interface SessionIdentityDto {
   memberId: string;
   name: string;
   role: SessionUser["role"];
+  roles: NonNullable<SessionUser["roles"]>;
   status: SessionUser["status"];
   canParticipate: boolean;
   isStaff: boolean;
@@ -62,6 +63,7 @@ export function toSessionIdentityDto(
     memberId: user.memberId,
     name: user.name,
     role: user.role,
+    roles: user.roles ?? [user.role],
     status: user.status,
     canParticipate: Boolean(user.canParticipate),
     isStaff: Boolean(user.isStaff),
@@ -354,6 +356,7 @@ export function toMemberAccountDto(m: MemberRecord) {
     name: m.name,
     email: m.email,
     role: m.role,
+    roles: m.roles ?? [m.role],
     status: m.status,
     disabled: Boolean(m.disabled),
     emailVerified: Boolean(m.emailVerified),

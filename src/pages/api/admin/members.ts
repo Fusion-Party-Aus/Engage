@@ -75,7 +75,8 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       body.status !== undefined ||
       body.disabled !== undefined ||
       body.name !== undefined;
-    const changingRole = body.role !== undefined;
+    const changingRole =
+      body.role !== undefined || body.roles !== undefined;
     if (!changingMembership && !changingRole) {
       return privateJson(
         { error: "Choose a membership or role change." },

@@ -70,6 +70,8 @@ export interface SessionUser {
   name: string;
   email: string;
   role: UserRole;
+  /** All platform system roles held by the member. Member is always present. */
+  roles?: UserRole[];
   status: MembershipStatus;
   canParticipate: boolean;
   isStaff: boolean;
@@ -280,6 +282,8 @@ export interface MemberRecord {
   name: string;
   email: string;
   role: UserRole;
+  /** All platform system roles held by the member. Member is always present. */
+  roles?: UserRole[];
   status: MembershipStatus;
   disabled: boolean;
   emailVerified: boolean;

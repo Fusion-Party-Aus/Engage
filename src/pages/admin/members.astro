@@ -2,6 +2,7 @@
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
+import { Checkbox } from '../../components/ui/checkbox';
 import { Search, ShieldAlert, UserPlus, Users } from 'lucide-react';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
@@ -99,7 +100,9 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
                             <h3 class="m-0 text-sm font-semibold text-foreground">{m.name || 'Name needed'}</h3>
                             {isSelf && <Badge variant="outline">You</Badge>}
                             <Badge variant={m.status === 'verified' ? 'success' : m.status === 'suspended' ? 'destructive' : 'warning'}>{m.status}</Badge>
-                            <Badge variant={m.role === 'administrator' ? 'secondary' : m.role === 'moderator' ? 'info' : 'muted'}>{PLATFORM_ROLE_LABELS[m.role]}</Badge>
+                            {(m.roles ?? [m.role]).map((role) => (
+                              <Badge variant={role === 'administrator' ? 'secondary' : role === 'moderator' ? 'info' : 'muted'}>{PLATFORM_ROLE_LABELS[role]}</Badge>
+                            ))}
                             {m.disabled && <Badge variant="destructive">Disabled</Badge>}
                           </div>
                           <p class="m-0 truncate text-sm text-muted-foreground">{m.email}</p>
@@ -131,16 +134,35 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
                         </Field>
 
                         {canManageRoles ? (
-                          <Field label="Platform role" htmlFor={`role-${m.memberId}`}>
-                            <NativeSelect defaultValue={m.role} id={`role-${m.memberId}`} name="role" aria-label={`Role for ${m.name || m.email}`} disabled={isSelf}>
-                              {PLATFORM_ROLE_OPTIONS.map((option) => (
-                                <option value={option.value}>{option.label}</option>
-                              ))}
-                            </NativeSelect>
+                          <Field label="Platform roles">
+                            <input type="hidden" name="roles" value="member" />
+                            <div class="grid gap-2" role="group" aria-label={`Platform roles for ${m.name || m.email}`}>
+                              {PLATFORM_ROLE_OPTIONS.map((option) => {
+                                const checked = (m.roles ?? [m.role]).includes(option.value);
+                                return (
+                                  <label class="flex items-start gap-2 text-sm">
+                                    <Checkbox
+                                      name="roles"
+                                      value={option.value}
+                                      defaultChecked={checked || option.value === 'member'}
+                                      disabled={isSelf || option.value === 'member'}
+                                    />
+                                    <span class="grid gap-0.5">
+                                      <span class="font-medium">{option.label}</span>
+                                      <span class="text-xs text-muted-foreground">{option.description}</span>
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
                           </Field>
                         ) : (
-                          <Field label="Platform role">
-                            <p class="m-0 text-sm font-medium text-foreground">{PLATFORM_ROLE_LABELS[m.role]}</p>
+                          <Field label="Platform roles">
+                            <div class="flex flex-wrap gap-1">
+                              {(m.roles ?? [m.role]).map((role) => (
+                                <Badge variant="outline">{PLATFORM_ROLE_LABELS[role]}</Badge>
+                              ))}
+                            </div>
                             <p class="m-0 text-xs text-muted-foreground">Role changes require role-management permission.</p>
                           </Field>
                         )}
@@ -191,12 +213,24 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
                   </NativeSelect>
                 </Field>
                 {canManageRoles && (
-                  <Field label="Platform role" htmlFor="create-member-role">
-                    <NativeSelect defaultValue="member" id="create-member-role" name="role">
+                  <Field label="Platform roles">
+                    <input type="hidden" name="roles" value="member" />
+                    <div class="grid gap-2" role="group" aria-label="Platform roles for the new member">
                       {PLATFORM_ROLE_OPTIONS.map((option) => (
-                        <option value={option.value}>{option.label}</option>
+                        <label class="flex items-start gap-2 text-sm">
+                          <Checkbox
+                            name="roles"
+                            value={option.value}
+                            defaultChecked={option.value === 'member'}
+                            disabled={option.value === 'member'}
+                          />
+                          <span class="grid gap-0.5">
+                            <span class="font-medium">{option.label}</span>
+                            <span class="text-xs text-muted-foreground">{option.description}</span>
+                          </span>
+                        </label>
                       ))}
-                    </NativeSelect>
+                    </div>
                   </Field>
                 )}
               </div>
@@ -224,16 +258,22 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
     if (createStatus) createStatus.textContent = 'Creating…';
 
     try {
-      const data = Object.fromEntries(new FormData(createForm).entries());
+      const data = new FormData(createForm);
+      const payload: Record<string, unknown> = {
+        name: data.get('name'),
+        email: data.get('email'),
+        status: data.get('status'),
+      };
+      if (data.has('roles')) payload.roles = data.getAll('roles');
       const res = await fetch('/api/admin/members', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || 'Could not create account.');
-      if (payload.notification === 'failed') {
+      const responseBody = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(responseBody.error || 'Could not create account.');
+      if (responseBody.notification === 'failed') {
         if (createStatus) createStatus.textContent = 'Account created, but the verification email could not be sent. Please notify the member and reload this page.';
         return;
       }
@@ -260,7 +300,7 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
         const fd = new FormData(form);
         const payload: Record<string, unknown> = { memberId };
         if (fd.has('status')) payload.status = fd.get('status');
-        if (fd.has('role')) payload.role = fd.get('role');
+        if (fd.has('roles')) payload.roles = fd.getAll('roles').map(String);
         if (fd.has('disabled')) payload.disabled = fd.get('disabled') === 'true';
         const res = await fetch('/api/admin/members', {
           method: 'PATCH',

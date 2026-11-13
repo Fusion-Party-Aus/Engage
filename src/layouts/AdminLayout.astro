@@ -23,7 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { getSessionUser } from '../lib/auth.ts';
-import { hasPermission } from '../lib/rbac.ts';
+import { PLATFORM_ROLE_LABELS, hasPermission } from '../lib/rbac.ts';
 import { runtimeEnv } from '../lib/db.ts';
 import '../styles/admin.css';
 
@@ -99,13 +99,13 @@ const initials = displayName
   .slice(0, 2)
   .map((part) => part[0]?.toUpperCase())
   .join('') || 'A';
-const roleLabel = user?.isAdmin
-  ? 'National Administrator'
-  : user?.isBranchAdmin
-    ? 'Branch administrator'
-    : canViewMembers || canManageRoles
-      ? 'Delegated administrator'
-      : 'Moderator';
+const roleLabels = (user?.roles ?? []).map(
+  (role) => PLATFORM_ROLE_LABELS[role] ?? role,
+);
+if (user?.isBranchAdmin) roleLabels.push('Branch administrator');
+if (!roleLabels.length && (canViewMembers || canManageRoles))
+  roleLabels.push('Delegated administrator');
+const roleLabel = roleLabels.join(' · ') || 'Moderator';
 ---
 
 <SiteLayout title={`${title} · Engage Admin`} description={description} noIndex workspace>

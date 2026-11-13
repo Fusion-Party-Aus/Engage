@@ -487,4 +487,57 @@ describe("RBAC audit & configurable roles", () => {
     assert.deepEqual(row?.branchAdministratorOf, ["Victoria"]);
     assert.deepEqual(row?.delegatedRoles, ["Ballot Officer — Victoria"]);
   });
+
+  it("supports multiple platform roles and replaces the set without losing other grants", async () => {
+    const db = createMemoryDb();
+    const targetId = new ObjectId().toString();
+    await db.collection("user").insertOne({
+      _id: new ObjectId(targetId),
+      name: "Multi Role Officer",
+      email: `multi-${targetId}@example.org`,
+      createdAt: new Date(),
+    });
+
+    await saveMember(db, nationalAdmin, {
+      memberId: targetId,
+      status: "verified",
+      roles: ["moderator", "administrator"],
+    });
+    const afterGrant = (await listMembers(db)).find(
+      (member) => member.memberId === targetId,
+    );
+    assert.deepEqual(afterGrant?.roles, ["member", "moderator", "administrator"]);
+    assert.equal(afterGrant?.role, "administrator");
+    assert.equal(
+      await db.collection("application_roles").countDocuments({ memberId: targetId }),
+      2,
+    );
+    const grantedPermissions = await resolveMemberEffectivePermissions(db, targetId);
+    assert.ok(grantedPermissions.national.includes("ballots.view_identifiable"));
+    assert.ok(grantedPermissions.national.includes("comments.moderate"));
+
+    // Removing one role leaves the other intact.
+    await saveMember(db, nationalAdmin, {
+      memberId: targetId,
+      roles: ["moderator"],
+    });
+    const afterDemote = (await listMembers(db)).find(
+      (member) => member.memberId === targetId,
+    );
+    assert.deepEqual(afterDemote?.roles, ["member", "moderator"]);
+    assert.equal(afterDemote?.role, "moderator");
+    assert.equal(
+      await db.collection("application_roles").countDocuments({ memberId: targetId }),
+      1,
+    );
+
+    await assert.rejects(
+      saveMember(db, nationalAdmin, {
+        memberId: targetId,
+        role: "moderator",
+        roles: ["administrator"],
+      }),
+      /one set of platform roles/i,
+    );
+  });
 });

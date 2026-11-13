@@ -25,9 +25,15 @@ The dimensions must not imply one another:
 ## Canonical permission model
 
 `src/lib/rbac.ts` is the single capability catalogue. Each permission declares
-its allowed scopes (`national`, `branch`) and sensitivity. System roles are:
+its allowed scopes (`national`, `branch`) and sensitivity. System roles are additive. A member may hold multiple platform roles at once
+(for example Moderator and National Administrator) as well as multiple custom
+roles and branch-administrator assignments. Effective permissions are the union
+of every granted role; the legacy single `role` value remains only as a display
+compatibility field and resolves to the highest role.
 
-- **Member** — no administrative permissions (`application_roles` absent).
+The system roles are:
+
+- **Member** — the base role held by every account, with no administrative permissions.
 - **Moderator** — `LEGACY_MODERATOR_PERMISSIONS`.
 - **National Administrator** — `ALL_NATIONAL_PERMISSIONS`.
 - **Branch Administrator** — `LEGACY_BRANCH_ADMIN_PERMISSIONS` for one branch.
@@ -60,10 +66,11 @@ sets.
 ## Submission destinations
 
 `listProposalSubmissionScopes` returns every recognised branch, independent of
-the caller. The proposal form presents National and all eight states and
-territories, then reveals constituent/local branches behind a disclosure. The
-member's verified or active branch is preselected when it is a recognised
-destination; the preselection never restricts the list.
+the caller. The proposal form uses a single grouped, type-ahead select: National
+and the eight states/territories form the first group, with recognised
+constituent/local branches in a second group. The member's verified or active
+branch is preselected when it is a recognised destination; the preselection
+never restricts the list.
 
 Server-side, any verified member may set an originating branch to any recognised
 branch. Governance authority, jurisdiction, and publication scope remain

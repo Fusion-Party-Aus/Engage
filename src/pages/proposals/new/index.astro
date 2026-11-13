@@ -25,8 +25,6 @@ const branches = user?.canParticipate
   ? await db.collection('branches').find({ recognised: true }).sort({ kind: 1, name: 1 }).toArray()
   : [];
 const scopeOptions = listProposalSubmissionScopes(branches);
-const geographicScopeOptions = scopeOptions.filter((option) => option.kind !== 'constituent');
-const localScopeOptions = scopeOptions.filter((option) => option.kind === 'constituent');
 const defaultScopeKey = user ? defaultProposalScopeKey(user, scopeOptions) : 'national';
 const showScopeSelector = Boolean(user?.canParticipate && scopeOptions.length > 1);
 
@@ -90,17 +88,11 @@ const quickTopics = [
         {showScopeSelector && (
           <ProposalScopeSelector
             client:load
-            geographicOptions={geographicScopeOptions.map(({ key, label, branchName }) => ({
+            options={scopeOptions.map(({ key, label, kind, branchName, parentName }) => ({
               key,
               label,
-              ...(key !== 'national' && branchName && branchName !== label
-                ? { branchName }
-                : {}),
-            }))}
-            localOptions={localScopeOptions.map(({ key, label, branchName, parentName }) => ({
-              key,
-              label,
-              ...(branchName ? { branchName } : {}),
+              kind,
+              ...(branchName && branchName !== label ? { branchName } : {}),
               ...(parentName ? { parentName } : {}),
             }))}
             defaultValue={defaultScopeKey}

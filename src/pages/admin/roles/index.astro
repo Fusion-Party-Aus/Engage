@@ -58,6 +58,7 @@ const [roleData, members, branches] = canManageRoles
         name: m.name,
         email: m.email,
         role: m.role,
+        roles: m.roles ?? [m.role],
         status: m.status,
       }))}
       branches={branches.map((b: any) => ({

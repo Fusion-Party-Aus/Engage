@@ -520,39 +520,39 @@ describe("proposal scope: server validation and permissions", () => {
 });
 
 describe("proposal scope selector regression", () => {
-  it("uses design-system primitives instead of a native dropdown", async () => {
+  it("uses a grouped design-system Select rather than radios or a native dropdown", async () => {
     const component = await read(
       "src/components/proposal/ProposalScopeSelector.tsx",
     );
-    assert.match(component, /ToggleGroup/);
-    assert.match(component, /ToggleGroupItem/);
+    assert.match(component, /from '@\/components\/ui\/select'/);
+    assert.match(component, /SelectTrigger/);
+    assert.match(component, /SelectGroup/);
+    assert.match(component, /SelectItem/);
+    assert.match(component, /Local branches/);
     assert.doesNotMatch(component, /<select/);
     assert.doesNotMatch(component, /NativeSelect/);
+    assert.doesNotMatch(component, /ToggleGroup/);
+    assert.doesNotMatch(component, /role="radio"/);
     assert.match(component, /type="hidden"/);
     assert.match(component, /aria-label="Proposal scope"/);
-    assert.match(component, /aria-label="Local branch"/);
     assert.match(component, /aria-describedby="proposal-scope-hint"/);
-    assert.match(component, /data-\[state=on\]/);
-    assert.match(component, /min-h-11/, "touch targets must meet mobile sizing");
-    assert.match(component, /flex-wrap/, "options must wrap on narrow screens");
-    assert.match(component, /basis-\[calc\(50%/, "two columns on small screens");
-    assert.match(component, /<details/, "local branches stay behind a disclosure");
   });
 
   it("keeps keyboard focus, labels and page wiring intact", async () => {
-    const toggle = await read("src/components/ui/toggle.tsx");
-    assert.match(toggle, /focus-visible:ring/, "focus must remain visible");
-    assert.match(toggle, /aria-invalid/);
+    const select = await read("src/components/ui/select.tsx");
+    assert.match(select, /focus-visible:ring/, "trigger focus must remain visible");
+    assert.match(select, /focus:bg-accent/, "options must have a focus state");
+    assert.match(select, /SelectPrimitive\.Portal/);
 
     const page = await read("src/pages/proposals/new/index.astro");
     assert.match(page, /ProposalScopeSelector/);
     assert.match(page, /client:load/);
     assert.match(page, /listProposalSubmissionScopes/);
-    assert.match(page, /geographicOptions=/);
-    assert.match(page, /localOptions=/);
+    assert.match(page, /options=\{scopeOptions/);
     assert.match(page, /canParticipate/);
     assert.doesNotMatch(page, /isBranchAdmin/);
     assert.doesNotMatch(page, /listAuthorisedProposalScopes/);
+    assert.doesNotMatch(page, /geographicOptions=/);
     assert.doesNotMatch(page, /NativeSelect/);
     assert.doesNotMatch(page, /<select/);
     assert.doesNotMatch(page, /option value="national"/);
