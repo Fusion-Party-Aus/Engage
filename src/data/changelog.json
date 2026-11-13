@@ -1,5 +1,21 @@
 [
   {
+    "hash": "631c7cf",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "governance",
+    "summary": "Address review findings and add Reddit-style comment composer"
+  },
+  {
+    "hash": "a02e501",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record usability, governance and reporting updates"
+  },
+  {
     "hash": "be7c90e",
     "date": "2026-11-13",
     "type": "feat",
@@ -639,21 +655,5 @@
     "category": "docs",
     "scope": "deploy",
     "summary": "Record end-to-end poller verification and staging access"
-  },
-  {
-    "hash": "ef8e9a8",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Document Coolify staging, production cutover, and poller"
-  },
-  {
-    "hash": "3280da3",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Bake Mongo helpers into Coolify staging image"
   }
 ]
