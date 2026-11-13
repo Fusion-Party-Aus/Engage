@@ -1,5 +1,21 @@
 [
   {
+    "hash": "4cc35df",
+    "date": "2026-11-13",
+    "type": "test",
+    "category": "ops",
+    "scope": "ci",
+    "summary": "Update member lifecycle browser check for unified notification center"
+  },
+  {
+    "hash": "233988d",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record authorisation consolidation"
+  },
+  {
     "hash": "8e5f9ab",
     "date": "2026-11-13",
     "type": "feat",
@@ -639,21 +655,5 @@
     "category": "feature",
     "scope": "proposals",
     "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
   }
 ]

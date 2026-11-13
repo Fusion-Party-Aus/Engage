@@ -36,7 +36,8 @@ try {
   assert.ok(await page.locator('.lifecycle-card').evaluate(el=>el.scrollWidth<=el.clientWidth+1),'Lifecycle card overflows viewport');
   await page.screenshot({path:path.join(output,`my-engage-${device}.png`),fullPage:true});
   await page.goto(origin+'/member/?view=notifications',{waitUntil:'networkidle'});
-  await page.getByRole('heading',{name:'Engage digests',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Notifications',exact:true}).waitFor();
+  await page.getByText('Email & push preferences',{exact:true}).waitFor();
   await page.screenshot({path:path.join(output,`notifications-${device}.png`),fullPage:true});
   for(const status of ['approved','suspended']) {
    await page.goto(pathToFileURL(path.resolve(`docs/member-lifecycle/verification-${status}.html`)).href);
