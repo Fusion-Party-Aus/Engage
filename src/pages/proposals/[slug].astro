@@ -1826,9 +1826,16 @@ const initialsFor = (name: string) =>
         if (!res.ok) throw new Error(data.error || 'Could not save response.');
         const slot = document.querySelector<HTMLElement>(`[data-feedback-slot="${commentId}"]`);
         const drawer = form.closest('details');
+        const selectEl = form.querySelector<HTMLSelectElement>('select[name="status"]');
+        const noteInput = form.querySelector<HTMLInputElement>('input[name="note"]');
+        const summaryEl = drawer?.querySelector<HTMLElement>('summary');
         if (slot) {
           if (!data.feedback) {
             slot.innerHTML = '';
+            selectEl?.querySelector('option[value="clear"]')?.remove();
+            if (selectEl) selectEl.value = 'considered';
+            if (noteInput) noteInput.value = '';
+            if (summaryEl) summaryEl.textContent = 'Record response';
           } else {
             const labelMap: Record<string, string> = {
               incorporated: 'Incorporated',
@@ -1847,6 +1854,14 @@ const initialsFor = (name: string) =>
                 </div>
               </div>
             `;
+            if (selectEl && !selectEl.querySelector('option[value="clear"]')) {
+              const clearOpt = document.createElement('option');
+              clearOpt.value = 'clear';
+              clearOpt.textContent = 'Clear response';
+              selectEl.appendChild(clearOpt);
+            }
+            if (selectEl) selectEl.value = String(data.feedback.status);
+            if (summaryEl) summaryEl.textContent = 'Update response';
           }
         }
         if (drawer) drawer.open = false;

@@ -74,9 +74,11 @@ export function buildBranchSummaryRows(
   proposals: ProposalSummaryView[],
   branches: Array<Pick<BranchRecord, "branchId" | "name" | "kind">>,
   verifiedCountsByBranch: Map<string, number>,
+  allowedBranchIds?: Set<string>,
 ): BranchSummaryRow[] {
   const rows = new Map<string, BranchSummaryRow>();
   for (const branch of branches) {
+    if (allowedBranchIds && !allowedBranchIds.has(branch.branchId)) continue;
     rows.set(branch.branchId, {
       branchId: branch.branchId,
       branchName: branch.name,
@@ -97,6 +99,7 @@ export function buildBranchSummaryRows(
       proposal.originatingBranchId ||
       proposal.jurisdictionBranchId ||
       "national";
+    if (allowedBranchIds && !allowedBranchIds.has(branchId)) continue;
     const existing = rows.get(branchId) ?? {
       branchId,
       branchName: branchId === "national" ? "National" : branchId,

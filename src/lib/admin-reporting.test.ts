@@ -88,6 +88,28 @@ describe("admin reporting", () => {
     assert.equal(summary[0]!.deliberate, 1);
     assert.equal(summary[0]!.totalProposals, 2);
     assert.equal(summary[0]!.totalVotes, 13);
+
+    // Branch-scoped admin only sees allowed branches even if a cross-branch proposal exists
+    const scoped = buildBranchSummaryRows(
+      [
+        makeProposal({
+          proposalId: "P3",
+          originatingBranchId: "nsw",
+          jurisdictionBranchId: "vic",
+        }),
+      ],
+      [
+        { branchId: "vic", name: "Victoria", kind: "state" },
+        { branchId: "nsw", name: "New South Wales", kind: "state" },
+      ],
+      new Map([
+        ["vic", 42],
+        ["nsw", 99],
+      ]),
+      new Set(["vic"]),
+    );
+    assert.equal(scoped.length, 1);
+    assert.equal(scoped[0]!.branchId, "vic");
   });
 
   it("exports formula-safe CSV with aggregate counts only", () => {

@@ -35,11 +35,12 @@ if (!user) return Astro.redirect('/member/', 302);
 if (!user.isStaff && !user.isBranchAdmin) Astro.response.status = 403;
 
 const db = await getDatabase(env);
-const proposals = user.isStaff
+const rawProposals = user.isStaff
   ? await listProposals(db, { includeArchived: true })
   : user.isBranchAdmin
     ? (await Promise.all((user.branchAdminIds ?? []).map((branch) => listProposals(db, { includeArchived: true, branch })))).flat()
     : [];
+const proposals = [...new Map(rawProposals.map((proposal) => [proposal.proposalId, proposal])).values()];
 
 const stageCounts = {
   propose: proposals.filter((p) => p.stage === 'propose').length,
@@ -176,7 +177,12 @@ const branchCountPairs = await Promise.all(
 );
 const verifiedCountsByBranch = new Map<string, number>(branchCountPairs);
 const ballotProgressRows = buildBallotProgressRows(proposals, branchNames);
-const branchSummaryRows = buildBranchSummaryRows(proposals, scopedBranches as any[], verifiedCountsByBranch);
+const branchSummaryRows = buildBranchSummaryRows(
+  proposals,
+  scopedBranches as any[],
+  verifiedCountsByBranch,
+  user.isStaff ? undefined : new Set(scopedBranchIds),
+);
 const ratifiedIds = new Set(registry.map((policy) => policy.proposalId));
 const awaitingRatification = ballotResults
   .filter((result) => !ratifiedIds.has(result.proposalId))

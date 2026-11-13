@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { getProposalDetail } from '../../../lib/store.ts';
+import { getProposalDetail, listProposals } from '../../../lib/store.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
 import PortableText from '../../../components/PortableText.astro';
@@ -80,15 +80,18 @@ for (const amendment of amendmentRows) {
   const current = amendment.revisionHistory.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
 }
-const [ballotResult, policy, relatedProposals, branches, allOtherProposals] = proposal
+const [ballotResult, policy, relatedProposals, branches, visibleOtherProposals] = proposal
   ? await Promise.all([
       db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
       db.collection('proposals').find({ space: proposal.space, proposalId: { $ne: proposal.proposalId } }).limit(4).toArray(),
       db.collection('branches').find({}).sort({ name: 1 }).toArray(),
-      db.collection('proposals').find({ proposalId: { $ne: proposal.proposalId } }).project({ proposalId: 1, title: 1 }).sort({ updatedAt: -1 }).toArray(),
+      listProposals(db, { includeArchived: true, user }),
     ])
   : [null, null, [], [], []];
+const allOtherProposals = proposal
+  ? visibleOtherProposals.filter((other) => other.proposalId !== proposal.proposalId)
+  : [];
 const isResolution = Boolean(proposal && (proposal.kind === 'resolution' || proposal.proposalId.startsWith('GOV-')));
 
 const branchNameFor = (branchId?: string) =>

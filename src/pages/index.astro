@@ -199,7 +199,11 @@ const stageVariant = (s: ProposalStage) => {
                   {discussions.length > 0 && (
                     <a href="#discussions">Join {discussions.length} open {discussions.length === 1 ? 'deliberation' : 'deliberations'} →</a>
                   )}
-                  <a href={primaryCtaHref}>{primaryCtaLabel} →</a>
+                  {user.canParticipate ? (
+                    <a href={primaryCtaHref}>{primaryCtaLabel} →</a>
+                  ) : (
+                    <a href="/member/">View account status →</a>
+                  )}
                   <a href="/sense-box/">Raise a local priority in Sense Box →</a>
                 </div>
               </div>

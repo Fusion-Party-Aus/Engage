@@ -22,10 +22,11 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const db = await getDatabase(env);
   const stage = (url.searchParams.get("stage") ?? "all").trim();
   const branchFilter = (url.searchParams.get("branch") ?? "all").trim();
+  const search = (url.searchParams.get("q") ?? "").trim();
   const branchAdminIds = user.branchAdminIds ?? [];
 
   const [allProposals, branches] = await Promise.all([
-    listProposals(db, { includeArchived: true, stage }),
+    listProposals(db, { includeArchived: true, stage, search }),
     db.collection("branches").find({}).toArray(),
   ]);
 
