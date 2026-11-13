@@ -12,6 +12,7 @@
     "build": "node scripts/generate-changelog.mjs && astro build",
     "start": "node ./dist/server/entry.mjs",
     "preview": "astro preview",
+    "perf:render": "node scripts/rendering-performance.mjs",
     "check": "astro check",
     "test": "node --experimental-strip-types --test src/**/*.test.ts",
     "ballots:schedule": "node --experimental-strip-types scripts/schedule-open-ballots.ts",
