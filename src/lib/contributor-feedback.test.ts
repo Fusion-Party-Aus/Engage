@@ -177,6 +177,7 @@ describe("contributor feedback and proposal supersession", () => {
       outcomes: ["Establish committee"],
       details: "Original details.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
 
     const newProposal = await saveProposal(db, adminUser, {

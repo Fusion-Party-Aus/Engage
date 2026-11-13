@@ -1,6 +1,6 @@
 import { ensureDigestCohort } from "./digest-preferences.ts";
 import { ensureVoteStorage, PROPOSAL_VOTES } from "./vote-storage.ts";
-import { MongoClient, ObjectId, type Db } from "mongodb";
+import { MongoClient, ObjectId, type ClientSession, type Db } from "mongodb";
 import { createHash } from "node:crypto";
 import baselineItems from "../data/policies.json" with { type: "json" };
 import { ensureLegacyProposalRevision } from "./proposal-revision.ts";
@@ -224,10 +224,30 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .collection("publication_events")
         .createIndex({ eventId: 1 }, { unique: true })
         .catch(() => {}),
-      db
-        .collection("ballot_results")
-        .createIndex({ proposalId: 1 }, { unique: true })
-        .catch(() => {}),
+      (async () => {
+        const col = db.collection("ballot_results");
+        const existing =
+          typeof col.indexes === "function"
+            ? await col.indexes().catch(() => [])
+            : [];
+        const legacyIdx = existing.find(
+          (idx) => idx.name === "proposalId_1" && idx.unique === true,
+        );
+        if (legacyIdx) {
+          await col.dropIndex("proposalId_1").catch(() => {});
+        }
+        await col
+          .createIndex(
+            { ballotId: 1 },
+            {
+              unique: true,
+              name: "ballot_results_ballot_unique",
+              partialFilterExpression: { ballotId: { $type: "string" } },
+            },
+          )
+          .catch(() => {});
+        await col.createIndex({ proposalId: 1 }).catch(() => {});
+      })(),
       db
         .collection("ballot_binding_events")
         .createIndex({ eventId: 1 }, { unique: true })
@@ -637,5 +657,30 @@ export function createMemoryDb(): Db {
 function getMemoryDb(): Db {
   if (!sharedMemoryDb) sharedMemoryDb = createMemoryDb();
   return sharedMemoryDb;
+}
+
+/**
+ * Run a persistence callback inside a MongoDB transaction when supported by
+ * the underlying client (e.g. a real replica set). Falls back to direct
+ * execution on the in-memory development/test database.
+ */
+export async function runInTransaction<T>(
+  db: Db,
+  fn: (session?: ClientSession) => Promise<T>,
+): Promise<T> {
+  const dbClient = (db as Db & { client?: MongoClient }).client;
+  if (!dbClient || typeof dbClient.startSession !== "function") {
+    return fn(undefined);
+  }
+  const session = dbClient.startSession();
+  try {
+    let result!: T;
+    await session.withTransaction(async () => {
+      result = await fn(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
 

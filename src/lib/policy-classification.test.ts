@@ -168,6 +168,7 @@ describe("governance resolution vs policy classification", () => {
     await saveProposal(db, nationalAdmin, {
       proposalId: govRes.proposalId,
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     const rev = await db
       .collection("proposal_revisions")
@@ -351,6 +352,7 @@ describe("governance resolution vs policy classification", () => {
     await saveProposal(db, nationalAdmin, {
       proposalId: pol.proposalId,
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     const polRev = await db
       .collection("proposal_revisions")

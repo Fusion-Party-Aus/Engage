@@ -220,6 +220,15 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                   </NativeSelect>
                 </Field>
 
+                <Field label="Ballot closing date" htmlFor="editor-ballot-closes-at" hint="Required when opening Decide (your local time).">
+                  <Input
+                    id="editor-ballot-closes-at"
+                    name="ballotClosesAt"
+                    type="datetime-local"
+                    defaultValue={editingProposal?.ballotClosesAt ? new Date(new Date(editingProposal.ballotClosesAt).getTime() - new Date(editingProposal.ballotClosesAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}
+                  />
+                </Field>
+
                 <Field label="Classification" htmlFor="proposal-kind-select">
                   <NativeSelect defaultValue={isResolution ? 'resolution' : 'policy'} id="proposal-kind-select" name="kind" disabled={isLocked}>
                     <option value="policy">Policy Proposal</option>
@@ -799,11 +808,15 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         provenance = null;
       }
 
+      const rawBallotClosesAt = String(formData.get('ballotClosesAt') || '').trim();
+      const ballotClosesAt = rawBallotClosesAt ? new Date(rawBallotClosesAt).toISOString() : undefined;
+
       const data = {
         proposalId: editingId || undefined,
         title: formData.get('title'),
         space: formData.get('space'),
         stage: formData.get('stage'),
+        ...(ballotClosesAt ? { ballotClosesAt } : {}),
         kind: formData.get('kind') || undefined,
         summary: formData.get('summary'),
         details: formData.get('details'),

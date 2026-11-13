@@ -5,7 +5,6 @@ import {
   recordFormalDecision,
 } from "../../../../lib/ballots.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
-import { recordGovernanceEvent } from "../../../../lib/governance-relationships.ts";
 import { hasPermission } from "../../../../lib/rbac.ts";
 
 export const prerender = false;
@@ -71,16 +70,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     decisionEventId,
     authorityBranchId: branchScope,
     recordedBy: user.memberId,
-  });
-  await recordGovernanceEvent(db, {
-    eventType: "decision.recorded",
-    matterId: proposalId,
-    ballotId: record.ballotId,
-    revisionId: record.revisionId,
-    decisionEventId,
-    actorId: user.memberId,
-    authorityBranchId: branchScope,
-    metadata: { result },
   });
   const { _id: _resultId, ...publicResult } = record as unknown as Record<string, unknown>;
   return Response.json(

@@ -1,5 +1,8 @@
 import { recordLifecycle, recordParticipation, notePriorParticipation } from "./member-lifecycle.ts";
 import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
+import { BALLOTS_COLLECTION, FORMAL_DECISIONS_COLLECTION } from "./ballots.ts";
+import { runInTransaction } from "./db.ts";
+import { recordGovernanceEvent } from "./governance-relationships.ts";
 import {
   PROPOSAL_VOTES,
   buildEncryptedVoteFields,
@@ -867,6 +870,29 @@ export async function saveProposal(
     }
   }
 
+function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date()): Date {
+  if (raw !== undefined) {
+    if (raw === null || raw === "") {
+      throw new Error("A future ballot closing date is required when opening a ballot.");
+    }
+    const parsed = new Date(String(raw));
+    if (!Number.isFinite(parsed.getTime())) {
+      throw new Error("Ballot closing date is invalid.");
+    }
+    if (parsed.getTime() <= now.getTime()) {
+      throw new Error("Ballot closing date must be in the future.");
+    }
+    return parsed;
+  }
+  if (existingClose) {
+    const parsed = new Date(existingClose);
+    if (Number.isFinite(parsed.getTime()) && parsed.getTime() > now.getTime()) {
+      return parsed;
+    }
+  }
+  throw new Error("A future ballot closing date is required when opening a ballot.");
+}
+
   // Quick stage / implementationNote / supersession update by staff
   if (
     existing &&
@@ -880,18 +906,31 @@ export async function saveProposal(
         "implementationNote",
         "supersededByProposalId",
         "supersededByNote",
+        "ballotClosesAt",
       ].includes(k),
     ) &&
     (body.stage !== undefined ||
       body.status !== undefined ||
       body.implementationNote !== undefined ||
       body.supersededByProposalId !== undefined ||
-      body.supersededByNote !== undefined)
+      body.supersededByNote !== undefined ||
+      body.ballotClosesAt !== undefined)
   ) {
     const stage =
       body.stage !== undefined || body.status !== undefined
         ? normalizeStage(body.stage ?? body.status, existing.stage)
         : existing.stage;
+    const updatedAt = new Date();
+    const openingBallot = stage === "decide" && existing.stage !== "decide";
+    const closingBallot = existing.stage === "decide" && stage !== "decide";
+    let ballotClosesAt = existing.ballotClosesAt;
+    if (openingBallot || (stage === "decide" && body.ballotClosesAt !== undefined)) {
+      ballotClosesAt = parseBallotCloseDate(
+        body.ballotClosesAt,
+        existing.ballotClosesAt,
+        updatedAt,
+      );
+    }
     const implementationNote =
       typeof body.implementationNote === "string"
         ? body.implementationNote.trim().slice(0, 1000)
@@ -939,21 +978,52 @@ export async function saveProposal(
           ? body.supersededByNote.trim().slice(0, 500)
           : undefined
         : existing.supersededByNote;
+
+    const currentBallotId = proposalBallotId(existing.proposalId);
+    const ballotVoteCount = await db
+      .collection<VoteRecord>(PROPOSAL_VOTES)
+      .countDocuments({
+        $or: [
+          { proposalId: existing.proposalId },
+          { ballotId: currentBallotId },
+        ],
+      });
+
     let ballotRevisionId = existing.ballotRevisionId;
-    if (stage === "decide" && !ballotRevisionId) {
+    let ballotUnbound = false;
+    let ballotReboundFrom: string | undefined;
+
+    if (closingBallot && ballotVoteCount === 0 && ballotRevisionId) {
+      // Returning a zero-vote ballot to deliberation/propose clears its binding so
+      // any subsequent wording edits do not leave a stale revision attached.
+      ballotRevisionId = undefined;
+      ballotUnbound = true;
+    } else if (stage === "decide") {
       const latest = await db
         .collection("proposal_revisions")
         .find({ proposalId: existing.proposalId })
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .limit(1)
         .toArray();
-      ballotRevisionId = latest[0]?.revisionId;
-      if (!ballotRevisionId)
+      const latestRevisionId = latest[0]?.revisionId;
+      if (!latestRevisionId) {
         throw new Error(
           "A proposal revision is required before opening a ballot.",
         );
+      }
+      if (ballotRevisionId && ballotRevisionId !== latestRevisionId) {
+        if (ballotVoteCount > 0) {
+          throw new Error(
+            "Cannot reopen a voted ballot when a newer wording revision exists.",
+          );
+        }
+        ballotReboundFrom = ballotRevisionId;
+        ballotRevisionId = latestRevisionId;
+      } else if (!ballotRevisionId) {
+        ballotRevisionId = latestRevisionId;
+      }
     }
-    const updatedAt = new Date();
+
     const set: Record<string, unknown> = {
       stage,
       implementationNote,
@@ -975,17 +1045,88 @@ export async function saveProposal(
         unset.supersededByNote = "";
       }
     }
-    if (ballotRevisionId) set.ballotRevisionId = ballotRevisionId;
+    if (ballotRevisionId) {
+      set.ballotRevisionId = ballotRevisionId;
+      if (openingBallot || ballotReboundFrom || !existing.ballotRevisionId) {
+        set.ballotRevisionBoundAt = updatedAt;
+        set.ballotRevisionBoundBy = user.memberId;
+      }
+    } else if (ballotUnbound) {
+      unset.ballotRevisionId = "";
+      unset.ballotRevisionBoundAt = "";
+      unset.ballotRevisionBoundBy = "";
+    }
+    if (ballotClosesAt) {
+      set.ballotClosesAt = ballotClosesAt;
+    }
     const updateDoc: Record<string, unknown> = { $set: set };
     if (Object.keys(unset).length) updateDoc.$unset = unset;
-    const write = await col.updateOne(
-      { proposalId: existing.proposalId, updatedAt: existing.updatedAt },
-      updateDoc,
-    );
-    if (write.matchedCount !== 1)
-      throw new Error(
-        "Proposal changed while you were editing it. Reload the latest state and try again.",
+
+    await runInTransaction(db, async (session) => {
+      const sessionOpts = session ? { session } : undefined;
+      const write = await col.updateOne(
+        { proposalId: existing.proposalId, updatedAt: existing.updatedAt },
+        updateDoc,
+        sessionOpts,
       );
+      if (write.matchedCount !== 1)
+        throw new Error(
+          "Proposal changed while you were editing it. Reload the latest state and try again.",
+        );
+      if (existing.stage !== stage) {
+        await recordGovernanceEvent(
+          db,
+          {
+            eventType: "proposal.stage_transition",
+            matterId: existing.proposalId,
+            revisionId: ballotRevisionId,
+            actorId: user.memberId,
+            authorityBranchId: existing.governanceAuthorityBranchId,
+            metadata: {
+              fromStage: existing.stage,
+              toStage: stage,
+              ...(ballotClosesAt
+                ? { ballotClosesAt: ballotClosesAt.toISOString() }
+                : {}),
+            },
+            createdAt: updatedAt,
+          },
+          session,
+        );
+      }
+      if (ballotUnbound) {
+        await recordGovernanceEvent(
+          db,
+          {
+            eventType: "ballot.unbound",
+            matterId: existing.proposalId,
+            ballotId: currentBallotId,
+            revisionId: existing.ballotRevisionId,
+            actorId: user.memberId,
+            authorityBranchId: existing.governanceAuthorityBranchId,
+            reason: "Returned from Decide with zero votes.",
+            createdAt: updatedAt,
+          },
+          session,
+        );
+      } else if (ballotReboundFrom && ballotRevisionId) {
+        await recordGovernanceEvent(
+          db,
+          {
+            eventType: "ballot.rebound",
+            matterId: existing.proposalId,
+            ballotId: currentBallotId,
+            revisionId: ballotRevisionId,
+            actorId: user.memberId,
+            authorityBranchId: existing.governanceAuthorityBranchId,
+            metadata: { previousRevisionId: ballotReboundFrom },
+            createdAt: updatedAt,
+          },
+          session,
+        );
+      }
+    });
+
     return {
       ...existing,
       stage,
@@ -993,6 +1134,7 @@ export async function saveProposal(
       supersededByProposalId,
       supersededByNote: supersededByProposalId ? supersededByNote : undefined,
       ballotRevisionId,
+      ...(ballotClosesAt ? { ballotClosesAt } : {}),
       updatedAt,
     };
   }
@@ -1295,13 +1437,43 @@ export async function saveProposal(
     const nextRevisionId = appendRevision
       ? randomUUID()
       : previousRevision.revisionId;
-    if (stage === "decide" && !updated.ballotRevisionId) {
+    const openingBallot = stage === "decide" && existing.stage !== "decide";
+    const closingBallot = existing.stage === "decide" && stage !== "decide";
+    let ballotClosesAt = existing.ballotClosesAt;
+    if (openingBallot || (stage === "decide" && body.ballotClosesAt !== undefined)) {
+      ballotClosesAt = parseBallotCloseDate(
+        body.ballotClosesAt,
+        existing.ballotClosesAt,
+        now,
+      );
+      updated.ballotClosesAt = ballotClosesAt;
+      updateSet.ballotClosesAt = ballotClosesAt;
+    }
+
+    let ballotUnbound = false;
+    let ballotReboundFrom: string | undefined;
+    if (stage === "decide") {
+      if (updated.ballotRevisionId && updated.ballotRevisionId !== nextRevisionId) {
+        ballotReboundFrom = updated.ballotRevisionId;
+      }
       updated.ballotRevisionId = nextRevisionId;
       updateSet.ballotRevisionId = nextRevisionId;
+      if (openingBallot || ballotReboundFrom || !existing.ballotRevisionId) {
+        updateSet.ballotRevisionBoundAt = now;
+        updateSet.ballotRevisionBoundBy = user.memberId;
+      }
+    } else if (existing.ballotRevisionId && (closingBallot || appendRevision)) {
+      // Editable path only runs when zero votes exist; clear any prior binding so
+      // a returned/edited proposal cannot carry stale wording back into Decide.
+      delete updated.ballotRevisionId;
+      unsetFields.ballotRevisionId = 1;
+      unsetFields.ballotRevisionBoundAt = 1;
+      unsetFields.ballotRevisionBoundBy = 1;
+      ballotUnbound = true;
     }
-    const dbClient = (db as Db & { client?: Db["client"] }).client;
-    const session = dbClient?.startSession();
-    const writeProposalRevision = async (session?: ClientSession) => {
+
+    await runInTransaction(db, async (session) => {
+      const sessionOpts = session ? { session } : undefined;
       const write = await col.updateOne(
         { proposalId: existing.proposalId, updatedAt: existing.updatedAt },
         {
@@ -1310,7 +1482,7 @@ export async function saveProposal(
             ? { $unset: unsetFields }
             : {}),
         },
-        session ? { session } : undefined,
+        sessionOpts,
       );
       if (write.matchedCount !== 1)
         throw new Error(
@@ -1330,20 +1502,70 @@ export async function saveProposal(
               contentHash,
               provenance: updated.provenance,
             },
-            { session },
+            sessionOpts,
           );
-    };
-    if (session) {
-      try {
-        await session.withTransaction(() => writeProposalRevision(session));
-      } finally {
-        await session.endSession();
+      if (existing.stage !== stage) {
+        await recordGovernanceEvent(
+          db,
+          {
+            eventType: "proposal.stage_transition",
+            matterId: updated.proposalId,
+            revisionId: nextRevisionId,
+            actorId: user.memberId,
+            authorityBranchId: updated.governanceAuthorityBranchId,
+            metadata: {
+              fromStage: existing.stage,
+              toStage: stage,
+              ...(ballotClosesAt
+                ? { ballotClosesAt: ballotClosesAt.toISOString() }
+                : {}),
+            },
+            createdAt: now,
+          },
+          session,
+        );
       }
-    } else {
-      await writeProposalRevision();
-    }
+      if (ballotUnbound) {
+        await recordGovernanceEvent(
+          db,
+          {
+            eventType: "ballot.unbound",
+            matterId: updated.proposalId,
+            ballotId: proposalBallotId(updated.proposalId),
+            revisionId: existing.ballotRevisionId,
+            actorId: user.memberId,
+            authorityBranchId: updated.governanceAuthorityBranchId,
+            reason: closingBallot
+              ? "Returned from Decide with zero votes."
+              : "Wording edited with zero votes.",
+            createdAt: now,
+          },
+          session,
+        );
+      } else if (ballotReboundFrom) {
+        await recordGovernanceEvent(
+          db,
+          {
+            eventType: "ballot.rebound",
+            matterId: updated.proposalId,
+            ballotId: proposalBallotId(updated.proposalId),
+            revisionId: nextRevisionId,
+            actorId: user.memberId,
+            authorityBranchId: updated.governanceAuthorityBranchId,
+            metadata: { previousRevisionId: ballotReboundFrom },
+            createdAt: now,
+          },
+          session,
+        );
+      }
+    });
     return updated;
   }
+
+  const ballotClosesAt =
+    stage === "decide"
+      ? parseBallotCloseDate(body.ballotClosesAt, undefined, now)
+      : undefined;
 
   const count = await col.countDocuments();
   const proposalId =
@@ -1371,7 +1593,12 @@ export async function saveProposal(
     kind: createdKind,
     ...(implementationNote ? { implementationNote } : {}),
     stage,
-    ...(stage === "decide" ? { ballotRevisionId: revisionId } : {}),
+    ...(stage === "decide"
+      ? {
+          ballotRevisionId: revisionId,
+          ballotClosesAt,
+        }
+      : {}),
     originatingBranchId,
     governanceAuthorityBranchId,
     jurisdictionBranchId,
@@ -1402,27 +1629,50 @@ export async function saveProposal(
       .digest("hex"),
     provenance: created.provenance,
   };
-  const dbClient = (db as Db & { client?: Db["client"] }).client;
-  const session = dbClient?.startSession();
-  try {
-    const insert = async (session?: ClientSession) => {
-      await col.insertOne(created, session ? { session } : undefined);
-      await db
-        .collection("proposal_revisions")
-        .insertOne(revision, session ? { session } : undefined);
-    };
-    if (session) await session.withTransaction(() => insert(session));
-    else await insert();
-  } finally {
-    if (session) await session.endSession();
-  }
+  await runInTransaction(db, async (session) => {
+    const sessionOpts = session ? { session } : undefined;
+    await col.insertOne(created, sessionOpts);
+    await db
+      .collection("proposal_revisions")
+      .insertOne(revision, sessionOpts);
+    if (stage === "decide") {
+      await recordGovernanceEvent(
+        db,
+        {
+          eventType: "proposal.stage_transition",
+          matterId: proposalId,
+          revisionId,
+          actorId: user.memberId,
+          authorityBranchId: created.governanceAuthorityBranchId,
+          metadata: {
+            fromStage: null,
+            toStage: "decide",
+            ...(ballotClosesAt
+              ? { ballotClosesAt: ballotClosesAt.toISOString() }
+              : {}),
+          },
+          createdAt: now,
+        },
+        session,
+      );
+    }
+  });
   return created;
+}
+
+export class ProposalDeletionConflictError extends Error {
+  status = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = "ProposalDeletionConflictError";
+  }
 }
 
 export async function deleteProposal(
   db: Db,
   user: SessionUser,
   proposalId: string,
+  reason?: string,
 ): Promise<void> {
   const id = proposalId.trim();
   if (!id) throw new Error("Proposal ID is required.");
@@ -1438,9 +1688,55 @@ export async function deleteProposal(
     );
   }
 
-  await col.deleteOne({ proposalId: id });
-  await db.collection("comments").deleteMany({ proposalId: id });
-  // Retain decision records as voting history when a proposal is deleted.
+  const [revisionCount, voteCount, ballotCount, resultCount, registryCount] =
+    await Promise.all([
+      db.collection("proposal_revisions").countDocuments({ proposalId: id }),
+      db.collection(PROPOSAL_VOTES).countDocuments({
+        $or: [{ proposalId: id }, { ballotId: proposalBallotId(id) }],
+      }),
+      db.collection(BALLOTS_COLLECTION).countDocuments({ matterId: id }),
+      db.collection(FORMAL_DECISIONS_COLLECTION).countDocuments({
+        $or: [{ matterId: id }, { proposalId: id }],
+      }),
+      db.collection("policy_registry").countDocuments({
+        $or: [{ policyId: id }, { proposalId: id }, { matterId: id }],
+      }),
+    ]);
+
+  if (
+    revisionCount > 1 ||
+    voteCount > 0 ||
+    ballotCount > 0 ||
+    resultCount > 0 ||
+    registryCount > 0 ||
+    Boolean(existing.ballotRevisionId) ||
+    ["decide", "implement", "archived"].includes(existing.stage)
+  ) {
+    throw new ProposalDeletionConflictError(
+      "Matters with governance history (revisions beyond initial draft, ballots, votes, results, or registry records) cannot be deleted. Archive the matter instead.",
+    );
+  }
+
+  await runInTransaction(db, async (session) => {
+    const sessionOpts = session ? { session } : undefined;
+    await col.deleteOne({ proposalId: id }, sessionOpts);
+    await db
+      .collection("proposal_revisions")
+      .deleteMany({ proposalId: id }, sessionOpts);
+    await db.collection("comments").deleteMany({ proposalId: id }, sessionOpts);
+    await recordGovernanceEvent(
+      db,
+      {
+        eventType: "proposal.deleted",
+        matterId: id,
+        actorId: user.memberId,
+        authorityBranchId: existing.governanceAuthorityBranchId,
+        reason: reason?.trim() || "Draft deleted before governance history.",
+        metadata: { stage: existing.stage, title: existing.title },
+      },
+      session,
+    );
+  });
 }
 
 export async function addComment(
@@ -2014,7 +2310,9 @@ async function upsertStoredVote(
     choice: VoteChoice;
     reason: string;
   },
+  session?: ClientSession,
 ): Promise<VoteTally> {
+  const sessionOpts = session ? { session } : undefined;
   const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
   const now = new Date();
   if (cryptoConfig?.mode === "encrypt") {
@@ -2027,13 +2325,16 @@ async function upsertStoredVote(
       input.ballotId,
       input.memberId,
     );
-    const existing = await votesCol.findOne({
-      ballotId: input.ballotId,
-      $or: [
-        { memberId: input.memberId },
-        { voterBlindIndex: { $in: allBlindIndexes } },
-      ],
-    } as any);
+    const existing = (await votesCol.findOne(
+      {
+        ballotId: input.ballotId,
+        $or: [
+          { memberId: input.memberId },
+          { voterBlindIndex: { $in: allBlindIndexes } },
+        ],
+      } as any,
+      sessionOpts,
+    )) as (VoteRecord & { _id?: ObjectId }) | null;
     if (existing?._id) {
       await votesCol.updateOne(
         { _id: existing._id } as any,
@@ -2041,6 +2342,7 @@ async function upsertStoredVote(
           $set: encryptedFields as any,
           $unset: { memberId: "", authorName: "", choice: "", reason: "" },
         },
+        sessionOpts,
       );
     } else {
       await votesCol.updateOne(
@@ -2049,7 +2351,7 @@ async function upsertStoredVote(
           voterBlindIndex: encryptedFields.voterBlindIndex,
         } as any,
         { $set: encryptedFields as any },
-        { upsert: true },
+        { upsert: true, ...(sessionOpts ?? {}) },
       );
     }
   } else {
@@ -2071,11 +2373,13 @@ async function upsertStoredVote(
           updatedAt: now,
         },
       },
-      { upsert: true },
+      { upsert: true, ...(sessionOpts ?? {}) },
     );
   }
 
-  const allVotes = await votesCol.find({ ballotId: input.ballotId }).toArray();
+  const allVotes = await votesCol
+    .find({ ballotId: input.ballotId }, sessionOpts)
+    .toArray();
   const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
   for (const v of allVotes) {
     const decoded = decodeStoredVote(v as Record<string, any>, cryptoConfig);
@@ -2162,20 +2466,29 @@ export async function castVote(
           ? "abstain"
           : "reject";
     const ballotId = `amendment:${amendmentId}`;
-    await notePriorParticipation(db, user.memberId);
-    const votes = await upsertStoredVote(db, cryptoConfig, {
-      ballotId,
-      proposalId,
-      amendmentId,
-      revisionId: amendment.ballotRevisionId,
-      amendmentRevisionId: amendment.ballotAmendmentRevisionId,
-      memberId: user.memberId,
-      authorName: user.name || "Verified Member",
-      choice,
-      reason:
-        typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "",
+    const reason =
+      typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+    const votes = await runInTransaction(db, async (session) => {
+      await notePriorParticipation(db, user.memberId, session);
+      const tally = await upsertStoredVote(
+        db,
+        cryptoConfig,
+        {
+          ballotId,
+          proposalId,
+          amendmentId,
+          revisionId: amendment.ballotRevisionId,
+          amendmentRevisionId: amendment.ballotAmendmentRevisionId,
+          memberId: user.memberId,
+          authorName: user.name || "Verified Member",
+          choice,
+          reason,
+        },
+        session,
+      );
+      await recordParticipation(db, user.memberId, new Date(), session);
+      return tally;
     });
-    await recordParticipation(db, user.memberId);
     return { choice, votes, amendmentId };
   }
   if (proposal.stage !== "decide") {
@@ -2184,6 +2497,7 @@ export async function castVote(
   if (ballotExpired(proposal)) throw new Error("This ballot has closed.");
 
   let ballotRevisionId = proposal.ballotRevisionId;
+  let lazyBindRevision = false;
   if (ballotRevisionId) {
     const currentBallotId = proposalBallotId(proposalId);
     const existingVotes = await db
@@ -2242,22 +2556,7 @@ export async function castVote(
       throw new Error(
         "A proposal revision is required before voting can begin.",
       );
-    const bound = await db
-      .collection("proposals")
-      .updateOne(
-        { proposalId, stage: "decide", ballotRevisionId: { $exists: false } },
-        { $set: { ballotRevisionId } },
-      );
-    if (!bound.matchedCount) {
-      const current = await db
-        .collection<ProposalRecord>("proposals")
-        .findOne({ proposalId, stage: "decide" });
-      if (!current?.ballotRevisionId)
-        throw new Error(
-          "The ballot changed while its revision was being bound. Reload and try again.",
-        );
-      ballotRevisionId = current.ballotRevisionId;
-    }
+    lazyBindRevision = true;
   }
 
   const rawChoice =
@@ -2274,26 +2573,63 @@ export async function castVote(
   const reason =
     typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
 
-  await notePriorParticipation(db, user.memberId);
-  const votes = await upsertStoredVote(db, cryptoConfig, {
-    ballotId: proposalBallotId(proposal.proposalId),
-    proposalId: proposal.proposalId,
-    revisionId: ballotRevisionId,
-    memberId: user.memberId,
-    authorName: user.name || "Verified Member",
-    choice,
-    reason,
+  if (!ballotRevisionId) {
+    throw new Error("A proposal revision is required before voting can begin.");
+  }
+  const initialBallotRevisionId = ballotRevisionId;
+  const votes = await runInTransaction(db, async (session) => {
+    const sessionOpts = session ? { session } : undefined;
+    let resolvedRevisionId = initialBallotRevisionId;
+    if (lazyBindRevision) {
+      const bound = await db
+        .collection("proposals")
+        .updateOne(
+          { proposalId, stage: "decide", ballotRevisionId: { $exists: false } },
+          { $set: { ballotRevisionId: resolvedRevisionId } },
+          sessionOpts,
+        );
+      if (!bound.matchedCount) {
+        const current = await db
+          .collection<ProposalRecord>("proposals")
+          .findOne({ proposalId, stage: "decide" }, sessionOpts);
+        if (!current?.ballotRevisionId)
+          throw new Error(
+            "The ballot changed while its revision was being bound. Reload and try again.",
+          );
+        resolvedRevisionId = current.ballotRevisionId;
+      }
+    }
+
+    await notePriorParticipation(db, user.memberId, session);
+    const tally = await upsertStoredVote(
+      db,
+      cryptoConfig,
+      {
+        ballotId: proposalBallotId(proposal.proposalId),
+        proposalId: proposal.proposalId,
+        revisionId: resolvedRevisionId,
+        memberId: user.memberId,
+        authorName: user.name || "Verified Member",
+        choice,
+        reason,
+      },
+      session,
+    );
+
+    // Clear any pending preference for this ballot now that a formal vote is recorded
+    await db
+      .collection<PendingVotePreferenceRecord>(PENDING_VOTE_PREFERENCES)
+      .deleteOne(
+        {
+          ballotId: proposalBallotId(proposal.proposalId),
+          memberId: user.memberId,
+        },
+        sessionOpts,
+      );
+
+    await recordParticipation(db, user.memberId, new Date(), session);
+    return tally;
   });
-
-  // Clear any pending preference for this ballot now that a formal vote is recorded
-  await db
-    .collection<PendingVotePreferenceRecord>(PENDING_VOTE_PREFERENCES)
-    .deleteOne({
-      ballotId: proposalBallotId(proposal.proposalId),
-      memberId: user.memberId,
-    });
-
-  await recordParticipation(db, user.memberId);
   return { choice, votes };
 }
 

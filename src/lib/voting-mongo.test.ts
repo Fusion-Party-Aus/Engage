@@ -229,7 +229,10 @@ test(
         castVote(db, member, { policyId: "POL-002", choice: "approve" }),
         /Decide stage/,
       );
-      await deleteProposal(db, { ...member, isAdmin: true }, "POL-001");
+      await assert.rejects(
+        deleteProposal(db, { ...member, isAdmin: true }, "POL-001"),
+        /cannot be deleted/i,
+      );
       assert.equal(await db.collection(PROPOSAL_VOTES).countDocuments(), 2);
     } finally {
       await db.dropDatabase();

@@ -1,22 +1,24 @@
-import type { Db } from 'mongodb';
+import type { ClientSession, Db } from 'mongodb';
 
 // Private operational records. Never forward these documents to Plausible.
-export async function recordLifecycle(db: Db, memberId: string, event: string, at = new Date(), window = 'once') {
+export async function recordLifecycle(db: Db, memberId: string, event: string, at = new Date(), window = 'once', session?: ClientSession) {
   try { await db.collection<any>('engagement_lifecycle_events').updateOne(
     {_id: `${event}:${memberId}:${window}`},
-    {$setOnInsert: {memberId, event, at}}, {upsert: true},
+    {$setOnInsert: {memberId, event, at}}, {upsert: true, ...(session ? { session } : {})},
   ); } catch(error) { if ((error as {code?:number}).code !== 11000) throw error; }
 }
-export async function notePriorParticipation(db:Db, memberId:string) {
+export async function notePriorParticipation(db:Db, memberId:string, session?: ClientSession) {
+  const sessionOpts = session ? { session } : undefined;
   const [first, prior] = await Promise.all([
-    db.collection('engagement_lifecycle_events').findOne({memberId,event:'first_vote_submitted'}),
-    db.collection('proposal_votes').findOne({memberId}),
+    db.collection('engagement_lifecycle_events').findOne({memberId,event:'first_vote_submitted'}, sessionOpts),
+    db.collection('proposal_votes').findOne({memberId}, sessionOpts),
   ]);
-  if (!first && prior) await recordLifecycle(db,memberId,'historical_participant');
+  if (!first && prior) await recordLifecycle(db,memberId,'historical_participant', new Date(), 'once', session);
 }
-export async function recordParticipation(db: Db, memberId: string, at = new Date()) {
-  if (!await db.collection('engagement_lifecycle_events').findOne({memberId,event:'historical_participant'})) await recordLifecycle(db, memberId, 'first_vote_submitted', at);
-  await recordLifecycle(db, memberId, 'participation_day', at, at.toISOString().slice(0, 10));
+export async function recordParticipation(db: Db, memberId: string, at = new Date(), session?: ClientSession) {
+  const sessionOpts = session ? { session } : undefined;
+  if (!await db.collection('engagement_lifecycle_events').findOne({memberId,event:'historical_participant'}, sessionOpts)) await recordLifecycle(db, memberId, 'first_vote_submitted', at, 'once', session);
+  await recordLifecycle(db, memberId, 'participation_day', at, at.toISOString().slice(0, 10), session);
 }
 export function memberNextAction(status: string, canParticipate: boolean, votes: number, outstanding: number) {
   if (status === 'suspended') return {title:'Review your membership status', detail:'Contact an administrator about restoring participation.', href:'/member/?view=account'};

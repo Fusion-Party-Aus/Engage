@@ -198,6 +198,7 @@ describe("branch participation: following and verified membership", () => {
       summary: "Summary with enough words.",
       details: "Details",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
       jurisdictionBranchId: "vic",
       governanceAuthorityBranchId: "vic",
       publicationScope: "branch",
@@ -244,6 +245,7 @@ describe("branch participation: following and verified membership", () => {
       summary: "A national ballot for verified members.",
       details: "Details",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
       jurisdictionBranchId: "nat",
       governanceAuthorityBranchId: "nat",
       publicationScope: "national",
@@ -356,6 +358,7 @@ describe("branch participation: verification authority and source integrity", ()
       space: "Governance",
       summary: "A member ballot with a frozen revision.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
       jurisdictionBranchId: "vic",
       governanceAuthorityBranchId: "vic",
       publicationScope: "branch",
@@ -575,6 +578,7 @@ describe("branch participation: migration and new proposal defaults", () => {
     const ballot = await saveProposal(db, branch, {
       proposalId: branchProposal.proposalId,
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     assert.equal(ballot.stage, "decide");
     assert.ok(ballot.ballotRevisionId);
