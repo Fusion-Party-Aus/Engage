@@ -18,8 +18,9 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../lib/db.ts';
+import { loadBallotCryptoConfig } from '../lib/ballot-crypto.ts';
 import { listOutstandingDecisions, listProposals } from '../lib/store.ts';
-import { PROPOSAL_VOTES } from '../lib/vote-storage.ts';
+import { findMemberVotes, proposalBallotId } from '../lib/vote-storage.ts';
 import { getSiteConfig } from '../lib/site-config.ts';
 import type { ProposalStage } from '../lib/types.ts';
 
@@ -30,15 +31,20 @@ if (authError) return Astro.redirect(`/member/?error=${encodeURIComponent(authEr
 const env = runtimeEnv(Astro.locals);
 const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
 const siteConfig = await getSiteConfig(db, env);
-const [proposals, publishedPolicyCount, mine, myVoteRows] = await Promise.all([
+const [proposals, publishedPolicyCount, mine] = await Promise.all([
   listProposals(db, { includeArchived: false, user }),
   db.collection('policy_registry').countDocuments({ publicationStatus: 'published' }),
   user?.canParticipate ? listOutstandingDecisions(db, user.memberId, user) : Promise.resolve([]),
-  user?.canParticipate
-    ? db.collection(PROPOSAL_VOTES).find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray()
-    : Promise.resolve([]),
 ]);
 const votes = proposals.filter((p) => p.stage === 'decide' && !ballotExpired(p));
+const myVoteRows = user?.canParticipate
+  ? await findMemberVotes(
+      db,
+      user.memberId,
+      votes.map((p) => proposalBallotId(p.proposalId)),
+      loadBallotCryptoConfig(env),
+    )
+  : [];
 const openProposalIds = new Set(votes.map((p) => p.proposalId));
 const completedOpenVotesCount = new Set(
   myVoteRows.map((v: any) => String(v.proposalId ?? '')).filter((id) => openProposalIds.has(id)),

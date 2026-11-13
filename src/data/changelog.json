@@ -1,5 +1,13 @@
 [
   {
+    "hash": "2717d4e",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record known-gap tracking"
+  },
+  {
     "hash": "5773001",
     "date": "2026-11-13",
     "type": "docs",
@@ -649,13 +657,5 @@
     "category": "feature",
     "scope": "time",
     "summary": "Display time in user's local timezone"
-  },
-  {
-    "hash": "5de3c91",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "participation",
-    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
   }
 ]

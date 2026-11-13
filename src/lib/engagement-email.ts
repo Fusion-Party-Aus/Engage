@@ -8,7 +8,8 @@ import {
   renderDigestEmail,
 } from "./email-templates.ts";
 import { listMembers, listProposals, canViewProposal } from "./store.ts";
-import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
+import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
+import { findMemberVotes, proposalBallotId } from "./vote-storage.ts";
 
 export { escapeEmailHtml };
 import { digestEnabled, ensureDigestCohort } from "./digest-preferences.ts";
@@ -51,12 +52,21 @@ export async function digestBallots(db:Db,user:SessionUser,proposals:ProposalSum
 /** The same visibility, verified membership and recognised branch electorate boundaries as voting. */
 export async function outstandingBallots(db: Db, user: SessionUser, proposals: ProposalSummaryView[], now = new Date()): Promise<OutstandingBallot[]> {
   if (!user.canParticipate) return [];
-  const [memberships, branches, votes, amendments] = await Promise.all([
+  const [memberships, branches, amendments] = await Promise.all([
     db.collection("branch_memberships").find({memberId:user.memberId, status:"active"}).project({branchId:1}).toArray(),
     db.collection("branches").find({recognised:true}).project({branchId:1, kind:1}).toArray(),
-    db.collection(PROPOSAL_VOTES).find({memberId:user.memberId}).project({ballotId:1, revisionId:1, amendmentRevisionId:1}).toArray(),
     db.collection("amendments").find({status:"voting"}).project({amendmentId:1, proposalId:1, title:1, ballotClosesAt:1, ballotRevisionId:1, ballotAmendmentRevisionId:1, currentRevisionId:1, baseRevisionId:1}).toArray(),
   ]);
+  const ballotIds = [
+    ...proposals.filter((p) => p.stage === "decide").map((p) => proposalBallotId(p.proposalId)),
+    ...amendments.map((a) => `amendment:${a.amendmentId}`),
+  ];
+  const votes = await findMemberVotes(
+    db,
+    user.memberId,
+    ballotIds,
+    loadBallotCryptoConfig(process.env),
+  );
   const memberBranches = new Set(memberships.map(m=>m.branchId));
   const recognised = new Set(branches.map(b=>b.branchId));
   const nationalBranches = new Set(
