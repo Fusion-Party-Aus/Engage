@@ -222,3 +222,31 @@ This documentation set was verified by source inspection, targeted `rg` checks, 
 - legal or constitutional review.
 
 Claims that depend on those activities are labelled as gaps or left out.
+
+## GitHub tracking
+
+The actionable gaps were opened as GitHub issues on 13 November 2026. This page remains the canonical description; issues track implementation.
+
+| Gap | Issue |
+|---|---|
+| 1–2 Ballot rebinding, deadlines, closure, eligibility snapshot | #26 |
+| 3–4 Decide authority, ratification authority, amendment ballot readiness | #27 |
+| 5, 19 RBAC enforcement and branch referrals | #31 |
+| 6, 11–13 Branch membership source, national row, uniqueness, provenance | #32 |
+| 7 Notification fan-out | #33 |
+| 8 Public supersession visibility | #35 |
+| 9, 18 Inter-amendment conflicts and ready state | #34 |
+| 10 Ballot outcome rules | #28 |
+| 14 Comment moderation audit | #42 |
+| 15 Perimeter security | #38 |
+| 16 Legal acceptance gate | #40 |
+| 17 In-memory database fidelity | #43 |
+| 20 Role administration UX | #41 |
+| 21, 26 Scheduling and observability | #39 |
+| 22 National policy baseline import | #36 |
+| 23 Amend/repeal from published policy | #37 |
+| 24 Seconding, notice, scheduled opening, confirmation ballots | #30 |
+| 25 Stale historical documentation | #44 |
+| 27 Election/Returning Officer role | #29 |
+
+Issue #28, #30, #36 and #40 are explicitly blocked on Fusion governance or legal decisions. Do not implement them by guessing the rule.
