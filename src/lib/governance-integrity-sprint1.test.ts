@@ -8,6 +8,7 @@ import {
   upsertMatterBallot,
 } from "./ballots.ts";
 import { GOVERNANCE_EVENTS_COLLECTION } from "./governance-relationships.ts";
+import { resolveLegacyPermissions } from "./rbac.ts";
 import {
   ProposalDeletionConflictError,
   castVote,
@@ -26,7 +27,9 @@ const adminUser: SessionUser = {
   status: "verified",
   role: "administrator",
   roles: ["administrator"],
-  permissions: { national: [], branches: {}, grants: [] },
+  // Mirror a real session: a national administrator resolves the full national
+  // permission catalogue, including the newly enforced ballots.bind gate.
+  permissions: resolveLegacyPermissions(["administrator"], []),
   canParticipate: true,
   isStaff: true,
   isAdmin: true,

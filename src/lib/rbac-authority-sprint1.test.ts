@@ -17,6 +17,8 @@ import { POST as ratifyPolicy } from "../pages/api/admin/policies/ratify.ts";
 import type { SessionUser } from "./types.ts";
 import type { PermissionKey } from "./rbac.ts";
 
+const futureClose = () => new Date(Date.now() + 7 * 86400_000).toISOString();
+
 function delegatedUser(
   overrides: Partial<SessionUser> & {
     national?: PermissionKey[];
@@ -122,6 +124,7 @@ describe("Sprint 1 RBAC and authority invariants (#27, #31)", () => {
     const opened = await saveProposal(db, vicBallotOfficer, {
       proposalId: created.proposalId,
       stage: "decide",
+      ballotClosesAt: futureClose(),
     });
     assert.equal(opened.stage, "decide");
     assert.ok(opened.ballotRevisionId);
@@ -238,24 +241,32 @@ describe("Sprint 1 RBAC and authority invariants (#27, #31)", () => {
       true,
     );
 
-    // Proposal deletion scoped to vic
-    const nswDeleter = delegatedUser({
-      memberId: "nsw-del",
-      branches: { nsw: ["proposals.delete"] },
-    });
-    await assert.rejects(
-      () => deleteProposal(db, nswDeleter, target.proposalId),
-      /Administrator access is required/i,
-    );
-    const vicDeleter = delegatedUser({
+    // Proposal deletion is national-only in the permission catalogue: a branch
+    // grant must not confer destructive authority.
+    const branchDeleter = delegatedUser({
       memberId: "vic-del",
       branches: { vic: ["proposals.delete"] },
     });
-    await deleteProposal(db, vicDeleter, target.proposalId);
+    const deletable = await saveProposal(db, admin, {
+      title: "Deletable Draft",
+      summary: "Draft with no governance history used for deletion checks.",
+      space: "Governance",
+      stage: "deliberate",
+      originatingBranchId: "vic",
+    });
+    await assert.rejects(
+      () => deleteProposal(db, branchDeleter, deletable.proposalId),
+      /Administrator access is required/i,
+    );
+    const nationalDeleter = delegatedUser({
+      memberId: "nat-del",
+      national: ["proposals.delete"],
+    });
+    await deleteProposal(db, nationalDeleter, deletable.proposalId);
     assert.equal(
       await db
         .collection("proposals")
-        .countDocuments({ proposalId: target.proposalId }),
+        .countDocuments({ proposalId: deletable.proposalId }),
       0,
     );
   });
