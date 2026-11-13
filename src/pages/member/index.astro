@@ -27,6 +27,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
+import { listMemberNotifications } from '../../lib/notifications.ts';
+import { getVapidConfig, listMemberPushSubscriptions } from '../../lib/web-push.ts';
 import { buildMemberCatchUp, listMemberActivityStream, type MemberCatchUpGroup } from '../../lib/member-activity.ts';
 import {
   devLoginEnabled,
@@ -87,11 +89,29 @@ const branchChoices = branchProfile?.all ?? [];
 const followableBranchCount = branchProfile?.following.length ?? 0;
 const verifiedBranchCount = branchProfile?.verified.length ?? 0;
 
-const [emailPreference, outstandingBallotsForMember, existingDigestMembers] = user ? await Promise.all([
+const [emailPreference, outstandingBallotsForMember, existingDigestMembers, rawInAppNotifications, rawPushSubscriptions] = user ? await Promise.all([
  db.collection('engagement_email_preferences').findOne({memberId:user.memberId}),
  outstandingBallots(db,user,visibleProposals),
  ensureDigestCohort(db),
-]) : [null, [], new Set<string>()];
+ listMemberNotifications(db, user.memberId, 25).catch(() => []),
+ listMemberPushSubscriptions(db, user.memberId).catch(() => []),
+]) : [null, [], new Set<string>(), [], []];
+const vapidConfig = getVapidConfig(env);
+const serializedNotifications = rawInAppNotifications.map((item) => ({
+ notificationId: item.notificationId,
+ topic: item.topic,
+ title: item.title,
+ body: item.body,
+ href: item.href,
+ readAt: item.readAt ? item.readAt.toISOString() : null,
+ createdAt: item.createdAt.toISOString(),
+}));
+const serializedPushSubscriptions = rawPushSubscriptions.map((sub) => ({
+ subscriptionId: sub.subscriptionId,
+ deviceLabel: sub.deviceLabel,
+ createdAt: sub.createdAt.toISOString(),
+ lastUsedAt: sub.lastUsedAt ? sub.lastUsedAt.toISOString() : undefined,
+}));
 const outstandingProposalIds=new Set(outstandingBallotsForMember.filter(b=>b.key.startsWith('proposal:')).map(b=>b.proposalId));
 const awaitingDecision=visibleProposals.filter(p=>outstandingProposalIds.has(p.proposalId));
 const closingSoon=outstandingBallotsForMember.filter((b):b is DigestBallot=>Boolean(b.closesAt && closesWithinSevenDays({ballotClosesAt:b.closesAt})));
@@ -657,7 +677,15 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             idPrefix="notifications-catchup"
           />
 
-          <EmailPreferences existingMember={existingDigestMember} preference={emailPreference} saved={Astro.url.searchParams.get('emailPreferences') === 'saved'} />
+          <EmailPreferences
+            existingMember={existingDigestMember}
+            preference={emailPreference}
+            saved={Astro.url.searchParams.get('emailPreferences') === 'saved'}
+            inAppNotifications={serializedNotifications}
+            pushSubscriptions={serializedPushSubscriptions}
+            pushConfigured={Boolean(vapidConfig)}
+            vapidPublicKey={vapidConfig?.publicKey ?? null}
+          />
         </div>
         <!-- VIEW 1: OVERVIEW (Outstanding votes, Participation opportunities, Catch-up, Status changes) -->
         <div class="overview-only member-overview-grid">
