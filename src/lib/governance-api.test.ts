@@ -872,7 +872,7 @@ it("amendment ballot opens on the frozen revision and closes as endorsement with
       baseRevisionId: revisionId,
       currentRevisionId: amendmentRevisionId,
       changes: { summary: "Suggested amended wording." },
-      status: "proposed",
+      status: "ready",
     });
   const adminRequest = (url: string) =>
     new Request(`http://localhost${url}`, {

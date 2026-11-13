@@ -7,6 +7,7 @@ import {
   toBranchReferralDto,
 } from "../../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { hasPermission } from "../../../../lib/rbac.ts";
 
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -14,17 +15,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin)
-    return Response.json(
-      { error: "Administrator access required." },
-      { status: 403 },
-    );
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const proposalId = String(body.proposalId ?? "");
     const targetBranchId = String(body.targetBranchId ?? "");
     const sourceBranchId =
       typeof body.sourceBranchId === "string" ? body.sourceBranchId : undefined;
+    if (
+      !user.isAdmin &&
+      !hasPermission(user, "branches.refer_proposals", sourceBranchId)
+    )
+      return Response.json(
+        { error: "Administrator access required." },
+        { status: 403 },
+      );
     const reason =
       typeof body.reason === "string" ? body.reason.trim().slice(0, 1000) : "";
     if (!proposalId || !targetBranchId || !reason)
@@ -89,12 +93,15 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin)
+  const targetBranchId = url.searchParams.get("branch") ?? "";
+  if (
+    !user.isAdmin &&
+    !hasPermission(user, "branches.refer_proposals", targetBranchId || undefined)
+  )
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
     );
-  const targetBranchId = url.searchParams.get("branch") ?? "";
   if (!targetBranchId)
     return Response.json(
       { error: "branch filter is required." },

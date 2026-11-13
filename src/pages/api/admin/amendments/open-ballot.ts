@@ -22,10 +22,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const db = await getDatabase(env);
     const amendment = await db
       .collection("amendments")
-      .findOne({ amendmentId, status: { $in: ["proposed", "ready"] } });
+      .findOne({ amendmentId, status: "ready" });
     if (!amendment)
       return Response.json(
-        { error: "Unresolved proposed amendment not found." },
+        { error: "Ready amendment not found. Resolve the amendment as ready before opening a ballot." },
         { status: 404 },
       );
     const proposal = await db
