@@ -1,0 +1,29 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import {getSessionUser} from '../../../lib/auth.ts';
+import {getDatabase,runtimeEnv} from '../../../lib/db.ts';
+import {listSense} from '../../../lib/sense-box.ts';
+import {SENSE_TOPICS,SENSE_STATUSES} from '../../../lib/sense-box-options.ts';
+export const prerender=false;
+Astro.response.headers.set('Cache-Control','private, no-store');
+const env=runtimeEnv(Astro.locals),user=await getSessionUser(Astro.request,env);
+if(!user)return Astro.redirect('/member/');
+if(!user.isAdmin&&!user.branchAdminIds?.length)return new Response('Branch organiser access required.',{status:403});
+const db=await getDatabase(env);
+const inbox=await listSense(db,user,Object.fromEntries(Astro.url.searchParams));
+const branches=await db.collection('branches').find(user.isAdmin?{}:{branchId:{$in:user.branchAdminIds!}}).project({branchId:1,name:1}).toArray();
+---
+<AdminLayout title="Sense Box" description="Review community priorities and explore ideas for proposals." section="branches" isAdmin={user.isAdmin} isBranchAdmin={user.isBranchAdmin}>
+<form class="flex flex-wrap gap-4 mb-6"><label>Branch<select name="branchId" class="block border rounded p-2 bg-background"><option value="">All your branches</option>{branches.map(b=><option value={b.branchId} selected={Astro.url.searchParams.get('branchId')===b.branchId}>{b.name}</option>)}</select></label><label>Topic<select name="topic" class="block border rounded p-2 bg-background"><option value="">All topics</option>{Object.entries(SENSE_TOPICS).map(([key,label])=><option value={key} selected={Astro.url.searchParams.get('topic')===key}>{label} ({inbox.topics[key]||0})</option>)}</select></label><label>Status<select name="status" class="block border rounded p-2 bg-background"><option value="">All statuses</option>{Object.entries(SENSE_STATUSES).map(([key,label])=><option value={key} selected={Astro.url.searchParams.get('status')===key}>{label}</option>)}</select></label><button class="border rounded-full px-5 self-end py-2">Filter</button></form>
+<p>{inbox.total} submissions</p>
+{inbox.items.map(item=><article class="border-t py-6 space-y-3"><p class="text-sm text-muted-foreground">{branches.find(b=>b.branchId===item.branchId)?.name} · {item.locality} · {new Date(item.createdAt).toLocaleDateString('en-AU')} · {SENSE_TOPICS[item.topic]}</p><h2 class="text-xl">{item.title}</h2><p class="whitespace-pre-wrap break-words">{item.detail}</p><form data-review data-id={item.submissionId} data-branch={item.branchId} data-version={item.version} class="flex flex-wrap gap-3 items-center"><label>Status <select name="status" class="border rounded p-2 bg-background">{Object.entries(SENSE_STATUSES).map(([key,label])=><option value={key} selected={item.status===key}>{label}</option>)}</select></label><button class="border rounded-full px-4 py-2">Save status</button><span role="status"></span></form></article>)}
+{!inbox.items.length&&<p class="py-8">No submissions match these filters.</p>}
+<nav class="flex gap-6" aria-label="Inbox pages">{inbox.page>1&&<a href={`?${new URLSearchParams({...Object.fromEntries(Astro.url.searchParams),page:String(inbox.page-1)})}`}>Previous</a>}{inbox.page*30<inbox.total&&<a href={`?${new URLSearchParams({...Object.fromEntries(Astro.url.searchParams),page:String(inbox.page+1)})}`}>Next</a>}</nav>
+<p class="mt-6"><a href="/proposals/new/">Develop a formal proposal →</a></p>
+</AdminLayout>
+<script>
+document.querySelectorAll<HTMLFormElement>('[data-review]').forEach(form=>form.addEventListener('submit',async event=>{
+ event.preventDefault();const button=form.querySelector('button')!,message=form.querySelector('[role=status]')!;button.disabled=true;message.textContent='Saving…';
+ try{const response=await fetch('/api/sense-box',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({submissionId:form.dataset.id,branchId:form.dataset.branch,version:Number(form.dataset.version),status:new FormData(form).get('status')})});const result=await response.json();if(!response.ok)throw new Error(result.error);form.dataset.version=String(Number(form.dataset.version)+1);message.textContent='Saved';}catch(e){message.textContent=e instanceof Error?e.message:'Could not save. Try again.';}finally{button.disabled=false;}
+}));
+</script>

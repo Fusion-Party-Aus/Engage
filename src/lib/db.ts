@@ -100,6 +100,10 @@ async function ensureSeeded(db: Db): Promise<void> {
 export async function initializeDatabase(db: Db): Promise<void> {
   await ensureDigestCohort(db);
   await Promise.all([
+    db.collection("sense_submissions").createIndex({branchId:1,createdAt:-1}),
+    db.collection("sense_limits").createIndex({expiresAt:1},{expireAfterSeconds:0}),
+  ]);
+  await Promise.all([
     db.collection("engagement_lifecycle_events").createIndex({memberId:1,event:1,at:1}),
     db.collection("engagement_email_preferences").createIndex({memberId:1}, {unique:true}),
     db.collection("engagement_email_outbox").createIndex({providerId:1}),
