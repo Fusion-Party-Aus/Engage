@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../lib/auth.ts";
+import { privateJson } from "../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
 import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import { castVote, savePendingVotePreference } from "../../lib/store.ts";
@@ -10,7 +11,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
-    return Response.json(
+    return privateJson(
       { error: "Please sign in to participate in decisions." },
       { status: 401 },
     );
@@ -23,13 +24,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (!user.canParticipate && user.status === "pending" && !body.amendmentId) {
       const pending = await savePendingVotePreference(db, user, body);
-      return Response.json(pending);
+      return privateJson(pending);
     }
 
     const result = await castVote(db, user, body);
-    return Response.json(result);
+    return privateJson(result);
   } catch (error) {
-    return Response.json(
+    return privateJson(
       {
         error:
           error instanceof Error ? error.message : "Could not record decision.",

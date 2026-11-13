@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { randomUUID } from "node:crypto";
 import { getSessionUser } from "../../../lib/auth.ts";
+import { privateJson, toBranchDto } from "../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 const kinds = ["national", "state", "territory", "constituent"];
 const parentKinds: Record<string, string[]> = {
@@ -32,10 +33,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
     .find({})
     .sort({ name: 1 })
     .toArray();
-  return Response.json(
-    { branches: rows.map(({ _id, ...r }) => r) },
-    { headers: { "cache-control": "private, no-store" } },
-  );
+  return privateJson({ branches: rows.map(toBranchDto) });
 };
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -108,7 +106,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         snapshot: record,
         createdAt: record.createdAt,
       });
-    return Response.json({ branch: record }, { status: 201 });
+    return privateJson({ branch: toBranchDto(record) }, { status: 201 });
   } catch (error) {
     return Response.json(
       {
@@ -225,7 +223,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
         after: next,
         createdAt: next.updatedAt,
       });
-    return Response.json({ branch: { ...previous, ...next } });
+    return privateJson({ branch: toBranchDto({ ...previous, ...next }) });
   } catch (error) {
     return Response.json(
       {

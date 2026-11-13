@@ -8,6 +8,7 @@ export const GET: APIRoute = async ({ locals, request }) => {
   const rows = await db
     .collection("policy_registry")
     .find({ publicationStatus: "published" })
+    .project({ _id: 0, category: 1 })
     .toArray();
   const data = [
     ...new Set(

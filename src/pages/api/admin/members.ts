@@ -1,5 +1,10 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
+import {
+  parsePagination,
+  privateJson,
+  toMemberAccountDto,
+} from "../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { requireApiPermission } from "../../../lib/rbac.ts";
 import { listMembers, saveMember } from "../../../lib/store.ts";
@@ -14,12 +19,20 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   });
   if (denied) return denied;
 
+  const { limit, offset } = parsePagination(url, { defaultLimit: 100, maxLimit: 250 });
   const db = await getDatabase(env);
-  const accounts = await listMembers(db, url.searchParams.get("q") ?? "");
-  return Response.json(
-    { accounts, currentMemberId: user!.memberId },
-    { headers: { "cache-control": "private, no-store" } },
-  );
+  const allAccounts = await listMembers(db, url.searchParams.get("q") ?? "");
+  const page = allAccounts.slice(offset, offset + limit).map(toMemberAccountDto);
+  return privateJson({
+    accounts: page,
+    currentMemberId: user!.memberId,
+    meta: {
+      limit,
+      offset,
+      total: allAccounts.length,
+      hasMore: offset + page.length < allAccounts.length,
+    },
+  });
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {

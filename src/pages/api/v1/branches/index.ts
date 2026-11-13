@@ -10,16 +10,17 @@ export const GET: APIRoute = async ({ locals, request, url }) => {
     Math.max(1, Number(url.searchParams.get("limit")) || 50),
   );
   const cursor = url.searchParams.get("cursor");
+  const filter: Record<string, unknown> = { recognised: true };
+  if (cursor) filter.branchId = { $gt: cursor };
   const rows = await db
     .collection("branches")
-    .find({ recognised: true })
+    .find(filter)
+    .project({ _id: 0, branchId: 1, name: 1, kind: 1, parentBranchId: 1 })
     .sort({ branchId: 1 })
+    .limit(limit + 1)
     .toArray();
-  const remaining = rows.filter(
-    (branch) => !cursor || String(branch.branchId) > cursor,
-  );
-  const hasMore = remaining.length > limit;
-  const page = remaining.slice(0, limit);
+  const hasMore = rows.length > limit;
+  const page = rows.slice(0, limit);
   const data = page.map((branch) => ({
     branchId: branch.branchId,
     name: branch.name,

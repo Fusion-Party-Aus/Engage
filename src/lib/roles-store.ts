@@ -241,18 +241,18 @@ export async function listRolesAndAssignments(db: Db): Promise<{
   const [customRoles, assignments, auditLog] = await Promise.all([
     db
       .collection<RoleDefinitionRecord>(RBAC_ROLES)
-      .find({})
+      .find({}, { projection: { _id: 0 } })
       .sort({ name: 1 })
       .toArray(),
     db
       .collection<RoleAssignmentRecord>(RBAC_ASSIGNMENTS)
-      .find({})
+      .find({}, { projection: { _id: 0 } })
       .sort({ assignedAt: -1 })
       .limit(200)
       .toArray(),
     db
       .collection(RBAC_AUDIT_LOG)
-      .find({})
+      .find({}, { projection: { _id: 0 } })
       .sort({ createdAt: -1 })
       .limit(50)
       .toArray(),
@@ -267,8 +267,11 @@ export async function listRolesAndAssignments(db: Db): Promise<{
   );
 
   return {
-    roles: [...systemRoles, ...customRoles],
-    assignments,
+    roles: [
+      ...systemRoles,
+      ...customRoles.map(({ _id, ...role }: any) => role as RoleDefinitionRecord),
+    ],
+    assignments: assignments.map(({ _id, ...assignment }: any) => assignment as RoleAssignmentRecord),
     auditLog: auditLog.map(({ _id, ...entry }) => entry),
   };
 }

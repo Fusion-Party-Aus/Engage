@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../lib/auth.ts";
+import { privateJson, toCommentDto } from "../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
 import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import {
@@ -15,7 +16,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
-    return Response.json(
+    return privateJson(
       { error: "Please sign in to participate." },
       { status: 401 },
     );
@@ -26,9 +27,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const gate = await requireLegalAcceptance(db, user, env);
     if (gate) return gate;
     const comment = await addComment(db, user, body);
-    return Response.json({ comment }, { status: 201 });
+    return privateJson({ comment: toCommentDto(comment, user) }, { status: 201 });
   } catch (error) {
-    return Response.json(
+    return privateJson(
       {
         error:
           error instanceof Error
@@ -44,7 +45,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
-    return Response.json(
+    return privateJson(
       { error: "Please sign in to endorse points." },
       { status: 401 },
     );
@@ -56,9 +57,13 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     const gate = await requireLegalAcceptance(db, user, env);
     if (gate) return gate;
     const result = await toggleUpvoteComment(db, user, commentId);
-    return Response.json(result);
+    return privateJson({
+      count: result.count,
+      endorsed: result.endorsed,
+      hasUpvoted: result.hasUpvoted,
+    });
   } catch (error) {
-    return Response.json(
+    return privateJson(
       {
         error:
           error instanceof Error ? error.message : "Could not endorse comment.",
@@ -72,7 +77,7 @@ export const DELETE: APIRoute = async ({ request, url, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
+    return privateJson({ error: "Sign in required." }, { status: 401 });
 
   try {
     const body = await request.json().catch(() => ({}));
@@ -81,9 +86,9 @@ export const DELETE: APIRoute = async ({ request, url, locals }) => {
     );
     const db = await getDatabase(env);
     await deleteComment(db, user, commentId);
-    return Response.json({ ok: true });
+    return privateJson({ ok: true });
   } catch (error) {
-    return Response.json(
+    return privateJson(
       {
         error:
           error instanceof Error ? error.message : "Could not delete comment.",
@@ -97,7 +102,7 @@ export const PUT: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
+    return privateJson({ error: "Sign in required." }, { status: 401 });
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -105,7 +110,7 @@ export const PUT: APIRoute = async ({ request, locals }) => {
     const gate = await requireLegalAcceptance(db, user, env);
     if (gate) return gate;
     const result = await setCommentFeedback(db, user, body);
-    return Response.json(result);
+    return privateJson(result);
   } catch (error) {
     const message =
       error instanceof Error
@@ -116,6 +121,6 @@ export const PUT: APIRoute = async ({ request, locals }) => {
       : message.endsWith("not found.")
         ? 404
         : 400;
-    return Response.json({ error: message }, { status });
+    return privateJson({ error: message }, { status });
   }
 };

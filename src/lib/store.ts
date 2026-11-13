@@ -629,8 +629,16 @@ export async function listProposalRevisions(
             : [{ field, before, after }];
         })
       : [{ field: "initial", before: null, after: revision.snapshot }];
-    const { _id, authorId, ...publicRevision } = revision;
-    return { ...publicRevision, changes };
+    return {
+      revisionId: String(revision.revisionId ?? ""),
+      proposalId: String(revision.proposalId ?? ""),
+      parentRevisionId: revision.parentRevisionId ?? null,
+      createdAt: revision.createdAt,
+      snapshot: revision.snapshot,
+      contentHash: String(revision.contentHash ?? ""),
+      ...(revision.provenance ? { provenance: revision.provenance } : {}),
+      changes,
+    };
   });
   return { proposalId: proposal.proposalId, revisions: data };
 }

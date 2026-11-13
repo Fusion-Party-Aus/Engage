@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
+import { privateJson, toPublicationEventDto } from "../../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import {
   detectCircularSupersession,
@@ -59,7 +60,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { status: 409 },
       );
     if (priorEvent?.status === "superseded")
-      return Response.json({ event: priorEvent }, { status: 200 });
+      return privateJson({ event: toPublicationEventDto(priorEvent) }, { status: 200 });
     const [oldPolicy, successor] = await Promise.all([
       col.findOne({
         policyId,
@@ -177,11 +178,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { eventId: event.eventId },
         { $set: { status: "superseded", completedAt: new Date() } },
       );
-    return Response.json(
+    const finalEvent = await db
+      .collection("publication_events")
+      .findOne({ eventId: event.eventId });
+    return privateJson(
       {
-        event: await db
-          .collection("publication_events")
-          .findOne({ eventId: event.eventId }),
+        event: finalEvent ? toPublicationEventDto(finalEvent) : null,
       },
       { status: 201 },
     );

@@ -1,5 +1,21 @@
 [
   {
+    "hash": "60d56bf",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "api",
+    "summary": "Enforce minimal response DTOs, ballot privacy, and bounded pagination"
+  },
+  {
+    "hash": "e0b85f8",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record cross-industry research"
+  },
+  {
     "hash": "ff5e240",
     "date": "2026-11-13",
     "type": "docs",
@@ -643,21 +659,5 @@
     "category": "docs",
     "scope": "deploy",
     "summary": "Document Coolify staging, production cutover, and poller"
-  },
-  {
-    "hash": "3280da3",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Bake Mongo helpers into Coolify staging image"
-  },
-  {
-    "hash": "6e2cc5e",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Use classic builder for Coolify builds (DNS workaround)"
   }
 ]

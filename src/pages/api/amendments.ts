@@ -1,6 +1,11 @@
 import type { APIRoute } from "astro";
 import { randomUUID } from "node:crypto";
 import { getSessionUser } from "../../lib/auth.ts";
+import {
+  parsePagination,
+  privateJson,
+  toAmendmentDto,
+} from "../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
 import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import { createAmendmentRevision } from "../../lib/amendments.ts";
@@ -14,10 +19,11 @@ export const GET: APIRoute = async ({ url, locals, request }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
+    return privateJson({ error: "Sign in required." }, { status: 401 });
   const proposalId = url.searchParams.get("proposalId") ?? "";
   if (!proposalId)
-    return Response.json({ error: "proposalId is required." }, { status: 400 });
+    return privateJson({ error: "proposalId is required." }, { status: 400 });
+  const { limit, offset } = parsePagination(url, { defaultLimit: 50, maxLimit: 200 });
   const db = await getDatabase(env);
   const proposal = await db.collection("proposals").findOne({ proposalId });
   const normalizedProposal = proposal ? normalizeProposalDoc(proposal) : null;
@@ -27,18 +33,22 @@ export const GET: APIRoute = async ({ url, locals, request }) => {
     (normalizedProposal.stage === "archived" &&
       !canReviewArchivedProposal(normalizedProposal, user))
   )
-    return Response.json({ error: "Proposal not found." }, { status: 404 });
+    return privateJson({ error: "Proposal not found." }, { status: 404 });
   const query: Record<string, unknown> = { proposalId };
   if (!user.isStaff) query.status = { $ne: "withdrawn" };
-  const amendments = await db
+  const rows = await db
     .collection("amendments")
     .find(query)
     .sort({ createdAt: 1 })
+    .limit(offset + limit + 1)
     .toArray();
-  return Response.json(
-    { amendments: amendments.map(({ _id, ...row }) => row) },
-    { headers: { "cache-control": "private, no-store" } },
-  );
+  const sliced = rows.slice(offset);
+  const hasMore = sliced.length > limit;
+  const page = sliced.slice(0, limit).map(toAmendmentDto);
+  return privateJson({
+    amendments: page,
+    meta: { limit, offset, hasMore },
+  });
 };
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -136,7 +146,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       createdAt: new Date(),
     };
     await db.collection("amendments").insertOne(record);
-    return Response.json({ amendment: record }, { status: 201 });
+    return privateJson({ amendment: toAmendmentDto(record) }, { status: 201 });
   } catch (error) {
     return Response.json(
       {

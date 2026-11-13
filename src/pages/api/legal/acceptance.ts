@@ -92,12 +92,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     }
     return Response.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not record legal acceptance.",
-      },
+      { error: "Could not record legal acceptance." },
       { status: 400, headers },
     );
   }

@@ -1,6 +1,11 @@
 import type { APIRoute } from "astro";
 import { randomUUID } from "node:crypto";
 import { getSessionUser } from "../../../../lib/auth.ts";
+import {
+  parsePagination,
+  privateJson,
+  toBranchReferralDto,
+} from "../../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 
 export const prerender = false;
@@ -62,7 +67,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       referredAt: new Date(),
     };
     await db.collection("branch_referrals").insertOne(referral);
-    return Response.json({ referral }, { status: 201 });
+    return privateJson({ referral: toBranchReferralDto(referral) }, { status: 201 });
   } catch (error) {
     if ((error as { code?: number }).code === 11000)
       return Response.json(
@@ -95,15 +100,19 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
       { error: "branch filter is required." },
       { status: 400 },
     );
+  const { limit, offset } = parsePagination(url, { defaultLimit: 50, maxLimit: 200 });
   const rows = await (
     await getDatabase(env)
   )
     .collection("branch_referrals")
     .find({ targetBranchId })
     .sort({ referredAt: -1 })
+    .limit(offset + limit + 1)
     .toArray();
-  return Response.json(
-    { referrals: rows.map(({ _id, ...row }) => row) },
-    { headers: { "cache-control": "private, no-store" } },
-  );
+  const sliced = rows.slice(offset);
+  const hasMore = sliced.length > limit;
+  return privateJson({
+    referrals: sliced.slice(0, limit).map(toBranchReferralDto),
+    meta: { limit, offset, hasMore },
+  });
 };
