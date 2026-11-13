@@ -18,6 +18,7 @@ import { listProposals } from '../../lib/store.ts';
 import { groupParticipationFeed, type ParticipationActivity } from '../../lib/participation-feed.ts';
 import { PROPOSAL_VOTES } from '../../lib/vote-storage.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
+import { buildBallotProgressRows, buildBranchSummaryRows } from '../../lib/admin-reporting.ts';
 import ActivityTimeline from '../../components/blocks/timeline-3';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -156,13 +157,31 @@ const adminTimelineEvents: ActivityTimelineEvent[] = recentActivity.slice(0, 30)
 const adminTimeline = buildActivityTimeline(adminTimelineEvents);
 
 const activeBallotsNeedingReview = proposals.filter((proposal) => proposal.stage === 'decide' && !proposal.ballotRevisionId);
-const ballotResults = await db.collection('ballot_results').find({ result: 'successful' }).toArray();
-const registry = user.isAdmin ? await db.collection('policy_registry').find({}).toArray() : [];
+const [ballotResults, registry, scopedBranches, activeBranchMemberships] = await Promise.all([
+  db.collection('ballot_results').find({ result: 'successful' }).toArray(),
+  user.isAdmin ? db.collection('policy_registry').find({}).toArray() : Promise.resolve([]),
+  user.isStaff
+    ? db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()
+    : user.isBranchAdmin
+      ? db.collection('branches').find({ branchId: { $in: user.branchAdminIds ?? [] } }).sort({ name: 1 }).toArray()
+      : Promise.resolve([]),
+  db.collection('branch_memberships').find({ status: 'active' }).project({ branchId: 1 }).toArray(),
+]);
+const branchNames = new Map(scopedBranches.map((branch: any) => [String(branch.branchId), String(branch.name)]));
+const verifiedCountsByBranch = new Map<string, number>();
+for (const row of activeBranchMemberships as any[]) {
+  const id = String(row.branchId ?? '');
+  if (id) verifiedCountsByBranch.set(id, (verifiedCountsByBranch.get(id) ?? 0) + 1);
+}
+const ballotProgressRows = buildBallotProgressRows(proposals, branchNames);
+const branchSummaryRows = buildBranchSummaryRows(proposals, scopedBranches as any[], verifiedCountsByBranch);
 const ratifiedIds = new Set(registry.map((policy) => policy.proposalId));
 const awaitingRatification = ballotResults
   .filter((result) => !ratifiedIds.has(result.proposalId))
   .map((result) => proposalMap.get(result.proposalId))
-  .filter(Boolean);
+  .filter((proposal): proposal is NonNullable<typeof proposal> =>
+    Boolean(proposal && proposal.kind !== 'resolution' && !proposal.proposalId.startsWith('GOV-')),
+  );
 const awaitingPublication = user.isAdmin ? registry.filter((policy) => policy.status === 'adopted' && policy.publicationStatus === 'unpublished') : [];
 const proposalIds = proposals.map((proposal) => proposal.proposalId);
 const unresolvedAmendments = proposalIds.length
@@ -387,6 +406,85 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
                 emptyMessage="No member activity in the last seven days."
               />
             </div>
+          </section>
+
+          <!-- Section 3: Open Ballot Progress & Branch Summary -->
+          <section class="overview-section" aria-labelledby="reporting-heading">
+            <div class="overview-section__head">
+              <div>
+                <h2 id="reporting-heading">Ballot progress &amp; branch summary</h2>
+                <p>Aggregate proposal status, ballot totals, and branch activity. Individual votes remain confidential.</p>
+              </div>
+              <Button href="/api/admin/reports/proposals.csv" variant="outline" size="sm">Export CSV summary</Button>
+            </div>
+
+            {ballotProgressRows.length > 0 ? (
+              <div class="admin-report-block">
+                <h3>Open ballots ({ballotProgressRows.length})</h3>
+                <div class="admin-report-table-wrap">
+                  <table class="admin-report-table">
+                    <thead>
+                      <tr>
+                        <th>Ballot</th>
+                        <th>Scope</th>
+                        <th>Wording</th>
+                        <th class="tabular">Approve / Abstain / Reject</th>
+                        <th class="tabular">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ballotProgressRows.map((row) => (
+                        <tr>
+                          <td>
+                            <a href={`/admin/proposals/${row.slug}/`}>{row.proposalId} · {row.title}</a>
+                          </td>
+                          <td>{row.branchName}</td>
+                          <td>
+                            <Badge variant={row.bound ? (row.expired ? 'warning' : 'success') : 'destructive'}>
+                              {row.bound ? (row.expired ? 'Closed' : 'Bound') : 'Unbound'}
+                            </Badge>
+                          </td>
+                          <td class="tabular">{row.approve} / {row.abstain} / {row.reject}</td>
+                          <td class="tabular"><strong>{row.total}</strong></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p class="text-sm text-muted-foreground m-0 mb-4">No ballots are currently open in Stage 3 (Decide).</p>
+            )}
+
+            {branchSummaryRows.length > 0 && (
+              <div class="admin-report-block">
+                <h3>Branch summary</h3>
+                <div class="admin-report-table-wrap">
+                  <table class="admin-report-table">
+                    <thead>
+                      <tr>
+                        <th>Branch</th>
+                        <th class="tabular">Verified members</th>
+                        <th class="tabular">Active proposals</th>
+                        <th class="tabular">Open ballots</th>
+                        <th class="tabular">Total votes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {branchSummaryRows.map((row) => (
+                        <tr>
+                          <td>{row.branchName}</td>
+                          <td class="tabular">{row.verifiedMembers}</td>
+                          <td class="tabular">{row.propose + row.deliberate + row.decide + row.implement}</td>
+                          <td class="tabular">{row.decide}</td>
+                          <td class="tabular">{row.totalVotes}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </section>
         </div>
 
@@ -655,5 +753,57 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
     .participation-strip > div:last-child {
       border-bottom: 0;
     }
+  }
+
+  .admin-report-block {
+    margin-top: 1rem;
+  }
+
+  .admin-report-block h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--horizon-purple);
+  }
+
+  .admin-report-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.65rem;
+    background: var(--horizon-white);
+  }
+
+  .admin-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+  }
+
+  .admin-report-table th,
+  .admin-report-table td {
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .admin-report-table th {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+    background: var(--horizon-lavender-soft);
+  }
+
+  .admin-report-table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .admin-report-table a {
+    color: var(--horizon-purple);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .admin-report-table a:hover {
+    text-decoration: underline;
   }
 </style>
