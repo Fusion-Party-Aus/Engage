@@ -79,6 +79,10 @@ const estMins = Math.max(1, Math.ceil((items.length * 45) / 60));
       <div>
         <p>You are caught up on all eligible ballots.</p>
         <span>New decisions appear here when you are eligible and have not yet voted.</span>
+        <div class="attention-empty__actions">
+          <a href="/proposals/?stage=deliberate">Join open discussions →</a>
+          <a href="/sense-box/">Raise a local priority in Sense Box →</a>
+        </div>
       </div>
     </div>
   ) : (
@@ -305,6 +309,24 @@ const estMins = Math.max(1, Math.ceil((items.length * 45) / 60));
     display: block;
     margin-top: 0.1rem;
     font-size: 0.82rem;
+  }
+
+  .attention-empty__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem 1.15rem;
+    margin-top: 0.55rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .attention-empty__actions a {
+    color: var(--horizon-purple);
+    text-decoration: none;
+  }
+
+  .attention-empty__actions a:hover {
+    text-decoration: underline;
   }
 
   .attention-more {

@@ -193,7 +193,16 @@ const stageVariant = (s: ProposalStage) => {
                 ))}
               </div>
             ) : (
-              <p class="home-empty-note">You have no outstanding ballots requiring your vote right now.</p>
+              <div class="home-empty-note">
+                <p>You have no outstanding ballots requiring your vote right now.</p>
+                <div class="home-empty-actions">
+                  {discussions.length > 0 && (
+                    <a href="#discussions">Join {discussions.length} open {discussions.length === 1 ? 'deliberation' : 'deliberations'} →</a>
+                  )}
+                  <a href={primaryCtaHref}>{primaryCtaLabel} →</a>
+                  <a href="/sense-box/">Raise a local priority in Sense Box →</a>
+                </div>
+              </div>
             )}
           </section>
 
@@ -253,6 +262,7 @@ const stageVariant = (s: ProposalStage) => {
             <h2>Your workspaces</h2>
             <ul class="rail-nav-list">
               <li><a href="/member/">My Engage activity &amp; log →</a></li>
+              <li><a href="/sense-box/">Sense Box · Local priorities →</a></li>
               <li><a href="/branches/">Branches &amp; state sites →</a></li>
               <li><a href="/policies/">Official policy registry →</a></li>
             </ul>
@@ -391,6 +401,9 @@ const stageVariant = (s: ProposalStage) => {
               <Button href="/member/" variant="outline" size="sm" className="w-full justify-center">
                 Member sign in
               </Button>
+              <p class="rail-sense-note">
+                Want to flag a local issue without drafting a proposal? <a href="/sense-box/">Share it in Sense Box →</a>
+              </p>
             </div>
 
             <div class="rail-box">
@@ -829,6 +842,38 @@ const stageVariant = (s: ProposalStage) => {
     background: var(--horizon-surface);
     border: 1px solid var(--horizon-line);
     font-size: 0.85rem;
+    color: var(--horizon-muted);
+  }
+
+  .home-empty-note p {
+    margin: 0;
+  }
+
+  .home-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    margin-top: 0.65rem;
+  }
+
+  .home-empty-actions a,
+  .rail-sense-note a {
+    font-weight: 600;
+    color: var(--horizon-purple);
+    text-decoration: none;
+  }
+
+  .home-empty-actions a:hover,
+  .rail-sense-note a:hover {
+    text-decoration: underline;
+  }
+
+  .rail-sense-note {
+    margin: 0.75rem 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--horizon-line);
+    font-size: 0.8rem;
+    line-height: 1.45;
     color: var(--horizon-muted);
   }
 
