@@ -27,7 +27,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return privateJson(pending);
     }
 
-    const result = await castVote(db, user, body);
+    const result = await castVote(db, user, body, env);
     return privateJson(result);
   } catch (error) {
     return privateJson(

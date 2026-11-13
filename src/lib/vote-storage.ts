@@ -1,20 +1,236 @@
 import { BSON, type Db, type Document } from "mongodb";
+import {
+  computeVoterBlindIndex,
+  decryptVotePayload,
+  encryptVotePayload,
+  type BallotCryptoConfig,
+  type VoteEnvelope,
+} from "./ballot-crypto.ts";
+import type { VoteChoice } from "./types.ts";
 
 // Current CRUD decisions are one ballot per proposal. Legacy formal/consultation
 // ballots remain in votes, with their original identities and uniqueness index.
 export const PROPOSAL_VOTES = "proposal_votes";
 export const VOTE_MIGRATION = "proposal-votes-v1";
 export const VOTE_INDEX = "one_current_proposal_vote_per_member_ballot";
+export const VOTE_BLIND_INDEX = "one_current_encrypted_vote_per_member_ballot";
 export const proposalBallotId = (proposalId: string) =>
   `proposal:${proposalId}`;
 
 export async function ensureProposalVoteIndex(db: Db): Promise<void> {
-  await db
-    .collection(PROPOSAL_VOTES)
-    .createIndex(
-      { ballotId: 1, memberId: 1 },
-      { unique: true, name: VOTE_INDEX },
+  const col = db.collection(PROPOSAL_VOTES);
+  const existing =
+    typeof col.indexes === "function"
+      ? await col.indexes().catch(() => [])
+      : [];
+  const legacyMemberIdx = existing.find((idx) => idx.name === VOTE_INDEX);
+  // Upgrade legacy unique index on { ballotId: 1, memberId: 1 } to a partial
+  // unique index so encrypted votes (which omit plaintext memberId) do not collide.
+  if (
+    legacyMemberIdx &&
+    legacyMemberIdx.unique === true &&
+    !legacyMemberIdx.partialFilterExpression &&
+    legacyMemberIdx.key?.ballotId === 1 &&
+    legacyMemberIdx.key?.memberId === 1
+  ) {
+    await col.dropIndex(VOTE_INDEX);
+  }
+  await col.createIndex(
+    { ballotId: 1, memberId: 1 },
+    {
+      unique: true,
+      name: VOTE_INDEX,
+      partialFilterExpression: { memberId: { $type: "string" } },
+    },
+  );
+  await col.createIndex(
+    { ballotId: 1, voterBlindIndex: 1 },
+    {
+      unique: true,
+      name: VOTE_BLIND_INDEX,
+      partialFilterExpression: { voterBlindIndex: { $type: "string" } },
+    },
+  );
+}
+
+export interface DecodedVoteRecord {
+  ballotId: string;
+  proposalId: string;
+  revisionId?: string;
+  amendmentId?: string;
+  amendmentRevisionId?: string;
+  memberId?: string;
+  authorName?: string;
+  voterBlindIndex?: string;
+  choice: VoteChoice;
+  reason: string;
+  updatedAt: Date;
+  encrypted: boolean;
+}
+
+export function decodeStoredVote(
+  doc: Record<string, any>,
+  cryptoConfig: BallotCryptoConfig | null,
+): DecodedVoteRecord {
+  const ballotId = String(doc.ballotId ?? "");
+  const proposalId = String(doc.proposalId ?? doc.policyId ?? "");
+  const revisionId =
+    typeof doc.revisionId === "string" ? doc.revisionId : undefined;
+  const amendmentId =
+    typeof doc.amendmentId === "string" ? doc.amendmentId : undefined;
+  const amendmentRevisionId =
+    typeof doc.amendmentRevisionId === "string"
+      ? doc.amendmentRevisionId
+      : undefined;
+
+  if (doc.voteEnvelope) {
+    if (!cryptoConfig) {
+      throw new Error(
+        "Encrypted ballot records exist, but ballot decryption keys are not configured.",
+      );
+    }
+    const voterBlindIndex = String(doc.voterBlindIndex ?? "");
+    const payload = decryptVotePayload(
+      cryptoConfig,
+      doc.voteEnvelope as VoteEnvelope,
+      {
+        ballotId,
+        proposalId,
+        revisionId: revisionId ?? "",
+        ...(amendmentRevisionId ? { amendmentRevisionId } : {}),
+        voterBlindIndex,
+      },
     );
+    return {
+      ballotId,
+      proposalId,
+      ...(revisionId ? { revisionId } : {}),
+      ...(amendmentId ? { amendmentId } : {}),
+      ...(amendmentRevisionId ? { amendmentRevisionId } : {}),
+      ...(typeof doc.memberId === "string" ? { memberId: doc.memberId } : {}),
+      ...(typeof doc.authorName === "string"
+        ? { authorName: doc.authorName }
+        : {}),
+      voterBlindIndex,
+      choice: payload.choice,
+      reason: payload.reason,
+      updatedAt:
+        doc.updatedAt instanceof Date
+          ? doc.updatedAt
+          : new Date(doc.updatedAt ?? Date.now()),
+      encrypted: true,
+    };
+  }
+
+  return {
+    ballotId,
+    proposalId,
+    ...(revisionId ? { revisionId } : {}),
+    ...(amendmentId ? { amendmentId } : {}),
+    ...(amendmentRevisionId ? { amendmentRevisionId } : {}),
+    ...(typeof doc.memberId === "string" ? { memberId: doc.memberId } : {}),
+    ...(typeof doc.authorName === "string"
+      ? { authorName: doc.authorName }
+      : {}),
+    choice: doc.choice as VoteChoice,
+    reason: typeof doc.reason === "string" ? doc.reason : "",
+    updatedAt:
+      doc.updatedAt instanceof Date
+        ? doc.updatedAt
+        : new Date(doc.updatedAt ?? Date.now()),
+    encrypted: false,
+  };
+}
+
+export function computeAllBlindIndexesForMember(
+  cryptoConfig: BallotCryptoConfig,
+  ballotId: string,
+  memberId: string,
+): string[] {
+  const indexes: string[] = [];
+  for (const key of cryptoConfig.blindIndexKeys.values()) {
+    indexes.push(computeVoterBlindIndex(key, ballotId, memberId));
+  }
+  return indexes;
+}
+
+export async function findMemberVotes(
+  db: Db,
+  memberId: string,
+  ballotIds: string[],
+  cryptoConfig: BallotCryptoConfig | null,
+): Promise<DecodedVoteRecord[]> {
+  const blindIndexes =
+    cryptoConfig && ballotIds.length > 0
+      ? ballotIds.flatMap((ballotId) =>
+          computeAllBlindIndexesForMember(cryptoConfig, ballotId, memberId),
+        )
+      : [];
+  const filter =
+    blindIndexes.length > 0
+      ? { $or: [{ memberId }, { voterBlindIndex: { $in: blindIndexes } }] }
+      : { memberId };
+  const rows = await db
+    .collection(PROPOSAL_VOTES)
+    .find(filter)
+    .sort({ updatedAt: -1 })
+    .toArray();
+  return rows.map((row) =>
+    decodeStoredVote(row as Record<string, any>, cryptoConfig),
+  );
+}
+
+export function buildEncryptedVoteFields(
+  cryptoConfig: BallotCryptoConfig,
+  input: {
+    ballotId: string;
+    proposalId: string;
+    revisionId: string;
+    amendmentId?: string;
+    amendmentRevisionId?: string;
+    memberId: string;
+    choice: VoteChoice;
+    reason: string;
+    updatedAt?: Date;
+  },
+) {
+  const biKey = cryptoConfig.blindIndexKeys.get(
+    cryptoConfig.activeBlindIndexKeyId,
+  );
+  if (!biKey) {
+    throw new Error("Active ballot blind-index key is unavailable.");
+  }
+  const voterBlindIndex = computeVoterBlindIndex(
+    biKey,
+    input.ballotId,
+    input.memberId,
+  );
+  const voteEnvelope = encryptVotePayload(
+    cryptoConfig,
+    { choice: input.choice, reason: input.reason },
+    {
+      ballotId: input.ballotId,
+      proposalId: input.proposalId,
+      revisionId: input.revisionId,
+      ...(input.amendmentRevisionId
+        ? { amendmentRevisionId: input.amendmentRevisionId }
+        : {}),
+      voterBlindIndex,
+    },
+  );
+  return {
+    ballotId: input.ballotId,
+    proposalId: input.proposalId,
+    revisionId: input.revisionId,
+    ...(input.amendmentId ? { amendmentId: input.amendmentId } : {}),
+    ...(input.amendmentRevisionId
+      ? { amendmentRevisionId: input.amendmentRevisionId }
+      : {}),
+    voterBlindIndex,
+    blindIndexKeyId: cryptoConfig.activeBlindIndexKeyId,
+    voteEnvelope,
+    updatedAt: input.updatedAt ?? new Date(),
+  };
 }
 
 export async function ensureVoteStorage(db: Db): Promise<void> {

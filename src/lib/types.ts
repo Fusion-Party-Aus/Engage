@@ -58,6 +58,11 @@ export interface PlatformEnv {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  BALLOT_ENCRYPTION_MODE?: string;
+  BALLOT_ENCRYPTION_KEYS?: string;
+  BALLOT_ENCRYPTION_ACTIVE_KEY_ID?: string;
+  BALLOT_BLIND_INDEX_KEY?: string;
+  BALLOT_BLIND_INDEX_ACTIVE_KEY_ID?: string;
 }
 
 export interface SessionUser {

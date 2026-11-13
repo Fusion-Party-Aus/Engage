@@ -1,5 +1,13 @@
 import { recordLifecycle, recordParticipation, notePriorParticipation } from "./member-lifecycle.ts";
-import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
+import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
+import {
+  PROPOSAL_VOTES,
+  buildEncryptedVoteFields,
+  computeAllBlindIndexesForMember,
+  decodeStoredVote,
+  findMemberVotes,
+  proposalBallotId,
+} from "./vote-storage.ts";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { validPersonName } from "./auth.ts";
 import { hasPermission } from "./rbac.ts";
@@ -349,6 +357,7 @@ export async function listProposals(
 
   const allProposals = rawProposals.map(normalizeProposalDoc);
 
+  const cryptoConfig = loadBallotCryptoConfig(process.env);
   const [allComments, allVotes] = await Promise.all([
     db
       .collection<CommentRecord>("comments")
@@ -358,7 +367,16 @@ export async function listProposals(
     db
       .collection<VoteRecord>(PROPOSAL_VOTES)
       .find({})
-      .project({ proposalId: 1, policyId: 1, ballotId: 1, choice: 1 })
+      .project({
+        proposalId: 1,
+        policyId: 1,
+        ballotId: 1,
+        revisionId: 1,
+        amendmentRevisionId: 1,
+        choice: 1,
+        voterBlindIndex: 1,
+        voteEnvelope: 1,
+      })
       .toArray(),
   ]);
 
@@ -373,14 +391,15 @@ export async function listProposals(
     const id = v.proposalId || (v as any).policyId;
     if (!id) continue;
     if (v.ballotId !== proposalBallotId(id)) continue;
+    const decoded = decodeStoredVote(v as Record<string, any>, cryptoConfig);
     const current = voteMap.get(id) ?? {
       approve: 0,
       abstain: 0,
       reject: 0,
       total: 0,
     };
-    if (v.choice === "approve") current.approve += 1;
-    else if (v.choice === "abstain") current.abstain += 1;
+    if (decoded.choice === "approve") current.approve += 1;
+    else if (decoded.choice === "abstain") current.abstain += 1;
     else current.reject += 1;
     current.total += 1;
     voteMap.set(id, current);
@@ -547,9 +566,22 @@ export async function getProposalDetail(
     stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
     upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
   }));
-  const proposalVotes = votes.filter(
-    (vote) => vote.ballotId === proposalBallotId(proposal.proposalId),
-  );
+  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const currentBallotId = proposalBallotId(proposal.proposalId);
+  const myBlindIndexes =
+    user && cryptoConfig
+      ? new Set(
+          computeAllBlindIndexesForMember(
+            cryptoConfig,
+            currentBallotId,
+            user.memberId,
+          ),
+        )
+      : null;
+
+  const proposalVotes = votes
+    .filter((vote) => vote.ballotId === currentBallotId)
+    .map((vote) => decodeStoredVote(vote as Record<string, any>, cryptoConfig));
 
   const tally: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
   let myVote: VoteChoice | null = null;
@@ -560,7 +592,14 @@ export async function getProposalDetail(
     else if (v.choice === "abstain") tally.abstain += 1;
     else tally.reject += 1;
     tally.total += 1;
-    if (user && v.memberId === user.memberId) {
+    const isMine =
+      Boolean(user && v.memberId && v.memberId === user.memberId) ||
+      Boolean(
+        myBlindIndexes &&
+          v.voterBlindIndex &&
+          myBlindIndexes.has(v.voterBlindIndex),
+      );
+    if (isMine) {
       myVote = v.choice;
       myReason = v.reason ?? "";
     }
@@ -578,7 +617,7 @@ export async function getProposalDetail(
       votes: tally,
     },
     comments,
-    votesList: proposalVotes,
+    votesList: proposalVotes as unknown as VoteRecord[],
     myVote,
     myReason,
     myPendingVote,
@@ -1984,11 +2023,92 @@ export async function setCommentFeedback(
   return { feedback, feedbackHistory };
 }
 
+async function upsertStoredVote(
+  db: Db,
+  cryptoConfig: ReturnType<typeof loadBallotCryptoConfig>,
+  input: {
+    ballotId: string;
+    proposalId: string;
+    revisionId: string;
+    amendmentId?: string;
+    amendmentRevisionId?: string;
+    memberId: string;
+    authorName: string;
+    choice: VoteChoice;
+    reason: string;
+  },
+): Promise<VoteTally> {
+  const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
+  const now = new Date();
+  if (cryptoConfig?.mode === "encrypt") {
+    const encryptedFields = buildEncryptedVoteFields(cryptoConfig, {
+      ...input,
+      updatedAt: now,
+    });
+    const legacyExisting = await votesCol.findOne({
+      ballotId: input.ballotId,
+      memberId: input.memberId,
+    });
+    if (legacyExisting?._id) {
+      await votesCol.updateOne(
+        { _id: legacyExisting._id } as any,
+        {
+          $set: encryptedFields as any,
+          $unset: { memberId: "", authorName: "", choice: "", reason: "" },
+        },
+      );
+    } else {
+      await votesCol.updateOne(
+        {
+          ballotId: input.ballotId,
+          voterBlindIndex: encryptedFields.voterBlindIndex,
+        } as any,
+        { $set: encryptedFields as any },
+        { upsert: true },
+      );
+    }
+  } else {
+    await votesCol.updateOne(
+      { ballotId: input.ballotId, memberId: input.memberId },
+      {
+        $set: {
+          ballotId: input.ballotId,
+          proposalId: input.proposalId,
+          ...(input.amendmentId ? { amendmentId: input.amendmentId } : {}),
+          revisionId: input.revisionId,
+          ...(input.amendmentRevisionId
+            ? { amendmentRevisionId: input.amendmentRevisionId }
+            : {}),
+          memberId: input.memberId,
+          authorName: input.authorName,
+          choice: input.choice,
+          reason: input.reason,
+          updatedAt: now,
+        },
+      },
+      { upsert: true },
+    );
+  }
+
+  const allVotes = await votesCol.find({ ballotId: input.ballotId }).toArray();
+  const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
+  for (const v of allVotes) {
+    const decoded = decodeStoredVote(v as Record<string, any>, cryptoConfig);
+    if (decoded.choice === "approve") votes.approve += 1;
+    else if (decoded.choice === "abstain") votes.abstain += 1;
+    else votes.reject += 1;
+    votes.total += 1;
+  }
+  return votes;
+}
+
 export async function castVote(
   db: Db,
   user: SessionUser,
   body: Record<string, unknown>,
+  env?: Partial<import("./types.ts").PlatformEnv>,
 ): Promise<{ choice: VoteChoice; votes: VoteTally; amendmentId?: string }> {
+  const cryptoConfig = loadBallotCryptoConfig(env ?? process.env);
   if (!user.canParticipate) {
     throw new Error(
       "Your membership must be verified before you can participate in decisions.",
@@ -2057,37 +2177,19 @@ export async function castVote(
           ? "abstain"
           : "reject";
     const ballotId = `amendment:${amendmentId}`;
-    const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
-    await notePriorParticipation(db,user.memberId);
-    await votesCol.updateOne(
-      { ballotId, memberId: user.memberId },
-      {
-        $set: {
-          ballotId,
-          proposalId,
-          amendmentId,
-          revisionId: amendment.ballotRevisionId,
-          amendmentRevisionId: amendment.ballotAmendmentRevisionId,
-          memberId: user.memberId,
-          authorName: user.name || "Verified Member",
-          choice,
-          reason:
-            typeof body.reason === "string"
-              ? body.reason.trim().slice(0, 500)
-              : "",
-          updatedAt: new Date(),
-        },
-      },
-      { upsert: true },
-    );
-    const allVotes = await votesCol.find({ ballotId }).toArray();
-    const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
-    for (const vote of allVotes) {
-      if (vote.choice === "approve") votes.approve++;
-      else if (vote.choice === "abstain") votes.abstain++;
-      else votes.reject++;
-      votes.total++;
-    }
+    await notePriorParticipation(db, user.memberId);
+    const votes = await upsertStoredVote(db, cryptoConfig, {
+      ballotId,
+      proposalId,
+      amendmentId,
+      revisionId: amendment.ballotRevisionId,
+      amendmentRevisionId: amendment.ballotAmendmentRevisionId,
+      memberId: user.memberId,
+      authorName: user.name || "Verified Member",
+      choice,
+      reason:
+        typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "",
+    });
     await recordParticipation(db, user.memberId);
     return { choice, votes, amendmentId };
   }
@@ -2187,27 +2289,16 @@ export async function castVote(
   const reason =
     typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
 
-  const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
-  await notePriorParticipation(db,user.memberId);
-  await votesCol.updateOne(
-    {
-      ballotId: proposalBallotId(proposal.proposalId),
-      memberId: user.memberId,
-    },
-    {
-      $set: {
-        ballotId: proposalBallotId(proposal.proposalId),
-        proposalId: proposal.proposalId,
-        revisionId: ballotRevisionId,
-        memberId: user.memberId,
-        authorName: user.name || "Verified Member",
-        choice,
-        ...(reason ? { reason } : { reason: "" }),
-        updatedAt: new Date(),
-      },
-    },
-    { upsert: true },
-  );
+  await notePriorParticipation(db, user.memberId);
+  const votes = await upsertStoredVote(db, cryptoConfig, {
+    ballotId: proposalBallotId(proposal.proposalId),
+    proposalId: proposal.proposalId,
+    revisionId: ballotRevisionId,
+    memberId: user.memberId,
+    authorName: user.name || "Verified Member",
+    choice,
+    reason,
+  });
 
   // Clear any pending preference for this ballot now that a formal vote is recorded
   await db
@@ -2216,17 +2307,6 @@ export async function castVote(
       ballotId: proposalBallotId(proposal.proposalId),
       memberId: user.memberId,
     });
-
-  const allVotes = await votesCol
-    .find({ ballotId: proposalBallotId(proposal.proposalId) })
-    .toArray();
-  const votes: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
-  for (const v of allVotes) {
-    if (v.choice === "approve") votes.approve += 1;
-    else if (v.choice === "abstain") votes.abstain += 1;
-    else votes.reject += 1;
-    votes.total += 1;
-  }
 
   await recordParticipation(db, user.memberId);
   return { choice, votes };
@@ -2434,19 +2514,21 @@ export async function listUserActivity(
     }
   >;
 }> {
-  const [proposals, comments, votes] = await Promise.all([
+  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const [proposals, comments] = await Promise.all([
     db.collection<ProposalRecord>("proposals").find({}).toArray(),
     db
       .collection<CommentRecord>("comments")
       .find({ memberId })
       .sort({ createdAt: -1 })
       .toArray(),
-    db
-      .collection<VoteRecord>(PROPOSAL_VOTES)
-      .find({ memberId })
-      .sort({ updatedAt: -1 })
-      .toArray(),
   ]);
+  const votes = await findMemberVotes(
+    db,
+    memberId,
+    proposals.map((p) => proposalBallotId(p.proposalId)),
+    cryptoConfig,
+  );
 
   const proposalMap = new Map(proposals.map((p) => [p.proposalId, p]));
 
@@ -2464,6 +2546,8 @@ export async function listUserActivity(
       const p = proposalMap.get(v.proposalId);
       return {
         ...v,
+        memberId: v.memberId ?? memberId,
+        authorName: v.authorName ?? "",
         proposalTitle: p?.title ?? v.proposalId,
         proposalSlug: p?.slug ?? v.proposalId,
         proposalStage: p?.stage ?? "deliberate",
@@ -2479,12 +2563,16 @@ export async function listOutstandingDecisions(
   availableProposals?: ProposalSummaryView[],
 ): Promise<ProposalSummaryView[]> {
   if (user && !user.canParticipate) return [];
-  const [decisions, votes] = await Promise.all([
-    availableProposals
-      ? Promise.resolve(availableProposals.filter((proposal) => proposal.stage === "decide"))
-      : listProposals(db, { stage: "decide", user }),
-    db.collection<VoteRecord>(PROPOSAL_VOTES).find({ memberId }).toArray(),
-  ]);
+  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const decisions = availableProposals
+    ? availableProposals.filter((proposal) => proposal.stage === "decide")
+    : await listProposals(db, { stage: "decide", user });
+  const votes = await findMemberVotes(
+    db,
+    memberId,
+    decisions.map((d) => proposalBallotId(d.proposalId)),
+    cryptoConfig,
+  );
   const branchIds = [...new Set(
     decisions
       .map((decision) => decision.jurisdictionBranchId)

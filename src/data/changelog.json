@@ -1,5 +1,21 @@
 [
   {
+    "hash": "b3f69d5",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Harden RBAC boundaries, CSRF origin checks, and markdown links"
+  },
+  {
+    "hash": "d77fdd2",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot after proposal scope changes"
+  },
+  {
     "hash": "dd4b251",
     "date": "2026-11-13",
     "type": "feat",
@@ -644,22 +660,5 @@
     "scope": "app",
     "summary": "Complete release-candidate remediation and Horizon UI integration",
     "details": "- make startup seeding insert-only so restarts do not rewrite updatedAt - remove Astro experimental React children to stop double-escaped entities and SSR attribute warnings - use a trusted public origin for canonicals and public API Link headers - show human-readable revision labels to members while retaining exact IDs in audit views - make the empty policy registry an explicit, accurate state and relabel navigation and calls to action - complete the shared header, footer, feature grid and member settings workspace on the Horizon/shadcn foundation"
-  },
-  {
-    "hash": "60e0679",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "governance",
-    "summary": "Bind legacy ballots to immutable wording revisions",
-    "details": "Add a deterministic, transactional bulk migration for existing Decide-stage ballots and their votes. The migration inventories wording against the deployment baseline, fails closed on ambiguity, supports dry-run and explicit apply, records attributable binding events, and is idempotent. Reuse the shared binding path in the admin review endpoint and expose human-readable revision labels while keeping exact identifiers in audit views. Rehearsed against a restored 414-document production clone: 37 ballots and 194 votes preserved, 0 ambiguous, 0 conflicting, 37 idempotent on retry."
-  },
-  {
-    "hash": "1b973fa",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Note token revocation and private-repo poller requirement"
   }
 ]
