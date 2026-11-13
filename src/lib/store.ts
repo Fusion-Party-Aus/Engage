@@ -49,6 +49,10 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { ballotExpired } from "./ballot-deadline.ts";
 import {
+  defaultBallotClosesAtFrom,
+  deliberationEndsAtFrom,
+} from "./lifecycle-schedule.ts";
+import {
   geographicScopeForBranch,
   parseProposalScopeInput,
 } from "./proposal-scope.ts";
@@ -322,6 +326,12 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
       ? String(raw.ballotRevisionId)
       : undefined,
     ballotClosesAt: raw.ballotClosesAt ? new Date(raw.ballotClosesAt) : undefined,
+    ballotClosedAt: raw.ballotClosedAt ? new Date(raw.ballotClosedAt) : undefined,
+    secondedBy: raw.secondedBy ? String(raw.secondedBy) : undefined,
+    secondedAt: raw.secondedAt ? new Date(raw.secondedAt) : undefined,
+    deliberationEndsAt: raw.deliberationEndsAt
+      ? new Date(raw.deliberationEndsAt)
+      : undefined,
     implementationNote: raw.implementationNote
       ? String(raw.implementationNote)
       : undefined,
@@ -913,7 +923,10 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
       return parsed;
     }
   }
-  throw new Error("A future ballot closing date is required when opening a ballot.");
+  // D6: an officer who opens a ballot without a date receives the approved
+  // 30-day ordinary ballot period. An explicit date always wins over this
+  // default, so authorised overrides keep working unchanged.
+  return defaultBallotClosesAtFrom(now);
 }
 
   // Quick stage / implementationNote / supersession update by staff
@@ -1097,6 +1110,16 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
     }
     if (ballotClosesAt) {
       set.ballotClosesAt = ballotClosesAt;
+    }
+    if (
+      closingBallot ||
+      (stage === "decide" && body.ballotClosesAt !== undefined)
+    ) {
+      // The closure marker belongs to one ballot deadline. Leaving Decide or
+      // configuring a new deadline starts a new ballot instance, so the marker
+      // must clear or the scheduler would never close the new ballot. The
+      // historical `ballot.closed` event remains.
+      unset.ballotClosedAt = "";
     }
     const updateDoc: Record<string, unknown> = { $set: set };
     if (Object.keys(unset).length) updateDoc.$unset = unset;
@@ -1492,6 +1515,14 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
 
     let ballotUnbound = false;
     let ballotReboundFrom: string | undefined;
+    if (
+      closingBallot ||
+      (stage === "decide" && body.ballotClosesAt !== undefined)
+    ) {
+      // A new ballot instance (or leaving Decide) invalidates the previous
+      // closure marker; the historical `ballot.closed` event remains.
+      unsetFields.ballotClosedAt = 1;
+    }
     if (stage === "decide") {
       if (updated.ballotRevisionId && updated.ballotRevisionId !== nextRevisionId) {
         ballotReboundFrom = updated.ballotRevisionId;
@@ -1698,6 +1729,119 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
     }
   });
   return created;
+}
+
+export class ProposalSecondingError extends Error {
+  status: number;
+  constructor(message: string, status = 409) {
+    super(message);
+    this.name = "ProposalSecondingError";
+    this.status = status;
+  }
+}
+
+/**
+ * Record the independent seconder a proposal needs before it enters Deliberate
+ * (D3) and start the 30-day deliberation clock (D4).
+ *
+ * Implemented assumptions, visible for review:
+ * - one seconder per proposal, and the seconder may not be the author — the
+ *   minimal reading of D3;
+ * - seconding is a participation act, so the seconder must be a verified member
+ *   who can view the matter. It is not a formal ballot and uses no ballot
+ *   permission;
+ * - the act does not change the stage. Advancing Propose → Deliberate remains
+ *   the existing workflow transition; whether seconding should itself be that
+ *   transition (or a hard gate on it) is not specified by the register.
+ */
+export async function secondProposal(
+  db: Db,
+  user: SessionUser,
+  proposalId: string,
+): Promise<ProposalRecord> {
+  const id = proposalId.trim();
+  if (!id) throw new ProposalSecondingError("Proposal ID is required.", 400);
+  if (!user.canParticipate) {
+    throw new ProposalSecondingError(
+      "Your membership must be verified before you can second a proposal.",
+      403,
+    );
+  }
+
+  const col = db.collection<ProposalRecord>("proposals");
+  const raw = await col.findOne({ proposalId: id });
+  if (!raw) throw new ProposalSecondingError("Proposal not found.", 404);
+
+  const proposal = normalizeProposalDoc(raw);
+  if (!canViewProposal(proposal, user)) {
+    throw new ProposalSecondingError("Proposal not found.", 404);
+  }
+  if (proposal.authorId && proposal.authorId === user.memberId) {
+    throw new ProposalSecondingError(
+      "You cannot second your own proposal.",
+    );
+  }
+  if (proposal.secondedBy) {
+    throw new ProposalSecondingError(
+      "This proposal already has a seconder.",
+    );
+  }
+  if (proposal.stage !== "propose") {
+    throw new ProposalSecondingError(
+      "Only a proposal in Propose can be seconded.",
+    );
+  }
+
+  const now = new Date();
+  const deliberationEndsAt = deliberationEndsAtFrom(now);
+  await runInTransaction(db, async (session) => {
+    const sessionOpts = session ? { session } : undefined;
+    const write = await col.updateOne(
+      {
+        proposalId: id,
+        stage: "propose",
+        secondedBy: { $exists: false },
+      },
+      {
+        $set: {
+          secondedBy: user.memberId,
+          secondedAt: now,
+          deliberationEndsAt,
+          updatedAt: now,
+        },
+      },
+      sessionOpts,
+    );
+    if (write.matchedCount !== 1) {
+      throw new ProposalSecondingError(
+        "This proposal can no longer be seconded. Reload the latest state and try again.",
+      );
+    }
+    await recordGovernanceEvent(
+      db,
+      {
+        eventType: "proposal.seconded",
+        matterId: id,
+        actorId: user.memberId,
+        authorityBranchId: proposal.governanceAuthorityBranchId,
+        metadata: {
+          secondedAt: now.toISOString(),
+          deliberationEndsAt: deliberationEndsAt.toISOString(),
+          ...(proposal.authorId ? { authorId: proposal.authorId } : {}),
+        },
+        createdAt: now,
+      },
+      session,
+    );
+  });
+
+  return {
+    ...proposal,
+    secondedBy: user.memberId,
+    secondedAt: now,
+    deliberationEndsAt,
+    updatedAt: now,
+  };
 }
 
 export class ProposalDeletionConflictError extends Error {

@@ -90,6 +90,37 @@ export async function recordGovernanceEvent(
 }
 
 /**
+ * Record a governance event at most once for a deterministic `eventId`.
+ *
+ * Scheduled and migration-style writers must be safe to replay: a second run
+ * reports the work as already done instead of duplicating audit history. The
+ * unique `governance_events.eventId` index is the final authority; the pre-read
+ * keeps the in-memory test database (which does not enforce unique indexes)
+ * faithful to that behaviour.
+ */
+export async function recordGovernanceEventOnce(
+  db: Db,
+  input: Omit<GovernanceEventRecord, "createdAt"> & {
+    createdAt?: Date;
+  },
+  session?: ClientSession,
+): Promise<GovernanceEventRecord> {
+  const col = db.collection<GovernanceEventRecord>(GOVERNANCE_EVENTS_COLLECTION);
+  const sessionOpts = session ? { session } : undefined;
+  const existing = await col.findOne({ eventId: input.eventId }, sessionOpts);
+  if (existing) return existing;
+  try {
+    return await recordGovernanceEvent(db, input, session);
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) {
+      const recorded = await col.findOne({ eventId: input.eventId }, sessionOpts);
+      if (recorded) return recorded;
+    }
+    throw error;
+  }
+}
+
+/**
  * Detect whether adding `sourceMatterId -> targetMatterId` as a `supersedes`
  * edge (or `supersededByProposalId`) would introduce a cycle.
  */

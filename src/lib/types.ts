@@ -180,6 +180,20 @@ export interface ProposalRecord {
   publicationScope?: "private" | "branch" | "national";
   ballotRevisionId?: string;
   ballotClosesAt?: Date;
+  /**
+   * Set by the lifecycle scheduler when the ballot deadline has passed and the
+   * closure has been recorded. Closing never changes the stage or records a
+   * result. Absent means no closure has been recorded.
+   */
+  ballotClosedAt?: Date;
+  /**
+   * The independent seconder required before a proposal enters Deliberate (D3).
+   * Server-side only; the seconder's member ID is not exposed in public DTOs.
+   */
+  secondedBy?: string;
+  secondedAt?: Date;
+  /** The deliberation deadline derived from `secondedAt` (D4). */
+  deliberationEndsAt?: Date;
   supersededByProposalId?: string;
   supersededByNote?: string;
 

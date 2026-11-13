@@ -1,5 +1,56 @@
 [
   {
+    "hash": "1e88005",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "lifecycle",
+    "summary": "State that returning to Propose keeps the seconding clock"
+  },
+  {
+    "hash": "f71ca91",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the Phase 1 lifecycle work"
+  },
+  {
+    "hash": "186baa2",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "lifecycle",
+    "summary": "Document seconding, scheduled transitions and closure",
+    "details": "Records the implemented behaviour and the assumptions visible for review: - one seconder who is not the author; seconding records the clock but does not change the stage or gate Propose -> Deliberate; - automatic proposal advancement at the deliberation deadline by a system actor, without `ballots.bind`; - the conservative blocking-amendment set, reason codes and failure behaviour; - automatic closure at the ballot deadline without a stage change or result; - the 30-day default for officer-opened ballots; - new proposal fields (`secondedBy`, `secondedAt`, `deliberationEndsAt`, `ballotClosedAt`), deterministic event IDs and scheduler transaction rules; - the read-only migration report and its manual recovery options."
+  },
+  {
+    "hash": "e0b2dfb",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ops",
+    "summary": "Add governance scheduler and deadline migration report commands",
+    "details": "- `npm run governance:scheduler` runs the lifecycle scheduler as a dry run by default and writes only with `--apply`. It prints a JSON report with advanced, skipped, closed, blockers and errors, and exits non-zero on errors. - `npm run governance:migration-report` prints the read-only legacy report. - Both require MONGODB_URI and fail loudly without it; neither adds a daemon nor requires production credentials."
+  },
+  {
+    "hash": "b6cc5a1",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "lifecycle",
+    "summary": "Second proposals and schedule advancement and ballot closure",
+    "details": "Implements the approved lifecycle schedule from the decision register (D3-D7, RFC 0001 Phase 1, refs #26 and #30). - A verified member who is not the author may second a proposal while it is in Propose. The act records `secondedBy`, `secondedAt` and `deliberationEndsAt` (30 days) and writes `proposal.seconded`. It does not change the stage or grant ballot authority. - `src/lib/lifecycle-schedule.ts` is the single source of truth for the 30-day deliberation period, 30-day ballot period and 60-day ceiling. - A system actor (`system:lifecycle-scheduler`) advances due deliberations to Decide, binding the latest immutable revision and setting `ballotClosesAt = secondedAt + 60 days`. It requires no `ballots.bind`; the human early-advancement gate is unchanged. - Advancement fails closed on unresolved amendments (`rejected`, `withdrawn`, `applied`, `not-endorsed` and `inconclusive` are the only non-blocking statuses), on votes bound to other wording, on a missing seconding anchor, and on a ceiling already in the past. - Ballots close automatically at their deadline: `ballot.closed` is recorded once, the stage and result are untouched, and voting is refused after the boundary (D12 is not implemented). - Conditional filters, deterministic event IDs and transactional writes make both operations idempotent and safe under concurrent runs. - An officer opening a ballot without a date now receives the 30-day default; explicit dates remain authoritative. - Adds a read-only report for legacy ballots without deadlines and matters in Deliberate without a deliberation clock."
+  },
+  {
+    "hash": "1bd4fd1",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the Sprint 1 integration"
+  },
+  {
     "hash": "b8030d2",
     "date": "2026-11-14",
     "type": "docs",
@@ -609,53 +660,5 @@
     "category": "feature",
     "scope": "changelog",
     "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
-  },
-  {
-    "hash": "3512e0a",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "workspaces",
-    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
-  },
-  {
-    "hash": "f58e150",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
   }
 ]

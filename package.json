@@ -16,6 +16,8 @@
     "test": "node --experimental-strip-types --test src/**/*.test.ts",
     "ballots:schedule": "node --experimental-strip-types scripts/schedule-open-ballots.ts",
     "ballots:migrate": "node --experimental-strip-types scripts/ballot-migration.ts",
+    "governance:scheduler": "node --experimental-strip-types scripts/run-governance-scheduler.ts",
+    "governance:migration-report": "node --experimental-strip-types scripts/report-governance-deadline-migration.ts",
     "ballots:encrypt-migrate": "node --experimental-strip-types scripts/migrate-encrypted-votes.ts",
     "branches:migrate": "node --experimental-strip-types scripts/seed-branches.ts",
     "branches:participation-migrate": "node --experimental-strip-types scripts/migrate-branch-participation.ts",

@@ -57,7 +57,7 @@ const memberUser: SessionUser = {
 const futureClose = () => new Date(Date.now() + 7 * 86400_000).toISOString();
 
 describe("Sprint 1 governance integrity", () => {
-  it("rejects opening Decide without a valid future ballotClosesAt", async () => {
+  it("defaults a missing ballot closing date to the 30-day period and rejects invalid or past dates", async () => {
     const db = createMemoryDb();
     const draft = await saveProposal(db, adminUser, {
       title: "Require ballot close dates",
@@ -65,14 +65,6 @@ describe("Sprint 1 governance integrity", () => {
       summary: "Every ballot must have an enforceable closing date.",
       stage: "deliberate",
     });
-
-    await assert.rejects(
-      saveProposal(db, adminUser, {
-        proposalId: draft.proposalId,
-        stage: "decide",
-      }),
-      /closing date is required/i,
-    );
 
     await assert.rejects(
       saveProposal(db, adminUser, {
@@ -92,20 +84,40 @@ describe("Sprint 1 governance integrity", () => {
       /must be in the future/i,
     );
 
+    // D6: an officer opening a ballot without a date receives the approved
+    // 30-day ordinary ballot period instead of an unbounded ballot.
+    const expectedDefault = Date.now() + 30 * 86400_000;
     const opened = await saveProposal(db, adminUser, {
       proposalId: draft.proposalId,
       stage: "decide",
-      ballotClosesAt: futureClose(),
     });
     assert.equal(opened.stage, "decide");
     assert.ok(opened.ballotClosesAt instanceof Date);
+    assert.ok(
+      Math.abs(opened.ballotClosesAt.getTime() - expectedDefault) < 60_000,
+      "default ballot deadline should be 30 days from opening",
+    );
     assert.ok(opened.ballotRevisionId);
+
+    // An explicit date remains authoritative.
+    const returned = await saveProposal(db, adminUser, {
+      proposalId: draft.proposalId,
+      stage: "deliberate",
+    });
+    assert.equal(returned.stage, "deliberate");
+    const explicit = new Date(Date.now() + 7 * 86400_000);
+    const reopened = await saveProposal(db, adminUser, {
+      proposalId: draft.proposalId,
+      stage: "decide",
+      ballotClosesAt: explicit.toISOString(),
+    });
+    assert.equal(reopened.ballotClosesAt?.getTime(), explicit.getTime());
 
     const events = await db
       .collection(GOVERNANCE_EVENTS_COLLECTION)
       .find({ matterId: draft.proposalId, eventType: "proposal.stage_transition" })
       .toArray();
-    assert.equal(events.length, 1);
+    assert.equal(events.length, 3);
     assert.equal(events[0]?.metadata?.fromStage, "deliberate");
     assert.equal(events[0]?.metadata?.toStage, "decide");
   });
