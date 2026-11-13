@@ -75,6 +75,8 @@ export interface SessionUser {
   followedBranchIds?: string[];
   /** Organisational membership facts verified by a branch authority. */
   verifiedBranchIds?: string[];
+  /** Effective granular permissions resolved from legacy and configurable roles. */
+  permissions?: import("./rbac.ts").EffectivePermissionsSnapshot;
 }
 
 export interface BranchMembershipRecord {

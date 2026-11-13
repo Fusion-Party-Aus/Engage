@@ -1,0 +1,71 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { ShieldAlert } from 'lucide-react';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { listMembers } from '../../../lib/store.ts';
+import { PERMISSION_CATALOGUE, hasPermission } from '../../../lib/rbac.ts';
+import { listRolesAndAssignments } from '../../../lib/roles-store.ts';
+import RolesManager from '../../../components/admin/RolesManager';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/', 302);
+const canManageRoles = hasPermission(user, 'roles.manage');
+if (!canManageRoles) Astro.response.status = 403;
+
+const db = await getDatabase(env);
+const [roleData, members, branches] = canManageRoles
+  ? await Promise.all([
+      listRolesAndAssignments(db),
+      listMembers(db, ''),
+      db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
+    ])
+  : [{ roles: [], assignments: [], auditLog: [] }, [], []];
+---
+
+<AdminLayout
+  title="Roles & permissions"
+  description="Create reusable administrative roles, delegate branch-scoped permissions, and inspect effective access."
+  section="roles"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  {!canManageRoles ? (
+    <Alert variant="destructive">
+      <ShieldAlert />
+      <AlertTitle>Access required</AlertTitle>
+      <AlertDescription>National administrator or role-management permission is required to manage roles.</AlertDescription>
+    </Alert>
+  ) : (
+    <RolesManager
+      client:load
+      catalogue={PERMISSION_CATALOGUE}
+      initialRoles={roleData.roles}
+      initialAssignments={roleData.assignments}
+      initialAuditLog={roleData.auditLog.map((e: any) => ({
+        ...e,
+        createdAt: e.createdAt ? new Date(e.createdAt).toISOString() : '',
+      }))}
+      members={members.map((m) => ({
+        memberId: m.memberId,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        status: m.status,
+      }))}
+      branches={branches.map((b: any) => ({
+        branchId: String(b.branchId),
+        name: String(b.name),
+        kind: String(b.kind),
+      }))}
+      currentMemberId={user.memberId}
+    />
+  )}
+</AdminLayout>

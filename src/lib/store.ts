@@ -2,6 +2,7 @@ import { recordLifecycle, recordParticipation, notePriorParticipation } from "./
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { validPersonName } from "./auth.ts";
+import { hasPermission } from "./rbac.ts";
 import type {
   CommentRecord,
   CommentStance,
@@ -1781,7 +1782,13 @@ export function canRespondToContribution(
   proposal: Pick<ProposalRecord, "authorId" | "originatingBranchId">,
 ): boolean {
   if (!user) return false;
-  if (user.isStaff || user.isAdmin) return true;
+  if (
+    user.isStaff ||
+    user.isAdmin ||
+    hasPermission(user, "contributions.respond", proposal.originatingBranchId)
+  ) {
+    return true;
+  }
   if (
     user.isBranchAdmin &&
     proposal.originatingBranchId &&

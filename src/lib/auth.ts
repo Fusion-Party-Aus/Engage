@@ -6,6 +6,8 @@ import { magicLink } from "better-auth/plugins";
 import { createAuthMiddleware, APIError } from "better-auth/api";
 import { ObjectId, type Db } from "mongodb";
 import { getDatabase } from "./db.ts";
+import { hasPermission } from "./rbac.ts";
+import { resolveMemberEffectivePermissions } from "./roles-store.ts";
 import type {
   MembershipStatus,
   PlatformEnv,
@@ -219,7 +221,11 @@ export function canAdministerBranch(
   user: SessionUser,
   branchId: string,
 ): boolean {
-  return user.isAdmin || Boolean(user.branchAdminIds?.includes(branchId));
+  return (
+    user.isAdmin ||
+    Boolean(user.branchAdminIds?.includes(branchId)) ||
+    hasPermission(user, "branches.verify_members", branchId)
+  );
 }
 
 export function canManageBranchProposal(
@@ -232,7 +238,8 @@ export function canManageBranchProposal(
     Boolean(
       proposal.originatingBranchId &&
       user.branchAdminIds?.includes(proposal.originatingBranchId),
-    )
+    ) ||
+    hasPermission(user, "proposals.edit", proposal.originatingBranchId)
   );
 }
 
@@ -243,30 +250,36 @@ export function canManageBranchBallot(
     jurisdictionBranchId?: string;
   },
 ): boolean {
-  return (
+  if (
     user.isAdmin ||
     user.isStaff ||
-    Boolean(
-      proposal.governanceAuthorityBranchId &&
-      proposal.governanceAuthorityBranchId === proposal.jurisdictionBranchId &&
-      user.branchAdminIds?.includes(proposal.governanceAuthorityBranchId),
-    )
+    hasPermission(user, "ballots.bind") ||
+    hasPermission(user, "ballots.record_result") ||
+    hasPermission(user, "amendments.manage_ballot")
+  ) {
+    return true;
+  }
+  const branchId = proposal.governanceAuthorityBranchId;
+  if (!branchId || branchId !== proposal.jurisdictionBranchId) {
+    return false;
+  }
+  return Boolean(
+    user.branchAdminIds?.includes(branchId) ||
+    hasPermission(user, "ballots.bind", branchId) ||
+    hasPermission(user, "ballots.record_result", branchId) ||
+    hasPermission(user, "amendments.manage_ballot", branchId),
   );
 }
 
 /**
  * Identifiable ballot records are restricted to the explicitly authorised
- * role. The current application model has no Election Officer role, so only
- * national administrators may read other members' ballot choices. Moderators
- * are generic staff and must not inherit ballot-identification access.
- *
- * Do not broaden this to `isStaff` without an explicit governance decision
- * defining the officer boundary.
+ * role or national permission. Moderators and branch roles must not inherit
+ * ballot-identification access.
  */
 export function canViewIdentifiableBallots(
   user: SessionUser | null | undefined,
 ): boolean {
-  return Boolean(user?.isAdmin);
+  return Boolean(user && (user.isAdmin || hasPermission(user, "ballots.view_identifiable")));
 }
 
 export async function getSessionUser(
@@ -283,6 +296,7 @@ export async function getSessionUser(
       let verifiedBranchIds: string[] = [];
       let followedBranchIds: string[] = [];
       let branchAdminIds: string[] = [];
+      let permissions: Awaited<ReturnType<typeof resolveMemberEffectivePermissions>> | undefined;
       try {
         const db = await getDatabase(env);
         const { ensureNationalMembership } = await import('./branch-participation.ts');
@@ -306,9 +320,14 @@ export async function getSessionUser(
           .filter((row) => row.branchRole === "administrator")
           .map((row) => row.branchId);
         followedBranchIds = subscriptions.map((row) => row.branchId);
+        permissions = await resolveMemberEffectivePermissions(db, memberId, {
+          rolesDocs: isAdmin ? [{ role: "administrator" }] : [],
+          branchMembershipRows: memberships,
+        });
       } catch {
         // Development sign-in must remain usable without a database.
       }
+      const hasBranchCustomPerms = Boolean(permissions && Object.keys(permissions.branches).length > 0);
       return {
         memberId,
         name: isAdmin ? "Local Administrator" : "Local Verified Member",
@@ -321,10 +340,11 @@ export async function getSessionUser(
         verifiedBranchIds,
         followedBranchIds,
         branchAdminIds,
-        isBranchAdmin: branchAdminIds.length > 0,
+        isBranchAdmin: branchAdminIds.length > 0 || hasBranchCustomPerms,
         activeBranchIds: [
           ...new Set([...verifiedBranchIds, ...followedBranchIds]),
         ],
+        ...(permissions ? { permissions } : {}),
       };
     }
   }
@@ -394,6 +414,11 @@ export async function getSessionUser(
     const branchAdminIds = branchMembershipRows
       .filter((row) => row.branchRole === "administrator")
       .map((row) => row.branchId);
+    const permissions = await resolveMemberEffectivePermissions(db, memberId, {
+      rolesDocs,
+      branchMembershipRows,
+    });
+    const hasBranchCustomPerms = Object.keys(permissions.branches).length > 0;
 
     return {
       memberId,
@@ -405,10 +430,11 @@ export async function getSessionUser(
       isStaff: role === "administrator" || role === "moderator",
       isAdmin: role === "administrator",
       branchAdminIds,
-      isBranchAdmin: branchAdminIds.length > 0,
+      isBranchAdmin: branchAdminIds.length > 0 || hasBranchCustomPerms,
       activeBranchIds,
       followedBranchIds,
       verifiedBranchIds,
+      permissions,
     };
   } catch {
     return null;
