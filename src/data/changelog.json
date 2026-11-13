@@ -112,6 +112,23 @@
     "summary": "Surface Sense Box and next actions when caught up on ballots"
   },
   {
+    "hash": "b8af56b",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record GitHub protection defaults (#19)"
+  },
+  {
+    "hash": "041c469",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "repo",
+    "summary": "Add CODEOWNERS for default review routing (#18)",
+    "details": "Every path defaults to @finneh4249 so pull requests are routed to a single accountable reviewer. Ownership is advisory only: the main ruleset keeps a one-approval requirement for all contributors."
+  },
+  {
     "hash": "27374e2",
     "date": "2026-11-13",
     "type": "chore",
@@ -632,22 +649,5 @@
     "category": "feature",
     "scope": "editor",
     "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
-  },
-  {
-    "hash": "e7d793a",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record Engage production cutover and verification",
-    "details": "Record the approved cutover of 4660690... to the prebuilt image, the final quiescent backup and off-host checksum, the 37-ballot/194-vote migration and preservation comparison, image and route verification, and the retained rollback state."
   }
 ]
