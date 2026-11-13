@@ -144,6 +144,8 @@ The implemented reading of D3 is deliberately minimal and visible for review:
 
 A proposal created directly in Deliberate by an officer has no seconder and no deliberation clock. The scheduler never advances it; the [migration report](#scheduled-transitions-and-the-lifecycle-scheduler) lists these records.
 
+Returning a seconded proposal to Propose does not clear the seconder or the clock: the schedule is anchored to the original seconding. Whether a materially rewritten proposal needs renewed seconding is an open question and is not implemented.
+
 An officer advances the matter to `deliberate`. Comments, endorsements and amendments become the substantive input. Deliberation can continue in `decide` and `implement` as discussion, but it can no longer change the ballot wording.
 
 ### 4. Contributions and amendments
@@ -282,7 +284,7 @@ npm run governance:scheduler              # dry run (default): report only
 npm run governance:scheduler -- --apply   # perform the transitions
 ```
 
-The command prints a JSON report with `advanced`, `skipped`, `closed`, `blockers` and `errors`, plus counts. It requires `MONGODB_URI` and fails loudly without it; it never falls back to the in-memory development database. There is no daemon: run it from an existing operational scheduler. See [operations.md](../operations.md) for deployment scheduling.
+The command prints a JSON report with `advanced`, `skipped`, `closed`, `blockers` and `errors`, plus counts. It requires `MONGODB_URI` and fails loudly without it; it never falls back to the in-memory development database. There is no daemon: run it from the deployment's existing cron or job runner and treat a failed run as an operational alert.
 
 Report reason codes:
 
