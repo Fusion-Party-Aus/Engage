@@ -1,54 +1,6 @@
 [
   {
-    "hash": "28a5dcb",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "verification",
-    "summary": "Validate outage alert threshold"
-  },
-  {
-    "hash": "09d3bfe",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record reconciliation backoff fix"
-  },
-  {
-    "hash": "28466de",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "verification",
-    "summary": "Avoid repeated reconciliation for blocked members"
-  },
-  {
-    "hash": "43d9884",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record multiple Fusion membership types"
-  },
-  {
-    "hash": "3b346c8",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "verification",
-    "summary": "Support multiple Fusion membership types"
-  },
-  {
-    "hash": "f676317",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record automatic CRM membership verification"
-  },
-  {
-    "hash": "ed25924",
+    "hash": "76797d6",
     "date": "2026-11-13",
     "type": "feat",
     "category": "feature",
@@ -657,5 +609,53 @@
     "category": "ops",
     "scope": "analytics",
     "summary": "Install Plausible tracker package"
+  },
+  {
+    "hash": "b98af1d",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "time",
+    "summary": "Display time in user's local timezone"
+  },
+  {
+    "hash": "5de3c91",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "participation",
+    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
+  },
+  {
+    "hash": "46f1b9b",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "branches",
+    "summary": "Fix error on branch pages, and seed branches to database"
+  },
+  {
+    "hash": "c14ee07",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
+  },
+  {
+    "hash": "31e34df",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
+  },
+  {
+    "hash": "ac9bb41",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "deploy",
+    "summary": "Automate production deployment gated on staging health"
   }
 ]
