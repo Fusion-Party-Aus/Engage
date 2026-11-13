@@ -1,4 +1,4 @@
-import type { SessionUser } from "./types.ts";
+import type { SessionUser, UserRole } from "./types.ts";
 
 export type PermissionKey =
   | "proposals.view_archived"
@@ -271,6 +271,57 @@ export const LEGACY_BRANCH_ADMIN_PERMISSIONS: PermissionKey[] = [
   "sense_box.review",
   "reports.export",
 ];
+
+export interface PlatformRoleOption {
+  value: UserRole;
+  label: string;
+  description: string;
+}
+
+/**
+ * The three legacy platform roles are canonical system roles, not a separate
+ * role set. They are assigned through Member Management; custom roles are
+ * assigned through Roles & permissions; branch administration is assigned on a
+ * branch membership.
+ */
+export const PLATFORM_ROLE_OPTIONS: PlatformRoleOption[] = [
+  {
+    value: "member",
+    label: "Member",
+    description: "Verified participation with no administrative permissions.",
+  },
+  {
+    value: "moderator",
+    label: "Moderator",
+    description:
+      "Review proposals, moderate deliberation, respond to contributions, and view aggregate reports.",
+  },
+  {
+    value: "administrator",
+    label: "National Administrator",
+    description:
+      "Full national administration, policy ratification, member verification, and identifiable ballot access.",
+  },
+];
+
+export const PLATFORM_ROLE_LABELS: Record<UserRole, string> = {
+  member: "Member",
+  moderator: "Moderator",
+  administrator: "National Administrator",
+};
+
+export function canGrantPermissionSet(
+  user: SessionUser | null | undefined,
+  permissions: readonly PermissionKey[],
+  branchId?: string,
+): boolean {
+  return Boolean(
+    user &&
+      permissions.every((permission) =>
+        hasPermission(user, permission, branchId),
+      ),
+  );
+}
 
 export interface EffectivePermissionGrant {
   permission: PermissionKey;

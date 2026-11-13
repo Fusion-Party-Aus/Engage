@@ -9,11 +9,11 @@ import {
   defaultProposalScopeKey,
   describeProposalScope,
   geographicScopeForBranch,
-  listAuthorisedProposalScopes,
+  listProposalSubmissionScopes,
   normalizeProposalScopeKey,
   storedProposalScopeKey,
 } from "./proposal-scope.ts";
-import { saveProposal } from "./store.ts";
+import { castVote, saveProposal } from "./store.ts";
 import type { SessionUser } from "./types.ts";
 
 const root = new URL("../../", import.meta.url);
@@ -183,76 +183,110 @@ describe("proposal scope: canonical geography and branch identity", () => {
     assert.equal(normalizeProposalScopeKey("VIC"), "vic");
   });
 
-  it("represents National once and only exposes branches the person administers", () => {
+  it("represents National once and exposes every recognised destination to every member", () => {
     const branches = [
-      { branchId: "branch-nat", name: "Fusion National", kind: "national" },
-      { branchId: "branch-vic", name: "Fusion Victoria", kind: "state" },
-      { branchId: "branch-nsw", name: "Fusion New South Wales", kind: "state" },
+      { branchId: "branch-nat", name: "Fusion National", kind: "national", recognised: true },
+      { branchId: "branch-vic", name: "Fusion Victoria", kind: "state", recognised: true },
+      { branchId: "branch-nsw", name: "Fusion New South Wales", kind: "state", recognised: true },
       {
         branchId: "old-vic",
         name: "Fusion Victoria — legacy",
         kind: "state",
+        recognised: true,
       },
       {
         branchId: "misclassified-national",
         name: "Fusion National",
         kind: "state",
+        recognised: true,
+      },
+      {
+        branchId: "branch-melbourne",
+        name: "Fusion Melbourne",
+        kind: "constituent",
+        parentBranchId: "branch-vic",
+        recognised: true,
+      },
+      {
+        branchId: "unrecognised-local",
+        name: "Fusion Unrecognised",
+        kind: "constituent",
+        recognised: false,
       },
     ];
 
-    const adminOptions = listAuthorisedProposalScopes(admin, branches);
+    const options = listProposalSubmissionScopes(branches);
     assert.equal(
-      adminOptions.filter((option) => option.key === "national").length,
+      options.filter((option) => option.key === "national").length,
       1,
     );
     assert.equal(
-      adminOptions.filter((option) => option.key === "vic").length,
+      options.filter((option) => option.key === "vic").length,
       1,
       "duplicate legacy Victoria branches collapse to one geographic option",
     );
     assert.equal(
-      adminOptions.some((option) => option.label === "Fusion National"),
+      options.some((option) => option.label === "Fusion National"),
       false,
     );
-
-    const vicOnly = listAuthorisedProposalScopes(branchAdmin("branch-vic"), branches);
-    assert.deepEqual(
-      vicOnly.map((option) => option.key),
-      ["national", "vic"],
+    assert.ok(
+      options.some((option) => option.key === "branch-melbourne"),
+      "constituent branches are discoverable destinations",
     );
-    assert.equal(vicOnly[1]?.branchName, "Fusion Victoria");
+    assert.ok(
+      options.every((option) => option.key !== "unrecognised-local"),
+      "unrecognised branches are not submission destinations",
+    );
 
-    const plainMember = listAuthorisedProposalScopes(member(), branches);
+    const memberOptions = listProposalSubmissionScopes(branches).map(
+      (option) => option.key,
+    );
+    const branchAdminOptions = listProposalSubmissionScopes(branches).map(
+      (option) => option.key,
+    );
     assert.deepEqual(
-      plainMember.map((option) => option.key),
-      ["national"],
+      memberOptions,
+      branchAdminOptions,
+      "submission destinations do not depend on administrative authority",
     );
   });
 
-  it("defaults to the member's own authorised branch and never to an unauthorised one", () => {
+  it("preselects the member's own branch without restricting other destinations", () => {
     const branches = [
-      { branchId: "branch-nat", name: "Fusion National", kind: "national" },
-      { branchId: "branch-vic", name: "Fusion Victoria", kind: "state" },
-      { branchId: "branch-nsw", name: "Fusion New South Wales", kind: "state" },
+      { branchId: "branch-nat", name: "Fusion National", kind: "national", recognised: true },
+      { branchId: "branch-vic", name: "Fusion Victoria", kind: "state", recognised: true },
+      { branchId: "branch-nsw", name: "Fusion New South Wales", kind: "state", recognised: true },
+      {
+        branchId: "branch-melbourne",
+        name: "Fusion Melbourne",
+        kind: "constituent",
+        parentBranchId: "branch-vic",
+        recognised: true,
+      },
     ];
-    const options = listAuthorisedProposalScopes(
-      branchAdmin("branch-vic", { verifiedBranchIds: ["branch-vic"] }),
-      branches,
+    const options = listProposalSubmissionScopes(branches);
+    assert.equal(
+      defaultProposalScopeKey(member({ verifiedBranchIds: ["branch-vic"] }), options),
+      "vic",
     );
-    assert.equal(defaultProposalScopeKey(branchAdmin("branch-vic"), options), "vic");
     assert.equal(
       defaultProposalScopeKey(
-        branchAdmin("branch-vic", {
-          verifiedBranchIds: ["branch-nsw"],
-          activeBranchIds: ["branch-nsw"],
-        }),
+        member({ verifiedBranchIds: ["branch-melbourne"] }),
         options,
       ),
-      "vic",
-      "a verified branch the person cannot administer is not offered",
+      "branch-melbourne",
+      "a verified local branch member is preselected into that local branch",
     );
     assert.equal(
-      defaultProposalScopeKey(admin, listAuthorisedProposalScopes(admin, branches)),
+      defaultProposalScopeKey(
+        member({ activeBranchIds: ["branch-nsw"] }),
+        options,
+      ),
+      "nsw",
+      "a followed geographic branch is a convenience default only",
+    );
+    assert.equal(
+      defaultProposalScopeKey(admin, options),
       "national",
     );
   });
@@ -341,7 +375,38 @@ describe("proposal scope: server validation and permissions", () => {
     );
   });
 
-  it("enforces branch administration independently of the rendered controls", async () => {
+  it("lets any verified member submit to any recognised branch without granting authority or membership", async () => {
+    const db = await seededDb();
+    const stateProposal = await saveProposal(
+      db,
+      member({ verifiedBranchIds: ["branch-vic"], activeBranchIds: ["branch-vic"] }),
+      proposalSeed({ scope: "nsw" }),
+    );
+    assert.equal(stateProposal.originatingBranchId, "branch-nsw");
+    assert.equal(stateProposal.scope, "nsw");
+    assert.equal(
+      stateProposal.publicationScope,
+      "national",
+      "submission does not grant branch governance authority",
+    );
+    assert.equal(stateProposal.governanceAuthorityBranchId, "branch-nat");
+
+    const localProposal = await saveProposal(
+      db,
+      member(),
+      proposalSeed({ scope: "branch-melbourne" }),
+    );
+    assert.equal(localProposal.originatingBranchId, "branch-melbourne");
+    assert.equal(localProposal.scope, undefined);
+    assert.equal(localProposal.publicationScope, "national");
+
+    // Submission creates no branch membership, voting eligibility, or admin role.
+    assert.equal(await db.collection("branch_memberships").countDocuments(), 0);
+    assert.equal(await db.collection("application_roles").countDocuments(), 0);
+    assert.equal(await db.collection("rbac_assignments").countDocuments(), 0);
+  });
+
+  it("keeps branch governance automatic only for administrators of that branch", async () => {
     const db = await seededDb();
     const vicAdmin = branchAdmin("branch-vic");
     const own = await saveProposal(
@@ -350,15 +415,21 @@ describe("proposal scope: server validation and permissions", () => {
       proposalSeed({ scope: "vic" }),
     );
     assert.equal(own.originatingBranchId, "branch-vic");
+    assert.equal(own.governanceAuthorityBranchId, "branch-vic");
+    assert.equal(own.publicationScope, "branch");
 
-    await assert.rejects(
-      saveProposal(db, vicAdmin, proposalSeed({ scope: "nsw" })),
-      /only create proposals in their own branch/,
+    const interstate = await saveProposal(
+      db,
+      vicAdmin,
+      proposalSeed({ scope: "nsw" }),
     );
-    await assert.rejects(
-      saveProposal(db, member(), proposalSeed({ scope: "vic" })),
-      /only create proposals in their own branch/,
+    assert.equal(interstate.originatingBranchId, "branch-nsw");
+    assert.equal(
+      interstate.governanceAuthorityBranchId,
+      "branch-nat",
+      "branch administration does not extend to another branch",
     );
+    assert.equal(interstate.publicationScope, "national");
 
     // Once a scope is set it cannot be reassigned through the API.
     await assert.rejects(
@@ -367,6 +438,59 @@ describe("proposal scope: server validation and permissions", () => {
         scope: "national",
       }),
       /cannot be changed/,
+    );
+  });
+
+  it("rejects unrecognised destinations and administrative field escalation", async () => {
+    const db = await seededDb();
+    await db.collection("branches").insertOne({
+      branchId: "unrecognised-local",
+      name: "Fusion Unrecognised",
+      kind: "constituent",
+      recognised: false,
+    });
+    await assert.rejects(
+      saveProposal(db, member(), proposalSeed({ scope: "unrecognised-local" })),
+      /recognised/,
+    );
+    await assert.rejects(
+      saveProposal(db, member(), proposalSeed({ scope: "vic", publicationScope: "branch" })),
+      /Only a national administrator/,
+    );
+    await assert.rejects(
+      saveProposal(db, member(), proposalSeed({ scope: "vic", governanceAuthorityBranchId: "branch-vic" })),
+      /Only a national administrator/,
+    );
+  });
+
+  it("keeps voting eligibility independent from submission destination", async () => {
+    const db = await seededDb();
+    const memberUser = member({
+      verifiedBranchIds: ["branch-vic"],
+      activeBranchIds: ["branch-vic", "branch-nsw"],
+      followedBranchIds: ["branch-nsw"],
+    });
+    await saveProposal(db, memberUser, proposalSeed({ scope: "nsw" }));
+    const ballot = await saveProposal(db, admin, {
+      ...proposalSeed(),
+      title: "NSW ballot eligibility test",
+      scope: "nsw",
+      stage: "decide",
+    });
+    assert.equal(ballot.jurisdictionBranchId, "branch-nsw");
+    await assert.rejects(
+      castVote(db, memberUser, {
+        proposalId: ballot.proposalId,
+        choice: "approve",
+      }),
+      /Voting is limited to verified Fusion New South Wales members|following does not grant/i,
+    );
+    assert.equal(
+      await db
+        .collection("branch_memberships")
+        .countDocuments({ memberId: memberUser.memberId, branchId: "branch-nsw" }),
+      0,
+      "submission created no membership fact in the destination branch",
     );
   });
 
@@ -406,11 +530,13 @@ describe("proposal scope selector regression", () => {
     assert.doesNotMatch(component, /NativeSelect/);
     assert.match(component, /type="hidden"/);
     assert.match(component, /aria-label="Proposal scope"/);
+    assert.match(component, /aria-label="Local branch"/);
     assert.match(component, /aria-describedby="proposal-scope-hint"/);
     assert.match(component, /data-\[state=on\]/);
     assert.match(component, /min-h-11/, "touch targets must meet mobile sizing");
     assert.match(component, /flex-wrap/, "options must wrap on narrow screens");
     assert.match(component, /basis-\[calc\(50%/, "two columns on small screens");
+    assert.match(component, /<details/, "local branches stay behind a disclosure");
   });
 
   it("keeps keyboard focus, labels and page wiring intact", async () => {
@@ -421,6 +547,12 @@ describe("proposal scope selector regression", () => {
     const page = await read("src/pages/proposals/new/index.astro");
     assert.match(page, /ProposalScopeSelector/);
     assert.match(page, /client:load/);
+    assert.match(page, /listProposalSubmissionScopes/);
+    assert.match(page, /geographicOptions=/);
+    assert.match(page, /localOptions=/);
+    assert.match(page, /canParticipate/);
+    assert.doesNotMatch(page, /isBranchAdmin/);
+    assert.doesNotMatch(page, /listAuthorisedProposalScopes/);
     assert.doesNotMatch(page, /NativeSelect/);
     assert.doesNotMatch(page, /<select/);
     assert.doesNotMatch(page, /option value="national"/);

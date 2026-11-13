@@ -284,5 +284,9 @@ export interface MemberRecord {
   disabled: boolean;
   emailVerified: boolean;
   createdAt?: Date;
+  /** Branch-scoped administrator assignments (system Branch Administrator). */
+  branchAdministratorOf?: string[];
+  /** Active custom role assignments, including their branch scope. */
+  delegatedRoles?: string[];
 }
 

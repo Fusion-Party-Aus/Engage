@@ -357,6 +357,10 @@ export function toMemberAccountDto(m: MemberRecord) {
     status: m.status,
     disabled: Boolean(m.disabled),
     emailVerified: Boolean(m.emailVerified),
+    ...(m.branchAdministratorOf?.length
+      ? { branchAdministratorOf: m.branchAdministratorOf }
+      : {}),
+    ...(m.delegatedRoles?.length ? { delegatedRoles: m.delegatedRoles } : {}),
     ...(m.createdAt ? { createdAt: m.createdAt } : {}),
   };
 }

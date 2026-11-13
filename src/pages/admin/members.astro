@@ -6,6 +6,11 @@ import { Search, ShieldAlert, UserPlus, Users } from 'lucide-react';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { listMembers } from '../../lib/store.ts';
+import {
+  PLATFORM_ROLE_LABELS,
+  PLATFORM_ROLE_OPTIONS,
+  hasPermission,
+} from '../../lib/rbac.ts';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import Card from '../../components/admin/Card.astro';
@@ -27,13 +32,16 @@ const user = await getSessionUser(Astro.request, env);
 if (!user) {
   return Astro.redirect('/member/', 302);
 }
-if (!user.isAdmin) {
+const canViewMembers = hasPermission(user, 'members.view');
+const canVerifyMembers = hasPermission(user, 'members.verify');
+const canManageRoles = hasPermission(user, 'roles.manage');
+if (!canViewMembers) {
   Astro.response.status = 403;
 }
 
 const db = await getDatabase(env);
 const query = (Astro.url.searchParams.get('q') ?? '').trim();
-const members = user.isAdmin ? (await listMembers(db, query)).sort((a, b) => Number(a.status !== 'pending') - Number(b.status !== 'pending') || a.name.localeCompare(b.name)) : [];
+const members = canViewMembers ? (await listMembers(db, query)).sort((a, b) => Number(a.status !== 'pending') - Number(b.status !== 'pending') || a.name.localeCompare(b.name)) : [];
 const pendingCount = members.filter((member) => member.status === 'pending').length;
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || '?';
 ---
@@ -44,11 +52,11 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
   section="members"
   isAdmin={user.isAdmin}
 >
-  {!user.isAdmin ? (
+  {!canViewMembers ? (
     <Alert variant="destructive">
       <ShieldAlert />
       <AlertTitle>Access required</AlertTitle>
-      <AlertDescription>Administrator access is required to manage member accounts.</AlertDescription>
+      <AlertDescription>Member directory permission is required to view member accounts.</AlertDescription>
     </Alert>
   ) : (
     <div class="admin-stack">
@@ -70,7 +78,7 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
         <CardHeader class="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
           <div class="grid gap-1">
             <CardTitle class="text-base">Member accounts</CardTitle>
-            <CardDescription>{members.length} account{members.length === 1 ? '' : 's'} in this view{pendingCount ? ` · ${pendingCount} awaiting verification` : ''}.</CardDescription>
+            <CardDescription>{members.length} account{members.length === 1 ? '' : 's'} in this view{pendingCount ? ` · ${pendingCount} awaiting verification` : ''}. Platform roles are assigned here; branch and custom roles appear on each member.</CardDescription>
           </div>
           <Badge variant="muted"><Users />{members.length}</Badge>
         </CardHeader>
@@ -91,11 +99,22 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
                             <h3 class="m-0 text-sm font-semibold text-foreground">{m.name || 'Name needed'}</h3>
                             {isSelf && <Badge variant="outline">You</Badge>}
                             <Badge variant={m.status === 'verified' ? 'success' : m.status === 'suspended' ? 'destructive' : 'warning'}>{m.status}</Badge>
-                            <Badge variant={m.role === 'administrator' ? 'secondary' : m.role === 'moderator' ? 'info' : 'muted'}>{m.role}</Badge>
+                            <Badge variant={m.role === 'administrator' ? 'secondary' : m.role === 'moderator' ? 'info' : 'muted'}>{PLATFORM_ROLE_LABELS[m.role]}</Badge>
                             {m.disabled && <Badge variant="destructive">Disabled</Badge>}
                           </div>
                           <p class="m-0 truncate text-sm text-muted-foreground">{m.email}</p>
                           <p class="m-0 text-xs text-muted-foreground">{m.emailVerified ? 'Email confirmed' : 'Email not yet used'}</p>
+                          {(m.branchAdministratorOf?.length || m.delegatedRoles?.length) && (
+                            <p class="m-0 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                              <span>Also:</span>
+                              {m.branchAdministratorOf?.map((branch) => (
+                                <Badge variant="outline">Branch Administrator · {branch}</Badge>
+                              ))}
+                              {m.delegatedRoles?.map((role) => (
+                                <Badge variant="outline">{role}</Badge>
+                              ))}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -104,23 +123,30 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
                       <summary>{m.status === 'pending' ? 'Review membership' : 'Manage access'}{m.disabled ? ' · disabled' : ''}</summary>
                       <div class="admin-form-grid pt-3">
                         <Field label="Membership status" htmlFor={`status-${m.memberId}`}>
-                          <NativeSelect defaultValue={m.status} id={`status-${m.memberId}`} name="status" aria-label={`Membership status for ${m.name || m.email}`} disabled={isSelf}>
+                          <NativeSelect defaultValue={m.status} id={`status-${m.memberId}`} name="status" aria-label={`Membership status for ${m.name || m.email}`} disabled={isSelf || !canVerifyMembers}>
                             <option value="pending">Pending verification</option>
                             <option value="verified">Verified member</option>
                             <option value="suspended">Suspended</option>
                           </NativeSelect>
                         </Field>
 
-                        <Field label="Platform role" htmlFor={`role-${m.memberId}`}>
-                          <NativeSelect defaultValue={m.role} id={`role-${m.memberId}`} name="role" aria-label={`Role for ${m.name || m.email}`} disabled={isSelf}>
-                            <option value="member">Member</option>
-                            <option value="moderator">Moderator</option>
-                            <option value="administrator">Administrator</option>
-                          </NativeSelect>
-                        </Field>
+                        {canManageRoles ? (
+                          <Field label="Platform role" htmlFor={`role-${m.memberId}`}>
+                            <NativeSelect defaultValue={m.role} id={`role-${m.memberId}`} name="role" aria-label={`Role for ${m.name || m.email}`} disabled={isSelf}>
+                              {PLATFORM_ROLE_OPTIONS.map((option) => (
+                                <option value={option.value}>{option.label}</option>
+                              ))}
+                            </NativeSelect>
+                          </Field>
+                        ) : (
+                          <Field label="Platform role">
+                            <p class="m-0 text-sm font-medium text-foreground">{PLATFORM_ROLE_LABELS[m.role]}</p>
+                            <p class="m-0 text-xs text-muted-foreground">Role changes require role-management permission.</p>
+                          </Field>
+                        )}
 
                         <Field label="Access state" htmlFor={`disabled-${m.memberId}`}>
-                          <NativeSelect defaultValue={String(m.disabled)} id={`disabled-${m.memberId}`} name="disabled" aria-label={`Access state for ${m.name || m.email}`} disabled={isSelf}>
+                          <NativeSelect defaultValue={String(m.disabled)} id={`disabled-${m.memberId}`} name="disabled" aria-label={`Access state for ${m.name || m.email}`} disabled={isSelf || !canVerifyMembers}>
                             <option value="false">Active</option>
                             <option value="true">Disabled</option>
                           </NativeSelect>
@@ -128,7 +154,7 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
                       </div>
 
                       <div class="admin-actions mt-3">
-                        {!isSelf && <Button variant="outline" size="sm" type="submit">Save changes</Button>}
+                        {!isSelf && (canVerifyMembers || canManageRoles) && <Button variant="outline" size="sm" type="submit">Save changes</Button>}
                         <span class="member-save-msg admin-status" role="status" aria-live="polite"></span>
                       </div>
                     </details>
@@ -140,44 +166,48 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
         </CardContent>
       </Card>
 
-      <details class="admin-disclosure">
-        <summary id="add-member-heading">
-          <UserPlus className="size-4" aria-hidden="true" />
-          Add a member account
-        </summary>
-        <div class="admin-disclosure__body">
-          <form id="create-member-form" class="grid gap-4">
-            <div class="admin-form-grid">
-              <Field label="Full name" htmlFor="create-member-name">
-                <Input id="create-member-name" name="name" required minLength={2} maxLength={100} autoComplete="off" />
-              </Field>
-              <Field label="Email address" htmlFor="create-member-email">
-                <Input id="create-member-email" name="email" type="email" required maxLength={254} autoComplete="off" />
-              </Field>
-            </div>
-            <div class="admin-form-grid">
-              <Field label="Party membership status" htmlFor="create-member-status-select">
-                <NativeSelect defaultValue="verified" id="create-member-status-select" name="status">
-                  <option value="verified">Verified member</option>
-                  <option value="pending">Pending verification</option>
-                  <option value="suspended">Suspended</option>
-                </NativeSelect>
-              </Field>
-              <Field label="Platform role" htmlFor="create-member-role">
-                <NativeSelect defaultValue="member" id="create-member-role" name="role">
-                  <option value="member">Member</option>
-                  <option value="moderator">Moderator</option>
-                  <option value="administrator">Administrator</option>
-                </NativeSelect>
-              </Field>
-            </div>
-            <div class="admin-actions">
-              <Button type="submit">Add member account</Button>
-              <p id="create-member-status" class="form-status admin-status" role="status" aria-live="polite"></p>
-            </div>
-          </form>
-        </div>
-      </details>
+      {canVerifyMembers && (
+        <details class="admin-disclosure">
+          <summary id="add-member-heading">
+            <UserPlus className="size-4" aria-hidden="true" />
+            Add a member account
+          </summary>
+          <div class="admin-disclosure__body">
+            <form id="create-member-form" class="grid gap-4">
+              <div class="admin-form-grid">
+                <Field label="Full name" htmlFor="create-member-name">
+                  <Input id="create-member-name" name="name" required minLength={2} maxLength={100} autoComplete="off" />
+                </Field>
+                <Field label="Email address" htmlFor="create-member-email">
+                  <Input id="create-member-email" name="email" type="email" required maxLength={254} autoComplete="off" />
+                </Field>
+              </div>
+              <div class="admin-form-grid">
+                <Field label="Party membership status" htmlFor="create-member-status-select">
+                  <NativeSelect defaultValue="verified" id="create-member-status-select" name="status">
+                    <option value="verified">Verified member</option>
+                    <option value="pending">Pending verification</option>
+                    <option value="suspended">Suspended</option>
+                  </NativeSelect>
+                </Field>
+                {canManageRoles && (
+                  <Field label="Platform role" htmlFor="create-member-role">
+                    <NativeSelect defaultValue="member" id="create-member-role" name="role">
+                      {PLATFORM_ROLE_OPTIONS.map((option) => (
+                        <option value={option.value}>{option.label}</option>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                )}
+              </div>
+              <div class="admin-actions">
+                <Button type="submit">Add member account</Button>
+                <p id="create-member-status" class="form-status admin-status" role="status" aria-live="polite"></p>
+              </div>
+            </form>
+          </div>
+        </details>
+      )}
     </div>
   )}
 </AdminLayout>
@@ -228,22 +258,21 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 
       try {
         const fd = new FormData(form);
+        const payload: Record<string, unknown> = { memberId };
+        if (fd.has('status')) payload.status = fd.get('status');
+        if (fd.has('role')) payload.role = fd.get('role');
+        if (fd.has('disabled')) payload.disabled = fd.get('disabled') === 'true';
         const res = await fetch('/api/admin/members', {
           method: 'PATCH',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            memberId,
-            status: fd.get('status'),
-            role: fd.get('role'),
-            disabled: fd.get('disabled') === 'true',
-          }),
+          body: JSON.stringify(payload),
         });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(payload.error || 'Failed');
-        msg.textContent = payload.notification === 'failed'
+        const responseBody = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(responseBody.error || 'Failed');
+        msg.textContent = responseBody.notification === 'failed'
           ? 'Saved. Verification email could not be sent; please notify the member.'
-          : payload.notification === 'sent' ? 'Saved. Verification email sent.' : 'Saved';
+          : responseBody.notification === 'sent' ? 'Saved. Verification email sent.' : 'Saved';
       } catch (err) {
         msg.textContent = err instanceof Error ? err.message : 'Error';
       } finally {

@@ -38,6 +38,8 @@ export interface ProposalScopeOption {
   /** Organisational branch identity, when one is recorded. */
   branchId: string | null;
   branchName?: string;
+  /** Parent branch name for constituent/local destinations. */
+  parentName?: string;
 }
 
 export interface ProposalScopeDescriptor {
@@ -258,24 +260,16 @@ export async function describeProposalScope(
   };
 }
 
-function authorisedBranches(
-  user: SessionUser,
-  branches: BranchLike[],
-): BranchLike[] {
-  const branchAdminIds = user.branchAdminIds ?? [];
-  return branches.filter(
-    (branch) =>
-      user.isAdmin || branchAdminIds.includes(String(branch.branchId ?? "")),
-  );
-}
-
 /**
- * Geographic scopes a person may submit into. National is always available to
- * an eligible member; branch scopes are strictly limited to delegated branch
- * administration. National is represented exactly once.
+ * All proposal submission destinations, independent of administrative
+ * authority or the member's own branch affiliations. Any verified member may
+ * submit to any recognised destination. National is represented exactly once.
+ *
+ * Geographic destinations (National and the states/territories) are kept
+ * separate from constituent/local branches so interfaces can present the
+ * bounded geographic choice first and reveal local branches only when needed.
  */
-export function listAuthorisedProposalScopes(
-  user: SessionUser,
+export function listProposalSubmissionScopes(
   branches: BranchLike[],
 ): ProposalScopeOption[] {
   const nationalBranch = branches.find(
@@ -296,7 +290,14 @@ export function listAuthorisedProposalScopes(
   ];
   const seen = new Set<string>([NATIONAL_PROPOSAL_SCOPE.key]);
 
-  const rows = authorisedBranches(user, branches).slice().sort((left, right) => {
+  const branchNameById = new Map(
+    branches.map((branch) => [
+      String(branch.branchId ?? ""),
+      String(branch.name ?? ""),
+    ]),
+  );
+
+  const rows = branches.slice().sort((left, right) => {
     const leftKind = String(left.kind ?? "");
     const rightKind = String(right.kind ?? "");
     return (
@@ -306,6 +307,7 @@ export function listAuthorisedProposalScopes(
   });
 
   for (const branch of rows) {
+    if (branch.recognised !== true) continue;
     const definition = geographicScopeForBranch(branch);
     if (definition?.key === NATIONAL_PROPOSAL_SCOPE.key) continue;
     // A national record may be misclassified as another kind in legacy data.
@@ -320,6 +322,10 @@ export function listAuthorisedProposalScopes(
     const key = definition?.key ?? branchId;
     if (seen.has(key)) continue;
     seen.add(key);
+    const parentId =
+      typeof branch.parentBranchId === "string"
+        ? branch.parentBranchId
+        : "";
     options.push({
       key,
       label: definition?.label ?? String(branch.name ?? branchId),
@@ -332,6 +338,9 @@ export function listAuthorisedProposalScopes(
           : "constituent"),
       branchId,
       ...(branch.name ? { branchName: String(branch.name) } : {}),
+      ...(String(branch.kind) === "constituent" && parentId
+        ? { parentName: branchNameById.get(parentId) ?? undefined }
+        : {}),
     });
   }
 
@@ -339,9 +348,9 @@ export function listAuthorisedProposalScopes(
 }
 
 /**
- * Prefer the member's own verified/active branch, but only when that branch is
- * one they are authorised to submit into. Otherwise National is the safe
- * default. Interstate scopes remain explicitly selectable.
+ * Prefer the member's own verified or active branch as a convenience default.
+ * This is a preselection only: every destination remains available to every
+ * verified member, and the default never restricts the list.
  */
 export function defaultProposalScopeKey(
   user: SessionUser,

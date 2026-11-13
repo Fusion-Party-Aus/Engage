@@ -65,18 +65,32 @@ export const POST: APIRoute = async ({ request, locals }) => {
 export const PATCH: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  const denied = requireApiPermission(user, "members.verify", {
-    message: "Administrator access required.",
-  });
-  if (denied || !user) {
-    return denied ?? privateJson({ error: "Sign in required." }, { status: 401 });
+  if (!user) {
+    return privateJson({ error: "Sign in required." }, { status: 401 });
   }
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    if (body.role !== undefined && !hasPermission(user, "roles.manage")) {
+    const changingMembership =
+      body.status !== undefined ||
+      body.disabled !== undefined ||
+      body.name !== undefined;
+    const changingRole = body.role !== undefined;
+    if (!changingMembership && !changingRole) {
+      return privateJson(
+        { error: "Choose a membership or role change." },
+        { status: 400 },
+      );
+    }
+    if (changingRole && !hasPermission(user, "roles.manage")) {
       return privateJson(
         { error: "Role management permission required to change member roles." },
+        { status: 403 },
+      );
+    }
+    if (changingMembership && !hasPermission(user, "members.verify")) {
+      return privateJson(
+        { error: "Member verification permission required." },
         { status: 403 },
       );
     }

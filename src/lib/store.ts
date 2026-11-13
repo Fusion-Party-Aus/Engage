@@ -10,7 +10,13 @@ import {
 } from "./vote-storage.ts";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { validPersonName } from "./auth.ts";
-import { hasPermission } from "./rbac.ts";
+import { RBAC_ASSIGNMENTS, RBAC_ROLES } from "./roles-store.ts";
+import {
+  ALL_NATIONAL_PERMISSIONS,
+  LEGACY_MODERATOR_PERMISSIONS,
+  canGrantPermissionSet,
+  hasPermission,
+} from "./rbac.ts";
 import type {
   CommentRecord,
   CommentStance,
@@ -712,7 +718,6 @@ export async function saveProposal(
   // canonical key is translated to an organisational branch identifier here,
   // so a display label can never select a branch.
   const submittedScope = await parseProposalScopeInput(db, body);
-  const explicitNationalScope = submittedScope?.explicitNational === true;
   const canManageExisting = Boolean(
     existing &&
     (user.isStaff ||
@@ -730,41 +735,12 @@ export async function saveProposal(
       throw new Error(
         "Only a national administrator may set governance authority, jurisdiction, or publication scope.",
       );
-    if (body.originatingBranchId !== undefined && !explicitNationalScope) {
-      const requestedOrigin = String(body.originatingBranchId ?? "").trim();
-      if (
-        !requestedOrigin ||
-        !branchAdminIds.includes(requestedOrigin) ||
-        (existing && requestedOrigin !== existing.originatingBranchId)
-      )
-        throw new Error(
-          "Only an administrator may assign a proposal origin in an explicitly delegated branch; proposal origin cannot be changed later.",
-        );
-    }
+    // Choosing a destination is participation, not administration. Any
+    // verified member may submit into any recognised branch; this grants no
+    // voting eligibility and no administrative authority in that branch.
     if (
-      !existing &&
-      body.originatingBranchId !== undefined &&
-      !explicitNationalScope
-    ) {
-      const requestedOrigin = String(body.originatingBranchId).trim();
-      if (!(await db.collection("branches").findOne({ branchId: requestedOrigin, recognised: true })))
-        throw new Error("Proposal origin must be a recognised branch.");
-    }
-    // A branch scope is never inferred from the UI. Enforce the delegation
-    // boundary independently of which controls were rendered.
-    if (
-      submittedScope?.definition &&
-      submittedScope.definition.kind !== "national" &&
-      submittedScope.branchId &&
-      !branchAdminIds.includes(submittedScope.branchId)
-    )
-      throw new Error(
-        "Branch administrators can only create proposals in their own branch. Choose National or one of your branches.",
-      );
-    if (
-      existing &&
+      existing?.originatingBranchId &&
       submittedScope?.branchId &&
-      existing.originatingBranchId &&
       submittedScope.branchId !== existing.originatingBranchId
     )
       throw new Error("Proposal scope cannot be changed after it is set.");
@@ -1144,11 +1120,15 @@ export async function saveProposal(
       geographicScope ||= geographicScopeForBranch(originBranch)?.key;
     } else if (nationalBranchForDefault) {
       const nationalId = String(nationalBranchForDefault.branchId);
+      const hadOrigin = Boolean(originatingBranchId);
       originatingBranchId ||= nationalId;
       governanceAuthorityBranchId ||= nationalId;
       jurisdictionBranchId ||= nationalId;
       publicationScope ||= "national";
-      geographicScope ||= geographicScopeForBranch(nationalBranchForDefault)?.key;
+      // A branch destination keeps its own geographic scope. Only a proposal
+      // with no branch destination defaults to National.
+      if (!hadOrigin)
+        geographicScope ||= geographicScopeForBranch(nationalBranchForDefault)?.key;
     }
   }
   if (!scopeWasSubmitted && originatingBranchId) {
@@ -1180,24 +1160,16 @@ export async function saveProposal(
       throw new Error(
         "National publication requires an explicit governance authority branch.",
       );
-  } else if (
-    originatingBranchId &&
-    branchAdminIds.includes(originatingBranchId)
-  ) {
+  } else if (originatingBranchId) {
+    // Any verified member may submit into any recognised branch. Recognition is
+    // the only destination rule; it does not grant branch membership, voting
+    // eligibility, or administrative authority.
     if (
       !(await db
         .collection("branches")
         .findOne({ branchId: originatingBranchId, recognised: true }))
     )
-      throw new Error("Proposal origin must be a recognised assigned branch.");
-  } else if (
-    !user.isAdmin &&
-    body.originatingBranchId !== undefined &&
-    !explicitNationalScope
-  ) {
-    throw new Error(
-      "An administrator must select a recognised proposal origin.",
-    );
+      throw new Error("Choose a recognised proposal scope.");
   }
 
   let provenance: PolicyProvenance | undefined = existing?.provenance;
@@ -2615,14 +2587,51 @@ export async function listMembers(
   db: Db,
   search = "",
 ): Promise<MemberRecord[]> {
-  const [users, roles, memberships] = await Promise.all([
+  const [
+    users,
+    roles,
+    memberships,
+    branchMemberships,
+    assignments,
+    roleDefinitions,
+    branches,
+  ] = await Promise.all([
     db.collection("user").find({}).sort({ createdAt: -1 }).toArray(),
     db
       .collection<{ memberId: string; role: UserRole }>("application_roles")
       .find({})
       .toArray(),
     db
-      .collection<{ memberId: string; status: MembershipStatus }>("memberships")
+      .collection<{
+        memberId: string;
+        status: MembershipStatus;
+      }>("memberships")
+      .find({})
+      .toArray(),
+    db
+      .collection<{
+        memberId: string;
+        branchId: string;
+        branchRole?: string;
+        status: string;
+      }>("branch_memberships")
+      .find({ status: "active", branchRole: "administrator" })
+      .toArray(),
+    db
+      .collection<{
+        memberId: string;
+        roleId: string;
+        branchId?: string | null;
+        status: string;
+      }>(RBAC_ASSIGNMENTS)
+      .find({ status: "active" })
+      .toArray(),
+    db
+      .collection<{ roleId: string; name: string }>(RBAC_ROLES)
+      .find({})
+      .toArray(),
+    db
+      .collection<{ branchId: string; name: string }>("branches")
       .find({})
       .toArray(),
   ]);
@@ -2636,6 +2645,32 @@ export async function listMembers(
   const statusMap = new Map<string, MembershipStatus>(
     memberships.map((m) => [m.memberId, m.status]),
   );
+  const branchNameById = new Map(
+    branches.map((branch) => [branch.branchId, branch.name]),
+  );
+  const roleNameById = new Map(
+    roleDefinitions.map((role) => [role.roleId, role.name]),
+  );
+  const branchAdministratorOf = new Map<string, string[]>();
+  for (const membership of branchMemberships) {
+    const list = branchAdministratorOf.get(membership.memberId) ?? [];
+    list.push(
+      branchNameById.get(membership.branchId) ?? membership.branchId,
+    );
+    branchAdministratorOf.set(membership.memberId, list);
+  }
+  const delegatedRoles = new Map<string, string[]>();
+  for (const assignment of assignments) {
+    const name =
+      roleNameById.get(assignment.roleId) ?? assignment.roleId;
+    const branch = assignment.branchId
+      ? branchNameById.get(assignment.branchId) ?? assignment.branchId
+      : null;
+    const label = branch ? `${name} — ${branch}` : name;
+    const list = delegatedRoles.get(assignment.memberId) ?? [];
+    list.push(label);
+    delegatedRoles.set(assignment.memberId, list);
+  }
   const q = search.trim().toLowerCase();
 
   return users
@@ -2650,12 +2685,20 @@ export async function listMembers(
         disabled: Boolean(u.disabled),
         emailVerified: Boolean(u.emailVerified),
         createdAt: u.createdAt instanceof Date ? u.createdAt : undefined,
+        ...(branchAdministratorOf.has(memberId)
+          ? { branchAdministratorOf: branchAdministratorOf.get(memberId) }
+          : {}),
+        ...(delegatedRoles.has(memberId)
+          ? { delegatedRoles: delegatedRoles.get(memberId) }
+          : {}),
       };
     })
     .filter(
       (m) =>
         !q ||
-        `${m.name} ${m.email} ${m.role} ${m.status}`.toLowerCase().includes(q),
+        `${m.name} ${m.email} ${m.role} ${m.status} ${(m.delegatedRoles ?? []).join(" ")} ${(m.branchAdministratorOf ?? []).join(" ")}`
+          .toLowerCase()
+          .includes(q),
     );
 }
 
@@ -2665,8 +2708,22 @@ export async function saveMember(
   body: Record<string, unknown>,
   create = false,
 ): Promise<{ memberId: string }> {
-  if (!actor.isAdmin) {
-    throw new Error("Administrator role required.");
+  const changingMembership =
+    create ||
+    body.name !== undefined ||
+    body.status !== undefined ||
+    body.disabled !== undefined;
+  const changingRole = body.role !== undefined;
+  if (changingMembership && !hasPermission(actor, "members.verify")) {
+    throw new Error("Member verification permission required.");
+  }
+  if (changingRole && !hasPermission(actor, "roles.manage")) {
+    throw new Error(
+      "Role management permission is required to change a platform role.",
+    );
+  }
+  if (!changingMembership && !changingRole) {
+    throw new Error("Choose a membership or role change.");
   }
 
   const name = body.name === undefined ? undefined : validPersonName(body.name);
@@ -2679,7 +2736,24 @@ export async function saveMember(
     role !== undefined &&
     !["member", "moderator", "administrator"].includes(role)
   ) {
-    throw new Error("Choose Member, Moderator or Administrator.");
+    throw new Error("Choose Member, Moderator or National Administrator.");
+  }
+  if (role !== undefined && !hasPermission(actor, "roles.manage")) {
+    throw new Error(
+      "Role management permission is required to change a platform role.",
+    );
+  }
+  // Anti-escalation: a delegated role manager cannot promote anyone into a
+  // system role whose permissions they do not personally hold.
+  if (role === "administrator" && !canGrantPermissionSet(actor, ALL_NATIONAL_PERMISSIONS)) {
+    throw new Error(
+      "You cannot grant National Administrator because you do not hold all national permissions.",
+    );
+  }
+  if (role === "moderator" && !canGrantPermissionSet(actor, LEGACY_MODERATOR_PERMISSIONS)) {
+    throw new Error(
+      "You cannot grant Moderator because you do not hold all moderator permissions.",
+    );
   }
 
   const status = body.status !== undefined ? String(body.status) : undefined;
@@ -2726,6 +2800,21 @@ export async function saveMember(
     memberId = body.memberId;
     if (!(await users.findOne({ _id: new ObjectId(memberId) }))) {
       throw new Error("Account not found.");
+    }
+    const targetRoles = await db
+      .collection<{ role: UserRole }>("application_roles")
+      .find({ memberId })
+      .toArray();
+    const targetIsAdministrator = targetRoles.some(
+      (row) => row.role === "administrator",
+    );
+    if (
+      targetIsAdministrator &&
+      !canGrantPermissionSet(actor, ALL_NATIONAL_PERMISSIONS)
+    ) {
+      throw new Error(
+        "Only a national administrator can change a national administrator account.",
+      );
     }
     if (
       memberId === actor.memberId &&

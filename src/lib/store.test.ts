@@ -860,7 +860,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
         proposalId: proposal.proposalId,
         originatingBranchId: "branch-1",
       }),
-      /Only an administrator may assign/,
+      /Moderator or Administrator access is required|Only an administrator may assign/,
     );
   });
 

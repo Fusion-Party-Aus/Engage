@@ -13,18 +13,22 @@ import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import {
   defaultProposalScopeKey,
-  listAuthorisedProposalScopes,
+  listProposalSubmissionScopes,
 } from '../../../lib/proposal-scope.ts';
 
 export const prerender = false;
 const env = runtimeEnv(Astro.locals);
 const [user, db] = await Promise.all([getSessionUser(Astro.request, env), getDatabase(env)]);
-const branches = user?.isAdmin || user?.isBranchAdmin
+// Submission destinations are a participation list, not an administrative
+// scope. Every verified member can submit to every recognised branch.
+const branches = user?.canParticipate
   ? await db.collection('branches').find({ recognised: true }).sort({ kind: 1, name: 1 }).toArray()
   : [];
-const scopeOptions = user ? listAuthorisedProposalScopes(user, branches) : [];
+const scopeOptions = listProposalSubmissionScopes(branches);
+const geographicScopeOptions = scopeOptions.filter((option) => option.kind !== 'constituent');
+const localScopeOptions = scopeOptions.filter((option) => option.kind === 'constituent');
 const defaultScopeKey = user ? defaultProposalScopeKey(user, scopeOptions) : 'national';
-const showScopeSelector = Boolean(user && (user.isAdmin || user.isBranchAdmin) && scopeOptions.length > 1);
+const showScopeSelector = Boolean(user?.canParticipate && scopeOptions.length > 1);
 
 const quickTopics = [
   'Climate & Energy',
@@ -86,15 +90,21 @@ const quickTopics = [
         {showScopeSelector && (
           <ProposalScopeSelector
             client:load
-            options={scopeOptions.map(({ key, label, branchName }) => ({
+            geographicOptions={geographicScopeOptions.map(({ key, label, branchName }) => ({
               key,
               label,
               ...(key !== 'national' && branchName && branchName !== label
                 ? { branchName }
                 : {}),
             }))}
+            localOptions={localScopeOptions.map(({ key, label, branchName, parentName }) => ({
+              key,
+              label,
+              ...(branchName ? { branchName } : {}),
+              ...(parentName ? { parentName } : {}),
+            }))}
             defaultValue={defaultScopeKey}
-            hint="National proposals are open to every member. A state, territory or local proposal stays within that branch."
+            hint="National proposals are open to every member. You can also submit to any state, territory or local branch. Submitting does not grant voting rights in that branch."
           />
         )}
 

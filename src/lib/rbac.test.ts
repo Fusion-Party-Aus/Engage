@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { ObjectId } from "mongodb";
-import { getDatabase } from "./db.ts";
+import { getDatabase, createMemoryDb } from "./db.ts";
 import {
   canAdministerBranch,
   canManageBranchBallot,
@@ -17,7 +17,7 @@ import {
   revokeRoleAssignment,
   saveRoleDefinition,
 } from "./roles-store.ts";
-import { castVote, saveProposal } from "./store.ts";
+import { castVote, listMembers, saveMember, saveProposal } from "./store.ts";
 import { GET as getAmendments } from "../pages/api/amendments.ts";
 import { POST as postRoles, DELETE as deleteRoles, GET as getRoles } from "../pages/api/admin/roles/index.ts";
 import type { SessionUser } from "./types.ts";
@@ -382,5 +382,109 @@ describe("RBAC audit & configurable roles", () => {
     } finally {
       process.env.APP_MODE = prevMode;
     }
+  });
+
+  it("uses one permission model across member management and delegated role display", async () => {
+    const db = createMemoryDb();
+    const targetId = new ObjectId().toString();
+    await db.collection("user").insertOne({
+      _id: new ObjectId(targetId),
+      name: "Delegated Officer",
+      email: `officer-${targetId}@example.org`,
+      createdAt: new Date(),
+    });
+    await db.collection("branches").insertOne({
+      branchId: "vic",
+      name: "Victoria",
+      kind: "state",
+      recognised: true,
+    });
+
+    const delegated: SessionUser = {
+      ...verifiedMember,
+      permissions: {
+        national: ["members.view", "members.verify", "roles.manage"],
+        branches: {},
+        grants: [],
+      },
+    };
+
+    await saveMember(db, delegated, { memberId: targetId, status: "verified" });
+    assert.equal(
+      (await db.collection("memberships").findOne({ memberId: targetId }))
+        ?.status,
+      "verified",
+    );
+
+    // The actor can demote to Member but cannot grant a system role whose
+    // permissions they do not hold.
+    await saveMember(db, delegated, { memberId: targetId, role: "member" });
+    await assert.rejects(
+      saveMember(db, delegated, { memberId: targetId, role: "administrator" }),
+      /cannot grant National Administrator/i,
+    );
+    await assert.rejects(
+      saveMember(db, delegated, { memberId: targetId, role: "moderator" }),
+      /cannot grant Moderator/i,
+    );
+
+    const noVerify: SessionUser = {
+      ...delegated,
+      permissions: {
+        national: ["roles.manage"],
+        branches: {},
+        grants: [],
+      },
+    };
+    await assert.rejects(
+      saveMember(db, noVerify, { memberId: targetId, status: "suspended" }),
+      /verification permission/i,
+    );
+
+    // A delegated verifier cannot suspend or demote a national administrator.
+    await db.collection("application_roles").insertOne({
+      memberId: targetId,
+      role: "administrator",
+      grantedAt: new Date(),
+      grantedBy: nationalAdmin.memberId,
+    });
+    await assert.rejects(
+      saveMember(db, delegated, { memberId: targetId, status: "suspended" }),
+      /Only a national administrator/i,
+    );
+
+    // Branch administration and custom roles are visible in the same member
+    // record, so Member Management does not present a different role set.
+    await db.collection("branch_memberships").insertOne({
+      branchId: "vic",
+      memberId: targetId,
+      status: "active",
+      branchRole: "administrator",
+    });
+    await db.collection("rbac_roles").insertOne({
+      roleId: "role_ballot_officer",
+      name: "Ballot Officer",
+      description: "Branch ballot administration.",
+      scope: "branch",
+      permissions: ["ballots.bind"],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.collection("rbac_assignments").insertOne({
+      assignmentId: "assignment_ballot_officer",
+      memberId: targetId,
+      roleId: "role_ballot_officer",
+      scopeType: "branch",
+      branchId: "vic",
+      status: "active",
+      assignedBy: nationalAdmin.memberId,
+      assignedAt: new Date(),
+    });
+
+    const row = (await listMembers(db)).find(
+      (member) => member.memberId === targetId,
+    );
+    assert.deepEqual(row?.branchAdministratorOf, ["Victoria"]);
+    assert.deepEqual(row?.delegatedRoles, ["Ballot Officer — Victoria"]);
   });
 });
