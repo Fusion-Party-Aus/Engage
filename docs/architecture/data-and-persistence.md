@@ -1,6 +1,6 @@
 # Data and persistence
 
-**Status:** Current · **Verified:** 13 November 2026
+**Status:** Current · **Verified:** 14 November 2026
 
 ## Connection model
 
@@ -94,12 +94,21 @@
   kind: "policy" | "resolution",
   originatingBranchId?, governanceAuthorityBranchId?, jurisdictionBranchId?,
   scope?, publicationScope?: "private" | "branch" | "national",
-  ballotRevisionId?, ballotClosesAt?,
+  ballotRevisionId?, ballotClosesAt?, ballotClosedAt?,
+  secondedBy?, secondedAt?, deliberationEndsAt?,
   attachmentUrl?, attachmentDescription?, provenance?,
   authorId?, authorName?, createdAt, updatedAt,
   implementationNote?, supersededByProposalId?, supersededByNote?
 }
 ```
+
+Lifecycle scheduling fields (D3–D7):
+
+- `secondedBy` / `secondedAt` — the independent seconder and when they seconded. `secondedBy` is a member ID and stays server-side; member-facing DTOs expose only `seconded`, `secondedAt` and `deliberationEndsAt`.
+- `deliberationEndsAt` — `secondedAt + 30 days`. Its presence is what makes a Deliberate matter eligible for automatic advancement.
+- `ballotClosedAt` — set once by the lifecycle scheduler when the ballot deadline has passed and the closure has been recorded. Its presence prevents a second closure record. It does not change `stage` and does not imply a result. It is cleared when the matter leaves Decide or a new ballot deadline is configured, because that starts a new ballot instance; the historical `ballot.closed` event is retained.
+
+The scheduler also sets `ballotRevisionBoundAt` and `ballotRevisionBoundBy = "system:lifecycle-scheduler"` when it binds the ballot revision. Those are the same fields a human binding writes.
 
 The `proposals` collection also accepts legacy aliases (`policyId`, `category`, `statement`, `status`, `division`). Normalisation happens at read time. New code should use the canonical fields.
 
@@ -184,6 +193,7 @@ External-source records cannot be edited or revoked locally.
 - one revision per `(proposalId, revisionId)`;
 - one current proposal vote per `(ballotId, memberId)` via a **partial** unique index where `memberId` is a string;
 - one encrypted vote per `(ballotId, voterBlindIndex)` via a partial unique index;
+- one governance event per `eventId`; scheduled transitions use deterministic IDs (`sched:advance:<proposalId>:<deadline>`, `sched:close:<proposalId>:<deadline>`) so a replay cannot duplicate audit history;
 - one branch subscription per `(memberId, branchId)`;
 - one CRM identity link per member/application;
 - one notification delivery per dedupe ID;
@@ -199,6 +209,31 @@ Index creation is idempotent but is not a migration system. Changing an index re
 Transactions are used for proposal writes and the associated revision (`saveProposal`). Most other writes are single-document updates or conditional updates. There is no global transaction wrapper.
 
 `recordFormalDecision` is guarded by a unique/conditional insert so a ballot cannot be certified twice. `bindBallotToRevision` uses conditional updates and refuses conflicting state.
+
+The lifecycle scheduler (`src/lib/governance-scheduler.ts`) writes each scheduled state change and its governance event in one transaction. It uses conditional updates rather than read-then-write: advancement matches `{stage: "deliberate", deliberationEndsAt: {$lte: now}}` and closure matches `{stage: "decide", ballotClosesAt: {$lte: now}, ballotClosedAt: {$exists: false}}`. Concurrent runs therefore produce one transition and one event, and a replayed run reports the work as already done. `recordGovernanceEventOnce` reads first and also catches the duplicate-key error, so the in-memory database behaves like the unique index it does not enforce.
+
+## Scheduled lifecycle writes
+
+`scripts/run-governance-scheduler.ts` (`npm run governance:scheduler`) runs the two scheduled operations. It is dry-run by default; `--apply` performs the writes. It requires `MONGODB_URI`, connects directly and never falls back to the in-memory database. There is no daemon.
+
+| Operation | Reads | Writes |
+|---|---|---|
+| Advance due deliberation | `proposals` (`stage: deliberate`, `deliberationEndsAt <= now`), `amendments`, `proposal_revisions`, `proposal_votes` | `proposals` (`stage`, `ballotRevisionId`, `ballotRevisionBoundAt/By`, `ballotClosesAt`, `updatedAt`), one `proposal.stage_transition` event |
+| Close due ballot | `proposals` (`stage: decide`, `ballotClosesAt <= now`, no `ballotClosedAt`) | `proposals.ballotClosedAt`, `ballots.status` when a projection row exists, one `ballot.closed` event |
+
+Both operations report rather than guess when a record cannot be scheduled safely: unresolved amendments, votes bound to a different wording revision, a missing seconding anchor, or a 60-day ceiling already in the past. The JSON report has `advanced`, `skipped`, `closed`, `blockers` and `errors` arrays and exits non-zero on errors. The scheduler is idempotent: a missed run is caught up by the next one because deadlines are absolute, and a repeated run does nothing.
+
+Closing a ballot does not write a result, certify a ballot or change the stage. Those remain officer acts.
+
+## Legacy deadline reporting
+
+`npm run governance:migration-report` prints a read-only JSON report (`src/lib/lifecycle-migration-report.ts`) and writes nothing. It lists:
+
+- proposal ballots in `decide` and amendment ballots in `voting` with a missing or malformed closing deadline;
+- open `ballots` projection rows with no `closesAt`;
+- proposals in `deliberate` with no `deliberationEndsAt`.
+
+The report includes its own recovery options. Recovery is manual, audited and deliberately not automated: no script invents a seconder, a deliberation deadline or a ballot deadline for a historical record.
 
 ## Vote encryption
 
@@ -232,6 +267,8 @@ Two mechanisms exist:
 
 1. **Admin migrations** (`src/lib/migrations.ts`, `/admin/migrations/`, `/api/admin/migrations`), recorded in `data_migrations`. Ordered migrations cover standard branches, branch participation and open-ballot expiry. They are restartable and inspectable.
 2. **One-off scripts** under `scripts/`, run with `tsx`/Node strip-types, usually with `--dry-run` and `--apply` modes. Examples: vote storage migration, encrypted vote migration, ballot scheduling, branch seeding, membership verification, encrypted-vote rotation.
+
+The approved lifecycle schedule is separate from both: `scripts/run-governance-scheduler.ts` is a repeatable operational job (dry-run by default), and `scripts/report-governance-deadline-migration.ts` is read-only. Neither is an admin migration and neither backfills governance acts.
 
 Rules:
 
