@@ -1,5 +1,21 @@
 [
   {
+    "hash": "8e513e0",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "research",
+    "summary": "Validate governance patterns with REA runtime evidence"
+  },
+  {
+    "hash": "3be9aba",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Update snapshot after main merge"
+  },
+  {
     "hash": "60a5e47",
     "date": "2026-11-13",
     "type": "fix",
@@ -633,21 +649,5 @@
     "category": "feature",
     "scope": "proposals",
     "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
   }
 ]
