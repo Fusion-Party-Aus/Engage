@@ -1,5 +1,21 @@
 [
   {
+    "hash": "f809655",
+    "date": "2026-11-13",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "auth",
+    "summary": "Unify legacy administrative permission resolution"
+  },
+  {
+    "hash": "1836213",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballots",
+    "summary": "Add AES-256-GCM encrypted vote storage, blind indexing, and migration"
+  },
+  {
     "hash": "b3f69d5",
     "date": "2026-11-13",
     "type": "fix",
@@ -642,23 +658,5 @@
     "scope": "release",
     "summary": "Integrate Coolify cutover evidence and final verification record",
     "details": "Merge the deployment workstream documentation with the release: storage and prebuilt-image verification, no-rebuild deployment path, quiescent backup helper, staging verification, rollback procedure and approval-gated cutover checklist. Distinguish the 2026-11-08 rehearsal image from the final release identity so the artifact cannot be mistaken for the approved cutover image. Add the production-readiness audit, application handover and final integrated verification record. Ignore the preserved research corpus."
-  },
-  {
-    "hash": "33cc170",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "legal",
-    "summary": "Integrate Privacy Policy, Terms of Use and acceptance controls",
-    "details": "Add owner-authorised legal documents at /privacy/ and /terms/ with the confirmed operator, ABN, registered party name, contact and correspondence address. The documents are explicit about identifiable ballots, national administrator access, small-ballot re-identification risk, retention limits, third-party processors and administrative ballot controls, and remain noindex while publication is pending. Add a server-side acceptance record, API and member gate, and enforce the gate on vote, comment, endorsement, proposal and amendment writes. Activation is interlocked: the gate remains inactive until both documents are published with real effective dates and LEGAL_ACCEPTANCE_ENABLED is set. Add the ballot-context privacy notice, footer and sign-in legal links, and regression tests."
-  },
-  {
-    "hash": "0dff758",
-    "date": "2026-11-08",
-    "type": "fix",
-    "category": "fix",
-    "scope": "app",
-    "summary": "Complete release-candidate remediation and Horizon UI integration",
-    "details": "- make startup seeding insert-only so restarts do not rewrite updatedAt - remove Astro experimental React children to stop double-escaped entities and SSR attribute warnings - use a trusted public origin for canonicals and public API Link headers - show human-readable revision labels to members while retaining exact IDs in audit views - make the empty policy registry an explicit, accurate state and relabel navigation and calls to action - complete the shared header, footer, feature grid and member settings workspace on the Horizon/shadcn foundation"
   }
 ]
