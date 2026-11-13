@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
+import { requireApiPermission } from "../../../lib/rbac.ts";
 import { listMembers, saveMember } from "../../../lib/store.ts";
 import { sendVerificationNotice } from "../../../lib/verification-email.ts";
 export const prerender = false;
@@ -8,18 +9,15 @@ export const prerender = false;
 export const GET: APIRoute = async ({ request, url, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin)
-    return Response.json(
-      { error: "Administrator access required." },
-      { status: 403 },
-    );
+  const denied = requireApiPermission(user, "members.view", {
+    message: "Administrator access required.",
+  });
+  if (denied) return denied;
 
   const db = await getDatabase(env);
   const accounts = await listMembers(db, url.searchParams.get("q") ?? "");
   return Response.json(
-    { accounts, currentMemberId: user.memberId },
+    { accounts, currentMemberId: user!.memberId },
     { headers: { "cache-control": "private, no-store" } },
   );
 };
@@ -27,18 +25,15 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin)
-    return Response.json(
-      { error: "Administrator access required." },
-      { status: 403 },
-    );
+  const denied = requireApiPermission(user, "members.verify", {
+    message: "Administrator access required.",
+  });
+  if (denied) return denied;
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const db = await getDatabase(env);
-    const result = await saveMember(db, user, body, true);
+    const result = await saveMember(db, user!, body, true);
     const notification = body.status === "verified" && body.disabled !== true
       ? await sendVerificationNotice(db, env, result.memberId, "verified") : "not-needed";
     return Response.json({ ...result, notification }, { status: 201 });

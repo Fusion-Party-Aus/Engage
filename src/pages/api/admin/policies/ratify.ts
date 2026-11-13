@@ -2,17 +2,17 @@ import type { APIRoute } from "astro";
 import { createHash, randomUUID } from "node:crypto";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { requireApiPermission } from "../../../../lib/rbac.ts";
 import { isGovernanceResolution } from "../../../../lib/store.ts";
 
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user?.isAdmin)
-    return Response.json(
-      { error: "Administrator access required." },
-      { status: user ? 403 : 401 },
-    );
+  const denied = requireApiPermission(user, "policies.ratify", {
+    message: "Administrator access required.",
+  });
+  if (denied) return denied;
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const proposalId = String(body.proposalId ?? "");

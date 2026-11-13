@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser, canManageBranchBallot } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { hasPermission } from "../../../../lib/rbac.ts";
 import {
   BallotBindingError,
   bindBallotToRevision,
@@ -13,7 +14,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin)
+  if (
+    !user.isAdmin &&
+    !user.isBranchAdmin &&
+    !hasPermission(user, "ballots.bind")
+  )
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -47,7 +52,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "Open proposal ballot not found." },
         { status: 404 },
       );
+    const branchScope =
+      typeof proposal.governanceAuthorityBranchId === "string"
+        ? proposal.governanceAuthorityBranchId
+        : undefined;
     if (
+      !hasPermission(user, "ballots.bind", branchScope) ||
       !canManageBranchBallot(user, {
         governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
         jurisdictionBranchId: proposal.jurisdictionBranchId,

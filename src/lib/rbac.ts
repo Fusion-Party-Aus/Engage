@@ -391,6 +391,28 @@ export function hasPermission(
 }
 
 /**
+ * Reusable API authorisation guard. Returns a 401 or 403 Response when the
+ * caller lacks `permission` (nationally or for `branchId`), or `null` when
+ * permitted.
+ */
+export function requireApiPermission(
+  user: SessionUser | null | undefined,
+  permission: PermissionKey,
+  options: { branchId?: string; message?: string } = {},
+): Response | null {
+  if (!user) {
+    return Response.json({ error: "Sign in required." }, { status: 401 });
+  }
+  if (!hasPermission(user, permission, options.branchId)) {
+    return Response.json(
+      { error: options.message ?? "You do not have permission for this action." },
+      { status: 403 },
+    );
+  }
+  return null;
+}
+
+/**
  * Return all branch IDs where the user holds `permission` (or null if they hold it nationally).
  */
 export function branchesWithPermission(
