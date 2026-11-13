@@ -1,5 +1,22 @@
 [
   {
+    "hash": "a00b21f",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "platform",
+    "summary": "Map Reclaim division paths to Engage proposals",
+    "details": "Old links to /reclaim-our-economy/<proposal>/ and /reclaim-our-future/<proposal>/ now land on /proposals/<proposal>/ instead of a 404 on Engage. Retired section index pages, whose names are not proposal slugs, resolve to the proposal list. Other paths and query strings are unchanged."
+  },
+  {
+    "hash": "bdf93ae",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record Reclaim domain redirect"
+  },
+  {
     "hash": "831bc61",
     "date": "2026-11-13",
     "type": "feat",
@@ -640,23 +657,5 @@
     "scope": "security",
     "summary": "Enforce proposal visibility and ballot privacy",
     "details": "- redact other members' ballot choices, reasons and identities from proposal reads - restrict identifiable ballots to national administrators - apply proposal visibility and branch scope filters to list and detail routes - gate local sign-in on explicit development modes in the session route - report member verification email failures without undoing account changes - add proposal access, authentication and member notification regression tests"
-  },
-  {
-    "hash": "c8f957f",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "web",
-    "summary": "Refresh member journeys, proposals and How It Works",
-    "details": "- rebuild visitor, member and branch pages around task-first navigation - add proposal composition, stage navigation and inline ballot components - refresh proposal and policy reading layouts for discussion, amendments and voting - add the How It Works participation guide - document the implemented journeys and their verification limits"
-  },
-  {
-    "hash": "5c55df2",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "registry",
-    "summary": "Add versioned policy registry and public API v1",
-    "details": "- add admin publication, ratification, withdrawal, supersession and reconciliation operations - expose published policy revisions, branches and categories through read-only API v1 with ETags and cursors - serve OpenAPI 3.1 metadata for the public catalogue - rebuild the public policy library and detail pages around publication status and exact approved wording - document governance and API contracts and add governance API regression tests"
   }
 ]
