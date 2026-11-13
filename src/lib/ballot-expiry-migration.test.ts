@@ -10,7 +10,6 @@ import {
   ballotExpired,
 } from "./ballot-deadline.ts";
 import {
-  OPEN_BALLOT_EXPIRY_MIGRATION,
   applyOpenBallotExpiryMigration,
   previewOpenBallotExpiryMigration,
 } from "./ballot-expiry-migration.ts";

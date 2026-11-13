@@ -11,7 +11,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const denied = requireApiPermission(user, "policies.publish", {
     message: "Administrator access required.",
   });
-  if (denied) return denied;
+  if (denied || !user) return denied ?? Response.json({ error: "Sign in required." }, { status: 401 });
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const policyId = String(body.policyId ?? "");

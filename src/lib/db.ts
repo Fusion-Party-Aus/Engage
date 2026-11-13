@@ -150,6 +150,30 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .createIndex({ authorId: 1, createdAt: 1 })
         .catch(() => {}),
       db
+        .collection("ballots")
+        .createIndex({ ballotId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("ballots")
+        .createIndex({ matterId: 1, status: 1 })
+        .catch(() => {}),
+      db
+        .collection("governance_events")
+        .createIndex({ eventId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("governance_events")
+        .createIndex({ matterId: 1, createdAt: -1 })
+        .catch(() => {}),
+      db
+        .collection("governance_relationships")
+        .createIndex({ sourceMatterId: 1, relationshipType: 1 })
+        .catch(() => {}),
+      db
+        .collection("governance_relationships")
+        .createIndex({ targetMatterId: 1, relationshipType: 1 })
+        .catch(() => {}),
+      db
         .collection("memberships")
         .createIndex(
           { memberId: 1 },

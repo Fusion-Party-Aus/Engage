@@ -53,12 +53,7 @@ export class BallotDomainError extends Error {
   }
 }
 
-export function resolveBallotElectorate(matter: {
-  jurisdictionBranchId?: string;
-  governanceAuthorityBranchId?: string;
-  originatingBranchId?: string;
-  publicationScope?: string;
-}): BallotElectorate {
+export function resolveBallotElectorate(matter: Record<string, unknown>): BallotElectorate {
   const branchId = String(
     matter.jurisdictionBranchId ||
       matter.governanceAuthorityBranchId ||

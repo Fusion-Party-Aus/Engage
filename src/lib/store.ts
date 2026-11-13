@@ -30,10 +30,6 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { ballotExpired } from "./ballot-deadline.ts";
 import {
-  MATTER_SCHEMA_VERSION,
-  MatterValidationError,
-  assertMatterCapability,
-  isRegisteredMatterType,
   matterHasCapability,
   normalizeMatterType,
   validateMatterTransition,
