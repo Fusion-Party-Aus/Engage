@@ -68,3 +68,14 @@ test('National concerns reach the existing National branch rather than a duplica
  await submitSense(db,{...input,branchId:'branch-nat'});
  assert.equal((await db.collection('sense_submissions').findOne({}))?.branchId,'original-national');
 });
+
+test('picker has eight unique geographic destinations plus National despite duplicate legacy records',async()=>{
+ const db=createMemoryDb();
+ await db.collection('branches').insertOne({branchId:'old-vic',kind:'state',name:'Fusion Victoria',recognised:true});
+ await db.collection('branches').insertOne({branchId:'branch-vic',kind:'state',name:'Fusion Victoria',recognised:true});
+ const choices=await senseDestinations(db);
+ assert.equal(choices.length,9);
+ assert.equal(choices.filter(b=>b.code==='branch-vic').length,1);
+ assert.equal(choices.find(b=>b.code==='branch-vic')?.label,'Victoria');
+ assert.equal(choices.find(b=>b.code==='branch-vic')?.branchId,'old-vic');
+});

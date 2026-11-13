@@ -116,14 +116,11 @@ export async function reviewSense(db: Db, user: SessionUser, body: Record<string
 /** Listening destinations do not create branch membership or governance authority. */
 export async function senseDestinations(db: Db) {
   const rows = await db.collection('branches').find({}).project({branchId:1,name:1,kind:1,recognised:1}).toArray();
-  const merged = new Map(STANDARD_BRANCHES.map(b=>[b.branchId,{branchId:b.branchId,name:b.name}]));
-  for (const standard of STANDARD_BRANCHES) {
-    const existing=rows.find(row=>row.kind===standard.kind && String(row.name).trim().toLowerCase()===standard.name.toLowerCase());
-    if(existing && existing.branchId!==standard.branchId) merged.delete(standard.branchId);
-  }
-  for (const row of rows) {
-    if (row.recognised === true && ['national','state','territory'].includes(row.kind)) merged.set(String(row.branchId),{branchId:String(row.branchId),name:String(row.name)});
-    else merged.delete(String(row.branchId));
-  }
-  return [...merged.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  return STANDARD_BRANCHES.flatMap(standard => {
+    // Standard IDs define destinations; names are only a legacy identity lookup.
+    const candidates=rows.filter(row=>row.branchId===standard.branchId || row.stateCode===standard.branchId.slice(7).toUpperCase() || (row.kind===standard.kind && String(row.name).trim().toLowerCase()===standard.name.toLowerCase()));
+    const existing=candidates.find(row=>row.branchId!==standard.branchId) ?? candidates[0];
+    if(existing && (existing.recognised!==true || !['national','state','territory'].includes(existing.kind))) return [];
+    return [{branchId:String(existing?.branchId ?? standard.branchId),name:String(existing?.name ?? standard.name),code:standard.branchId,label:standard.kind==='national'?'National':standard.name.replace(/^Fusion /,'')}];
+  });
 }
