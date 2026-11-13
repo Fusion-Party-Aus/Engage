@@ -1,5 +1,21 @@
 [
   {
+    "hash": "5549e0c",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "sense-box",
+    "summary": "Offer accessible geographic destination picker"
+  },
+  {
+    "hash": "63e0a28",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record branch identity repair"
+  },
+  {
     "hash": "2a7452a",
     "date": "2026-11-13",
     "type": "fix",
@@ -643,22 +659,5 @@
     "scope": "ui",
     "summary": "Adopt Horizon design system with shadcn and Radix primitives",
     "details": "- add React, Tailwind v4 and shadcn configuration with Radix-based UI primitives - rebuild shared Horizon tokens, typography and admin styles around the new system - add Astro admin card, alert and field components - refresh public and admin layout shells and the PortableText renderer - document the Horizon design system and updated product direction"
-  },
-  {
-    "hash": "2ffd083",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Add Coolify staging and production compose definitions"
-  },
-  {
-    "hash": "c204f47",
-    "date": "2026-11-04",
-    "type": "feat",
-    "category": "feature",
-    "scope": "voting",
-    "summary": "Migrate votes to proposal_votes collection with ballotId",
-    "details": "- Introduced a new voting storage structure to handle proposal votes with unique ballotId. - Updated database interactions in store.ts to reference the new proposal_votes collection. - Implemented migration script to transfer existing votes while preserving legacy data. - Enhanced error handling for voting operations to ensure data integrity. - Added tests to validate migration logic and ensure correct behavior of voting functionalities. - Updated deployment scripts for seamless integration of new voting structure."
   }
 ]
