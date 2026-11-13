@@ -99,10 +99,26 @@ Primary cyan buttons lead to a task. Outlined buttons are secondary. Fields use 
 
 Astro owns page structure and server rendering. Shared Astro components handle static controls and layout; shadcn-compatible React components with Radix handle tabs, dialogs and interactions that need client state. Both use the same Horizon CSS classes and tokens. Keep shadcn's interaction patterns and use Horizon for the visual language. Do not hydrate static content or create a second set of visual rules in React.
 
+### Implementation contract
+
+The shadcn-compatible primitives in `src/components/ui` are the only control layer. Horizon styles are applied through their variants, not by replacing them with page-specific HTML and CSS.
+
+- Use `Button`, `Input`, `Textarea`, `NativeSelect`, `Checkbox`, `Switch`, `ToggleGroup`, `Table`, `Badge`, `Alert`, `Dialog`, `AlertDialog` and the `Card` family. Raw controls are defects.
+- Plain text navigation may use `<a>`; anything presented as an action uses `Button`.
+- Compose specialist interfaces from primitives. Do not recreate a primitive to achieve a local visual effect.
+- Astro-only pages use the wrappers in `src/components/admin`, which mirror the same markup and variants. They must not drift from `src/components/ui`.
+- Use only Horizon semantic tokens. Never add arbitrary palette utilities, hardcoded colours or undefined CSS custom properties.
+- Keep a visible focus indicator on every control, especially composite radio, toggle and chip controls.
+- One-off layout CSS is acceptable. One-off control CSS is not.
+
+The normative component rules and audit command live in `AGENTS.md`, Section 4.
+
 ## Do's and Don'ts
 
 - Do use plain language for exploration and exact governance terms at decision points.
 - Do keep published policy visibly distinct from proposals and ballot results.
 - Do preserve the Horizon logo, colours and type pairing on every surface.
+- Do build every control from the shadcn primitives and expose Horizon through their variants.
 - Don't place internal IDs, provenance classifications or procedural stages ahead of the user's task.
 - Don't invent thresholds, authority rules or visual assets that are not supported by the product record.
+- Don't hand-roll buttons, fields, selects, tables or modal markup when a primitive exists.
