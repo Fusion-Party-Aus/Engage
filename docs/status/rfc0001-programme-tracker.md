@@ -26,6 +26,19 @@ Status values:
 | 4 | Durable jobs, identity/CRM ports, observability, audit viewer, encryption hardening | Planned |
 | 5 | Automatic ratification, collision resolution, amend/repeal, public APIs, elections | Partly blocked on O1–O8 |
 
+## Workstreams in flight
+
+| Workstream | Branch | Issue | State |
+|---|---|---|---|
+| Phase 1 lifecycle scheduling | `feat/phase1-lifecycle` | #26, #30 | In progress — seconding, 30/30 deadlines, system advancement, automatic closure, scheduler |
+| Rendering performance | `perf/rendering-investigation` | #52 | In progress — measurement harness, audit, low-risk wins |
+| Turnstile and abuse protection | `feat/turnstile-abuse-protection` | #38 (part) | In progress — server verification, protected unauthenticated actions, durable rate limiting |
+| Ballot-results migration safety | — | #55 | Planned — preflight, observability, recovery |
+| Governance command layer | — | #53 | Planned — after Phase 1 |
+| Decision record and responsibility queue | — | #54 | Planned — depends on #53 |
+
+Sprint 1 integration is PR #51 (draft).
+
 ## Immediate recommendations
 
 | ID | Recommendation | Issue | State | Evidence / remaining work |
@@ -41,19 +54,19 @@ Status values:
 | I9 | Wire essential notifications through an outbox | #33 | **Planned** | `dispatchMemberNotification` still has no production caller. |
 | I10 | Security and operations baseline | #38, #39 | **Planned** | Headers, rate limiting, CSRF coverage, Turnstile (D32), scheduler health, metrics. |
 | I11 | Documentation truth pass | #44, #46 | **Partial** | Canonical documentation set exists; RFC, decision register and this tracker added. Older dated documents remain stale. |
-| I12 | Replace full-collection proposal list reads | — | **Planned** | No issue yet. Pagination, projection, removal of per-vote decryption on list pages. |
+| I12 | Replace full-collection proposal list reads | #52 | **In progress** | Rendering-performance workstream: pagination, projection, query-count and hydration measurement. |
 
 ## Strategic recommendations
 
 | ID | Recommendation | Issue | State | Notes |
 |---|---|---|---|---|
-| S1 | Governance command layer and central route policy | — | **Planned** | Issue required before implementation. |
-| S2 | Decision record and lineage read model | #5 | **Planned** | Depends on I12/S1. |
+| S1 | Governance command layer and central route policy | #53 | **Planned** | Issue opened. Coordinate read queries with #52. |
+| S2 | Decision record and lineage read model | #54 | **Planned** | Depends on I12/S1. |
 | S3 | Ballot lifecycle: open, close, certify | #26 | **Partial** | Open and certify exist; scheduled close and automated certification do not. See D4–D7. |
 | S4 | Read models and tally projections | — | **Planned** | Depends on I12/S1. |
 | S5 | Durable outbox and job runner | #33, #39 | **Planned** | Notification and scheduler infrastructure. |
 | S6 | Identity and membership ports | #32 | **Partial** | CRM membership port exists in `membership-verification.ts`; identity port is deferred (D31). |
-| S7 | Administrative responsibility queue and role legibility | #41 | **Planned** | Queue needs an issue; role legibility covered by #41. |
+| S7 | Administrative responsibility queue and role legibility | #41, #54 | **Planned** | Queue and decision-record view tracked in #54; role legibility in #41. |
 | S8 | Observability and audit viewer | #39 | **Planned** | Audit events are now written; no viewer or metrics. |
 
 ## Long-term opportunities
@@ -90,7 +103,7 @@ Status values:
 
 1. **Deadline semantics without scheduling.** The system now refuses a Decide entry without a deadline but does not create one. This is deliberately incomplete until Phase 1; it must not be treated as a finished ballot lifecycle.
 2. **Automatic advancement vs human authority.** D4 introduces a system transition path. It must not be implemented by granting `ballots.bind` to a scheduler identity.
-3. **Index migration is one-way.** The `ballot_results` unique index moved from `proposalId` to `ballotId`. Rollback requires deleting later results. A preflight and dry-run migration is required before production.
+3. **Index migration is one-way.** The `ballot_results` unique index moved from `proposalId` to `ballotId`. Rollback requires deleting later results. A preflight and dry-run migration is required before production (#55).
 4. **Real-MongoDB coverage of governance writes.** The voting suite runs on MongoDB; the governance-integrity suite uses the in-memory database. Add replica-set cases for the atomic result, deletion guard and transition events in Phase 1.
 5. **Historical records.** Existing open ballots without deadlines and historical CRM verification reviews are not migrated by this branch.
 
@@ -101,5 +114,5 @@ Phase 1, in this order:
 1. Proposal lifecycle scheduling: seconding, deliberation deadline, automatic advancement, ballot default deadline, automatic closure, idempotent job runner.
 2. Computed outcome validation (Yes versus No, tie fails) with an audited officer override; do not decide abstentions.
 3. Real-MongoDB concurrency and crash-recovery tests for governance writes.
-4. `ballot_results` migration preflight and recovery procedure.
+4. `ballot_results` migration preflight and recovery procedure (#55).
 5. Notification outbox foundation, so scheduled transitions produce durable notices.

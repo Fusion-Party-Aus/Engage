@@ -261,5 +261,9 @@ The actionable gaps were opened as GitHub issues on 13 November 2026. This page 
 | 24 Seconding, notice, scheduled opening, confirmation ballots | #30 |
 | 25 Stale historical documentation | #44 |
 | 27 Election/Returning Officer role | #29 |
+| Rendering performance and list read path | #52 |
+| Governance command layer and route policy | #53 |
+| Decision record and responsibility queue | #54 |
+| Ballot-results index migration safety | #55 |
 
-Issue #28, #30, #36 and #40 are explicitly blocked on Fusion governance or legal decisions. Do not implement them by guessing the rule.
+Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain blocked on unresolved governance or legal decisions; implement only the parts the decision register settles.
