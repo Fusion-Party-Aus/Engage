@@ -1,5 +1,21 @@
 [
   {
+    "hash": "dc0e7bd",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "governance",
+    "summary": "Address PR #20 CodeRabbit review comments"
+  },
+  {
+    "hash": "0b36edf",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record in-app notifications update"
+  },
+  {
     "hash": "4d4c38e",
     "date": "2026-11-13",
     "type": "feat",
@@ -637,23 +653,5 @@
     "scope": "legal",
     "summary": "Integrate Privacy Policy, Terms of Use and acceptance controls",
     "details": "Add owner-authorised legal documents at /privacy/ and /terms/ with the confirmed operator, ABN, registered party name, contact and correspondence address. The documents are explicit about identifiable ballots, national administrator access, small-ballot re-identification risk, retention limits, third-party processors and administrative ballot controls, and remain noindex while publication is pending. Add a server-side acceptance record, API and member gate, and enforce the gate on vote, comment, endorsement, proposal and amendment writes. Activation is interlocked: the gate remains inactive until both documents are published with real effective dates and LEGAL_ACCEPTANCE_ENABLED is set. Add the ballot-context privacy notice, footer and sign-in legal links, and regression tests."
-  },
-  {
-    "hash": "0dff758",
-    "date": "2026-11-08",
-    "type": "fix",
-    "category": "fix",
-    "scope": "app",
-    "summary": "Complete release-candidate remediation and Horizon UI integration",
-    "details": "- make startup seeding insert-only so restarts do not rewrite updatedAt - remove Astro experimental React children to stop double-escaped entities and SSR attribute warnings - use a trusted public origin for canonicals and public API Link headers - show human-readable revision labels to members while retaining exact IDs in audit views - make the empty policy registry an explicit, accurate state and relabel navigation and calls to action - complete the shared header, footer, feature grid and member settings workspace on the Horizon/shadcn foundation"
-  },
-  {
-    "hash": "60e0679",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "governance",
-    "summary": "Bind legacy ballots to immutable wording revisions",
-    "details": "Add a deterministic, transactional bulk migration for existing Decide-stage ballots and their votes. The migration inventories wording against the deployment baseline, fails closed on ambiguity, supports dry-run and explicit apply, records attributable binding events, and is idempotent. Reuse the shared binding path in the admin review endpoint and expose human-readable revision labels while keeping exact identifiers in audit views. Rehearsed against a restored 414-document production clone: 37 ballots and 194 votes preserved, 0 ambiguous, 0 conflicting, 37 idempotent on retry."
   }
 ]
