@@ -1,18 +1,23 @@
 # reclaim-redirect
 
 `reclaim.fusionparty.org.au` is retired. This Worker answers every request on
-that hostname with a `301` to the same path on
-`https://engage.fusionparty.org.au`.
+that hostname with a `301` to `https://engage.fusionparty.org.au`.
 
-```text
-https://reclaim.fusionparty.org.au/pending-vote/?x=1
-→ https://engage.fusionparty.org.au/pending-vote/?x=1
-```
+| Request | Redirects to |
+| --- | --- |
+| `/` | `/` |
+| `/reclaim-our-economy/<proposal-slug>/` | `/proposals/<proposal-slug>/` |
+| `/reclaim-our-future/<proposal-slug>/` | `/proposals/<proposal-slug>/` |
+| `/reclaim-our-economy/` or `/reclaim-our-future/` | `/proposals/` |
+| `/reclaim-our-economy/solve-the-housing-crisis/` (section index) | `/proposals/` |
+| `/pending-vote/`, `/all-policies/`, anything else | same path on Engage |
 
-The path and query string are preserved rather than flattened to the homepage,
-because Engage already redirects the Reclaim sections (`/pending-vote`,
-`/all-policies`, `/reclaim-our-economy`, `/reclaim-our-future`) to the relevant
-proposal views.
+Reclaim split its platform into the two division paths above; Engage publishes
+the same proposals at `/proposals/<proposal-slug>/`, so the division segment
+becomes `proposals`. Section index pages keep no equivalent and resolve to the
+proposal list rather than a 404. Query strings are preserved throughout, so
+Engage's own legacy redirects (`/pending-vote` → `?stage=decide`,
+`/all-policies` → `/proposals/`) still resolve.
 
 ## Deploy
 
@@ -37,10 +42,11 @@ wrangler deploy
 
 ```sh
 curl -sSI https://reclaim.fusionparty.org.au/ | head -5
-curl -sSI https://reclaim.fusionparty.org.au/pending-vote/?stage=decide | head -5
+curl -sSI https://reclaim.fusionparty.org.au/reclaim-our-economy/make-housing-tax-fair-across-generations/ | head -5
 ```
 
-Both must return `301` with a `location` on `https://engage.fusionparty.org.au`.
+Both must return `301`; the second must point at
+`https://engage.fusionparty.org.au/proposals/make-housing-tax-fair-across-generations/`.
 
 ## Roll back
 
