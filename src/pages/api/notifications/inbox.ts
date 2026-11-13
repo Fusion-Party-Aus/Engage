@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../lib/auth.ts";
 import { privateJson, toNotificationDto } from "../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
+import { resolvePublicOrigin } from "../../../lib/public-origin.ts";
 import {
   listMemberNotifications,
   markAllNotificationsRead,
@@ -29,10 +30,10 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
 };
 
 export const POST: APIRoute = async ({ request, locals, url }) => {
-  if (request.headers.get("origin") !== url.origin) {
+  const env = runtimeEnv(locals);
+  if (request.headers.get("origin") !== resolvePublicOrigin({ env, requestUrl: url })) {
     return privateJson({ error: "Invalid origin" }, { status: 403 });
   }
-  const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user) return privateJson({ error: "Sign in required" }, { status: 401 });
 

@@ -2045,13 +2045,21 @@ async function upsertStoredVote(
       ...input,
       updatedAt: now,
     });
-    const legacyExisting = await votesCol.findOne({
+    const allBlindIndexes = computeAllBlindIndexesForMember(
+      cryptoConfig,
+      input.ballotId,
+      input.memberId,
+    );
+    const existing = await votesCol.findOne({
       ballotId: input.ballotId,
-      memberId: input.memberId,
-    });
-    if (legacyExisting?._id) {
+      $or: [
+        { memberId: input.memberId },
+        { voterBlindIndex: { $in: allBlindIndexes } },
+      ],
+    } as any);
+    if (existing?._id) {
       await votesCol.updateOne(
-        { _id: legacyExisting._id } as any,
+        { _id: existing._id } as any,
         {
           $set: encryptedFields as any,
           $unset: { memberId: "", authorName: "", choice: "", reason: "" },

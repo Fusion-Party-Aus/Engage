@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { resolvePublicOrigin } from '../../lib/public-origin.ts';
 import { getSessionUser } from '../../lib/auth.ts';
 import { submitSense, listSense, reviewSense, SenseError } from '../../lib/sense-box.ts';
 export const prerender = false;
@@ -8,7 +9,7 @@ async function handle(context: Parameters<APIRoute>[0]) {
   const {request,locals,url} = context;
   const env = runtimeEnv(locals);
   try {
-    if (request.method !== 'GET' && request.headers.get('origin') !== url.origin) throw new SenseError('Please submit from the Engage website.',403);
+    if (request.method !== 'GET' && request.headers.get('origin') !== resolvePublicOrigin({env,requestUrl:url})) throw new SenseError('Please submit from the Engage website.',403);
     const db = await getDatabase(env);
     if (request.method === 'GET') {
       const user = await getSessionUser(request,env);
