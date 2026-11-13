@@ -6,6 +6,8 @@ These rules apply to all agents and maintainers working on Engage.
 
 A feature is not finished simply because its API works, its tests pass, or its controls appear on screen.
 
+Canonical product, domain and architecture documentation lives in [`docs/README.md`](docs/README.md). Read the product overview, governance model and agent guide before changing governance, eligibility, permissions or ballot behaviour. Documentation describes current behaviour; where it conflicts with code, the code is authoritative and the documentation must be corrected in the same change.
+
 ## 1. Product Design Principles
 
 ### Design for people, not implementation

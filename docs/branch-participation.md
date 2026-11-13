@@ -102,15 +102,26 @@ This means a branch proposal can move into deliberation and open its local ballo
 
 ## Underground CRM boundary
 
-`applyExternalMembership` is the integration seam for a future Underground CRM:
+`applyExternalMembership` is the write seam for Underground CRM:
 
-- External facts use `source: "underground-crm"` plus an external member identifier, verification timestamp and audit event.
-- External membership changes never touch `branch_subscriptions`, so a CRM sync cannot overwrite a person’s chosen branches.
+- External facts use `source: "underground-crm"` plus a durable external person identifier, verification timestamp and audit event.
+- External membership changes never touch `branch_subscriptions`, so a CRM verification cannot overwrite a person’s chosen branches.
 - Local administrators cannot edit or revoke CRM-sourced membership; a discrepancy must be resolved at the authority. This prevents a silent local override.
-- If the CRM is unavailable, existing verified facts and recorded votes remain usable. Voting never depends on a live CRM call.
+- If the CRM is unavailable, existing verified facts and recorded votes remain usable. Verification never depends on a live CRM call in the request path.
 - No second member profile or CRM data model is introduced. Only the organisational membership fact is replaceable.
+- A verification never revokes a locally verified membership. It reports the discrepancy instead.
 
-The integration is deliberately a service boundary, not a speculative full synchronisation client. A future sync job calls `applyExternalMembership` with the authority’s facts.
+The verification client is `src/lib/membership-verification.ts`. It pulls the
+CRM's read-only people feed, links only verified Engage accounts, verifies the
+platform membership when the configured Fusion membership type is active, and
+calls `applyExternalMembership` for a geographic state or territory branch
+resolved from the CRM electorate fields using Engage-owned mapping. See
+[Automatic membership verification](integrations/underground-crm.md) for
+configuration, exceptions, audit and deployment sequencing.
+
+Verification is a scheduled pull, not a real-time webhook. A member's request
+never depends on CRM availability, and a failed run leaves all existing facts
+in place.
 
 ## Tests
 

@@ -9,6 +9,7 @@ import {
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { hasPermission, requireApiPermission } from "../../../lib/rbac.ts";
 import { listMembers, saveMember } from "../../../lib/store.ts";
+import { resolveOpenVerificationReviews } from "../../../lib/membership-verification.ts";
 import { sendVerificationNotice } from "../../../lib/verification-email.ts";
 export const prerender = false;
 
@@ -110,6 +111,21 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       .collection("user")
       .findOne({ _id: new ObjectId(memberId) });
     const result = await saveMember(db, user, body, false);
+    if (body.status !== undefined || body.disabled !== undefined) {
+      try {
+        await resolveOpenVerificationReviews(db, memberId, {
+          actorId: user.memberId,
+          note: "An administrator updated the member's status.",
+        });
+      } catch (error) {
+        const { logOperationalEvent } = await import(
+          "../../../lib/resilience.ts"
+        );
+        logOperationalEvent("error", "verification_review_resolution_failed", {
+          code: error instanceof Error ? error.name : "unknown",
+        });
+      }
+    }
     const willBeVerified =
       body.status === undefined
         ? Boolean(wasVerified)

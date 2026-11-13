@@ -126,6 +126,18 @@ export function createEngageAuth(db: Db, env: PlatformEnv) {
       user: { create: { after: async (account) => {
         await recordLifecycle(db, account.id, 'registration_completed');
         await recordLifecycle(db, account.id, 'verification_requested');
+        // Queue only; the scheduled worker performs the CRM lookup outside the
+        // sign-up request so a CRM outage cannot delay account creation. A queue
+        // failure must not block the account itself.
+        try {
+          const { enqueueVerificationAttempt } = await import('./membership-verification.ts');
+          await enqueueVerificationAttempt(db, String(account.id), { source: 'registration' });
+        } catch (error) {
+          const { logOperationalEvent } = await import('./resilience.ts');
+          logOperationalEvent('error', 'verification_queue_failed', {
+            code: error instanceof Error ? error.name : 'unknown',
+          });
+        }
       } } },
       session: {
         create: {
