@@ -1,5 +1,45 @@
 [
   {
+    "hash": "be7c90e",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add ballot progress, branch summary, and privacy-preserving CSV export"
+  },
+  {
+    "hash": "568cab8",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "governance",
+    "summary": "Add contributor feedback, proposal supersession, and resolution lifecycle support"
+  },
+  {
+    "hash": "c1b3ec9",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "policies",
+    "summary": "Link empty policy registry directly to fusionparty.org.au/policy"
+  },
+  {
+    "hash": "802aa20",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discovery",
+    "summary": "Surface Sense Box and next actions when caught up on ballots"
+  },
+  {
+    "hash": "27374e2",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record Reclaim path mapping"
+  },
+  {
     "hash": "a00b21f",
     "date": "2026-11-13",
     "type": "feat",
@@ -615,47 +655,5 @@
     "category": "ops",
     "scope": "deploy",
     "summary": "Bake Mongo helpers into Coolify staging image"
-  },
-  {
-    "hash": "6e2cc5e",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Use classic builder for Coolify builds (DNS workaround)"
-  },
-  {
-    "hash": "a65c66d",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Build Coolify images on the coolify bridge network"
-  },
-  {
-    "hash": "09de77b",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Build Coolify images with host network for DNS"
-  },
-  {
-    "hash": "0ad210b",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "ops",
-    "summary": "Align CI, deployment configuration and operational documentation",
-    "details": "- run voting and authentication suites against a disposable MongoDB replica set and fail when test URIs are absent - replace removed test scripts with package-level checks in both workflows - add Coolify production and staging compose definitions with hardened container defaults - document CI prerequisites, deployment verification and vote storage migration - update local configuration notes and add a CI workflow regression test"
-  },
-  {
-    "hash": "47e5f9b",
-    "date": "2026-11-08",
-    "type": "fix",
-    "category": "fix",
-    "scope": "security",
-    "summary": "Enforce proposal visibility and ballot privacy",
-    "details": "- redact other members' ballot choices, reasons and identities from proposal reads - restrict identifiable ballots to national administrators - apply proposal visibility and branch scope filters to list and detail routes - gate local sign-in on explicit development modes in the session route - report member verification email failures without undoing account changes - add proposal access, authentication and member notification regression tests"
   }
 ]
