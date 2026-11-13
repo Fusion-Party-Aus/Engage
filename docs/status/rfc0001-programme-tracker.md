@@ -1,0 +1,105 @@
+# RFC 0001 implementation tracker
+
+**Status:** Living · **Updated:** 14 November 2026
+**Source documents:** [RFC 0001](../rfc/0001-participatory-governance-platform-evolution.md) · [Decision register](../governance/decision-register.md) · [Known gaps](known-gaps.md)
+
+This is the authoritative progress record for the RFC 0001 programme. Each recommendation maps to an issue, a state, and the evidence that justifies that state. An entry is only **Done** when the behaviour is enforced by code, covered by tests that run against a real MongoDB replica set where persistence is involved, and reflected in the documentation.
+
+Status values:
+
+| Value | Meaning |
+|---|---|
+| **Done** | Implemented, tested, documented, merged. |
+| **Integrated** | Implemented and tested on an integration branch; not merged. |
+| **Partial** | Some behaviour exists; the named gate or guarantee is missing. |
+| **Planned** | Committed to the programme; no implementation started. |
+| **Deferred** | Out of this programme or blocked on a maintainer decision. |
+
+## Programme phases
+
+| Phase | Scope | State |
+|---|---|---|
+| Integration | Combine Sprint 1 branches, reconcile with decisions, verify | **Integrated** — see [integration report](sprint1-integration-report.md) |
+| 1 | Integrity, deadlines, automatic advancement, outcome correctness | **In progress** |
+| 2 | Command layer, route policy, read models, jobs, Turnstile, notifications | Planned |
+| 3 | Decision records, following, admin queues, role UX, Horizon consistency | Planned |
+| 4 | Durable jobs, identity/CRM ports, observability, audit viewer, encryption hardening | Planned |
+| 5 | Automatic ratification, collision resolution, amend/repeal, public APIs, elections | Partly blocked on O1–O8 |
+
+## Immediate recommendations
+
+| ID | Recommendation | Issue | State | Evidence / remaining work |
+|---|---|---|---|---|
+| I1 | Remove hard deletion of governance records | #50 | **Integrated** | `deleteProposal` refuses matters with revisions beyond the initial draft, votes, ballots, decisions, registry records, or a consequential stage. Branch-scoped `proposals.delete` cannot confer authority (national-only in the catalogue). Tests: `governance-integrity-sprint1.test.ts`, `rbac-authority-sprint1.test.ts`. |
+| I2 | Make ballot deadlines mandatory and audited | #26 | **Partial** | Entering Decide now requires a future `ballotClosesAt`, recorded with a stage-transition event. Missing: 30-day default (D6), automatic closure, automatic advancement at the deliberation deadline (D4), idempotent scheduler, deadline migration for existing open ballots. |
+| I3 | Stop writes during session resolution; fix CRM national-row conflict | #32 | **Integrated** | CRM-sourced memberships cannot be overwritten by self-service; the national row is exempt from the geographic conflict check; manual verification records source and verifier. Tests: `membership-crm-sprint1.test.ts`. |
+| I4 | Enforce the permission catalogue | #31 | **Partial** | `ballots.bind`, `proposals.delete`, `proposals.manage_supersession`, `proposals.view_archived`, `comments.moderate`, `amendments.*`, `branches.manage`, `branches.refer_proposals`, `sense_box.review` are enforced in the domain or route. Branch grants for national-only permissions are ignored (defence in depth). Remaining: role administration UX (#41), any dead keys found by the catalogue audit. |
+| I5 | Make result recording atomic, idempotent and audited | #26, #50 | **Integrated** | `recordFormalDecision` writes result, ballot certification and governance event in one transaction; repeated identical payloads are idempotent; conflicting payloads are refused. Tests use the real-MongoDB replica set for the voting suite; the governance-integrity suite still needs a real-MongoDB atomicity case. |
+| I6 | Record every lifecycle and ballot act | #50 | **Integrated** | Stage transitions, ballot bind/unbind, decision recording and amendment open/close/accept writes emit governance events. Remaining: notification fan-out (#33), audit viewer (S8), scheduler-origin events (Phase 1). |
+| I7 | Rebind re-opened ballots explicitly | #26 | **Integrated** | Returning a zero-vote ballot to Deliberate unbinds the revision and emits `ballot.unbound`; re-entry binds the current revision. Substantive edits are refused once votes exist. Tests: `governance-integrity-sprint1.test.ts`. |
+| I8 | Close the small high-risk defects | #27, #32, #35, #42 | **Partial** | Ratification authority is cross-checked against the governance authority and the recorded ballot decision. Remaining: public supersession visibility (#35), comment moderation state and audit trail (#42), moderation UX. |
+| I9 | Wire essential notifications through an outbox | #33 | **Planned** | `dispatchMemberNotification` still has no production caller. |
+| I10 | Security and operations baseline | #38, #39 | **Planned** | Headers, rate limiting, CSRF coverage, Turnstile (D32), scheduler health, metrics. |
+| I11 | Documentation truth pass | #44, #46 | **Partial** | Canonical documentation set exists; RFC, decision register and this tracker added. Older dated documents remain stale. |
+| I12 | Replace full-collection proposal list reads | — | **Planned** | No issue yet. Pagination, projection, removal of per-vote decryption on list pages. |
+
+## Strategic recommendations
+
+| ID | Recommendation | Issue | State | Notes |
+|---|---|---|---|---|
+| S1 | Governance command layer and central route policy | — | **Planned** | Issue required before implementation. |
+| S2 | Decision record and lineage read model | #5 | **Planned** | Depends on I12/S1. |
+| S3 | Ballot lifecycle: open, close, certify | #26 | **Partial** | Open and certify exist; scheduled close and automated certification do not. See D4–D7. |
+| S4 | Read models and tally projections | — | **Planned** | Depends on I12/S1. |
+| S5 | Durable outbox and job runner | #33, #39 | **Planned** | Notification and scheduler infrastructure. |
+| S6 | Identity and membership ports | #32 | **Partial** | CRM membership port exists in `membership-verification.ts`; identity port is deferred (D31). |
+| S7 | Administrative responsibility queue and role legibility | #41 | **Planned** | Queue needs an issue; role legibility covered by #41. |
+| S8 | Observability and audit viewer | #39 | **Planned** | Audit events are now written; no viewer or metrics. |
+
+## Long-term opportunities
+
+| ID | Recommendation | Issue | State | Notes |
+|---|---|---|---|---|
+| L1 | Threshold, quorum and turnout rule engine | #28 | **Partial** | D8/D9 settle simple majority and the absence of quorum. A computed Yes-versus-No check with an audited override is implementable. Abstention denominator (O1) remains open; no rule engine yet. |
+| L2 | Amend or repeal from a published policy | #37 | **Planned** | Governance dependency: whether a normal proposal suffices. |
+| L3 | Confirmation ballots and multiple ballot instances | #30 | **Partial** | Result cardinality is corrected (one result per ballot, multiple ballots per matter possible). Confirmation ballots are not specified (O3). |
+| L4 | Shared Fusion identity / OIDC | — | **Deferred** | D31: seam only. |
+| L5 | Public API expansion and deprecation policy | — | **Planned** | D27 approves a full public proposal API; versioning, visibility and confidentiality model still need specification. |
+| — | National Neon policy baseline import | #36 | **Deferred** | D33 excludes import, mapping, backfill and publication from this programme. |
+
+## Integrity findings from RFC §7.2
+
+| Finding | State | Evidence |
+|---|---|---|
+| G1 Hard deletion of a voted matter | **Integrated** | I1 |
+| G2 Re-opened ballot not rebound | **Integrated** | I7 |
+| G3 Result, certification and audit are separate writes | **Integrated** | I5 |
+| G4 Stage transitions not audited | **Integrated** | I6 |
+| G5 Amendment ballots not audited | **Integrated** | I6; amendment routes now emit events |
+| G6 Moderators can open Decide | **Integrated** | D5; `ballots.bind` required |
+| G7 Ratifying authority not cross-checked | **Integrated** | I8; `ratify.ts` compares both authorities |
+| G8 Self-service branch switching revokes CRM membership | **Integrated** | I3 |
+| G9 National row conflicts with CRM assignment | **Integrated** | I3 |
+| G10 Permission delegation is untrue | **Partial** | I4; remaining keys and #41 |
+| G11 No eligibility snapshot | **Resolved by decision** | D2: eligibility at vote time, no snapshot |
+| G12 Vote admission not transactional | **Integrated** | Transactional `castVote` with revision consistency checks |
+| G13 Hard deletion of comments, no moderation record | **Partial** | #42 |
+| G14 Public supersession links to unpublished policy | **Planned** | #35 |
+
+## Cross-slice risks carried by the integration
+
+1. **Deadline semantics without scheduling.** The system now refuses a Decide entry without a deadline but does not create one. This is deliberately incomplete until Phase 1; it must not be treated as a finished ballot lifecycle.
+2. **Automatic advancement vs human authority.** D4 introduces a system transition path. It must not be implemented by granting `ballots.bind` to a scheduler identity.
+3. **Index migration is one-way.** The `ballot_results` unique index moved from `proposalId` to `ballotId`. Rollback requires deleting later results. A preflight and dry-run migration is required before production.
+4. **Real-MongoDB coverage of governance writes.** The voting suite runs on MongoDB; the governance-integrity suite uses the in-memory database. Add replica-set cases for the atomic result, deletion guard and transition events in Phase 1.
+5. **Historical records.** Existing open ballots without deadlines and historical CRM verification reviews are not migrated by this branch.
+
+## Next workstream
+
+Phase 1, in this order:
+
+1. Proposal lifecycle scheduling: seconding, deliberation deadline, automatic advancement, ballot default deadline, automatic closure, idempotent job runner.
+2. Computed outcome validation (Yes versus No, tie fails) with an audited officer override; do not decide abstentions.
+3. Real-MongoDB concurrency and crash-recovery tests for governance writes.
+4. `ballot_results` migration preflight and recovery procedure.
+5. Notification outbox foundation, so scheduled transitions produce durable notices.

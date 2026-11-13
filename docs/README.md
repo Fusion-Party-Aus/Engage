@@ -29,6 +29,8 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Act as an autonomous agent | [guides/agent-guide.md](guides/agent-guide.md) |
 | Know what is actually shipped | [status/capability-matrix.md](status/capability-matrix.md) |
 | Know what is broken or undecided | [status/known-gaps.md](status/known-gaps.md) |
+| Know which governance rules the maintainer has approved | [governance/decision-register.md](governance/decision-register.md) |
+| Track RFC 0001 implementation progress | [status/rfc0001-programme-tracker.md](status/rfc0001-programme-tracker.md) |
 | Understand a proposed direction | [rfc/README.md](rfc/README.md) |
 
 ## Documentation map
@@ -52,9 +54,13 @@ docs/
 ├── guides/
 │   ├── contributing.md               # Change protocol and quality gates
 │   └── agent-guide.md                # Orientation, invariants, traps, recipes
+├── governance/
+│   └── decision-register.md          # Maintainer-approved governance rules
 ├── status/
 │   ├── capability-matrix.md          # Implemented / partial / planned
-│   └── known-gaps.md                 # Defects, risks and open decisions
+│   ├── known-gaps.md                 # Defects, risks and open decisions
+│   ├── rfc0001-programme-tracker.md  # Recommendation-by-recommendation progress
+│   └── sprint1-integration-report.md # Verification evidence for the first slice
 └── rfc/
     ├── README.md                     # RFC status, structure and rules
     └── 0001-…                        # Proposed platform evolution RFC
