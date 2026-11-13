@@ -185,6 +185,22 @@ const totalContributions =
 const completedOpenBallotsCount =
   new Set(activity?.votes.filter(v => visibleProposals.some(p => p.proposalId === v.proposalId && p.stage === 'decide' && !ballotExpired(p) && v.ballotId === `proposal:${p.proposalId}` && v.revisionId === p.ballotRevisionId)).map(v=>v.proposalId) ?? []).size;
 const totalEligibleOpenBallotsCount = completedOpenBallotsCount + awaitingDecision.length;
+const proposalById = new Map(visibleProposals.map((proposal: any) => [String(proposal.proposalId), proposal]));
+const contributionResponses = (activity?.comments ?? [])
+  .filter((comment: any) => comment.feedback && proposalById.has(String(comment.proposalId)))
+  .map((comment: any) => {
+    const proposal = proposalById.get(String(comment.proposalId));
+    return {
+      commentId: String(comment.commentId),
+      proposalTitle: String(proposal?.title ?? comment.proposalId),
+      proposalSlug: String(proposal?.slug ?? ''),
+      status: String(comment.feedback.status),
+      note: comment.feedback.note ? String(comment.feedback.note) : '',
+      updatedByName: String(comment.feedback.updatedByName ?? 'Author'),
+      updatedAt: new Date(comment.feedback.updatedAt),
+    };
+  })
+  .sort((a: any, b: any) => b.updatedAt.getTime() - a.updatedAt.getTime());
 const requestedView = Astro.url.searchParams.get('view');
 const memberView =
   requestedView === 'activity' || requestedView === 'account' || requestedView === 'notifications' || requestedView === 'branches'
@@ -584,7 +600,12 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             Activity &amp; Log
             <span class="member-tab__count tabular">{memberTimelineCount}</span>
           </a>
-          <a href="/member/?view=notifications" class="member-tab" aria-current={memberView === 'notifications' ? 'page' : undefined}>Notifications</a>
+          <a href="/member/?view=notifications" class="member-tab" aria-current={memberView === 'notifications' ? 'page' : undefined}>
+            Notifications
+            {(contributionResponses.length + catchUpTotal) > 0 && (
+              <span class="member-tab__count tabular">{contributionResponses.length + catchUpTotal}</span>
+            )}
+          </a>
           <a href="/member/?view=branches" class="member-tab" aria-current={memberView === 'branches' ? 'page' : undefined}>
             My branches
             {memberBranches.length > 0 && <span class="member-tab__count tabular">{memberBranches.length}</span>}
@@ -594,7 +615,49 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           </a>
         </nav>
 
-        <div class="notifications-only"><EmailPreferences existingMember={existingDigestMember} preference={emailPreference} saved={Astro.url.searchParams.get('emailPreferences') === 'saved'} /></div>
+        <div class="notifications-only grid gap-6">
+          <section class="member-panel" aria-labelledby="responses-notifications-heading">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 id="responses-notifications-heading">Responses to your contributions</h2>
+                <p class="text-sm text-muted-foreground m-0">Feedback from proposal authors and administrators on your comments and wording suggestions.</p>
+              </div>
+              <Badge variant={contributionResponses.length ? 'info' : 'muted'}>
+                {contributionResponses.length} {contributionResponses.length === 1 ? 'response' : 'responses'}
+              </Badge>
+            </div>
+            {contributionResponses.length ? (
+              <ul class="grid gap-3 list-none p-0 m-0">
+                {contributionResponses.map((item: any) => (
+                  <li class="p-3 rounded-lg border bg-background">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                      <a href={`/proposals/${item.proposalSlug}/#deliberation`} class="font-semibold text-sm">{item.proposalTitle}</a>
+                      <Badge variant={item.status === 'incorporated' ? 'success' : item.status === 'deferred' ? 'warning' : item.status === 'considered' ? 'info' : 'outline'}>
+                        {item.status[0]!.toUpperCase() + item.status.slice(1)}
+                      </Badge>
+                    </div>
+                    {item.note && <p class="text-sm m-0 mb-1">{item.note}</p>}
+                    <small class="text-xs text-muted-foreground">
+                      By {item.updatedByName} · {item.updatedAt.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class="text-sm text-muted-foreground m-0">No responses recorded on your contributions yet.</p>
+            )}
+          </section>
+
+          <CatchUpDigest
+            groups={catchUpGroups}
+            total={catchUpTotal}
+            sinceLabel={catchUpSinceLabel}
+            hasLastVisit={Boolean(lastSeen)}
+            idPrefix="notifications-catchup"
+          />
+
+          <EmailPreferences existingMember={existingDigestMember} preference={emailPreference} saved={Astro.url.searchParams.get('emailPreferences') === 'saved'} />
+        </div>
         <!-- VIEW 1: OVERVIEW (Outstanding votes, Participation opportunities, Catch-up, Status changes) -->
         <div class="overview-only member-overview-grid">
           <!-- Left Column: Actionable Queues -->

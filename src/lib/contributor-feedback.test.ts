@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { getDatabase } from "./db.ts";
 import { addComment, getProposalDetail, saveProposal, setCommentFeedback } from "./store.ts";
+import { buildMemberCatchUp, listMemberActivityStream } from "./member-activity.ts";
 import type { SessionUser } from "./types.ts";
 
 const adminUser: SessionUser = {
@@ -102,6 +103,25 @@ describe("contributor feedback and proposal supersession", () => {
       .collection("comments")
       .findOne({ commentId: comment.commentId });
     assert.equal(storedComment?.feedbackHistory?.length, 3);
+
+    // Non-cleared responses appear in the contributor's activity stream and catch-up notifications
+    const stream = await listMemberActivityStream(db, otherMember.memberId);
+    assert.ok(
+      stream.some((event) => event.action === "responded to your contribution on"),
+    );
+    const catchUp = await buildMemberCatchUp(
+      db,
+      otherMember.memberId,
+      new Date(Date.now() - 60_000),
+      otherMember,
+    );
+    assert.ok(
+      catchUp.some((group) =>
+        group.items.some(
+          (item) => item.action === "responded to your contribution",
+        ),
+      ),
+    );
   });
 
   it("enforces proposal visibility on supersession targets when fetched for public/unauthorised viewers", async () => {
