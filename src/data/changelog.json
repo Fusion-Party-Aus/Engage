@@ -1,5 +1,21 @@
 [
   {
+    "hash": "e839386",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "branches",
+    "summary": "Let verified members manage branch membership"
+  },
+  {
+    "hash": "e22aa5e",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record Sense Box availability fix"
+  },
+  {
     "hash": "7efcbbb",
     "date": "2026-11-13",
     "type": "fix",
@@ -644,21 +660,5 @@
     "category": "feature",
     "scope": "platform",
     "summary": "Enable adding and editing policy provenance in admin panel and fix MongoDB seeding conflict"
-  },
-  {
-    "hash": "0020544",
-    "date": "2026-10-27",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Add PortableText renderer and restore Reclaim policy provenance"
-  },
-  {
-    "hash": "5065d00",
-    "date": "2026-10-27",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Refactor proposal detail to 2-column layout with refined asset showcase and trim UI verbosity"
   }
 ]
