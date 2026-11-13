@@ -1,6 +1,15 @@
 [
   {
-    "hash": "4cc35df",
+    "hash": "d9313bb",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "site",
+    "summary": "Open notifications in a header popover",
+    "details": "The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu."
+  },
+  {
+    "hash": "69ee0e8",
     "date": "2026-11-13",
     "type": "test",
     "category": "ops",
@@ -647,13 +656,5 @@
     "category": "feature",
     "scope": "workspaces",
     "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
-  },
-  {
-    "hash": "f58e150",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
   }
 ]
