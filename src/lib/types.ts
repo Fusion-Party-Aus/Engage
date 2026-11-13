@@ -168,6 +168,8 @@ export interface ProposalRecord {
   originatingBranchId?: string;
   governanceAuthorityBranchId?: string;
   jurisdictionBranchId?: string;
+  /** Canonical geographic proposal scope key. Branch identity stays separate. */
+  scope?: string;
   publicationScope?: "private" | "branch" | "national";
   ballotRevisionId?: string;
   ballotClosesAt?: Date;

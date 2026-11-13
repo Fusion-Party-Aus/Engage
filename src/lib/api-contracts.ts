@@ -1,4 +1,5 @@
 import { canViewIdentifiableBallots } from "./auth.ts";
+import { storedProposalScopeKey } from "./proposal-scope.ts";
 import { publicPolicy } from "./public-policy.ts";
 import type {
   CommentRecord,
@@ -84,6 +85,7 @@ export function toProposalListItemDto(p: ProposalSummaryView) {
     outcomes: Array.isArray(p.outcomes) ? p.outcomes : [],
     stage: p.stage,
     kind: p.kind ?? "policy",
+    scope: storedProposalScopeKey(p),
     ...(p.originatingBranchId
       ? { originatingBranchId: p.originatingBranchId }
       : {}),

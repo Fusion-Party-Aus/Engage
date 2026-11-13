@@ -30,6 +30,10 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { ballotExpired } from "./ballot-deadline.ts";
 import {
+  geographicScopeForBranch,
+  parseProposalScopeInput,
+} from "./proposal-scope.ts";
+import {
   matterHasCapability,
   normalizeMatterType,
   validateMatterTransition,
@@ -665,6 +669,11 @@ export async function saveProposal(
     "publicationScope",
   ] as const;
   const branchAdminIds = user.branchAdminIds ?? [];
+  // Validate the submitted geographic scope before any permissions run. The
+  // canonical key is translated to an organisational branch identifier here,
+  // so a display label can never select a branch.
+  const submittedScope = await parseProposalScopeInput(db, body);
+  const explicitNationalScope = submittedScope?.explicitNational === true;
   const canManageExisting = Boolean(
     existing &&
     (user.isStaff ||
@@ -682,7 +691,7 @@ export async function saveProposal(
       throw new Error(
         "Only a national administrator may set governance authority, jurisdiction, or publication scope.",
       );
-    if (body.originatingBranchId !== undefined) {
+    if (body.originatingBranchId !== undefined && !explicitNationalScope) {
       const requestedOrigin = String(body.originatingBranchId ?? "").trim();
       if (
         !requestedOrigin ||
@@ -693,11 +702,33 @@ export async function saveProposal(
           "Only an administrator may assign a proposal origin in an explicitly delegated branch; proposal origin cannot be changed later.",
         );
     }
-    if (!existing && body.originatingBranchId !== undefined) {
+    if (
+      !existing &&
+      body.originatingBranchId !== undefined &&
+      !explicitNationalScope
+    ) {
       const requestedOrigin = String(body.originatingBranchId).trim();
       if (!(await db.collection("branches").findOne({ branchId: requestedOrigin, recognised: true })))
         throw new Error("Proposal origin must be a recognised branch.");
     }
+    // A branch scope is never inferred from the UI. Enforce the delegation
+    // boundary independently of which controls were rendered.
+    if (
+      submittedScope?.definition &&
+      submittedScope.definition.kind !== "national" &&
+      submittedScope.branchId &&
+      !branchAdminIds.includes(submittedScope.branchId)
+    )
+      throw new Error(
+        "Branch administrators can only create proposals in their own branch. Choose National or one of your branches.",
+      );
+    if (
+      existing &&
+      submittedScope?.branchId &&
+      existing.originatingBranchId &&
+      submittedScope.branchId !== existing.originatingBranchId
+    )
+      throw new Error("Proposal scope cannot be changed after it is set.");
   }
   const isGovernanceOperator = Boolean(user.isStaff || canManageExisting);
 
@@ -773,7 +804,9 @@ export async function saveProposal(
           (field) =>
             body[field] !== undefined &&
             body[field] !== (existing[field] ?? ""),
-        )
+        ) ||
+        (submittedScope?.branchId &&
+          submittedScope.branchId !== (existing.originatingBranchId ?? ""))
       ) {
         throw new Error(
           "Governance authority, jurisdiction and publication scope are locked once a ballot begins.",
@@ -1021,9 +1054,15 @@ export async function saveProposal(
   const now = new Date();
 
   let originatingBranchId =
-    typeof body.originatingBranchId === "string"
+    submittedScope?.branchId ??
+    (typeof body.originatingBranchId === "string"
       ? body.originatingBranchId.trim()
-      : existing?.originatingBranchId;
+      : existing?.originatingBranchId);
+  const scopeWasSubmitted =
+    typeof body.scope === "string" && Boolean(body.scope.trim());
+  let geographicScope = scopeWasSubmitted
+    ? submittedScope?.definition?.key
+    : existing?.scope;
   let governanceAuthorityBranchId =
     typeof body.governanceAuthorityBranchId === "string"
       ? body.governanceAuthorityBranchId.trim()
@@ -1063,13 +1102,27 @@ export async function saveProposal(
       governanceAuthorityBranchId ||= originatingBranchId;
       jurisdictionBranchId ||= originatingBranchId;
       publicationScope ||= "branch";
+      geographicScope ||= geographicScopeForBranch(originBranch)?.key;
     } else if (nationalBranchForDefault) {
       const nationalId = String(nationalBranchForDefault.branchId);
       originatingBranchId ||= nationalId;
       governanceAuthorityBranchId ||= nationalId;
       jurisdictionBranchId ||= nationalId;
       publicationScope ||= "national";
+      geographicScope ||= geographicScopeForBranch(nationalBranchForDefault)?.key;
     }
+  }
+  if (!scopeWasSubmitted && originatingBranchId) {
+    // API clients may still submit an originating branch identifier. Derive the
+    // canonical geographic scope from the branch record rather than trusting a
+    // label, and keep legacy records untouched when it cannot be derived.
+    const originBranch = await db
+      .collection("branches")
+      .findOne({ branchId: originatingBranchId });
+    const derivedScope = originBranch
+      ? geographicScopeForBranch(originBranch)?.key
+      : undefined;
+    geographicScope = derivedScope ?? existing?.scope;
   }
   if (user.isAdmin) {
     for (const branchId of [
@@ -1098,7 +1151,11 @@ export async function saveProposal(
         .findOne({ branchId: originatingBranchId, recognised: true }))
     )
       throw new Error("Proposal origin must be a recognised assigned branch.");
-  } else if (!user.isAdmin && body.originatingBranchId !== undefined) {
+  } else if (
+    !user.isAdmin &&
+    body.originatingBranchId !== undefined &&
+    !explicitNationalScope
+  ) {
     throw new Error(
       "An administrator must select a recognised proposal origin.",
     );
@@ -1172,6 +1229,7 @@ export async function saveProposal(
       governanceAuthorityBranchId,
       jurisdictionBranchId,
       publicationScope,
+      scope: geographicScope,
       provenance,
       updatedAt: now,
     };
@@ -1190,8 +1248,12 @@ export async function saveProposal(
       governanceAuthorityBranchId: updated.governanceAuthorityBranchId,
       jurisdictionBranchId: updated.jurisdictionBranchId,
       publicationScope: updated.publicationScope,
+      ...(geographicScope ? { scope: geographicScope } : {}),
       updatedAt: now,
     };
+    const unsetFields: Record<string, 1> = {};
+    if (scopeWasSubmitted && !geographicScope) unsetFields.scope = 1;
+    if (user.isStaff && body.provenance === null) unsetFields.provenance = 1;
     if (user.isStaff && body.provenance !== undefined) {
       updateSet.provenance = provenance;
     }
@@ -1228,8 +1290,8 @@ export async function saveProposal(
         { proposalId: existing.proposalId, updatedAt: existing.updatedAt },
         {
           $set: updateSet,
-          ...(user.isStaff && body.provenance === null
-            ? { $unset: { provenance: 1 } }
+          ...(Object.keys(unsetFields).length
+            ? { $unset: unsetFields }
             : {}),
         },
         session ? { session } : undefined,
@@ -1298,6 +1360,7 @@ export async function saveProposal(
     governanceAuthorityBranchId,
     jurisdictionBranchId,
     publicationScope,
+    ...(geographicScope ? { scope: geographicScope } : {}),
     provenance,
     authorId: user.memberId,
     authorName: user.name || "Verified Member",
