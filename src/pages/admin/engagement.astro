@@ -47,7 +47,7 @@ const kpis=[
 const labels={accepted:'Accepted · awaiting delivery',delivered:'Delivered',bounced:'Bounced',complained:'Spam complaints',failed:'Failed',held:'Held or awaiting acceptance'};
 const date=(v:any)=>v ? new Date(v).toLocaleString('en-AU',{timeZone:'Australia/Melbourne'}) : 'Not recorded';
 ---
-<AdminLayout title="Member engagement" description="Understand delivery and voting participation, and check a sample email." section="overview" isAdmin>
+<AdminLayout title="Member engagement" description="Understand delivery and voting participation, and check a sample email." section="engagement" isAdmin>
  <div class="engagement-dashboard">
   <div class="engagement-toolbar">
    <span class="engagement-badge">Scheduled digests {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}</span>

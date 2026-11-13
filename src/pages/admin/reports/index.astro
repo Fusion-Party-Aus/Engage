@@ -1,0 +1,263 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import {
+  ArrowRight,
+  Download,
+  FileDown,
+  FileText,
+  GitBranch,
+  Mail,
+  ShieldAlert,
+} from 'lucide-react';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { isGovernanceResolution, listProposals } from '../../../lib/store.ts';
+import { buildBranchSummaryRows } from '../../../lib/admin-reporting.ts';
+import { Button } from '../../../components/ui/button';
+import { Badge } from '../../../components/ui/badge';
+import { Input } from '../../../components/ui/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../../../components/ui/table';
+import Card from '../../../components/admin/Card.astro';
+import CardAction from '../../../components/admin/CardAction.astro';
+import CardContent from '../../../components/admin/CardContent.astro';
+import CardDescription from '../../../components/admin/CardDescription.astro';
+import CardHeader from '../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../components/admin/CardTitle.astro';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/', 302);
+if (!user.isStaff && !user.isBranchAdmin) Astro.response.status = 403;
+
+const db = await getDatabase(env);
+const branchAdminIds = user.branchAdminIds ?? [];
+const search = (Astro.url.searchParams.get('q') ?? '').trim();
+
+const rawProposals = user.isStaff
+  ? await listProposals(db, { includeArchived: true })
+  : user.isBranchAdmin
+    ? (await Promise.all(branchAdminIds.map((branch) => listProposals(db, { includeArchived: true, branch })))).flat()
+    : [];
+const proposals = [...new Map(rawProposals.map((proposal) => [proposal.proposalId, proposal])).values()];
+
+const scopedBranches = user.isStaff
+  ? await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()
+  : user.isBranchAdmin
+    ? await db.collection('branches').find({ branchId: { $in: branchAdminIds } }).sort({ name: 1 }).toArray()
+    : [];
+
+const scopedBranchIds = scopedBranches.map((branch: any) => String(branch.branchId));
+const branchCountPairs = await Promise.all(
+  scopedBranchIds.map(async (branchId) => [
+    branchId,
+    await db.collection('branch_memberships').countDocuments({ status: 'active', branchId }),
+  ] as const),
+);
+const verifiedCountsByBranch = new Map<string, number>(branchCountPairs);
+const branchSummaryRows = buildBranchSummaryRows(
+  proposals,
+  scopedBranches as any[],
+  verifiedCountsByBranch,
+  user.isStaff ? undefined : new Set(scopedBranchIds),
+);
+
+const queryLower = search.toLowerCase();
+const pdfCandidates = proposals
+  .filter((proposal) =>
+    !queryLower ||
+    `${proposal.proposalId} ${proposal.title} ${proposal.space}`.toLowerCase().includes(queryLower),
+  )
+  .slice(0, 40);
+
+const totalVotes = proposals.reduce((sum, p) => sum + p.votes.total, 0);
+const totalComments = proposals.reduce((sum, p) => sum + p.commentCount, 0);
+const activeBallots = proposals.filter((p) => p.stage === 'decide').length;
+---
+
+<AdminLayout
+  title="Reports & exports"
+  description="Generate shareable proposal PDFs, export aggregate CSV summaries, and review branch activity."
+  section="reports"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  {!user.isStaff && !user.isBranchAdmin ? (
+    <Alert variant="destructive">
+      <ShieldAlert />
+      <AlertTitle>Access required</AlertTitle>
+      <AlertDescription>Moderator or Administrator access is required to view reports.</AlertDescription>
+    </Alert>
+  ) : (
+    <div class="admin-stack">
+      <div class="project-detail-strip" aria-label="Reporting totals">
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><FileText aria-hidden="true" />Total records</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{proposals.length}</strong>
+            <span class="project-stat-cell__hint">In your authority scope</span>
+          </div>
+        </div>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><GitBranch aria-hidden="true" />Active ballots</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{activeBallots}</strong>
+            <span class="project-stat-cell__hint">Currently in Decide</span>
+          </div>
+        </div>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><FileDown aria-hidden="true" />Aggregate votes</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{totalVotes}</strong>
+            <span class="project-stat-cell__hint">Identities never exported</span>
+          </div>
+        </div>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><Mail aria-hidden="true" />Contributions</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{totalComments}</strong>
+            <span class="project-stat-cell__hint">Across visible proposals</span>
+          </div>
+        </div>
+      </div>
+
+      <Card class="gap-0">
+        <CardHeader>
+          <CardTitle class="text-base">Aggregate exports</CardTitle>
+          <CardDescription>Download spreadsheets for committee packs or open engagement delivery metrics.</CardDescription>
+          <CardAction>
+            <div class="flex flex-wrap gap-2">
+              <Button href="/api/admin/reports/proposals.csv" variant="outline" size="sm">
+                <Download />Export all proposals (CSV)
+              </Button>
+              {user.isAdmin && (
+                <Button href="/admin/engagement/" variant="outline" size="sm">
+                  Member engagement<ArrowRight />
+                </Button>
+              )}
+            </div>
+          </CardAction>
+        </CardHeader>
+      </Card>
+
+      <Card class="gap-0">
+        <CardHeader class="border-b pb-4">
+          <CardTitle class="text-base">Proposal &amp; motion PDF reports</CardTitle>
+          <CardDescription>Generate an on-demand PDF brief with status, ballot totals, recorded outcomes, and comments.</CardDescription>
+          <CardAction>
+            <form method="get" action="/admin/reports/" class="flex items-center gap-2">
+              <label for="report-search" class="sr-only">Filter proposals</label>
+              <Input
+                id="report-search"
+                type="search"
+                name="q"
+                defaultValue={search}
+                placeholder="Filter by ID or title"
+                className="h-8 w-52"
+              />
+              <Button type="submit" variant="outline" size="sm">Filter</Button>
+            </form>
+          </CardAction>
+        </CardHeader>
+        <CardContent class="p-4">
+          {pdfCandidates.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Record</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Stage</TableHead>
+                  <TableHead>Votes</TableHead>
+                  <TableHead>Comments</TableHead>
+                  <TableHead>Report</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pdfCandidates.map((proposal) => {
+                  const isResolution = isGovernanceResolution(proposal);
+                  return (
+                    <TableRow>
+                      <TableCell className="whitespace-normal">
+                        <a href={`/admin/proposals/${proposal.slug}/`} class="font-semibold text-foreground hover:underline">
+                          <span class="tabular text-muted-foreground">{proposal.proposalId}</span> · {proposal.title}
+                        </a>
+                      </TableCell>
+                      <TableCell><Badge variant="outline">{isResolution ? 'Resolution' : 'Policy'}</Badge></TableCell>
+                      <TableCell><Badge variant="muted">{proposal.stage}</Badge></TableCell>
+                      <TableCell className="tabular">{proposal.votes.total}</TableCell>
+                      <TableCell className="tabular">{proposal.commentCount}</TableCell>
+                      <TableCell>
+                        <Button
+                          href={`/api/admin/reports/proposal-pdf?proposalId=${encodeURIComponent(proposal.proposalId)}`}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <FileDown />Download PDF
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <div class="rounded-lg border bg-muted/30 p-5 text-sm">
+              <strong class="block text-foreground">No proposals match this filter</strong>
+              <p class="mt-1 mb-0 text-muted-foreground">Try a broader search term to locate a proposal or governance motion.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card class="gap-0">
+        <CardHeader class="border-b pb-4">
+          <CardTitle class="text-base">Branch activity summary</CardTitle>
+          <CardDescription>Verified members, active proposals, and aggregate vote counts by branch.</CardDescription>
+        </CardHeader>
+        <CardContent class="p-4">
+          {branchSummaryRows.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Branch</TableHead>
+                  <TableHead>Verified members</TableHead>
+                  <TableHead>Active proposals</TableHead>
+                  <TableHead>Decide stage</TableHead>
+                  <TableHead>Total votes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {branchSummaryRows.map((branch) => (
+                  <TableRow>
+                    <TableCell className="font-semibold">{branch.branchName}</TableCell>
+                    <TableCell className="tabular">{branch.verifiedMembers}</TableCell>
+                    <TableCell className="tabular">{branch.totalProposals - branch.archived}</TableCell>
+                    <TableCell className="tabular">{branch.decide}</TableCell>
+                    <TableCell className="tabular">{branch.totalVotes}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div class="rounded-lg border bg-muted/30 p-5 text-sm">
+              <strong class="block text-foreground">No branches in scope</strong>
+              <p class="mt-1 mb-0 text-muted-foreground">Recognised branches will appear here once configured.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )}
+</AdminLayout>

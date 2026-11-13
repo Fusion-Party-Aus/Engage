@@ -2,15 +2,18 @@
 import SiteLayout from './SiteLayout.astro';
 import { Button } from '../components/ui/button';
 import {
+  BarChart3,
   BookOpen,
   ChevronRight,
   Database,
   FileText,
+  Gavel,
   GitBranch,
   Home,
   LayoutDashboard,
   LifeBuoy,
   LogOut,
+  Mail,
   PanelLeft,
   PlusCircle,
   ScrollText,
@@ -23,10 +26,23 @@ import { getSessionUser } from '../lib/auth.ts';
 import { runtimeEnv } from '../lib/db.ts';
 import '../styles/admin.css';
 
+export type AdminSection =
+  | 'overview'
+  | 'proposals'
+  | 'ballots'
+  | 'policies'
+  | 'members'
+  | 'branches'
+  | 'sense-box'
+  | 'reports'
+  | 'engagement'
+  | 'settings'
+  | 'migrations';
+
 interface Props {
   title: string;
   description: string;
-  section?: 'overview' | 'proposals' | 'members' | 'branches' | 'policies' | 'settings' | 'migrations';
+  section?: AdminSection;
   isAdmin?: boolean;
   isBranchAdmin?: boolean;
   hideIntro?: boolean;
@@ -34,28 +50,43 @@ interface Props {
 
 const { title, description, section = 'policies', isAdmin = false, isBranchAdmin = false, hideIntro = false } = Astro.props;
 const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
+const canAccessAdmin = isAdmin || isBranchAdmin;
 
-const proposalsHref = isAdmin || isBranchAdmin ? '/admin/proposals/' : '/admin/';
-const governanceItems = [
-  { key: 'overview', href: '/admin/', label: 'Needs attention', icon: LayoutDashboard, show: true },
-  { key: 'proposals', href: proposalsHref, label: 'Review ideas & votes', icon: FileText, show: isAdmin || isBranchAdmin },
-  { key: 'members', href: isAdmin ? '/admin/members/' : '/admin/branches/#people', label: 'Member access', icon: Users, show: isAdmin || isBranchAdmin },
-  { key: 'sense-box', href: '/admin/sense-box/', label: 'Sense Box', icon: LifeBuoy, show: isAdmin || isBranchAdmin },
-  { key: 'branches', href: '/admin/branches/', label: 'Branch governance', icon: GitBranch, show: isAdmin || isBranchAdmin },
-  { key: 'policies', href: '/admin/policies/', label: 'Adopt & publish', icon: BookOpen, show: isAdmin },
-  { key: 'settings', href: '/admin/settings/', label: 'Platform settings', icon: Settings, show: isAdmin },
+const workspaceItems = [
+  { key: 'overview', href: '/admin/', label: 'Overview', icon: LayoutDashboard, show: true },
+  { key: 'proposals', href: canAccessAdmin ? '/admin/proposals/' : '/admin/', label: 'Proposals & motions', icon: FileText, show: canAccessAdmin },
+  { key: 'ballots', href: '/admin/ballots/', label: 'Ballots & decisions', icon: Gavel, show: canAccessAdmin },
+  { key: 'policies', href: '/admin/policies/', label: 'Policy registry', icon: BookOpen, show: isAdmin },
+].filter((item) => item.show);
+
+const peopleItems = [
+  { key: 'members', href: '/admin/members/', label: 'Members', icon: Users, show: isAdmin },
+  { key: 'branches', href: '/admin/branches/', label: 'Branches', icon: GitBranch, show: canAccessAdmin },
+  { key: 'sense-box', href: '/admin/sense-box/', label: 'Sense Box', icon: LifeBuoy, show: canAccessAdmin },
+].filter((item) => item.show);
+
+const operationsItems = [
+  { key: 'reports', href: '/admin/reports/', label: 'Reports', icon: BarChart3, show: canAccessAdmin },
+  { key: 'engagement', href: '/admin/engagement/', label: 'Member engagement', icon: Mail, show: isAdmin },
+  { key: 'settings', href: '/admin/settings/', label: 'Settings', icon: Settings, show: isAdmin },
   { key: 'migrations', href: '/admin/migrations/', label: 'Migrations', icon: Database, show: isAdmin },
 ].filter((item) => item.show);
 
+const navGroups = [
+  { label: 'Governance', items: workspaceItems },
+  { label: 'People & branches', items: peopleItems },
+  { label: 'Reports & settings', items: operationsItems },
+].filter((group) => group.items.length > 0);
+
 const siteItems = [
-  ...(isAdmin ? [{ href: '/admin/engagement/', label: 'Member engagement', icon: Users }] : []),
   { href: '/', label: 'Engage home', icon: Home },
   { href: '/proposals/', label: 'All proposals', icon: FileText },
   { href: '/policies/', label: 'Policy registry', icon: ScrollText },
   { href: '/how-it-works/', label: 'How it works', icon: LifeBuoy },
 ];
 
-const sectionLabel = governanceItems.find((item) => item.key === section)?.label ?? 'Administration';
+const allNavItems = navGroups.flatMap((group) => group.items);
+const sectionLabel = allNavItems.find((item) => item.key === section)?.label ?? 'Administration';
 const displayName = user?.name || user?.email || 'Administrator';
 const initials = displayName
   .split(/\s+/)
@@ -92,24 +123,26 @@ const roleLabel = user?.isAdmin ? 'Administrator' : user?.isBranchAdmin ? 'Branc
         </Button>
 
         <nav class="admin-nav" aria-label="Administration">
-          <div class="admin-nav-group">
-            <p class="admin-nav-label">Governance</p>
-            <ul class="admin-nav-list">
-              {governanceItems.map((item) => {
-                const Icon = item.icon;
-                const current = section === item.key;
-                return (
-                  <li>
-                    <a href={item.href} class:list={['admin-nav-link', { 'is-active': current }]} aria-current={current ? 'page' : undefined} aria-label={item.label} title={item.label}>
-                      <Icon aria-hidden="true" />
-                      <span>{item.label}</span>
-                      {current && <ChevronRight className="admin-nav-chevron" aria-hidden="true" />}
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+          {navGroups.map((group) => (
+            <div class="admin-nav-group">
+              <p class="admin-nav-label">{group.label}</p>
+              <ul class="admin-nav-list">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const current = section === item.key;
+                  return (
+                    <li>
+                      <a href={item.href} class:list={['admin-nav-link', { 'is-active': current }]} aria-current={current ? 'page' : undefined} aria-label={item.label} title={item.label}>
+                        <Icon aria-hidden="true" />
+                        <span>{item.label}</span>
+                        {current && <ChevronRight className="admin-nav-chevron" aria-hidden="true" />}
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
 
           <div class="admin-nav-group">
             <p class="admin-nav-label">Public site</p>
