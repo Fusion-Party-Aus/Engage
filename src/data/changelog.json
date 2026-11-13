@@ -1,6 +1,15 @@
 [
   {
-    "hash": "55711e2",
+    "hash": "a24be08",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "auth",
+    "summary": "Support multiple roles and a grouped scope select",
+    "details": "Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips."
+  },
+  {
+    "hash": "ada97c2",
     "date": "2026-11-13",
     "type": "fix",
     "category": "fix",
@@ -648,13 +657,5 @@
     "category": "feature",
     "scope": "ui",
     "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
   }
 ]
