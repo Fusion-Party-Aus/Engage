@@ -15,7 +15,7 @@ import { NativeSelect } from '../../components/ui/native-select';
 import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { getProposalDetail, listOutstandingDecisions } from '../../lib/store.ts';
+import { canRespondToContribution, getProposalDetail, listOutstandingDecisions } from '../../lib/store.ts';
 import { getProposalEligibility, type ParticipationEligibility } from '../../lib/branch-participation.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import type { ProposalStage } from '../../lib/types.ts';
@@ -33,6 +33,31 @@ const detail = await getProposalDetail(db, Astro.params.slug ?? '', user);
 if (!detail) {
   Astro.response.status = 404;
 }
+const supersededByProposal = detail?.proposal?.supersededByProposalId
+  ? await db
+      .collection('proposals')
+      .findOne(
+        { proposalId: detail.proposal.supersededByProposalId },
+        { projection: { proposalId: 1, title: 1, slug: 1 } },
+      )
+  : null;
+const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
+const feedbackStatusLabel = (status: string) =>
+  status === 'incorporated'
+    ? 'Incorporated'
+    : status === 'considered'
+      ? 'Considered'
+      : status === 'deferred'
+        ? 'Deferred'
+        : 'Declined';
+const feedbackStatusVariant = (status: string) =>
+  status === 'incorporated'
+    ? ('success' as const)
+    : status === 'considered'
+      ? ('info' as const)
+      : status === 'deferred'
+        ? ('warning' as const)
+        : ('outline' as const);
 
 const proposal = detail?.proposal;
 const [
@@ -347,6 +372,20 @@ const initialsFor = (name: string) =>
 
           <h1 class="proposal-hero__title">{proposal.title}</h1>
           <p class="proposal-hero__summary">{proposal.summary}</p>
+          {proposal.supersededByProposalId && (
+            <div class="superseded-notice" role="status">
+              <strong>Superseded:</strong>{' '}
+              {supersededByProposal ? (
+                <>
+                  This record has been superseded by{' '}
+                  <a href={`/proposals/${supersededByProposal.slug}/`}>{supersededByProposal.proposalId} · {supersededByProposal.title}</a>.
+                </>
+              ) : (
+                <>This record has been superseded by {proposal.supersededByProposalId}.</>
+              )}
+              {proposal.supersededByNote && <span> {proposal.supersededByNote}</span>}
+            </div>
+          )}
 
 
           <!-- Immediate Next Action Banner (Zero-Friction Entry Point) -->
@@ -790,6 +829,11 @@ const initialsFor = (name: string) =>
                             This amendment overlaps with wording changed since its base revision. An administrator must resolve the conflict before it can be applied.
                           </p>
                         )}
+                        {amendment.resolution?.reason && (
+                          <p class="amendment-resolution-note">
+                            <strong>Review note ({amendment.resolution.outcome}):</strong> {amendment.resolution.reason}
+                          </p>
+                        )}
 
                         <div class="amendment-card__body">
                           {Object.entries(amendment.changes ?? {}).map(([field, value]: [string, any]) => (
@@ -990,6 +1034,54 @@ const initialsFor = (name: string) =>
                           <div class="comment-card__body">
                             <p>{c.body}</p>
                           </div>
+
+                          <div class="comment-feedback-slot" data-feedback-slot={c.commentId}>
+                            {c.feedback && (
+                              <div class="comment-feedback">
+                                <Badge variant={feedbackStatusVariant(c.feedback.status)}>
+                                  {feedbackStatusLabel(c.feedback.status)}
+                                </Badge>
+                                <div class="comment-feedback__copy">
+                                  {c.feedback.note && <p>{c.feedback.note}</p>}
+                                  <small>
+                                    Response by {c.feedback.updatedByName} ·{' '}
+                                    {new Date(c.feedback.updatedAt).toLocaleDateString('en-AU', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })}
+                                  </small>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {canRespondToFeedback && (
+                            <details class="comment-feedback-drawer">
+                              <summary>{c.feedback ? 'Update response' : 'Record response'}</summary>
+                              <form class="comment-feedback-form" data-comment-id={c.commentId}>
+                                <div class="comment-feedback-form__row">
+                                  <label for={`feedback-status-${c.commentId}`} class="sr-only">Contribution outcome</label>
+                                  <select id={`feedback-status-${c.commentId}`} name="status">
+                                    <option value="incorporated" selected={c.feedback?.status === 'incorporated'}>Incorporated</option>
+                                    <option value="considered" selected={!c.feedback || c.feedback.status === 'considered'}>Considered</option>
+                                    <option value="deferred" selected={c.feedback?.status === 'deferred'}>Deferred</option>
+                                    <option value="declined" selected={c.feedback?.status === 'declined'}>Declined</option>
+                                    {c.feedback && <option value="clear">Clear response</option>}
+                                  </select>
+                                  <input
+                                    type="text"
+                                    name="note"
+                                    maxlength={500}
+                                    value={c.feedback?.note ?? ''}
+                                    placeholder="Short explanation for the contributor (optional)"
+                                  />
+                                  <button type="submit" class="comment-feedback-save">Save</button>
+                                </div>
+                                <span class="comment-feedback-status" role="status" aria-live="polite"></span>
+                              </form>
+                            </details>
+                          )}
                         </div>
                       </article>
                     );
@@ -1616,6 +1708,62 @@ const initialsFor = (name: string) =>
       }
     });
   }
+
+  // Author / administrator contribution feedback (zero-reload)
+  document.querySelectorAll<HTMLFormElement>('.comment-feedback-form').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const commentId = form.dataset.commentId;
+      const saveBtn = form.querySelector<HTMLButtonElement>('.comment-feedback-save');
+      const statusMsg = form.querySelector<HTMLElement>('.comment-feedback-status');
+      if (!commentId || !saveBtn) return;
+      const fields = new FormData(form);
+      const status = String(fields.get('status') ?? 'considered');
+      const note = String(fields.get('note') ?? '').trim();
+      saveBtn.disabled = true;
+      if (statusMsg) statusMsg.textContent = 'Saving...';
+      try {
+        const res = await fetch('/api/comments', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ commentId, status, note }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not save response.');
+        const slot = document.querySelector<HTMLElement>(`[data-feedback-slot="${commentId}"]`);
+        const drawer = form.closest('details');
+        if (slot) {
+          if (!data.feedback) {
+            slot.innerHTML = '';
+          } else {
+            const labelMap: Record<string, string> = {
+              incorporated: 'Incorporated',
+              considered: 'Considered',
+              deferred: 'Deferred',
+              declined: 'Declined',
+            };
+            const label = labelMap[String(data.feedback.status)] ?? 'Considered';
+            const noteHtml = data.feedback.note ? `<p>${escapeHtmlClient(String(data.feedback.note))}</p>` : '';
+            slot.innerHTML = `
+              <div class="comment-feedback">
+                <span class="comment-feedback__badge is-${escapeHtmlClient(String(data.feedback.status))}">${escapeHtmlClient(label)}</span>
+                <div class="comment-feedback__copy">
+                  ${noteHtml}
+                  <small>Response by ${escapeHtmlClient(String(data.feedback.updatedByName || 'Author'))} · just now</small>
+                </div>
+              </div>
+            `;
+          }
+        }
+        if (drawer) drawer.open = false;
+        if (statusMsg) statusMsg.textContent = 'Saved.';
+      } catch (err: any) {
+        if (statusMsg) statusMsg.textContent = err?.message || 'Could not save response.';
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+  });
 
   // Endorse contribution (+1)
   document.querySelectorAll<HTMLButtonElement>('[data-endorse-id]').forEach((btn) => {
@@ -3409,6 +3557,139 @@ const initialsFor = (name: string) =>
     .reading-nav__cta {
       display: none;
     }
+  }
+
+  .superseded-notice {
+    margin: 0.75rem 0 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--horizon-line);
+    border-left: 3px solid var(--horizon-warn-ink);
+    border-radius: 0.45rem;
+    background: var(--horizon-warn-bg);
+    color: var(--horizon-warn-ink);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .superseded-notice a {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+
+  .amendment-resolution-note {
+    margin: 0.5rem 0 0;
+    padding: 0.55rem 0.75rem;
+    border-radius: 0.4rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+    font-size: 0.85rem;
+    color: var(--horizon-muted);
+  }
+
+  .comment-feedback {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin-top: 0.65rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: 0.45rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+  }
+
+  .comment-feedback__badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple);
+  }
+
+  .comment-feedback__badge.is-incorporated {
+    background: var(--horizon-success-bg);
+    color: var(--horizon-success-ink);
+  }
+
+  .comment-feedback__badge.is-deferred {
+    background: var(--horizon-warn-bg);
+    color: var(--horizon-warn-ink);
+  }
+
+  .comment-feedback__copy {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+
+  .comment-feedback__copy p {
+    margin: 0 0 0.2rem;
+    font-size: 0.86rem;
+    color: var(--horizon-purple-deep);
+  }
+
+  .comment-feedback__copy small {
+    font-size: 0.76rem;
+    color: var(--horizon-muted);
+  }
+
+  .comment-feedback-drawer {
+    margin-top: 0.5rem;
+    font-size: 0.82rem;
+  }
+
+  .comment-feedback-drawer > summary {
+    cursor: pointer;
+    color: var(--horizon-purple);
+    font-weight: 600;
+  }
+
+  .comment-feedback-form {
+    margin-top: 0.5rem;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .comment-feedback-form__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+  }
+
+  .comment-feedback-form__row select,
+  .comment-feedback-form__row input {
+    height: 2rem;
+    padding: 0 0.55rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.4rem;
+    background: var(--horizon-white);
+    font-size: 0.82rem;
+  }
+
+  .comment-feedback-form__row input {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+
+  .comment-feedback-save {
+    height: 2rem;
+    padding: 0 0.85rem;
+    border: 1px solid var(--horizon-purple);
+    border-radius: 999px;
+    background: var(--horizon-purple);
+    color: var(--horizon-white);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .comment-feedback-status {
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
   }
 </style>
 

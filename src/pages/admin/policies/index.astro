@@ -51,7 +51,7 @@ const resultRows = user.isAdmin ? await db.collection('ballot_results').find({ r
 const awaitingRatification = resultRows
   .filter((result) => !policies.some((policy: any) => policy.proposalId === result.proposalId))
   .map((result) => ({ ...result, proposal: proposalMap.get(result.proposalId) }))
-  .filter((row) => row.proposal);
+  .filter((row) => row.proposal && row.proposal.kind !== 'resolution' && !row.proposal.proposalId.startsWith('GOV-'));
 
 const ratificationBranches = branches;
 const successorOptions = policies.filter((policy: any) => policy.status === 'adopted');
