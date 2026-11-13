@@ -3,8 +3,9 @@ import { recordLifecycle } from '../../lib/member-lifecycle.ts';
 import { ballotExpired, ballotDeadlineLabel } from '../../lib/ballot-deadline.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
+import StanceSelector from '../../components/ui/stance-selector';
 import PortableText from '../../components/PortableText.astro';
-import { AlertCircle, Check, FileText, MessageCircle, PenLine, ThumbsUp } from 'lucide-react';
+import { AlertCircle, FileText, MessageCircle, PenLine, ThumbsUp } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -955,30 +956,29 @@ const initialsFor = (name: string) =>
                 <!-- Stance Filter Pills + Sort -->
                 <div class="deliberation-controls">
                   <div class="stance-filters" role="group" aria-label="Filter contributions by stance">
-                    <button type="button" class="stance-pill is-active" data-stance="all" aria-pressed="true">
+                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="all" aria-pressed="true">
                       All <span class="tabular">{stanceCounts.all}</span>
-                    </button>
-                    <button type="button" class="stance-pill" data-stance="support" aria-pressed="false">
-                      <ThumbsUp aria-hidden="true" className="size-3.5" /> Support <span class="tabular">{stanceCounts.support}</span>
-                    </button>
-                    <button type="button" class="stance-pill" data-stance="concern" aria-pressed="false">
-                      <AlertCircle aria-hidden="true" className="size-3.5" /> Concern <span class="tabular">{stanceCounts.concern}</span>
-                    </button>
-                    <button type="button" class="stance-pill" data-stance="amendment" aria-pressed="false">
-                      <PenLine aria-hidden="true" className="size-3.5" /> Wording <span class="tabular">{stanceCounts.amendment}</span>
-                    </button>
-                    <button type="button" class="stance-pill" data-stance="comment" aria-pressed="false">
-                      <MessageCircle aria-hidden="true" className="size-3.5" /> Comment <span class="tabular">{stanceCounts.comment}</span>
-                    </button>
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="support" aria-pressed="false">
+                      <ThumbsUp aria-hidden="true" /> Support <span class="tabular">{stanceCounts.support}</span>
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="concern" aria-pressed="false">
+                      <AlertCircle aria-hidden="true" /> Concern <span class="tabular">{stanceCounts.concern}</span>
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="amendment" aria-pressed="false">
+                      <PenLine aria-hidden="true" /> Wording <span class="tabular">{stanceCounts.amendment}</span>
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="comment" aria-pressed="false">
+                      <MessageCircle aria-hidden="true" /> Comment <span class="tabular">{stanceCounts.comment}</span>
+                    </Button>
                   </div>
                   {comments.length > 1 && (
                     <div class="comment-sort">
-                      <label for="comment-sort-select" class="sr-only">Sort contributions</label>
-                      <select id="comment-sort-select" data-comment-sort>
+                      <NativeSelect id="comment-sort-select" data-comment-sort defaultValue="oldest" size="sm" wrapperClassName="w-auto" className="rounded-full" aria-label="Sort contributions">
                         <option value="top">Top endorsed</option>
                         <option value="newest">Newest first</option>
-                        <option value="oldest" selected>Oldest first</option>
-                      </select>
+                        <option value="oldest">Oldest first</option>
+                      </NativeSelect>
                     </div>
                   )}
                 </div>
@@ -1016,35 +1016,19 @@ const initialsFor = (name: string) =>
                 <form id="comment-form" class="comment-composer" data-proposal-id={proposal.proposalId}>
                   <div class="comment-composer__box">
                     <label for="comment-body-input" class="sr-only">Join the discussion</label>
-                    <textarea
+                    <Textarea
                       id="comment-body-input"
                       name="body"
                       required
-                      minlength={5}
-                      maxlength={4000}
+                      minLength={5}
+                      maxLength={4000}
                       rows={3}
                       placeholder="Join the conversation — share support, raise an implementation concern, or suggest wording..."
-                    ></textarea>
+                      className="focus-visible:ring-0"
+                    />
 
                     <div class="comment-composer__toolbar">
-                      <div class="stance-radio-group" role="radiogroup" aria-label="Contribution stance">
-                        <label class="stance-label stance-label--comment">
-                          <input type="radio" name="stance" value="comment" checked />
-                          <span><MessageCircle aria-hidden="true" className="size-3.5" /> Comment</span>
-                        </label>
-                        <label class="stance-label stance-label--support">
-                          <input type="radio" name="stance" value="support" />
-                          <span><Check aria-hidden="true" className="size-3.5" /> Support</span>
-                        </label>
-                        <label class="stance-label stance-label--concern">
-                          <input type="radio" name="stance" value="concern" />
-                          <span><AlertCircle aria-hidden="true" className="size-3.5" /> Concern</span>
-                        </label>
-                        <label class="stance-label stance-label--amendment">
-                          <input type="radio" name="stance" value="amendment" />
-                          <span><PenLine aria-hidden="true" className="size-3.5" /> Wording</span>
-                        </label>
-                      </div>
+                      <StanceSelector client:load />
 
                       <div class="comment-composer__submit">
                         <span id="comment-char-count" class="comment-char-count tabular">0 / 4000</span>
@@ -1058,38 +1042,46 @@ const initialsFor = (name: string) =>
 
                   <div class="stance-starters" aria-label="Quick stance starters">
                     <span class="stance-starters__hint">Prompts:</span>
-                    <button
+                    <Button
                       type="button"
-                      class="starter-chip"
+                      className="starter-chip"
+                      variant="outline"
+                      size="sm"
                       data-starter-stance="support"
                       data-starter-placeholder="What makes this proposal valuable or effective? Share the evidence or outcomes you support..."
                     >
                       I support this because…
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      class="starter-chip"
+                      className="starter-chip"
+                      variant="outline"
+                      size="sm"
                       data-starter-stance="concern"
                       data-starter-placeholder="What unintended consequence, cost, or implementation risk should members consider?"
                     >
                       Implementation concern…
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      class="starter-chip"
+                      className="starter-chip"
+                      variant="outline"
+                      size="sm"
                       data-starter-stance="amendment"
                       data-starter-placeholder="Which sentence or commitment should be clarified, and what wording do you suggest?"
                     >
                       Suggested wording tweak…
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      class="starter-chip"
+                      className="starter-chip"
+                      variant="outline"
+                      size="sm"
                       data-starter-stance="comment"
                       data-starter-placeholder="Ask a clarifying question or share context for other members..."
                     >
                       Clarifying question…
-                    </button>
+                    </Button>
                   </div>
                 </form>
               ) : user ? (
@@ -1156,36 +1148,42 @@ const initialsFor = (name: string) =>
                             </div>
 
                             <div class="comment-card__actions">
-                              <button
+                              <Button
                                 type="button"
-                                class:list={['endorse-btn', { 'is-endorsed': hasEndorsed }]}
+                                variant={hasEndorsed ? 'secondary' : 'outline'}
+                                size="sm"
+                                className="endorse-btn"
                                 data-endorse-id={c.commentId}
                                 disabled={!user?.canParticipate}
                                 title={user?.canParticipate ? 'Endorse contribution' : 'Sign in to endorse'}
                               >
-                                <ThumbsUp aria-hidden="true" className="size-3" />
+                                <ThumbsUp aria-hidden="true" />
                                 <span>Endorse</span>
                                 <span class="endorse-count tabular">{c.upvotes.length}</span>
-                              </button>
+                              </Button>
 
                               {user?.canParticipate && (
-                                <button
+                                <Button
                                   type="button"
-                                  class="reply-btn"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="reply-btn"
                                   data-reply-author={c.authorName}
                                 >
                                   Reply
-                                </button>
+                                </Button>
                               )}
 
                               {canDelete && (
-                                <button
+                                <Button
                                   type="button"
-                                  class="delete-btn"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="delete-btn text-[var(--horizon-danger-ink)]"
                                   data-delete-comment={c.commentId}
                                 >
                                   Delete
-                                </button>
+                                </Button>
                               )}
                             </div>
                           </div>
@@ -1240,23 +1238,29 @@ const initialsFor = (name: string) =>
                               <form class="comment-feedback-form" data-comment-id={c.commentId}>
                                 <div class="comment-feedback-form__row">
                                   <label for={`feedback-status-${c.commentId}`} class="sr-only">Contribution outcome</label>
-                                  <select id={`feedback-status-${c.commentId}`} name="status">
-                                    <option value="incorporated" selected={c.feedback?.status === 'incorporated'}>Incorporated</option>
-                                    <option value="considered" selected={!c.feedback || c.feedback.status === 'considered'}>Considered</option>
-                                    <option value="deferred" selected={c.feedback?.status === 'deferred'}>Deferred</option>
-                                    <option value="declined" selected={c.feedback?.status === 'declined'}>Declined</option>
+                                  <NativeSelect
+                                    id={`feedback-status-${c.commentId}`}
+                                    name="status"
+                                    defaultValue={c.feedback?.status ?? 'considered'}
+                                    size="sm"
+                                    wrapperClassName="w-auto"
+                                  >
+                                    <option value="incorporated">Incorporated</option>
+                                    <option value="considered">Considered</option>
+                                    <option value="deferred">Deferred</option>
+                                    <option value="declined">Declined</option>
                                     {c.feedback && <option value="clear">Clear response</option>}
-                                  </select>
+                                  </NativeSelect>
                                   <label for={`feedback-note-${c.commentId}`} class="sr-only">Explanation for contributor (optional)</label>
-                                  <input
+                                  <Input
                                     id={`feedback-note-${c.commentId}`}
                                     type="text"
                                     name="note"
-                                    maxlength={500}
-                                    value={c.feedback?.note ?? ''}
+                                    maxLength={500}
+                                    defaultValue={c.feedback?.note ?? ''}
                                     placeholder="Short explanation for the contributor (optional)"
                                   />
-                                  <button type="submit" class="comment-feedback-save">Save</button>
+                                  <Button type="submit" variant="outline" size="sm" className="comment-feedback-save">Save</Button>
                                 </div>
                                 <span class="comment-feedback-status" role="status" aria-live="polite"></span>
                               </form>
@@ -1679,10 +1683,7 @@ const initialsFor = (name: string) =>
       const targetStance = chip.dataset.starterStance;
       const placeholder = chip.dataset.starterPlaceholder;
       if (targetStance) {
-        const radio = document.querySelector<HTMLInputElement>(
-          `#comment-form input[name="stance"][value="${targetStance}"]`,
-        );
-        if (radio) radio.checked = true;
+        window.dispatchEvent(new CustomEvent('engage:stance', { detail: targetStance }));
       }
       if (commentBodyInput) {
         if (placeholder) commentBodyInput.placeholder = placeholder;
@@ -2946,27 +2947,7 @@ const initialsFor = (name: string) =>
     gap: 0.35rem;
   }
 
-  .stance-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.32rem 0.7rem;
-    border-radius: 999px;
-    border: 1px solid var(--horizon-line);
-    background: #faf9fd;
-    color: var(--horizon-muted);
-    font: inherit;
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .stance-pill:hover {
-    color: var(--horizon-purple-deep);
-    border-color: var(--horizon-line-strong);
-  }
-
-  .stance-pill.is-active {
+  :global(.stance-pill[aria-pressed='true']) {
     background: var(--horizon-purple);
     border-color: var(--horizon-purple);
     color: #ffffff;
@@ -3185,36 +3166,33 @@ const initialsFor = (name: string) =>
     color: var(--horizon-purple-deep);
   }
 
-  .stance-radio-group {
+  :global(.stance-radio-group) {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
   }
 
-  .stance-label input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .stance-label span {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
+  :global(.stance-choice) {
+    height: auto;
+    min-width: 0;
     padding: 0.28rem 0.65rem;
     border-radius: 999px;
     border: 1px solid var(--horizon-line);
-    background: #ffffff;
+    background: var(--horizon-white);
     color: var(--horizon-muted);
     font-size: 0.78rem;
     font-weight: 600;
-    cursor: pointer;
   }
 
-  .stance-label input:checked + span {
+  :global(.stance-choice[data-state='on']) {
     background: var(--horizon-purple);
     border-color: var(--horizon-purple);
     color: #ffffff;
+  }
+
+  :global(.starter-chip.is-active) {
+    background: var(--horizon-lavender);
+    border-color: var(--horizon-purple);
   }
 
   .sr-only-label :global([data-slot="field-label"]) {
@@ -3869,6 +3847,7 @@ const initialsFor = (name: string) =>
 
   .comment-composer__box:focus-within {
     border-color: var(--horizon-focus);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--horizon-focus) 25%, transparent);
   }
 
   .comment-composer__box textarea {

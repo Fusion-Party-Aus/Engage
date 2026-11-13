@@ -4,6 +4,8 @@ import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import { NativeSelect } from '../../../components/ui/native-select';
 import { Textarea } from '../../../components/ui/textarea';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
 import { ImagePlus, Link as LinkIcon } from 'lucide-react';
@@ -67,21 +69,21 @@ const quickTopics = [
           </Field>
           <div class="topic-chips" role="group" aria-label="Quick-select topic space">
             {quickTopics.map((topic) => (
-              <button type="button" class="topic-chip" data-topic-value={topic}>
+              <Button type="button" className="topic-chip" variant="outline" size="sm" data-topic-value={topic}>
                 {topic}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
 
         {(user?.isAdmin || user?.isBranchAdmin) && (
           <Field label="Proposal scope" htmlFor="proposal-branch">
-            <select id="proposal-branch" name="branch" class="scope-select w-full" required>
+            <NativeSelect id="proposal-branch" name="branch" required>
               <option value="national">National</option>
               {branches.filter((branch: any) => user?.isAdmin || user?.branchAdminIds?.includes(branch.branchId)).map((branch: any) => (
                 <option value={branch.branchId}>{branch.name}</option>
               ))}
-            </select>
+            </NativeSelect>
             <p class="field-hint">Branch proposals are visible within their branch and require a branch administrator to create.</p>
           </Field>
         )}
@@ -102,16 +104,16 @@ const quickTopics = [
 
             <div class="markdown-field-group">
               <div class="markdown-field-head">
-                <label for="proposal-details">Why does it matter? (Rationale &amp; markdown)</label>
+                <Label htmlFor="proposal-details">Why does it matter? (Rationale &amp; markdown)</Label>
                 <div class="markdown-toolbar">
-                  <button type="button" class="toolbar-btn" id="insert-image-btn">
-                    <ImagePlus className="size-3.5" aria-hidden="true" />
+                  <Button type="button" className="toolbar-btn" id="insert-image-btn" variant="outline" size="sm">
+                    <ImagePlus aria-hidden="true" />
                     Add image
-                  </button>
-                  <button type="button" class="toolbar-btn" id="insert-link-btn">
-                    <LinkIcon className="size-3.5" aria-hidden="true" />
+                  </Button>
+                  <Button type="button" className="toolbar-btn" id="insert-link-btn" variant="outline" size="sm">
+                    <LinkIcon aria-hidden="true" />
                     Add link
-                  </button>
+                  </Button>
                 </div>
               </div>
               <Textarea
@@ -296,41 +298,10 @@ const quickTopics = [
     gap: 0.38rem;
   }
 
-  .topic-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.25rem 0.65rem;
-    border-radius: 999px;
-    border: 1px solid var(--horizon-line);
-    background: var(--horizon-surface);
-    color: var(--horizon-purple-deep);
-    font: inherit;
-    font-size: 0.76rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color 120ms ease, border-color 120ms ease;
-  }
-
-  .topic-chip:hover {
-    background: var(--horizon-lavender);
-    border-color: var(--horizon-purple);
-  }
-
-  .topic-chip.is-active {
+  :global(.topic-chip.is-active) {
     background: var(--horizon-purple);
     border-color: var(--horizon-purple);
     color: #ffffff;
-  }
-
-  .scope-select {
-    height: 2.35rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--horizon-line);
-    background: #ffffff;
-    padding: 0 0.75rem;
-    font: inherit;
-    font-size: 0.9rem;
-    color: var(--horizon-ink);
   }
 
   .optional-drawer {
@@ -385,25 +356,6 @@ const quickTopics = [
     display: flex;
     align-items: center;
     gap: 0.4rem;
-  }
-
-  .toolbar-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.28rem 0.6rem;
-    border-radius: 0.38rem;
-    border: 1px solid var(--horizon-line);
-    background: var(--horizon-surface);
-    color: var(--horizon-purple-deep);
-    font-size: 0.76rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .toolbar-btn:hover {
-    background: var(--horizon-lavender);
-    border-color: #b7a2df;
   }
 
   .field-hint {

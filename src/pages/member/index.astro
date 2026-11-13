@@ -5,6 +5,7 @@ import SiteLayout from '../../layouts/SiteLayout.astro';
 import LegalAcceptanceGate from '../../components/legal/LegalAcceptanceGate.astro';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { Checkbox } from '../../components/ui/checkbox';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
@@ -292,7 +293,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                         <div class="signin-passkey-meta">
                           <p id="passkey-status" class="form-status" role="status" aria-live="polite"></p>
                           <label class="signin-autoprompt-toggle" id="passkey-autoprompt-wrap" hidden>
-                            <input type="checkbox" id="passkey-autoprompt" checked />
+                            <Checkbox id="passkey-autoprompt" defaultChecked />
                             <span>Auto-prompt passkey on this device</span>
                           </label>
                         </div>
@@ -518,8 +519,8 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           <Button href={nextAction?.href}>{nextAction?.title} <ArrowRight className="size-4" aria-hidden="true" /></Button>
           <div class="engage-bookmark">
             <label for="engage-url">Find Engage again — bookmark or copy this address</label>
-            <input id="engage-url" readonly value={persistentEngageUrl} />
-            <button type="button" id="copy-engage-url">Copy Engage URL</button>
+            <Input id="engage-url" readOnly defaultValue={persistentEngageUrl} />
+            <Button type="button" id="copy-engage-url" variant="outline" size="sm">Copy Engage URL</Button>
             <p id="copy-engage-status" role="status" aria-live="polite"></p>
           </div>
         </section>

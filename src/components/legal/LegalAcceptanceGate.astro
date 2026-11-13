@@ -1,5 +1,6 @@
 ---
 import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 ---
 <section
   class="legal-acceptance"
@@ -15,7 +16,7 @@ import { Button } from '../ui/button';
 
   <form data-legal-acceptance-form class="legal-acceptance__form">
     <label class="legal-acceptance__choice">
-      <input type="checkbox" name="termsAccepted" value="true" required />
+      <Checkbox name="termsAccepted" value="true" required />
       <span>
         I agree to the <a href="/terms/">Terms of Use</a>
         (version <span data-terms-version>current version</span>).
@@ -23,7 +24,7 @@ import { Button } from '../ui/button';
     </label>
 
     <label class="legal-acceptance__choice">
-      <input type="checkbox" name="privacyAcknowledged" value="true" required />
+      <Checkbox name="privacyAcknowledged" value="true" required />
       <span>
         I have read the <a href="/privacy/">Privacy Policy</a>
         (version <span data-privacy-version>current version</span>).

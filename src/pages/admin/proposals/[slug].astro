@@ -1,6 +1,7 @@
 ---
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   BookOpen,
@@ -10,6 +11,7 @@ import {
   FileText,
   Gavel,
   GitBranch,
+  Info,
   Layers,
   ListChecks,
   Lock,
@@ -444,7 +446,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
           <span class="tabular project-id">{proposal.proposalId}</span>
           <Badge variant={stageTone(proposal.stage)}>{stageLabel(proposal.stage)}</Badge>
           <Badge variant={isResolution ? 'secondary' : 'outline'}>
-            {isResolution ? 'Governance resolution · outcome & archival' : 'Policy proposal · ballot → ratification → registry'}
+            {isResolution ? 'Governance resolution' : 'Policy proposal'}
           </Badge>
           <Badge variant="muted">{proposal.space}</Badge>
         </div>
@@ -453,7 +455,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 
       {nextAction && (
         <Alert variant={nextAction.variant}>
-          <CheckCircle2 />
+          {nextAction.variant === 'warning' ? <AlertTriangle /> : <Info />}
           <div class="flex flex-wrap items-center justify-between gap-3 w-full">
             <div class="grid gap-1">
               <AlertTitle>{nextAction.title}</AlertTitle>

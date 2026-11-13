@@ -19,6 +19,8 @@
   --horizon-lavender: #f2eef9;
   --horizon-lavender-soft: #f8f5fc;
   --horizon-line: #ded6e7;
+  --horizon-line-strong: #c3b3d9;
+  --horizon-ink: var(--horizon-purple-deep);
   --horizon-muted: #54465f;
   --horizon-white: #ffffff;
   --horizon-focus: #006a70;

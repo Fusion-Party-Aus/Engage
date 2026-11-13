@@ -2,6 +2,8 @@
 import { lifecycleConversion } from '../../lib/member-lifecycle.ts';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { NativeSelect } from '../../components/ui/native-select';
 import { getSessionUser } from '../../lib/auth.ts';
 import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
 import { deliveryBreakdown, percentage, testDeliveryHistory } from '../../lib/admin-engagement.ts';
@@ -51,7 +53,7 @@ const date=(v:any)=>v ? new Date(v).toLocaleString('en-AU',{timeZone:'Australia/
  <div class="engagement-dashboard">
   <div class="engagement-toolbar">
    <span class="engagement-badge">Scheduled digests {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}</span>
-   <form method="get" class="engagement-controls"><label for="engagement-period">Email reporting period</label><select name="days" id="engagement-period">{[7,30,90].map(n=><option value={n} selected={n===days}>Last {n} days</option>)}</select><Button type="submit" size="sm" variant="outline">Apply</Button></form>
+   <form method="get" class="engagement-controls"><label for="engagement-period">Email reporting period</label><NativeSelect name="days" id="engagement-period" defaultValue={String(days)} wrapperClassName="w-auto" className="w-auto">{[7,30,90].map(n=><option value={n}>Last {n} days</option>)}</NativeSelect><Button type="submit" size="sm" variant="outline">Apply</Button></form>
   </div>
   {!report && <p class="engagement-feedback" role="alert">Engagement data could not be loaded. Refresh this page to try again. The testing controls remain available.</p>}
   <section aria-label="Engagement overview" class="engagement-kpis">
@@ -88,7 +90,7 @@ const date=(v:any)=>v ? new Date(v).toLocaleString('en-AU',{timeZone:'Australia/
    </section>
    <section class="engagement-card" aria-labelledby="historical-heading">
     <header><h2 id="historical-heading">Historical re-engagement</h2><p>Check who may qualify for a future participation reminder.</p></header>
-    <form id="reengagement-preview-form" class="engagement-preview"><label for="reengagement-cutoff">Verified on or before</label><input type="date" id="reengagement-cutoff" name="cutoff" required max={new Date().toISOString().slice(0,10)} /><Button type="submit" variant="outline">Preview eligibility</Button></form>
+    <form id="reengagement-preview-form" class="engagement-preview"><label for="reengagement-cutoff">Verified on or before</label><Input type="date" id="reengagement-cutoff" name="cutoff" required max={new Date().toISOString().slice(0,10)} className="w-auto" /><Button type="submit" variant="outline">Preview eligibility</Button></form>
     <p id="reengagement-status" class="engagement-feedback" role="status" aria-live="polite"></p>
     <div id="reengagement-results"><p class="engagement-empty">Choose a cutoff date to see eligible, excluded, suppressed and review counts.</p></div>
     <p class="engagement-caption">Read-only preview. This action never sends messages or changes member preferences.</p>

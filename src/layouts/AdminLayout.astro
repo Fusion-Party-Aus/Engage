@@ -110,10 +110,10 @@ const roleLabel = user?.isAdmin ? 'Administrator' : user?.isBranchAdmin ? 'Branc
             <small>Administration</small>
           </span>
         </a>
-        <button class="admin-sidebar__close" type="button" data-sidebar-close>
-          <X className="size-4" aria-hidden="true" />
+        <Button className="admin-sidebar__close" type="button" variant="ghost" size="icon" data-sidebar-close>
+          <X aria-hidden="true" />
           <span class="sr-only">Close navigation</span>
-        </button>
+        </Button>
       </div>
 
       <div class="admin-sidebar__content">
@@ -176,10 +176,10 @@ const roleLabel = user?.isAdmin ? 'Administrator' : user?.isBranchAdmin ? 'Branc
           <div class="admin-user-menu__panel">
             <a href="/member/">Member account</a>
             <a href="/">View public site</a>
-            <button type="button" data-signout>
-              <LogOut className="size-4" aria-hidden="true" />
+            <Button type="button" variant="ghost" size="sm" className="w-full justify-start" data-signout>
+              <LogOut aria-hidden="true" />
               Sign out
-            </button>
+            </Button>
           </div>
         </details>
         <p class="admin-sidebar__note">Actions are limited by your assigned authority. Every decision keeps its recorded wording and history.</p>
@@ -189,10 +189,10 @@ const roleLabel = user?.isAdmin ? 'Administrator' : user?.isBranchAdmin ? 'Branc
     <div class="admin-main">
       <header class="admin-topbar">
         <div class="admin-topbar__left">
-          <button class="admin-icon-button" type="button" data-sidebar-toggle aria-controls="admin-sidebar" aria-expanded="true">
-            <PanelLeft className="size-4" aria-hidden="true" />
+          <Button className="admin-icon-button" type="button" variant="ghost" size="icon" data-sidebar-toggle aria-controls="admin-sidebar" aria-expanded="true">
+            <PanelLeft aria-hidden="true" />
             <span class="sr-only">Toggle administration sidebar</span>
-          </button>
+          </Button>
           <span class="admin-topbar__divider" aria-hidden="true"></span>
           <nav class="admin-breadcrumb" aria-label="Breadcrumb">
             <ol>

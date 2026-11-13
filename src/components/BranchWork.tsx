@@ -215,8 +215,10 @@ export default function BranchWork(props: Props) {
 
       <div role="tablist" aria-label="Branch governance" className="flex flex-wrap gap-5 border-b">
         {tabs.map((t) => (
-          <button
+          <Button
             key={t.key}
+            type="button"
+            variant="ghost"
             role="tab"
             id={`tab-${t.key}`}
             aria-selected={tab === t.key}
@@ -229,12 +231,12 @@ export default function BranchWork(props: Props) {
               if (e.key === 'ArrowLeft') goTab(tabs[(i + tabs.length - 1) % tabs.length]!.key);
             }}
             className={cn(
-              '-mb-px border-b-2 px-0.5 py-2.5 text-sm font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+              '-mb-px h-auto rounded-none border-b-2 px-0.5 py-2.5 text-sm font-semibold',
               tab === t.key ? 'border-[var(--horizon-ink)] text-[var(--horizon-ink)]' : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
             {t.label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -334,20 +336,21 @@ function BranchesPanel({ branches, mine, setBranches, byId, countsFor, activity,
       <li key={b.branchId} role="treeitem" aria-expanded={kids.length ? open : undefined} aria-selected={selected === b.branchId}>
         <div className="flex items-center gap-1" style={{ paddingLeft: `${depth * 1.1}rem` }}>
           {kids.length ? (
-            <button type="button" aria-label={`${open ? 'Collapse' : 'Expand'} ${b.name}`} className="grid size-7 place-items-center rounded hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none" onClick={() => setCollapsed((s: Set<string>) => { const n = new Set(s); open ? n.add(b.branchId) : n.delete(b.branchId); return n; })}>
+            <Button type="button" variant="ghost" size="icon" aria-label={`${open ? 'Collapse' : 'Expand'} ${b.name}`} className="size-7" onClick={() => setCollapsed((s: Set<string>) => { const n = new Set(s); open ? n.add(b.branchId) : n.delete(b.branchId); return n; })}>
               {open ? <ChevronDown aria-hidden className="size-4" /> : <ChevronRight aria-hidden className="size-4" />}
-            </button>
+            </Button>
           ) : <span className="size-7" />}
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setSelected(b.branchId)}
-            className={cn('flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50', selected === b.branchId ? 'bg-[var(--horizon-lavender)]' : 'hover:bg-[var(--horizon-lavender-soft)]')}
+            className={cn('h-auto w-full min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left', selected === b.branchId ? 'bg-[var(--horizon-lavender)]' : 'hover:bg-[var(--horizon-lavender-soft)]')}
           >
             <span className="min-w-0">
               <strong className="block truncate text-sm">{b.name}</strong>
               <span className="block text-xs text-muted-foreground">{KIND_LABEL[b.kind] ?? b.kind} · {c.members} verified · {c.followers} following</span>
             </span>
-          </button>
+          </Button>
         </div>
         {kids.length > 0 && open && <ul role="group" className="grid gap-0.5">{kids.map((k) => renderNode(k, depth + 1))}</ul>}
       </li>

@@ -195,9 +195,9 @@ const formatDate = (value: unknown) =>
                       <TableCell className="tabular text-xs text-muted-foreground">
                         {formatDate(row.closesAt)}
                         {row.expired && (
-                          <span class="ml-1 inline-flex items-center gap-1 font-semibold text-amber-800">
-                            <AlertTriangle className="size-3" aria-hidden="true" />Closed
-                          </span>
+                          <Badge variant="warning" className="ml-1">
+                            <AlertTriangle aria-hidden="true" />Closed
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell className="tabular">{row.approve} / {row.abstain} / {row.reject}</TableCell>

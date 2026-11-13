@@ -1,5 +1,7 @@
 ---
 import { digestEnabled, engageConsentState } from "../../lib/digest-preferences.ts";
+import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 const { preference, saved = false, existingMember = false } = Astro.props;
 const consent=engageConsentState(preference,existingMember);
 const consentLabel={
@@ -20,8 +22,8 @@ const consentLabel={
   <p>Account administration and critical voting-related information. Sign-in links and security alerts are always sent so you can access and protect your account.</p>
   <form method="post" action="/api/email/preferences">
    <input type="hidden" name="category" value="essential" />
-   <label><input type="checkbox" name="accountNotificationsEnabled" value="true" checked={preference?.accountNotificationsEnabled !== false} /> Send account administration and critical voting notices</label>
-   <button type="submit">Save account notifications</button>
+   <label><Checkbox name="accountNotificationsEnabled" value="true" defaultChecked={preference?.accountNotificationsEnabled !== false} /> Send account administration and critical voting notices</label>
+   <Button type="submit" size="sm">Save account notifications</Button>
   </form>
  </section>
  <section aria-labelledby="engage-notifications-heading">
@@ -31,8 +33,8 @@ const consentLabel={
   <p>{existingMember ? "Digests were enabled for existing Engage accounts. Turn them off here or unsubscribe in any digest." : "Digests stay off for new accounts until you opt in."}</p>
   {preference?.suppressed ? <p>Digest delivery is paused after a bounce or spam complaint. Contact an administrator to resolve delivery.</p> : <form method="post" action="/api/email/preferences">
    <input type="hidden" name="category" value="engage" />
-   <label><input type="checkbox" name="digestEnabled" value="true" checked={digestEnabled(preference, existingMember)} /> Send me Engage digests</label>
-   <button type="submit">Save Engage digests</button>
+   <label><Checkbox name="digestEnabled" value="true" defaultChecked={digestEnabled(preference, existingMember)} /> Send me Engage digests</label>
+   <Button type="submit" size="sm">Save Engage digests</Button>
   </form>}
  </section>
  <section aria-labelledby="general-notifications-heading">
@@ -40,8 +42,8 @@ const consentLabel={
   <p>Newsletters, campaigns and broader party updates. This preference is separate from Engage digests and your account notifications.</p>
   <form method="post" action="/api/email/preferences">
    <input type="hidden" name="category" value="general" />
-   <label><input type="checkbox" name="generalCommunicationsEnabled" value="true" checked={preference?.generalCommunicationsEnabled === true} /> Receive general party communications through Engage</label>
-   <button type="submit">Save general communications</button>
+   <label><Checkbox name="generalCommunicationsEnabled" value="true" defaultChecked={preference?.generalCommunicationsEnabled === true} /> Receive general party communications through Engage</label>
+   <Button type="submit" size="sm">Save general communications</Button>
   </form>
  </section>
  <small>Every digest includes an unsubscribe link. Delivery, bounce and unsubscribe reporting help keep emails reliable. Changing these settings does not change your membership.</small>
