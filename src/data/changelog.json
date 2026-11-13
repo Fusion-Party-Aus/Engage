@@ -1,5 +1,21 @@
 [
   {
+    "hash": "8ec0cf1",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "sense-box",
+    "summary": "Collect private branch community priorities"
+  },
+  {
+    "hash": "9ef66f5",
+    "date": "2026-11-09",
+    "type": "test",
+    "category": "ops",
+    "scope": "proposals",
+    "summary": "Capture approved desktop and mobile journeys"
+  },
+  {
     "hash": "b5207f2",
     "date": "2026-11-09",
     "type": "feat",
@@ -646,21 +662,5 @@
     "scope": "platform",
     "summary": "Overhaul participatory democracy platform: Decidim/Loomio 4-stage lifecycle",
     "details": "- Structure lifecycle around Propose -> Deliberate -> Decide -> Implement - Redesign homepage with interactive 4-stage pipeline banner, active deliberations, open decision ballots, and participatory spaces - Add proposal detail page with 4-stage visual stepper, structured deliberation stances (support, concern, amendment, comment) and endorsements - Support voting on decisions with Approve / Abstain / Reject and optional reason - Support Stage 4 implementation tracking notes and officer updates - Rename /policies/ to /proposals/ with seamless backwards-compatible redirects - Fix MongoDB index creation to be conflict-safe with existing NUC indexes"
-  },
-  {
-    "hash": "73d8ab5",
-    "date": "2026-10-27",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Support non-policy party proposals alongside policies in unified CRUD"
-  },
-  {
-    "hash": "99c5940",
-    "date": "2026-10-27",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "platform",
-    "summary": "Simplify Engage into unified CRUD app with redesigned member and admin UX"
   }
 ]
