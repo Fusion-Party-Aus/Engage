@@ -1,11 +1,21 @@
 [
   {
-    "hash": "06dd133",
+    "hash": "ff5e240",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "research",
+    "summary": "Add cross-industry product and UX research",
+    "details": "Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence."
+  },
+  {
+    "hash": "787160a",
     "date": "2026-11-13",
     "type": "fix",
     "category": "fix",
     "scope": "branding",
-    "summary": "Remove internal Horizon label from public and verification emails"
+    "summary": "Remove internal Horizon label from public and verification emails (#24)",
+    "details": "* fix(branding): remove internal Horizon label from public and verification emails * chore(changelog): update changelog snapshot"
   },
   {
     "hash": "baae42d",
@@ -649,13 +659,5 @@
     "category": "ops",
     "scope": "deploy",
     "summary": "Use classic builder for Coolify builds (DNS workaround)"
-  },
-  {
-    "hash": "a65c66d",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Build Coolify images on the coolify bridge network"
   }
 ]
