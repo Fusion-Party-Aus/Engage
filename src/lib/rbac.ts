@@ -314,57 +314,67 @@ export interface RoleAssignmentRecord {
 }
 
 /**
- * Compute legacy-compatible permission snapshot when `user.permissions` is not
- * pre-populated (for example in unit tests constructing synthetic SessionUser).
+ * Resolve legacy administrative facts without reading or changing membership.
+ * Session fallback and database resolution share the same capabilities and IDs.
  */
-function legacySnapshotForUser(user: SessionUser): EffectivePermissionsSnapshot {
-  const national = new Set<PermissionKey>();
+export function resolveLegacyPermissions(
+  roles: readonly string[],
+  memberships: ReadonlyArray<{
+    branchId: string;
+    branchRole?: string;
+    status: string;
+  }>,
+): EffectivePermissionsSnapshot {
+  const national: PermissionKey[] = roles.includes("administrator")
+    ? [...ALL_NATIONAL_PERMISSIONS]
+    : roles.includes("moderator")
+      ? [...LEGACY_MODERATOR_PERMISSIONS]
+      : [];
+  const roleId = roles.includes("administrator")
+    ? "system:national_administrator"
+    : "system:moderator";
+  const roleName = roles.includes("administrator")
+    ? "National Administrator"
+    : "Moderator";
+  const grants: EffectivePermissionGrant[] = national.map((permission) => ({
+    permission,
+    scopeType: "national",
+    sourceKind: "legacy-role",
+    roleId,
+    roleName,
+  }));
   const branches: Record<string, PermissionKey[]> = {};
-  const grants: EffectivePermissionGrant[] = [];
-
-  if (user.isAdmin || user.role === "administrator") {
-    for (const key of ALL_NATIONAL_PERMISSIONS) {
-      national.add(key);
-      grants.push({
-        permission: key,
-        scopeType: "national",
-        sourceKind: "legacy-role",
-        roleId: "legacy:administrator",
-        roleName: "National Administrator",
-      });
+  for (const membership of memberships) {
+    if (membership.status !== "active" || membership.branchRole !== "administrator") {
+      continue;
     }
-  } else if (user.isStaff || user.role === "moderator") {
-    for (const key of LEGACY_MODERATOR_PERMISSIONS) {
-      national.add(key);
-      grants.push({
-        permission: key,
-        scopeType: "national",
-        sourceKind: "legacy-role",
-        roleId: "legacy:moderator",
-        roleName: "Moderator",
-      });
-    }
-  }
-
-  for (const branchId of user.branchAdminIds ?? []) {
+    const branchId = membership.branchId;
     branches[branchId] = [...LEGACY_BRANCH_ADMIN_PERMISSIONS];
-    for (const key of LEGACY_BRANCH_ADMIN_PERMISSIONS) {
+    for (const permission of LEGACY_BRANCH_ADMIN_PERMISSIONS) {
       grants.push({
-        permission: key,
+        permission,
         scopeType: "branch",
         branchId,
         sourceKind: "legacy-branch-admin",
-        roleId: "legacy:branch-admin",
+        roleId: "system:branch_administrator",
         roleName: "Branch Administrator",
       });
     }
   }
+  return { national, branches, grants };
+}
 
-  return {
-    national: [...national],
-    branches,
-    grants,
-  };
+function legacySnapshotForUser(user: SessionUser): EffectivePermissionsSnapshot {
+  return resolveLegacyPermissions(
+    user.isAdmin || user.role === "administrator"
+      ? ["administrator"]
+      : user.isStaff || user.role === "moderator" ? ["moderator"] : [],
+    (user.branchAdminIds ?? []).map((branchId) => ({
+      branchId,
+      branchRole: "administrator",
+      status: "active",
+    })),
+  );
 }
 
 export function getEffectivePermissionsSnapshot(

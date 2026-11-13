@@ -5,6 +5,7 @@ import {
   LEGACY_BRANCH_ADMIN_PERMISSIONS,
   LEGACY_MODERATOR_PERMISSIONS,
   hasPermission,
+  resolveLegacyPermissions,
   validatePermissionsForScope,
   type EffectivePermissionGrant,
   type EffectivePermissionsSnapshot,
@@ -138,52 +139,17 @@ export async function resolveMemberEffectivePermissions(
     roleById.set(r.roleId, r);
   }
 
-  const nationalSet = new Set<PermissionKey>();
-  const branchSets = new Map<string, Set<PermissionKey>>();
-  const grants: EffectivePermissionGrant[] = [];
-
-  const legacyRoles = rolesDocs.map((r) => r.role);
-  if (legacyRoles.includes("administrator")) {
-    for (const key of ALL_NATIONAL_PERMISSIONS) {
-      nationalSet.add(key);
-      grants.push({
-        permission: key,
-        scopeType: "national",
-        sourceKind: "legacy-role",
-        roleId: "system:national_administrator",
-        roleName: "National Administrator",
-      });
-    }
-  } else if (legacyRoles.includes("moderator")) {
-    for (const key of LEGACY_MODERATOR_PERMISSIONS) {
-      nationalSet.add(key);
-      grants.push({
-        permission: key,
-        scopeType: "national",
-        sourceKind: "legacy-role",
-        roleId: "system:moderator",
-        roleName: "Moderator",
-      });
-    }
-  }
-
-  for (const bm of branchMembershipRows) {
-    if (bm.status === "active" && bm.branchRole === "administrator") {
-      const set = branchSets.get(bm.branchId) ?? new Set<PermissionKey>();
-      for (const key of LEGACY_BRANCH_ADMIN_PERMISSIONS) {
-        set.add(key);
-        grants.push({
-          permission: key,
-          scopeType: "branch",
-          branchId: bm.branchId,
-          sourceKind: "legacy-branch-admin",
-          roleId: "system:branch_administrator",
-          roleName: "Branch Administrator",
-        });
-      }
-      branchSets.set(bm.branchId, set);
-    }
-  }
+  const legacy = resolveLegacyPermissions(
+    rolesDocs.map((row) => row.role),
+    branchMembershipRows,
+  );
+  const nationalSet = new Set<PermissionKey>(legacy.national);
+  const branchSets = new Map<string, Set<PermissionKey>>(
+    Object.entries(legacy.branches).map(([branchId, permissions]) => [
+      branchId, new Set(permissions),
+    ]),
+  );
+  const grants: EffectivePermissionGrant[] = [...legacy.grants];
 
   for (const assignment of assignmentRows) {
     const def = roleById.get(assignment.roleId);
