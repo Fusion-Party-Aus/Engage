@@ -2,6 +2,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { ObjectId, type Db } from 'mongodb';
 import { STANDARD_BRANCHES } from './migrations.ts';
 import type { SessionUser } from './types.ts';
+import { branchesWithPermission, hasPermission } from './rbac.ts';
 import { SENSE_TOPICS, SENSE_STATUSES, type SenseItem, type SenseInbox } from './sense-box-options.ts';
 
 export class SenseError extends Error {
@@ -19,8 +20,11 @@ function choice(value: unknown, options: object, label: string): string {
   return value;
 }
 function scope(user: SessionUser) {
-  if (!user.isAdmin && !user.branchAdminIds?.length) throw new SenseError('Branch organiser access required.',403);
-  return user.isAdmin ? {} : {branchId:{$in:user.branchAdminIds!}};
+  const access = branchesWithPermission(user, 'sense_box.review');
+  if (user.isAdmin || access.national) return {};
+  const allowed = Array.from(new Set([...(user.branchAdminIds ?? []), ...access.branchIds]));
+  if (!allowed.length) throw new SenseError('Branch organiser access required.',403);
+  return {branchId:{$in:allowed}};
 }
 
 // Atomic _id claims work across application instances; TTL removes the hashed network keys.
@@ -81,7 +85,7 @@ export async function listSense(db: Db, user: SessionUser, filters: Record<strin
   const base: Record<string, any> = scope(user);
   if (filters.branchId) {
     const branchId = text(filters.branchId,'Branch',1,100);
-    if (!user.isAdmin && !user.branchAdminIds?.includes(branchId)) throw new SenseError('You do not have access to that branch.',403);
+    if (!user.isAdmin && !user.branchAdminIds?.includes(branchId) && !hasPermission(user, 'sense_box.review', branchId)) throw new SenseError('You do not have access to that branch.',403);
     base.branchId = branchId;
   }
   const filter = {...base};
@@ -105,7 +109,7 @@ export async function listSense(db: Db, user: SessionUser, filters: Record<strin
 export async function reviewSense(db: Db, user: SessionUser, body: Record<string, unknown>) {
   scope(user);
   const branchId = text(body.branchId,'Branch',1,100);
-  if (!user.isAdmin && !user.branchAdminIds?.includes(branchId)) throw new SenseError('You do not have access to that branch.',403);
+  if (!user.isAdmin && !user.branchAdminIds?.includes(branchId) && !hasPermission(user, 'sense_box.review', branchId)) throw new SenseError('You do not have access to that branch.',403);
   const submissionId = text(body.submissionId,'Submission',36,36);
   const status = choice(body.status,SENSE_STATUSES,'status');
   if (!Number.isSafeInteger(body.version) || Number(body.version) < 0) throw new SenseError('Reload this submission and try again.');

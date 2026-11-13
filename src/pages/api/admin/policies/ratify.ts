@@ -82,6 +82,30 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "Ratifying authority must be a recognised branch." },
         { status: 400 },
       );
+    if (
+      typeof proposal.governanceAuthorityBranchId === "string" &&
+      proposal.governanceAuthorityBranchId &&
+      authorityBranchId !== proposal.governanceAuthorityBranchId
+    )
+      return Response.json(
+        {
+          error:
+            "Ratification authority must match the proposal's governance authority branch.",
+        },
+        { status: 409 },
+      );
+    if (
+      typeof ballotResult.authorityBranchId === "string" &&
+      ballotResult.authorityBranchId &&
+      authorityBranchId !== ballotResult.authorityBranchId
+    )
+      return Response.json(
+        {
+          error:
+            "Ratification authority must match the recorded ballot decision authority.",
+        },
+        { status: 409 },
+      );
     const jurisdictionBranchId =
       typeof body.jurisdictionBranchId === "string"
         ? body.jurisdictionBranchId

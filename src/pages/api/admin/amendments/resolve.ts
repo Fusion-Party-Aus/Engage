@@ -1,15 +1,15 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
-import { canManageBranchProposal } from "../../../../lib/auth.ts";
 import { createAmendmentRevision } from "../../../../lib/amendments.ts";
+import { hasPermission } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin)
+  if (!user.isAdmin && !user.isBranchAdmin && !hasPermission(user, "amendments.resolve"))
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -49,9 +49,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (
       (!user.isAdmin && !proposal) ||
       (proposal &&
-        !canManageBranchProposal(user, {
-          originatingBranchId: proposal.originatingBranchId,
-        }))
+        !hasPermission(user, "amendments.resolve", proposal.originatingBranchId))
     )
       return Response.json(
         {

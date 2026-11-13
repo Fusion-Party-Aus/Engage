@@ -431,6 +431,13 @@ export async function listProposals(
       if (!allowArchived && p.stage === "archived") {
         return false;
       }
+      if (
+        options.user !== undefined &&
+        p.stage === "archived" &&
+        !canReviewArchivedProposal(p, options.user)
+      ) {
+        return false;
+      }
       if (options.user !== undefined && !canViewProposal(p, options.user))
         return false;
       if (spaceFilter && spaceFilter !== "all" && p.space !== spaceFilter) {
@@ -505,7 +512,8 @@ export function canReviewArchivedProposal(
       user.isAdmin ||
       proposal.authorId === user.memberId ||
       (proposal.originatingBranchId &&
-        user.branchAdminIds?.includes(proposal.originatingBranchId))),
+        user.branchAdminIds?.includes(proposal.originatingBranchId)) ||
+      hasPermission(user, "proposals.view_archived", proposal.originatingBranchId)),
   );
 }
 
@@ -727,7 +735,8 @@ export async function saveProposal(
     existing &&
     (user.isStaff ||
       (existing.originatingBranchId &&
-        branchAdminIds.includes(existing.originatingBranchId))),
+        branchAdminIds.includes(existing.originatingBranchId)) ||
+      hasPermission(user, "proposals.edit", existing.originatingBranchId)),
   );
   if (!user.isAdmin) {
     if (
@@ -777,16 +786,30 @@ export async function saveProposal(
       }
       const targetStage = normalizeStage(rawStageInput, existing.stage);
       validateStageTransition(existing.stage, targetStage, existing.kind);
-      if (targetStage === "decide" && !user.isStaff && canManageExisting) {
-        const branchId = existing.governanceAuthorityBranchId;
+      if (targetStage === "decide" && existing.stage !== "decide") {
         if (
-          !branchId ||
-          !branchAdminIds.includes(branchId) ||
-          existing.jurisdictionBranchId !== branchId
+          !hasPermission(
+            user,
+            "ballots.bind",
+            existing.governanceAuthorityBranchId,
+          )
         ) {
           throw new Error(
-            "A national administrator must explicitly assign this proposal's branch authority and jurisdiction before its local ballot can open.",
+            "You are not authorised to open a ballot for this proposal.",
           );
+        }
+        if (!user.isAdmin && !hasPermission(user, "ballots.bind")) {
+          const branchId = existing.governanceAuthorityBranchId;
+          if (
+            !branchId ||
+            (!branchAdminIds.includes(branchId) &&
+              !hasPermission(user, "ballots.bind", branchId)) ||
+            existing.jurisdictionBranchId !== branchId
+          ) {
+            throw new Error(
+              "A national administrator must explicitly assign this proposal's branch authority and jurisdiction before its local ballot can open.",
+            );
+          }
         }
       }
       if (existing.stage === "decide" && targetStage === "implement") {
@@ -896,6 +919,22 @@ export async function saveProposal(
       typeof body.implementationNote === "string"
         ? body.implementationNote.trim().slice(0, 1000)
         : existing.implementationNote;
+    if (
+      body.supersededByProposalId !== undefined ||
+      body.supersededByNote !== undefined
+    ) {
+      if (
+        !hasPermission(
+          user,
+          "proposals.manage_supersession",
+          existing.originatingBranchId,
+        )
+      ) {
+        throw new Error(
+          "You do not have permission to manage proposal supersession.",
+        );
+      }
+    }
     let supersededByProposalId = existing.supersededByProposalId;
     if (body.supersededByProposalId !== undefined) {
       const candidate =
@@ -1432,7 +1471,11 @@ export async function deleteProposal(
 
   const isAuthorInPropose =
     existing.authorId === user.memberId && existing.stage === "propose";
-  if (!user.isAdmin && !isAuthorInPropose) {
+  if (
+    !user.isAdmin &&
+    !hasPermission(user, "proposals.delete", existing.originatingBranchId) &&
+    !isAuthorInPropose
+  ) {
     throw new Error(
       "Administrator access is required to delete this proposal.",
     );
@@ -1563,7 +1606,11 @@ export async function deleteComment(
     .findOne({ proposalId: existing.proposalId });
   if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user))
     throw new Error("Comment not found.");
-  if (existing.memberId !== user.memberId && !user.isStaff) {
+  if (
+    existing.memberId !== user.memberId &&
+    !user.isStaff &&
+    !hasPermission(user, "comments.moderate", proposal.originatingBranchId)
+  ) {
     throw new Error("You can only delete your own contributions.");
   }
   await col.deleteOne({ commentId: id });
