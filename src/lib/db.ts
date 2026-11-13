@@ -115,6 +115,16 @@ export async function initializeDatabase(db: Db): Promise<void> {
     db.collection("member_notifications").createIndex({memberId:1,createdAt:-1}),
     db.collection("member_notifications").createIndex({notificationId:1},{unique:true}),
     db.collection("notification_deliveries").createIndex({dedupeKey:1},{unique:true}),
+    db.collection("crm_identity_links").createIndex({memberId:1,application:1},{unique:true}),
+    db.collection("crm_identity_links").createIndex({crmPersonId:1}),
+    db.collection("crm_identity_links").createIndex({application:1,status:1,nextCheckAt:1}),
+    db.collection("membership_verification_attempts").createIndex({status:1,nextAttemptAt:1}),
+    db.collection("membership_verification_attempts").createIndex({status:1,lockedAt:1}),
+    db.collection("membership_verification_reviews").createIndex({reviewId:1},{unique:true}),
+    db.collection("membership_verification_reviews").createIndex({memberId:1,status:1}),
+    db.collection("membership_verification_reviews").createIndex({status:1,createdAt:1}),
+    db.collection("membership_verification_events").createIndex({eventId:1},{unique:true}),
+    db.collection("membership_verification_events").createIndex({memberId:1,createdAt:-1}),
   ]);
   try {
     await ensureVoteStorage(db);
@@ -186,6 +196,7 @@ export async function initializeDatabase(db: Db): Promise<void> {
           { unique: true, name: "membership_member_unique" },
         )
         .catch(() => {}),
+      db.collection("memberships").createIndex({ status: 1 }).catch(() => {}),
       db
         .collection("application_roles")
         .createIndex(

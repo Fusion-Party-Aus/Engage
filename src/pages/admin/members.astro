@@ -7,6 +7,7 @@ import { Search, ShieldAlert, UserPlus, Users } from 'lucide-react';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { listMembers } from '../../lib/store.ts';
+import { listOpenVerificationReviews } from '../../lib/membership-verification.ts';
 import {
   PLATFORM_ROLE_LABELS,
   PLATFORM_ROLE_OPTIONS,
@@ -44,6 +45,7 @@ const db = await getDatabase(env);
 const query = (Astro.url.searchParams.get('q') ?? '').trim();
 const members = canViewMembers ? (await listMembers(db, query)).sort((a, b) => Number(a.status !== 'pending') - Number(b.status !== 'pending') || a.name.localeCompare(b.name)) : [];
 const pendingCount = members.filter((member) => member.status === 'pending').length;
+const verificationReviews = canVerifyMembers ? await listOpenVerificationReviews(db, 25) : [];
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || '?';
 ---
 
@@ -74,6 +76,32 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
           </form>
         </CardContent>
       </Card>
+
+      {verificationReviews.length > 0 && (
+        <Card class="gap-0">
+          <CardHeader class="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+            <div class="grid gap-1">
+              <CardTitle class="text-base">Verification reviews</CardTitle>
+              <CardDescription>Accounts whose CRM membership or geographic branch could not be resolved automatically.</CardDescription>
+            </div>
+            <Badge variant="warning">{verificationReviews.length}</Badge>
+          </CardHeader>
+          <CardContent class="p-0">
+            <div class="divide-y">
+              {verificationReviews.map((review) => (
+                <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                  <div class="grid min-w-0 gap-1">
+                    <p class="m-0 text-sm font-semibold text-foreground">{review.name || review.email || 'Member account'}</p>
+                    <p class="m-0 text-sm text-muted-foreground">{review.reasonLabel}</p>
+                    <p class="m-0 text-xs text-muted-foreground">Opened {new Date(review.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  </div>
+                  <Button href={`/admin/members/?q=${encodeURIComponent(review.email || review.name || '')}`} variant="outline" size="sm">Review account</Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card class="gap-0">
         <CardHeader class="flex flex-wrap items-center justify-between gap-3 border-b pb-4">

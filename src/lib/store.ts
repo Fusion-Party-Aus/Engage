@@ -2910,6 +2910,23 @@ export async function saveMember(
     }
   }
 
+  if (status === "pending") {
+    try {
+      const { enqueueVerificationAttempt } = await import(
+        "./membership-verification.ts"
+      );
+      await enqueueVerificationAttempt(db, memberId, {
+        source: "admin-pending",
+        force: true,
+      });
+    } catch (error) {
+      const { logOperationalEvent } = await import("./resilience.ts");
+      logOperationalEvent("error", "verification_queue_failed", {
+        code: error instanceof Error ? error.name : "unknown",
+      });
+    }
+  }
+
   if (disabled === true) {
     await db
       .collection("session")
