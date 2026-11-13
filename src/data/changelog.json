@@ -1,5 +1,22 @@
 [
   {
+    "hash": "8e5f9ab",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "auth",
+    "summary": "Separate participation, voting and administration",
+    "details": "Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work."
+  },
+  {
+    "hash": "6850011",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot after status pages"
+  },
+  {
     "hash": "66dc64d",
     "date": "2026-11-13",
     "type": "feat",
@@ -638,22 +655,5 @@
     "category": "feature",
     "scope": "editor",
     "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
-  },
-  {
-    "hash": "e7d793a",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record Engage production cutover and verification",
-    "details": "Record the approved cutover of 4660690... to the prebuilt image, the final quiescent backup and off-host checksum, the 37-ballot/194-vote migration and preservation comparison, image and route verification, and the retained rollback state."
   }
 ]
