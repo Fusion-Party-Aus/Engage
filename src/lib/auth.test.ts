@@ -38,6 +38,14 @@ test("explicit development and preview modes allow local sign-in", async () => {
   assert.equal(preview?.isAdmin, false);
 });
 
+test("a single request resolves the session once for every layout and page", async () => {
+  const request = devRequest("member");
+  const first = await getSessionUser(request, { APP_MODE: "development" });
+  const second = await getSessionUser(request, { APP_MODE: "development" });
+  assert.equal(first?.memberId, second?.memberId);
+  assert.equal(first, second, "the same request reuses its resolved session");
+});
+
 test("missing or inconsistent APP_MODE fails closed for development sign-in", async () => {
   for (const env of [
     {},
