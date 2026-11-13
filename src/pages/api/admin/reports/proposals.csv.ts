@@ -33,10 +33,11 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const scoped = allProposals.filter((proposal) => {
     const inAdminScope =
       user.isStaff ||
-      Boolean(
-        proposal.originatingBranchId &&
-          branchAdminIds.includes(proposal.originatingBranchId),
-      );
+      [
+        proposal.originatingBranchId,
+        proposal.governanceAuthorityBranchId,
+        proposal.jurisdictionBranchId,
+      ].some((id) => Boolean(id && branchAdminIds.includes(id)));
     if (!inAdminScope) return false;
     if (!branchFilter || branchFilter === "all") return true;
     return [

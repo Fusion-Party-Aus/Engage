@@ -107,14 +107,15 @@ export const PUT: APIRoute = async ({ request, locals }) => {
     const result = await setCommentFeedback(db, user, body);
     return Response.json(result);
   } catch (error) {
-    return Response.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not save contribution outcome.",
-      },
-      { status: 400 },
-    );
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Could not save contribution outcome.";
+    const status = message.startsWith("Only administrators")
+      ? 403
+      : message.endsWith("not found.")
+        ? 404
+        : 400;
+    return Response.json({ error: message }, { status });
   }
 };

@@ -6,8 +6,10 @@ import {
   proposalsSummaryToCsv,
 } from "./admin-reporting.ts";
 import { GET as exportProposalsCsv } from "../pages/api/admin/reports/proposals.csv.ts";
+import { createDevSessionCookie } from "./auth.ts";
 import { getDatabase } from "./db.ts";
-import type { ProposalSummaryView } from "./types.ts";
+import { saveProposal } from "./store.ts";
+import type { ProposalSummaryView, SessionUser } from "./types.ts";
 
 function makeProposal(
   overrides: Partial<ProposalSummaryView> = {},
@@ -128,12 +130,12 @@ describe("admin reporting", () => {
     assert.match(lines[0]!, /^proposalId,title,kind,stage/);
     assert.ok(lines[1]!.includes("'=HYPERLINK"));
     assert.ok(lines[1]!.includes("PROP-10"));
-    assert.ok(!lines[1]!.includes("@"));
+    assert.ok(!lines[0]!.includes("email") && !lines[0]!.includes("memberId"));
   });
 
   it("enforces admin/branch-admin authorisation on CSV export endpoint", async () => {
     const env = { APP_MODE: "development" };
-    await getDatabase(env);
+    const db = await getDatabase(env);
 
     const unauth = await exportProposalsCsv({
       locals: { runtime: { env } },
@@ -141,5 +143,84 @@ describe("admin reporting", () => {
       url: new URL("http://localhost/api/admin/reports/proposals.csv"),
     } as never);
     assert.equal(unauth.status, 401);
+
+    const memberCookie = createDevSessionCookie("member").split(";")[0]!;
+    const forbidden = await exportProposalsCsv({
+      locals: { runtime: { env } },
+      request: new Request("http://localhost/api/admin/reports/proposals.csv", {
+        headers: { cookie: memberCookie },
+      }),
+      url: new URL("http://localhost/api/admin/reports/proposals.csv"),
+    } as never);
+    assert.equal(forbidden.status, 403);
+
+    const adminUser: SessionUser = {
+      memberId: "mem-admin-csv",
+      name: "Admin",
+      email: "admin-csv@example.org",
+      role: "administrator",
+      status: "verified",
+      canParticipate: true,
+      isAdmin: true,
+      isStaff: true,
+      isBranchAdmin: false,
+      branchAdminIds: [],
+    };
+    await db.collection("branches").updateOne(
+      { branchId: "vic" },
+      { $setOnInsert: { branchId: "vic", name: "Victoria", kind: "state", recognised: true } },
+      { upsert: true },
+    );
+    await db.collection("branches").updateOne(
+      { branchId: "nsw" },
+      { $setOnInsert: { branchId: "nsw", name: "New South Wales", kind: "state", recognised: true } },
+      { upsert: true },
+    );
+    const vicProp = await saveProposal(db, adminUser, {
+      title: "VIC Branch Export Item",
+      space: "Governance",
+      summary: "VIC branch summary.",
+      outcomes: ["Outcome"],
+      details: "Details.",
+      originatingBranchId: "vic",
+    });
+    const nswProp = await saveProposal(db, adminUser, {
+      title: "NSW Branch Export Item",
+      space: "Governance",
+      summary: "NSW branch summary.",
+      outcomes: ["Outcome"],
+      details: "Details.",
+      originatingBranchId: "nsw",
+    });
+
+    await db.collection("branch_memberships").updateOne(
+      { memberId: "dev-member-01", branchId: "vic" },
+      {
+        $set: {
+          memberId: "dev-member-01",
+          branchId: "vic",
+          branchRole: "administrator",
+          status: "active",
+        },
+      },
+      { upsert: true },
+    );
+    try {
+      const vicRes = await exportProposalsCsv({
+        locals: { runtime: { env } },
+        request: new Request("http://localhost/api/admin/reports/proposals.csv", {
+          headers: { cookie: memberCookie },
+        }),
+        url: new URL("http://localhost/api/admin/reports/proposals.csv"),
+      } as never);
+      assert.equal(vicRes.status, 200);
+      const csvText = await vicRes.text();
+      assert.ok(csvText.includes(vicProp.proposalId));
+      assert.ok(!csvText.includes(nswProp.proposalId));
+    } finally {
+      await db
+        .collection("branch_memberships")
+        .deleteOne({ memberId: "dev-member-01", branchId: "vic" });
+    }
   });
 });

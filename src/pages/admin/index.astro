@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { canViewIdentifiableBallots, getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { listProposals } from '../../lib/store.ts';
+import { isGovernanceResolution, listProposals } from '../../lib/store.ts';
 import { groupParticipationFeed, type ParticipationActivity } from '../../lib/participation-feed.ts';
 import { PROPOSAL_VOTES } from '../../lib/vote-storage.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
@@ -188,7 +188,18 @@ const awaitingRatification = ballotResults
   .filter((result) => !ratifiedIds.has(result.proposalId))
   .map((result) => proposalMap.get(result.proposalId))
   .filter((proposal): proposal is NonNullable<typeof proposal> =>
-    Boolean(proposal && proposal.kind !== 'resolution' && !proposal.proposalId.startsWith('GOV-')),
+    Boolean(proposal && !isGovernanceResolution(proposal)),
+  );
+const resolutionsAwaitingOutcome = ballotResults
+  .map((result) => proposalMap.get(result.proposalId))
+  .filter((proposal): proposal is NonNullable<typeof proposal> =>
+    Boolean(
+      proposal &&
+        isGovernanceResolution(proposal) &&
+        proposal.stage !== 'archived' &&
+        !proposal.implementationNote &&
+        !proposal.supersededByProposalId,
+    ),
   );
 const awaitingPublication = user.isAdmin ? registry.filter((policy) => policy.status === 'adopted' && policy.publicationStatus === 'unpublished') : [];
 const proposalIds = proposals.map((proposal) => proposal.proposalId);
@@ -232,6 +243,18 @@ if (awaitingRatification.length) {
     cta: user.isAdmin ? 'Open registry' : 'View decisions',
     tone: 'info',
     count: awaitingRatification.length,
+  });
+}
+if (resolutionsAwaitingOutcome.length) {
+  attentionGroups.push({
+    key: 'resolution-outcome',
+    title: 'Resolution outcomes to record',
+    description: 'These governance motions passed a ballot and need an implementation note, supersession link, or archival.',
+    names: resolutionsAwaitingOutcome.map((proposal) => ({ title: proposal.title, href: `/admin/proposals/${proposal.slug}/#outcome-notes` })),
+    href: `/admin/proposals/${resolutionsAwaitingOutcome[0]!.slug}/#outcome-notes`,
+    cta: 'Record outcome',
+    tone: 'info',
+    count: resolutionsAwaitingOutcome.length,
   });
 }
 if (awaitingPublication.length) {
@@ -428,7 +451,7 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
 
             {ballotProgressRows.length > 0 ? (
               <div class="admin-report-block">
-                <h3>Open ballots ({ballotProgressRows.length})</h3>
+                <h3>Decide stage ({ballotProgressRows.length})</h3>
                 <div class="admin-report-table-wrap">
                   <table class="admin-report-table">
                     <thead>
@@ -474,7 +497,7 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
                         <th>Branch</th>
                         <th class="tabular">Verified members</th>
                         <th class="tabular">Active proposals</th>
-                        <th class="tabular">Open ballots</th>
+                        <th class="tabular">Decide stage</th>
                         <th class="tabular">Total votes</th>
                       </tr>
                     </thead>

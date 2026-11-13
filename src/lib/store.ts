@@ -29,6 +29,16 @@ import { ballotExpired } from "./ballot-deadline.ts";
 
 export const PENDING_VOTE_PREFERENCES = "pending_vote_preferences";
 
+export function isGovernanceResolution(proposal: {
+  kind?: string;
+  proposalId: string;
+}): boolean {
+  return (
+    proposal.kind === "resolution" ||
+    proposal.proposalId.toUpperCase().startsWith("GOV-")
+  );
+}
+
 export function getDefaultProvenanceLabel(
   category: string,
   kind: ProposalKind = "policy",
@@ -270,6 +280,13 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     implementationNote: raw.implementationNote
       ? String(raw.implementationNote)
       : undefined,
+    supersededByProposalId: raw.supersededByProposalId
+      ? String(raw.supersededByProposalId)
+      : undefined,
+    supersededByNote:
+      raw.supersededByProposalId && raw.supersededByNote
+        ? String(raw.supersededByNote)
+        : undefined,
     authorId: raw.authorId ? String(raw.authorId) : undefined,
     authorName: raw.authorName ? String(raw.authorName) : undefined,
     createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
@@ -849,14 +866,18 @@ export async function saveProposal(
     const unset: Record<string, "" | 1> = {};
     if (supersededByProposalId) {
       set.supersededByProposalId = supersededByProposalId;
-    } else if (body.supersededByProposalId !== undefined) {
-      unset.supersededByProposalId = "";
-    }
-    if (supersededByNote) {
-      set.supersededByNote = supersededByNote;
-    } else if (body.supersededByNote !== undefined || !supersededByProposalId) {
-      if (body.supersededByProposalId === "") unset.supersededByNote = "";
-      else if (body.supersededByNote !== undefined) unset.supersededByNote = "";
+      if (supersededByNote) {
+        set.supersededByNote = supersededByNote;
+      } else if (body.supersededByNote !== undefined) {
+        unset.supersededByNote = "";
+      }
+    } else {
+      if (body.supersededByProposalId !== undefined) {
+        unset.supersededByProposalId = "";
+        unset.supersededByNote = "";
+      } else if (body.supersededByNote !== undefined) {
+        unset.supersededByNote = "";
+      }
     }
     if (ballotRevisionId) set.ballotRevisionId = ballotRevisionId;
     const updateDoc: Record<string, unknown> = { $set: set };

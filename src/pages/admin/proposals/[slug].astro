@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { getProposalDetail, listProposals } from '../../../lib/store.ts';
+import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
 import PortableText from '../../../components/PortableText.astro';
@@ -90,9 +90,13 @@ const [ballotResult, policy, relatedProposals, branches, visibleOtherProposals] 
     ])
   : [null, null, [], [], []];
 const allOtherProposals = proposal
-  ? visibleOtherProposals.filter((other) => other.proposalId !== proposal.proposalId)
+  ? visibleOtherProposals.filter(
+      (other) =>
+        other.proposalId !== proposal.proposalId &&
+        (other.stage !== 'archived' || other.proposalId === proposal.supersededByProposalId),
+    )
   : [];
-const isResolution = Boolean(proposal && (proposal.kind === 'resolution' || proposal.proposalId.startsWith('GOV-')));
+const isResolution = Boolean(proposal && isGovernanceResolution(proposal));
 
 const branchNameFor = (branchId?: string) =>
   branchId ? String(branches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
@@ -163,10 +167,18 @@ const adminChain = proposal
                 ? 'Archived'
                 : proposal.implementationNote
                   ? 'Outcome recorded'
-                  : proposal.stage === 'implement'
-                    ? 'In implementation'
-                    : 'Pending decision',
-            state: proposal.supersededByProposalId || proposal.stage === 'archived' || proposal.implementationNote ? 'done' : 'pending',
+                  : ballotResult
+                    ? `Ballot ${String(ballotResult.result ?? 'recorded')}`
+                    : proposal.stage === 'implement'
+                      ? 'In implementation'
+                      : 'Pending decision',
+            state:
+              proposal.supersededByProposalId ||
+              proposal.stage === 'archived' ||
+              proposal.implementationNote ||
+              ballotResult
+                ? 'done'
+                : 'pending',
             href: '#outcome-notes',
           }
         : {
@@ -345,7 +357,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
         <div class="project-header__badges">
           <span class="tabular project-id">{proposal.proposalId}</span>
           <Badge variant={stageTone(proposal.stage)}>{stageLabel(proposal.stage)}</Badge>
-          <Badge variant="outline">{proposal.kind === 'resolution' || proposal.proposalId.startsWith('GOV-') ? 'Governance resolution' : 'Policy proposal'}</Badge>
+          <Badge variant="outline">{isResolution ? 'Governance resolution' : 'Policy proposal'}</Badge>
           <Badge variant="muted">{proposal.space}</Badge>
         </div>
         <h1>{proposal.title}</h1>
@@ -862,7 +874,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
             <dl class="project-rail-props">
               <div>
                 <dt><Tag className="size-3.5" aria-hidden="true" />Classification</dt>
-                <dd><Badge variant="outline">{proposal.kind === 'resolution' || proposal.proposalId.startsWith('GOV-') ? 'Resolution' : 'Policy'}</Badge></dd>
+                <dd><Badge variant="outline">{isResolution ? 'Resolution' : 'Policy'}</Badge></dd>
               </div>
               <div>
                 <dt><User className="size-3.5" aria-hidden="true" />Sponsor / Author</dt>

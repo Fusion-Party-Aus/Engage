@@ -1,11 +1,11 @@
 import { ballotExpired } from "./ballot-deadline.ts";
+import { isGovernanceResolution } from "./store.ts";
 import type { BranchRecord, ProposalSummaryView } from "./types.ts";
 
 export interface BallotProgressRow {
   proposalId: string;
   slug: string;
   title: string;
-  kind: string;
   branchName: string;
   bound: boolean;
   closesAt?: Date;
@@ -43,10 +43,6 @@ export function buildBallotProgressRows(
         proposalId: proposal.proposalId,
         slug: proposal.slug,
         title: proposal.title,
-        kind:
-          proposal.kind === "resolution" || proposal.proposalId.startsWith("GOV-")
-            ? "resolution"
-            : "policy",
         branchName: branchId
           ? (branchNames.get(branchId) ?? branchId)
           : "Party-wide",
@@ -168,10 +164,7 @@ export function proposalsSummaryToCsv(
     const branchName = branchId
       ? (branchNames.get(branchId) ?? branchId)
       : "Party-wide";
-    const kind =
-      proposal.kind === "resolution" || proposal.proposalId.startsWith("GOV-")
-        ? "resolution"
-        : "policy";
+    const kind = isGovernanceResolution(proposal) ? "resolution" : "policy";
     const row = [
       proposal.proposalId,
       proposal.title,

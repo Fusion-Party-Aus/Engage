@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { getDatabase } from "./db.ts";
-import { addComment, getProposalDetail, saveProposal, setCommentFeedback } from "./store.ts";
+import { addComment, getProposalDetail, listProposals, saveProposal, setCommentFeedback } from "./store.ts";
 import { buildMemberCatchUp, listMemberActivityStream } from "./member-activity.ts";
 import type { SessionUser } from "./types.ts";
 
@@ -208,5 +208,27 @@ describe("contributor feedback and proposal supersession", () => {
     assert.equal(updated.stage, "archived");
     assert.equal(updated.supersededByProposalId, newProposal.proposalId);
     assert.equal(updated.supersededByNote, "Replaced at November meeting.");
+
+    // Round-trip read-back via getProposalDetail and listProposals (verifies normalizeProposalDoc)
+    const detail = await getProposalDetail(db, oldProposal.proposalId, adminUser);
+    assert.equal(detail?.proposal.supersededByProposalId, newProposal.proposalId);
+    assert.equal(detail?.proposal.supersededByNote, "Replaced at November meeting.");
+
+    const listed = await listProposals(db, { includeArchived: true, user: adminUser });
+    const listedOld = listed.find((p) => p.proposalId === oldProposal.proposalId);
+    assert.equal(listedOld?.supersededByProposalId, newProposal.proposalId);
+    assert.equal(listedOld?.supersededByNote, "Replaced at November meeting.");
+
+    // Clearing successor ID without explicitly passing supersededByNote clears both
+    const cleared = await saveProposal(db, adminUser, {
+      proposalId: oldProposal.proposalId,
+      supersededByProposalId: "",
+    });
+    assert.equal(cleared.supersededByProposalId, undefined);
+    assert.equal(cleared.supersededByNote, undefined);
+
+    const detailAfterClear = await getProposalDetail(db, oldProposal.proposalId, adminUser);
+    assert.equal(detailAfterClear?.proposal.supersededByProposalId, undefined);
+    assert.equal(detailAfterClear?.proposal.supersededByNote, undefined);
   });
 });

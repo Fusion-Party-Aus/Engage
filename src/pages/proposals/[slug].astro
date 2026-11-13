@@ -15,7 +15,7 @@ import { NativeSelect } from '../../components/ui/native-select';
 import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { canRespondToContribution, getProposalDetail, listOutstandingDecisions } from '../../lib/store.ts';
+import { canRespondToContribution, getProposalDetail, isGovernanceResolution, listOutstandingDecisions } from '../../lib/store.ts';
 import { getProposalEligibility, type ParticipationEligibility } from '../../lib/branch-participation.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import type { ProposalStage } from '../../lib/types.ts';
@@ -166,7 +166,9 @@ const stageGuideText = (stage: ProposalStage) => {
     return 'Open for member discussion, scrutiny, and formal wording amendments before a ballot is opened.';
   }
   if (stage === 'implement') {
-    return 'Ballot has closed. Recorded decisions undergo constitutional ratification before publication in the Policy Registry.';
+    return isResolution
+      ? 'Ballot has closed. Recorded governance decisions are documented and implemented by the relevant branch or committee.'
+      : 'Ballot has closed. Recorded decisions undergo constitutional ratification before publication in the Policy Registry.';
   }
   return 'Initial idea stage. Open for early feedback and refinement before advancing to formal deliberation.';
 };
@@ -197,9 +199,7 @@ const stanceCounts = {
 
 const votes = proposal?.votes ?? { approve: 0, abstain: 0, reject: 0, total: 0 };
 
-const isResolution = proposal
-  ? proposal.kind === 'resolution' || proposal.proposalId.toUpperCase().startsWith('GOV-')
-  : false;
+const isResolution = proposal ? isGovernanceResolution(proposal) : false;
 
 const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
 
@@ -208,6 +208,18 @@ const policyStatusLabel = policyRecord
   : proposal?.stage === 'implement'
     ? 'Pending ratification'
     : 'Not yet adopted';
+
+const resolutionStatusLabel = proposal?.supersededByProposalId
+  ? `Superseded by ${proposal.supersededByProposalId}`
+  : proposal?.stage === 'archived'
+    ? 'Archived'
+    : proposal?.implementationNote
+      ? 'Outcome recorded'
+      : ballotResult
+        ? `Ballot ${String(ballotResult.result ?? 'recorded')}`
+        : proposal?.stage === 'implement'
+          ? 'In implementation'
+          : 'Pending decision';
 
 const ballotResultLabel = ballotResult
   ? `${String(ballotResult.result ?? 'Recorded')}${ballotResult.recordedAt ? ` · ${new Date(ballotResult.recordedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}` : ''}`
@@ -218,12 +230,25 @@ const decisionChain = proposal
       { label: 'Workflow stage', value: stageStepLabel(proposal.stage), href: '#proposal-brief', state: 'done' },
       { label: 'Ballot wording', value: proposal.ballotRevisionId ? ballotRevisionLabel : 'Wording not yet locked', href: '#proposal-vote', state: proposal.ballotRevisionId ? 'done' : proposal.stage === 'decide' ? 'current' : 'pending' },
       { label: 'Returning officer result', value: ballotResultLabel, href: ballotResult ? '#proposal-vote' : undefined, state: ballotResult ? 'done' : 'pending' },
-      {
-        label: 'Policy Registry',
-        value: policyStatusLabel,
-        href: policyRecord ? `/policies/${encodeURIComponent(String(policyRecord.policyId))}/` : undefined,
-        state: policyRecord?.publicationStatus === 'published' ? 'done' : policyRecord ? 'current' : 'pending',
-      },
+      isResolution
+        ? {
+            label: 'Resolution outcome',
+            value: resolutionStatusLabel,
+            href: undefined,
+            state:
+              proposal.supersededByProposalId ||
+              proposal.stage === 'archived' ||
+              proposal.implementationNote ||
+              ballotResult
+                ? 'done'
+                : 'pending',
+          }
+        : {
+            label: 'Policy Registry',
+            value: policyStatusLabel,
+            href: policyRecord ? `/policies/${encodeURIComponent(String(policyRecord.policyId))}/` : undefined,
+            state: policyRecord?.publicationStatus === 'published' ? 'done' : policyRecord ? 'current' : 'pending',
+          },
     ]
   : [];
 
@@ -369,7 +394,7 @@ const initialsFor = (name: string) =>
           <h1 class="proposal-hero__title">{proposal.title}</h1>
           <p class="proposal-hero__summary">{proposal.summary}</p>
           {proposal.supersededByProposalId && (
-            <div class="superseded-notice" role="status">
+            <div class="superseded-notice">
               <strong>Superseded:</strong>{' '}
               {supersededByProposal ? (
                 <>
@@ -540,9 +565,11 @@ const initialsFor = (name: string) =>
               </dd>
             </div>
             <div class="governance-fact">
-              <dt>Policy Registry</dt>
+              <dt>{isResolution ? 'Resolution outcome' : 'Policy Registry'}</dt>
               <dd>
-                {policyRecord ? (
+                {isResolution ? (
+                  <strong>{resolutionStatusLabel}</strong>
+                ) : policyRecord ? (
                   <a class="fact-link" href={`/policies/${encodeURIComponent(String(policyRecord.policyId))}/`}>
                     {policyStatusLabel} →
                   </a>
@@ -1220,7 +1247,9 @@ const initialsFor = (name: string) =>
                                     <option value="declined" selected={c.feedback?.status === 'declined'}>Declined</option>
                                     {c.feedback && <option value="clear">Clear response</option>}
                                   </select>
+                                  <label for={`feedback-note-${c.commentId}`} class="sr-only">Explanation for contributor (optional)</label>
                                   <input
+                                    id={`feedback-note-${c.commentId}`}
                                     type="text"
                                     name="note"
                                     maxlength={500}
@@ -1843,11 +1872,19 @@ const initialsFor = (name: string) =>
               deferred: 'Deferred',
               declined: 'Declined',
             };
-            const label = labelMap[String(data.feedback.status)] ?? 'Considered';
+            const badgeClassMap: Record<string, string> = {
+              incorporated: 'border-transparent bg-[var(--horizon-success-bg)] text-[var(--horizon-success-ink)]',
+              considered: 'border-transparent bg-[var(--horizon-voting-bg)] text-[var(--horizon-voting-ink)]',
+              deferred: 'border-transparent bg-[var(--horizon-warn-bg)] text-[var(--horizon-warn-ink)]',
+              declined: 'border-border bg-background text-foreground',
+            };
+            const statusKey = String(data.feedback.status);
+            const label = labelMap[statusKey] ?? 'Considered';
+            const variantClasses = badgeClassMap[statusKey] ?? badgeClassMap.declined;
             const noteHtml = data.feedback.note ? `<p>${escapeHtmlClient(String(data.feedback.note))}</p>` : '';
             slot.innerHTML = `
               <div class="comment-feedback">
-                <span class="comment-feedback__badge is-${escapeHtmlClient(String(data.feedback.status))}">${escapeHtmlClient(label)}</span>
+                <span data-slot="badge" class="inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${variantClasses}">${escapeHtmlClient(label)}</span>
                 <div class="comment-feedback__copy">
                   ${noteHtml}
                   <small>Response by ${escapeHtmlClient(String(data.feedback.updatedByName || 'Author'))} · just now</small>
@@ -3695,7 +3732,7 @@ const initialsFor = (name: string) =>
     color: var(--horizon-muted);
   }
 
-  .comment-feedback {
+  .comment-feedback-slot :global(.comment-feedback) {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
@@ -3707,39 +3744,18 @@ const initialsFor = (name: string) =>
     border: 1px solid var(--horizon-line);
   }
 
-  .comment-feedback__badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.15rem 0.55rem;
-    border-radius: 999px;
-    font-size: 0.76rem;
-    font-weight: 600;
-    background: var(--horizon-lavender);
-    color: var(--horizon-purple);
-  }
-
-  .comment-feedback__badge.is-incorporated {
-    background: var(--horizon-success-bg);
-    color: var(--horizon-success-ink);
-  }
-
-  .comment-feedback__badge.is-deferred {
-    background: var(--horizon-warn-bg);
-    color: var(--horizon-warn-ink);
-  }
-
-  .comment-feedback__copy {
+  .comment-feedback-slot :global(.comment-feedback__copy) {
     flex: 1 1 14rem;
     min-width: 0;
   }
 
-  .comment-feedback__copy p {
+  .comment-feedback-slot :global(.comment-feedback__copy p) {
     margin: 0 0 0.2rem;
     font-size: 0.86rem;
     color: var(--horizon-purple-deep);
   }
 
-  .comment-feedback__copy small {
+  .comment-feedback-slot :global(.comment-feedback__copy small) {
     font-size: 0.76rem;
     color: var(--horizon-muted);
   }
