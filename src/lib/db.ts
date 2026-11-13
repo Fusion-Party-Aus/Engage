@@ -12,6 +12,75 @@ let mongoFallbackUntil = 0;
 const dbInstanceCache = new Map<string, Db>();
 const seededDbs = new WeakMap<object, Promise<void>>();
 
+/**
+ * Opt-in driver command monitoring used by the rendering-performance harness.
+ * It is disabled unless `ENGAGE_DB_COMMAND_MONITOR=1` and the application is
+ * not running in production. Counters are process-wide and are only read from
+ * the development-only `/api/dev/render-metrics` diagnostic route.
+ */
+export interface DbCommandMetricsSnapshot {
+  enabled: boolean;
+  commands: number;
+  failed: number;
+  durationMs: number;
+  byCommand: Record<string, { count: number; durationMs: number }>;
+}
+
+const dbCommandMetrics = {
+  commands: 0,
+  failed: 0,
+  durationMs: 0,
+  byCommand: new Map<string, { count: number; durationMs: number }>(),
+};
+
+export function dbCommandMonitoringEnabled(env: PlatformEnv): boolean {
+  return (
+    env.ENGAGE_DB_COMMAND_MONITOR === "1" && env.APP_MODE !== "production"
+  );
+}
+
+function recordDbCommand(commandName: string, durationMs: number): void {
+  const name = commandName || "unknown";
+  dbCommandMetrics.commands += 1;
+  dbCommandMetrics.durationMs += durationMs;
+  const entry = dbCommandMetrics.byCommand.get(name) ?? {
+    count: 0,
+    durationMs: 0,
+  };
+  entry.count += 1;
+  entry.durationMs += durationMs;
+  dbCommandMetrics.byCommand.set(name, entry);
+}
+
+export function snapshotDbCommandMetrics(
+  env: PlatformEnv = runtimeEnv(),
+): DbCommandMetricsSnapshot {
+  return {
+    enabled: dbCommandMonitoringEnabled(env),
+    commands: dbCommandMetrics.commands,
+    failed: dbCommandMetrics.failed,
+    durationMs: Math.round(dbCommandMetrics.durationMs * 1000) / 1000,
+    byCommand: Object.fromEntries(
+      [...dbCommandMetrics.byCommand.entries()]
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(([name, value]) => [
+          name,
+          {
+            count: value.count,
+            durationMs: Math.round(value.durationMs * 1000) / 1000,
+          },
+        ]),
+    ),
+  };
+}
+
+export function resetDbCommandMetrics(): void {
+  dbCommandMetrics.commands = 0;
+  dbCommandMetrics.failed = 0;
+  dbCommandMetrics.durationMs = 0;
+  dbCommandMetrics.byCommand.clear();
+}
+
 export function runtimeEnv(locals?: unknown): PlatformEnv {
   const runtime = locals as
     { runtime?: { env?: PlatformEnv }; env?: PlatformEnv } | undefined;
@@ -47,11 +116,37 @@ export async function getDatabase(
     if (clientUri !== uri || !clientPromise) {
       clientUri = uri;
       dbInstanceCache.clear();
-      clientPromise = new MongoClient(uri, {
+      const monitorCommands = dbCommandMonitoringEnabled(env);
+      const client = new MongoClient(uri, {
         maxPoolSize: 10,
         serverSelectionTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
         connectTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
-      }).connect();
+        monitorCommands,
+      });
+      if (monitorCommands) {
+        const startedAt = new Map<number, number>();
+        client.on("commandStarted", (event) => {
+          startedAt.set(event.requestId, performance.now());
+        });
+        client.on("commandSucceeded", (event) => {
+          const started = startedAt.get(event.requestId);
+          startedAt.delete(event.requestId);
+          recordDbCommand(
+            event.commandName,
+            started === undefined ? 0 : performance.now() - started,
+          );
+        });
+        client.on("commandFailed", (event) => {
+          const started = startedAt.get(event.requestId);
+          startedAt.delete(event.requestId);
+          dbCommandMetrics.failed += 1;
+          recordDbCommand(
+            event.commandName,
+            started === undefined ? 0 : performance.now() - started,
+          );
+        });
+      }
+      clientPromise = client.connect();
     }
     const client = await clientPromise;
     const cacheKey = `${uri}::${dbName}`;
