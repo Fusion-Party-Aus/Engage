@@ -828,10 +828,23 @@ async function assignGeographicBranch(
     return { branchId: null, outcome: "branch_not_geographic" };
   }
 
-  const existing = await db
+  const geographicBranches = await db
+    .collection("branches")
+    .find({ kind: { $in: ["state", "territory"] } })
+    .project({ branchId: 1 })
+    .toArray();
+  const geographicBranchIds = new Set(
+    geographicBranches.map((b: any) => String(b.branchId)),
+  );
+  const allExisting = await db
     .collection("branch_memberships")
     .find({ memberId, status: "active" })
     .toArray();
+  const existing = allExisting.filter((row: any) => {
+    const id = String(row.branchId);
+    if (geographicBranchIds.size > 0) return geographicBranchIds.has(id);
+    return id !== "branch-nat" && id !== "nat";
+  });
   if (existing.length === 0) {
     try {
       await applyExternalMembership(db, {

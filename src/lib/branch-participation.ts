@@ -1465,6 +1465,7 @@ export async function chooseBranchMembership(db: Db, user: SessionUser, input: {
     for (const membership of memberships) {
       if (input.join && membership.branchId===input.branchId) continue;
       if (!input.join && membership.branchId!==input.branchId) continue;
+      assertLocalMembershipMutation(membership);
       const after={status:'revoked',revokedAt:now,revokedBy:user.memberId,revocationReason:'Member changed their branch membership.'};
       await recordMembershipEvent(db,{branchId:String(membership.branchId),memberId:user.memberId,actorId:user.memberId,action:'self-left',before:membership,after});
       await db.collection(BRANCH_MEMBERSHIPS).updateOne({memberId:user.memberId,branchId:membership.branchId},{$set:after});
@@ -1472,6 +1473,7 @@ export async function chooseBranchMembership(db: Db, user: SessionUser, input: {
     if(input.join) {
       const existing=await db.collection(BRANCH_MEMBERSHIPS).findOne({memberId:user.memberId,branchId:input.branchId});
       if(existing?.status!=='active') {
+        assertLocalMembershipMutation(existing);
         const after={memberId:user.memberId,branchId:input.branchId,status:'active',branchRole:'member',source:LOCAL_MEMBERSHIP_SOURCE,verifiedAt:now,verifiedBy:user.memberId,updatedAt:now,verification:{method:geographic?'member-declared-residence':'member-choice',verifiedAt:now}};
         await recordMembershipEvent(db,{branchId:input.branchId,memberId:user.memberId,actorId:user.memberId,action:'self-joined',before:existing,after});
         await db.collection(BRANCH_MEMBERSHIPS).updateOne({memberId:user.memberId,branchId:input.branchId},{$set:after},{upsert:true});

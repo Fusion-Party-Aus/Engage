@@ -3233,7 +3233,13 @@ export async function saveMember(
         $set: {
           memberId,
           status,
-          ...(status === "verified" && previous?.status !== "verified" ? {verifiedAt:now} : {}),
+          ...(status === "verified" && previous?.status !== "verified"
+            ? {
+                verifiedAt: now,
+                verifiedBy: actor.memberId,
+                verificationSource: "manual-admin",
+              }
+            : {}),
           updatedAt: now,
           updatedBy: actor.memberId,
         },
