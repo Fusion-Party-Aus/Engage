@@ -1,5 +1,21 @@
 [
   {
+    "hash": "2a7452a",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "branches",
+    "summary": "Reuse existing identities and accept national concerns"
+  },
+  {
+    "hash": "123606c",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record self-service branch membership"
+  },
+  {
     "hash": "e839386",
     "date": "2026-11-13",
     "type": "feat",
@@ -644,21 +660,5 @@
     "scope": "voting",
     "summary": "Migrate votes to proposal_votes collection with ballotId",
     "details": "- Introduced a new voting storage structure to handle proposal votes with unique ballotId. - Updated database interactions in store.ts to reference the new proposal_votes collection. - Implemented migration script to transfer existing votes while preserving legacy data. - Enhanced error handling for voting operations to ensure data integrity. - Added tests to validate migration logic and ensure correct behavior of voting functionalities. - Updated deployment scripts for seamless integration of new voting structure."
-  },
-  {
-    "hash": "116d9d7",
-    "date": "2026-10-27",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Protect ballot integrity, support general resolutions, and improve admin usability"
-  },
-  {
-    "hash": "0e67e5b",
-    "date": "2026-10-27",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Enable adding and editing policy provenance in admin panel and fix MongoDB seeding conflict"
   }
 ]
