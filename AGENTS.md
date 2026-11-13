@@ -8,6 +8,15 @@ A feature is not finished simply because its API works, its tests pass, or its c
 
 Canonical product, domain and architecture documentation lives in [`docs/README.md`](docs/README.md). Read the product overview, governance model and agent guide before changing governance, eligibility, permissions or ballot behaviour. Documentation describes current behaviour; where it conflicts with code, the code is authoritative and the documentation must be corrected in the same change.
 
+## Before implementation
+
+1. **Check the open GitHub issues** with `gh issue list --state open`, and check [`docs/status/known-gaps.md`](docs/status/known-gaps.md).
+2. **If an issue covers the work**, follow its acceptance criteria and reference the issue in the branch, commits and pull request. Do not start a competing implementation.
+3. **If the work is not captured**, open or update an issue before implementation. Include the problem, evidence, acceptance criteria and any governance dependency.
+4. **Do not duplicate or silently close an existing commitment.** Close an issue only with verification evidence or an explicit supersession note.
+
+An implemented capability is not automatically a completed issue. Confirm the acceptance criteria, not merely that related code exists.
+
 ## 1. Product Design Principles
 
 ### Design for people, not implementation
