@@ -203,7 +203,7 @@ export default function ProposalBallot({
             >
               <Clock className="mt-0.5 size-4 shrink-0 text-[var(--horizon-purple)]" aria-hidden="true" />
               <div className="grid gap-0.5">
-                <span className="font-semibold">
+                <span className="font-semibold" suppressHydrationWarning>
                   {ballotExpired({ ballotClosesAt }, clientNow ?? undefined)
                     ? 'Voting closed'
                     : 'Voting closes'}{' '}
@@ -214,6 +214,7 @@ export default function ProposalBallot({
                 <time
                   dateTime={ballotClosesAt}
                   className="text-xs text-muted-foreground"
+                  suppressHydrationWarning
                 >
                   {clientNow
                     ? formatLocalDeadline(ballotClosesAt)
