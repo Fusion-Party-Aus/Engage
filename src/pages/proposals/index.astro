@@ -433,7 +433,7 @@ const hasActiveFilters =
                 </div>
 
                 <!-- Line 2: Prominent Visual Anchor Title -->
-                {item.ballotClosesAt && <p>{ballotExpired(item) ? "Voting closed" : "Voting closes"}: {ballotDeadlineLabel(item.ballotClosesAt)}</p>}
+                {item.ballotClosesAt && <p><time datetime={new Date(item.ballotClosesAt).toISOString()} data-ballot-deadline data-prefix={ballotExpired(item) ? "Voting closed" : "Voting closes"}>{ballotExpired(item) ? "Voting closed" : "Voting closes"}: {ballotDeadlineLabel(item.ballotClosesAt)}</time></p>}
                 <h2 class="proposal-item__title">
                   <a href={`/proposals/${item.slug}/`}>{item.title}</a>
                 </h2>

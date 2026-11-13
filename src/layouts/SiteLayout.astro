@@ -185,4 +185,22 @@ const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organ
     if (a) prefetchLink(a);
   }, { passive: true });
 </script>
+<script>
+  import { formatLocalDeadline, formatRelativeDeadline } from '../lib/ballot-deadline.ts';
+  function hydrateBallotDeadlines() {
+    const now = new Date();
+    document.querySelectorAll('time[data-ballot-deadline]').forEach((el) => {
+      const iso = el.getAttribute('datetime');
+      if (!iso) return;
+      try {
+        const prefix = el.getAttribute('data-prefix') || 'Voting closes';
+        el.textContent = `${prefix} ${formatRelativeDeadline(iso, now)} · ${formatLocalDeadline(iso)}`;
+      } catch {
+        // Keep server-rendered fallback if invalid date
+      }
+    });
+  }
+  hydrateBallotDeadlines();
+  document.addEventListener('astro:page-load', hydrateBallotDeadlines);
+</script>
 

@@ -8,6 +8,8 @@ import {
   ballotDeadlineLabel,
   ballotDeadlineShortLabel,
   ballotExpired,
+  formatLocalDeadline,
+  formatRelativeDeadline,
 } from "./ballot-deadline.ts";
 import {
   applyOpenBallotExpiryMigration,
@@ -36,6 +38,25 @@ describe("open ballot expiry migration (14 January 2027)", () => {
     assert.equal(
       ballotExpired({ ballotClosesAt: deadline }, new Date("2027-01-14T13:00:00.000Z")),
       true,
+    );
+
+    // Local timezone formatting adapts across Perth, New York, and Melbourne
+    assert.match(formatLocalDeadline(deadline, "Australia/Perth"), /8:59\s*pm AWST/i);
+    assert.match(formatLocalDeadline(deadline, "America/New_York"), /7:59\s*am (EST|GMT-5)/i);
+    assert.match(formatLocalDeadline(deadline, "Australia/Melbourne"), /11:59\s*pm AEDT/i);
+
+    // Relative deadline formatting
+    assert.equal(
+      formatRelativeDeadline(deadline, new Date("2026-11-13T13:00:00.000Z")),
+      "in 2 months",
+    );
+    assert.equal(
+      formatRelativeDeadline(deadline, new Date("2027-01-11T13:00:00.000Z")),
+      "in 3 days",
+    );
+    assert.equal(
+      formatRelativeDeadline(deadline, new Date("2027-01-16T13:00:00.000Z")),
+      "2 days ago",
     );
   });
 
