@@ -1,211 +1,20 @@
 [
   {
-    "hash": "4de4408",
+    "hash": "06dd133",
     "date": "2026-11-13",
     "type": "fix",
     "category": "fix",
-    "scope": "deploy",
-    "summary": "Stop repeated Coolify deployments after health failures"
+    "scope": "branding",
+    "summary": "Remove internal Horizon label from public and verification emails"
   },
   {
-    "hash": "d9f9e02",
+    "hash": "baae42d",
     "date": "2026-11-13",
-    "type": "chore",
+    "type": "update",
     "category": "ops",
-    "scope": "changelog",
-    "summary": "Update changelog snapshot"
-  },
-  {
-    "hash": "3f82960",
-    "date": "2026-11-13",
-    "type": "test",
-    "category": "ops",
-    "scope": "notifications",
-    "summary": "Add notification/PWA tests, preview script, and docs"
-  },
-  {
-    "hash": "dccbc33",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add unified NotificationCenter UI for inbox, email, and push"
-  },
-  {
-    "hash": "e9ae209",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Add self-hosted VAPID Web Push, in-app inbox, and unified preferences"
-  },
-  {
-    "hash": "e770d23",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "pwa",
-    "summary": "Generate app icons from Horizon SVG logo"
-  },
-  {
-    "hash": "94d2f18",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "pwa",
-    "summary": "Add installable Engage manifest, Horizon icons, and safe service worker"
-  },
-  {
-    "hash": "6a1aef1",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "email",
-    "summary": "Add explicit approval-gated batch re-engagement workflow"
-  },
-  {
-    "hash": "76afecb",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "email",
-    "summary": "Add responsive Horizon email templates for all lifecycle notifications"
-  },
-  {
-    "hash": "a13bbb1",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record extensibility sprint and ballot expiry migration"
-  },
-  {
-    "hash": "715fe72",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "architecture",
-    "summary": "Add integration seams, authorised read models, resilience helpers, and indexes"
-  },
-  {
-    "hash": "0cb2d1b",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "security",
-    "summary": "Enforce scoped RBAC permissions across admin API endpoints"
-  },
-  {
-    "hash": "a4527ba",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "governance",
-    "summary": "Decouple ballot/decision records and add provenance relationship validation"
-  },
-  {
-    "hash": "98094d1",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "governance",
-    "summary": "Add extensible matter registry and type-aware lifecycle validation"
-  },
-  {
-    "hash": "2e458bd",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ballots",
-    "summary": "Add 14 Jan 2027 open ballot expiry migration and prominent deadline display"
-  },
-  {
-    "hash": "6cd3ffc",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record governance resolution classification fix"
-  },
-  {
-    "hash": "54366eb",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "governance",
-    "summary": "Document safe policy registry reconciliation for misclassified resolutions"
-  },
-  {
-    "hash": "fb871d6",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "governance",
-    "summary": "Exclude governance resolutions from policy ratification and publication workflows"
-  },
-  {
-    "hash": "2744bea",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record RBAC audit and configurable roles"
-  },
-  {
-    "hash": "f8b1d04",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "rbac",
-    "summary": "Add configurable scoped roles, permission evaluation, and admin UI"
-  },
-  {
-    "hash": "01c6a42",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "security",
-    "summary": "Enforce archived proposal review permission on GET /api/amendments"
-  },
-  {
-    "hash": "ec15e83",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "rbac",
-    "summary": "Document RBAC audit, permission matrix, and configurable roles spec"
-  },
-  {
-    "hash": "66c8d65",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record governance transparency sprint"
-  },
-  {
-    "hash": "554d0bf",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "reporting",
-    "summary": "Enforce branch admin scope and add PDF confidentiality disclosures"
-  },
-  {
-    "hash": "12b5f88",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "governance",
-    "summary": "Add evidence-backed contribution outcomes and historical safety checks"
-  },
-  {
-    "hash": "f90e2cc",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "governance",
-    "summary": "Specify historical access, reporting privacy, and AI briefing design"
+    "scope": "platform",
+    "summary": "Governance transparency, extensibility hardening, notifications, PWA & Web Push (#23)",
+    "details": "* docs(governance): specify historical access, reporting privacy, and AI briefing design * feat(governance): add evidence-backed contribution outcomes and historical safety checks * fix(reporting): enforce branch admin scope and add PDF confidentiality disclosures * chore(changelog): record governance transparency sprint * docs(rbac): document RBAC audit, permission matrix, and configurable roles spec * fix(security): enforce archived proposal review permission on GET /api/amendments * feat(rbac): add configurable scoped roles, permission evaluation, and admin UI * chore(changelog): record RBAC audit and configurable roles * fix(governance): exclude governance resolutions from policy ratification and publication workflows * docs(governance): document safe policy registry reconciliation for misclassified resolutions * chore(changelog): record governance resolution classification fix * feat(ballots): add 14 Jan 2027 open ballot expiry migration and prominent deadline display * feat(governance): add extensible matter registry and type-aware lifecycle validation * feat(governance): decouple ballot/decision records and add provenance relationship validation * fix(security): enforce scoped RBAC permissions across admin API endpoints * feat(architecture): add integration seams, authorised read models, resilience helpers, and indexes * chore(changelog): record extensibility sprint and ballot expiry migration * feat(email): add responsive Horizon email templates for all lifecycle notifications * feat(email): add explicit approval-gated batch re-engagement workflow * feat(pwa): add installable Engage manifest, Horizon icons, and safe service worker * fix(pwa): generate app icons from Horizon SVG logo * feat(notifications): add self-hosted VAPID Web Push, in-app inbox, and unified preferences * feat(member): add unified NotificationCenter UI for inbox, email, and push * test(notifications): add notification/PWA tests, preview script, and docs * chore(changelog): update changelog snapshot * fix(deploy): stop repeated Coolify deployments after health failures * chore(changelog): record Coolify deployment fix"
   },
   {
     "hash": "b271a70",
@@ -649,5 +458,204 @@
     "category": "feature",
     "scope": "member",
     "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
+  },
+  {
+    "hash": "31e34df",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
+  },
+  {
+    "hash": "ac9bb41",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "deploy",
+    "summary": "Automate production deployment gated on staging health"
+  },
+  {
+    "hash": "c6edce0",
+    "date": "2026-11-09",
+    "type": "docs",
+    "category": "docs",
+    "scope": "audit",
+    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
+  },
+  {
+    "hash": "3098b44",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ui",
+    "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
+  },
+  {
+    "hash": "99f0153",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "changelog",
+    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
+  },
+  {
+    "hash": "71a6351",
+    "date": "2026-11-09",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "server",
+    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
+  },
+  {
+    "hash": "3512e0a",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "workspaces",
+    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
+  },
+  {
+    "hash": "f58e150",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
+  },
+  {
+    "hash": "ff1f0a8",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "walkthrough",
+    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
+  },
+  {
+    "hash": "0a291c4",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "editor",
+    "summary": "Support inline markdown images and Add Image helper in proposal composers"
+  },
+  {
+    "hash": "d6f09b0",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "settings",
+    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
+  },
+  {
+    "hash": "e7d793a",
+    "date": "2026-11-08",
+    "type": "docs",
+    "category": "docs",
+    "scope": "release",
+    "summary": "Record Engage production cutover and verification",
+    "details": "Record the approved cutover of 4660690... to the prebuilt image, the final quiescent backup and off-host checksum, the 37-ballot/194-vote migration and preservation comparison, image and route verification, and the retained rollback state."
+  },
+  {
+    "hash": "4660690",
+    "date": "2026-11-08",
+    "type": "docs",
+    "category": "docs",
+    "scope": "release",
+    "summary": "Record member ballot refinement verification",
+    "details": "Record the approved ballot hierarchy: segmented control, single results block, zero-vote empty state, compact privacy line, full-width action and 390px browser validation. Full route matrix 109/109 and dedicated ballot checks 14/14."
+  },
+  {
+    "hash": "2b85970",
+    "date": "2026-11-08",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ui",
+    "summary": "Refine member ballot hierarchy and voting control",
+    "details": "Replace the tall three-card radio composition with a single-row shadcn/Radix segmented control for Approve, Abstain and Reject. The primary action is full-width with a matching radius, uses a neutral disabled treatment and reserves the Horizon accent for an enabled vote. Move results into one compact block, show a simple empty state for zero-vote ballots, reduce the privacy disclosure to a persistent one-line notice, and move revision metadata into a small readable line. Keep selected state, keyboard navigation, existing votes and closed-ballot read-only behaviour."
+  },
+  {
+    "hash": "153e909",
+    "date": "2026-11-08",
+    "type": "docs",
+    "category": "docs",
+    "scope": "release",
+    "summary": "Integrate Coolify cutover evidence and final verification record",
+    "details": "Merge the deployment workstream documentation with the release: storage and prebuilt-image verification, no-rebuild deployment path, quiescent backup helper, staging verification, rollback procedure and approval-gated cutover checklist. Distinguish the 2026-11-08 rehearsal image from the final release identity so the artifact cannot be mistaken for the approved cutover image. Add the production-readiness audit, application handover and final integrated verification record. Ignore the preserved research corpus."
+  },
+  {
+    "hash": "33cc170",
+    "date": "2026-11-08",
+    "type": "feat",
+    "category": "feature",
+    "scope": "legal",
+    "summary": "Integrate Privacy Policy, Terms of Use and acceptance controls",
+    "details": "Add owner-authorised legal documents at /privacy/ and /terms/ with the confirmed operator, ABN, registered party name, contact and correspondence address. The documents are explicit about identifiable ballots, national administrator access, small-ballot re-identification risk, retention limits, third-party processors and administrative ballot controls, and remain noindex while publication is pending. Add a server-side acceptance record, API and member gate, and enforce the gate on vote, comment, endorsement, proposal and amendment writes. Activation is interlocked: the gate remains inactive until both documents are published with real effective dates and LEGAL_ACCEPTANCE_ENABLED is set. Add the ballot-context privacy notice, footer and sign-in legal links, and regression tests."
+  },
+  {
+    "hash": "0dff758",
+    "date": "2026-11-08",
+    "type": "fix",
+    "category": "fix",
+    "scope": "app",
+    "summary": "Complete release-candidate remediation and Horizon UI integration",
+    "details": "- make startup seeding insert-only so restarts do not rewrite updatedAt - remove Astro experimental React children to stop double-escaped entities and SSR attribute warnings - use a trusted public origin for canonicals and public API Link headers - show human-readable revision labels to members while retaining exact IDs in audit views - make the empty policy registry an explicit, accurate state and relabel navigation and calls to action - complete the shared header, footer, feature grid and member settings workspace on the Horizon/shadcn foundation"
+  },
+  {
+    "hash": "60e0679",
+    "date": "2026-11-08",
+    "type": "feat",
+    "category": "feature",
+    "scope": "governance",
+    "summary": "Bind legacy ballots to immutable wording revisions",
+    "details": "Add a deterministic, transactional bulk migration for existing Decide-stage ballots and their votes. The migration inventories wording against the deployment baseline, fails closed on ambiguity, supports dry-run and explicit apply, records attributable binding events, and is idempotent. Reuse the shared binding path in the admin review endpoint and expose human-readable revision labels while keeping exact identifiers in audit views. Rehearsed against a restored 414-document production clone: 37 ballots and 194 votes preserved, 0 ambiguous, 0 conflicting, 37 idempotent on retry."
+  },
+  {
+    "hash": "1b973fa",
+    "date": "2026-11-08",
+    "type": "docs",
+    "category": "docs",
+    "scope": "deploy",
+    "summary": "Note token revocation and private-repo poller requirement"
+  },
+  {
+    "hash": "cffc1a0",
+    "date": "2026-11-08",
+    "type": "docs",
+    "category": "docs",
+    "scope": "deploy",
+    "summary": "Record end-to-end poller verification and staging access"
+  },
+  {
+    "hash": "ef8e9a8",
+    "date": "2026-11-08",
+    "type": "docs",
+    "category": "docs",
+    "scope": "deploy",
+    "summary": "Document Coolify staging, production cutover, and poller"
+  },
+  {
+    "hash": "3280da3",
+    "date": "2026-11-08",
+    "type": "chore",
+    "category": "ops",
+    "scope": "deploy",
+    "summary": "Bake Mongo helpers into Coolify staging image"
+  },
+  {
+    "hash": "6e2cc5e",
+    "date": "2026-11-08",
+    "type": "chore",
+    "category": "ops",
+    "scope": "deploy",
+    "summary": "Use classic builder for Coolify builds (DNS workaround)"
+  },
+  {
+    "hash": "a65c66d",
+    "date": "2026-11-08",
+    "type": "chore",
+    "category": "ops",
+    "scope": "deploy",
+    "summary": "Build Coolify images on the coolify bridge network"
   }
 ]
