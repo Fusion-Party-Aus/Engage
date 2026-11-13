@@ -1,5 +1,21 @@
 [
   {
+    "hash": "9e31379",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "platform",
+    "summary": "Establish canonical product, domain and architecture documentation"
+  },
+  {
+    "hash": "d1a24af",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record CRM membership verification"
+  },
+  {
     "hash": "76797d6",
     "date": "2026-11-13",
     "type": "feat",
@@ -641,21 +657,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
-  },
-  {
-    "hash": "31e34df",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
-  },
-  {
-    "hash": "ac9bb41",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "deploy",
-    "summary": "Automate production deployment gated on staging health"
   }
 ]
