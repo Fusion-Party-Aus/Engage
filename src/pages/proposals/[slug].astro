@@ -843,6 +843,7 @@ const initialsFor = (name: string) =>
                     isGuest={!user}
                     isPendingMember={Boolean(user && !user.canParticipate && user.status === 'pending')}
                     nextBallot={nextBallotInfo}
+                    ballotClosesAt={proposal.ballotClosesAt ? new Date(proposal.ballotClosesAt).toISOString() : null}
                   />
                 </div>
               ) : (

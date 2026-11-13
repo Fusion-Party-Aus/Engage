@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
 import { trackEngage } from '../../lib/analytics.ts';
+import {
+  ballotDeadlineDateLabel,
+  ballotDeadlineLabel,
+  ballotExpired,
+} from '../../lib/ballot-deadline.ts';
 import { ArrowRight, CheckCircle2, Clock, Loader2, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from './badge';
@@ -33,6 +38,7 @@ interface Props {
   isGuest?: boolean;
   isPendingMember?: boolean;
   nextBallot?: NextBallotInfo | null;
+  ballotClosesAt?: string | null;
 }
 
 const choices: Array<{ value: Choice; label: string }> = [
@@ -61,6 +67,7 @@ export default function ProposalBallot({
   isGuest = false,
   isPendingMember = false,
   nextBallot = null,
+  ballotClosesAt = null,
 }: Props) {
   const effectiveInitialChoice = initialChoice ?? initialPendingChoice ?? null;
   const effectiveInitialReason = initialChoice ? initialReason : (initialPendingReason || initialReason);
@@ -182,6 +189,24 @@ export default function ProposalBallot({
               <Badge variant="muted">Select to preview</Badge>
             )}
           </div>
+
+          {ballotClosesAt && (
+            <div
+              className="flex items-start gap-2 rounded-lg border border-[var(--horizon-line)] bg-[var(--horizon-lavender-soft)] px-3 py-2 text-sm text-[var(--horizon-purple-deep)]"
+              data-testid="ballot-deadline-banner"
+            >
+              <Clock className="mt-0.5 size-4 shrink-0 text-[var(--horizon-purple)]" aria-hidden="true" />
+              <div className="grid gap-0.5">
+                <span className="font-semibold">
+                  {ballotExpired({ ballotClosesAt }) ? 'Voting closed' : 'Voting closes'}{' '}
+                  {ballotDeadlineDateLabel(ballotClosesAt)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {ballotDeadlineLabel(ballotClosesAt)}
+                </span>
+              </div>
+            </div>
+          )}
 
           <ToggleGroup
             aria-label="Choose your vote"
