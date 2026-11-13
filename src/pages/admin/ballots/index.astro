@@ -1,0 +1,276 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  Gavel,
+  Lock,
+  ShieldAlert,
+} from 'lucide-react';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { isGovernanceResolution, listProposals } from '../../../lib/store.ts';
+import { buildBallotProgressRows } from '../../../lib/admin-reporting.ts';
+import { Button } from '../../../components/ui/button';
+import { Badge } from '../../../components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../../../components/ui/table';
+import Card from '../../../components/admin/Card.astro';
+import CardAction from '../../../components/admin/CardAction.astro';
+import CardContent from '../../../components/admin/CardContent.astro';
+import CardDescription from '../../../components/admin/CardDescription.astro';
+import CardHeader from '../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../components/admin/CardTitle.astro';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/', 302);
+if (!user.isStaff && !user.isBranchAdmin) Astro.response.status = 403;
+
+const db = await getDatabase(env);
+const filter = (Astro.url.searchParams.get('view') ?? 'all').trim();
+const branchAdminIds = user.branchAdminIds ?? [];
+
+const rawProposals = user.isStaff
+  ? await listProposals(db, { includeArchived: true })
+  : user.isBranchAdmin
+    ? (await Promise.all(branchAdminIds.map((branch) => listProposals(db, { includeArchived: true, branch })))).flat()
+    : [];
+const proposals = [...new Map(rawProposals.map((proposal) => [proposal.proposalId, proposal])).values()];
+const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
+const proposalIds = proposals.map((proposal) => proposal.proposalId);
+
+const [scopedBranches, ballotResults, registry] = await Promise.all([
+  user.isStaff
+    ? db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()
+    : user.isBranchAdmin
+      ? db.collection('branches').find({ branchId: { $in: branchAdminIds } }).sort({ name: 1 }).toArray()
+      : Promise.resolve([]),
+  proposalIds.length
+    ? db.collection('ballot_results').find({ proposalId: { $in: proposalIds } }).sort({ recordedAt: -1 }).toArray()
+    : Promise.resolve([]),
+  user.isAdmin ? db.collection('policy_registry').find({}).toArray() : Promise.resolve([]),
+]);
+
+const branchNames = new Map(scopedBranches.map((branch: any) => [String(branch.branchId), String(branch.name)]));
+const ballotRows = buildBallotProgressRows(proposals, branchNames);
+const resultByProposal = new Map(ballotResults.map((row: any) => [String(row.proposalId), row]));
+const ratifiedIds = new Set(registry.map((policy: any) => String(policy.proposalId)));
+
+const unboundCount = ballotRows.filter((row) => !row.bound).length;
+const expiredCount = ballotRows.filter((row) => row.expired).length;
+const awaitingOutcomeCount = ballotRows.filter((row) => row.bound && !resultByProposal.has(row.proposalId)).length;
+
+const filteredRows = ballotRows.filter((row) => {
+  if (filter === 'unbound') return !row.bound;
+  if (filter === 'expired') return row.expired;
+  if (filter === 'bound') return row.bound;
+  return true;
+});
+
+const postBallotPending = ballotResults
+  .filter((result: any) => result.result === 'successful')
+  .map((result: any) => ({
+    result,
+    proposal: proposalMap.get(String(result.proposalId)),
+  }))
+  .filter((entry): entry is { result: any; proposal: NonNullable<ReturnType<typeof proposalMap.get>> } => Boolean(entry.proposal))
+  .filter(({ proposal }) => {
+    if (isGovernanceResolution(proposal)) {
+      return proposal.stage !== 'archived' && !proposal.implementationNote && !proposal.supersededByProposalId;
+    }
+    return !ratifiedIds.has(proposal.proposalId);
+  });
+
+const formatDate = (value: unknown) =>
+  value ? new Date(String(value)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No closing date';
+---
+
+<AdminLayout
+  title="Ballots & decisions"
+  description="Bind reviewed wording, monitor active voting, and record formal ballot outcomes."
+  section="ballots"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  {!user.isStaff && !user.isBranchAdmin ? (
+    <Alert variant="destructive">
+      <ShieldAlert />
+      <AlertTitle>Access required</AlertTitle>
+      <AlertDescription>Moderator or Administrator access is required to manage ballots.</AlertDescription>
+    </Alert>
+  ) : (
+    <div class="admin-stack">
+      <div class="project-detail-strip" aria-label="Ballot summary">
+        <a href="/admin/ballots/?view=all" class="project-stat-cell">
+          <span class="project-stat-cell__label"><Gavel aria-hidden="true" />Active ballots</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{ballotRows.length}</strong>
+            <span class="project-stat-cell__hint">In Decide stage</span>
+          </div>
+        </a>
+        <a href="/admin/ballots/?view=unbound" class="project-stat-cell">
+          <span class="project-stat-cell__label"><Lock aria-hidden="true" />Wording unbound</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{unboundCount}</strong>
+            <span class="project-stat-cell__hint">Needs revision binding</span>
+          </div>
+        </a>
+        <a href="/admin/ballots/?view=expired" class="project-stat-cell">
+          <span class="project-stat-cell__label"><Clock aria-hidden="true" />Past closing date</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{expiredCount}</strong>
+            <span class="project-stat-cell__hint">Ready to finalise</span>
+          </div>
+        </a>
+        <div class="project-stat-cell">
+          <span class="project-stat-cell__label"><CheckCircle2 aria-hidden="true" />Awaiting follow-up</span>
+          <div class="project-stat-cell__bottom">
+            <strong class="project-stat-cell__value tabular">{postBallotPending.length}</strong>
+            <span class="project-stat-cell__hint">Ratification or outcome note</span>
+          </div>
+        </div>
+      </div>
+
+      <Card class="gap-0">
+        <CardHeader class="border-b pb-4">
+          <CardTitle class="text-base">Active ballots</CardTitle>
+          <CardDescription>Aggregate tallies only. Individual member ballot choices remain confidential.</CardDescription>
+          <CardAction>
+            <div class="flex flex-wrap gap-2" role="group" aria-label="Filter ballots">
+              <Button href="/admin/ballots/?view=all" variant={filter === 'all' ? 'secondary' : 'outline'} size="sm">All ({ballotRows.length})</Button>
+              <Button href="/admin/ballots/?view=unbound" variant={filter === 'unbound' ? 'secondary' : 'outline'} size="sm">Needs binding ({unboundCount})</Button>
+              <Button href="/admin/ballots/?view=bound" variant={filter === 'bound' ? 'secondary' : 'outline'} size="sm">Bound ({awaitingOutcomeCount})</Button>
+              <Button href="/admin/ballots/?view=expired" variant={filter === 'expired' ? 'secondary' : 'outline'} size="sm">Expired ({expiredCount})</Button>
+            </div>
+          </CardAction>
+        </CardHeader>
+        <CardContent class="p-4">
+          {filteredRows.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Proposal or motion</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Wording</TableHead>
+                  <TableHead>Closing</TableHead>
+                  <TableHead>Approve / Abstain / Reject</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Next step</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRows.map((row) => {
+                  const proposal = proposalMap.get(row.proposalId);
+                  const isResolution = proposal ? isGovernanceResolution(proposal) : false;
+                  const result = resultByProposal.get(row.proposalId);
+                  return (
+                    <TableRow>
+                      <TableCell className="whitespace-normal">
+                        <a href={`/admin/proposals/${row.slug}/#record-decision`} class="font-semibold text-foreground hover:underline">
+                          <span class="tabular text-muted-foreground">{row.proposalId}</span> · {row.title}
+                        </a>
+                        <div class="text-xs text-muted-foreground mt-0.5">{isResolution ? 'Governance resolution' : 'Policy proposal'}</div>
+                      </TableCell>
+                      <TableCell>{row.branchName}</TableCell>
+                      <TableCell>
+                        <Badge variant={row.bound ? 'success' : 'destructive'}>
+                          {row.bound ? 'Bound' : 'Unbound'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="tabular text-xs text-muted-foreground">
+                        {formatDate(row.closesAt)}
+                        {row.expired && (
+                          <Badge variant="warning" className="ml-1">
+                            <AlertTriangle aria-hidden="true" />Closed
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="tabular">{row.approve} / {row.abstain} / {row.reject}</TableCell>
+                      <TableCell className="tabular font-semibold">{row.total}</TableCell>
+                      <TableCell>
+                        {!row.bound ? (
+                          <Button href={`/admin/proposals/${row.slug}/#bind-ballot`} size="sm" variant="outline">
+                            Bind wording<ArrowRight />
+                          </Button>
+                        ) : result ? (
+                          <Badge variant="success">Recorded: {String(result.result)}</Badge>
+                        ) : (
+                          <Button href={`/admin/proposals/${row.slug}/#record-outcome`} size="sm" variant="outline">
+                            Record outcome<ArrowRight />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <div class="rounded-lg border bg-muted/30 p-5 text-sm">
+              <strong class="block text-foreground">No ballots match this filter</strong>
+              <p class="mt-1 mb-0 text-muted-foreground">Proposals enter this list when moved to Stage 3 (Decide).</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {postBallotPending.length > 0 && (
+        <Card class="gap-0">
+          <CardHeader class="border-b pb-4">
+            <CardTitle class="text-base">Successful ballots awaiting next step</CardTitle>
+            <CardDescription>A successful vote does not automatically adopt policy or close a governance motion.</CardDescription>
+            <CardAction>
+              <Badge variant="info">{postBallotPending.length} open</Badge>
+            </CardAction>
+          </CardHeader>
+          <CardContent class="p-0">
+            <ul class="divide-y m-0 list-none p-0">
+              {postBallotPending.map(({ proposal }) => {
+                const isResolution = isGovernanceResolution(proposal);
+                return (
+                  <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                    <div class="grid min-w-0 gap-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{isResolution ? 'Governance resolution' : 'Policy proposal'}</Badge>
+                        <strong class="text-sm text-foreground">{proposal.proposalId} · {proposal.title}</strong>
+                      </div>
+                      <p class="m-0 text-xs text-muted-foreground">
+                        {isResolution
+                          ? 'Needs an implementation note, supersession link, or archival.'
+                          : 'Awaiting formal ratification in the Policy Registry.'}
+                      </p>
+                    </div>
+                    <Button
+                      href={isResolution ? `/admin/proposals/${proposal.slug}/#outcome-notes` : user.isAdmin ? '/admin/policies/' : `/admin/proposals/${proposal.slug}/`}
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                    >
+                      {isResolution ? 'Record outcome' : user.isAdmin ? 'Open policy registry' : 'View proposal'}
+                      <ArrowRight />
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )}
+</AdminLayout>

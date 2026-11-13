@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import BranchChooser, { type BranchChoice } from '@/components/member/BranchChooser';
 
 export interface MemberOnboardingProps {
@@ -354,15 +355,17 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={handleDismiss}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-[var(--horizon-muted)] hover:bg-[var(--horizon-lavender)] hover:text-[var(--horizon-purple-deep)]"
+            className="text-xs text-[var(--horizon-muted)]"
             aria-label="Dismiss getting started guide"
           >
             <span>Dismiss</span>
-            <X className="size-3.5" aria-hidden="true" />
-          </button>
+            <X aria-hidden="true" />
+          </Button>
         </div>
       </div>
 
@@ -374,7 +377,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
           : 'For new Engage accounts, reminders stay off until you opt in. This is optional and does not affect voting or membership.'}</p>
         {props.digestSuppressed ? <p className="text-sm">Reminder delivery is paused after a bounce or spam complaint. Contact an administrator to resolve delivery.</p> :
           <form method="post" action="/api/email/preferences" className="flex flex-wrap items-center gap-3 py-2">
-            <label className="flex items-center gap-2 text-sm"><input type="hidden" name="category" value="engage" /><input type="checkbox" name="digestEnabled" value="true" defaultChecked={props.digestEnabled === true} /> Send me ballot reminder emails</label>
+            <label className="flex items-center gap-2 text-sm"><input type="hidden" name="category" value="engage" /><Checkbox name="digestEnabled" value="true" defaultChecked={props.digestEnabled === true} /> Send me ballot reminder emails</label>
             <Button type="submit" size="sm" variant="outline">Save reminder preference</Button>
           </form>}
         <p className="text-xs text-[var(--horizon-muted)]">My Engage → Notifications has separate settings for essential account notifications, Engage digests, and general communications such as newsletters and campaigns. Every digest has an unsubscribe link. Delivery, bounce and unsubscribe reporting help keep emails reliable.</p>
@@ -400,13 +403,15 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
               <Fingerprint className="size-3.5" aria-hidden="true" />
               {enrollingPasskey ? 'Waiting for device…' : 'Enable 1-tap passkey'}
             </Button>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={handleDismissNudge}
-              className="rounded px-2 py-1 text-xs font-semibold text-[var(--horizon-muted)] hover:text-[var(--horizon-purple-deep)]"
+              className="text-xs text-[var(--horizon-muted)]"
             >
               Not now
-            </button>
+            </Button>
           </div>
         </div>
       )}

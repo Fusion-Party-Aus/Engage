@@ -26,7 +26,7 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   const branchAdminIds = user.branchAdminIds ?? [];
 
   const [allProposals, branches] = await Promise.all([
-    listProposals(db, { includeArchived: true, stage, search }),
+    listProposals(db, { includeArchived: true, stage, search, user }),
     db.collection("branches").find({}).toArray(),
   ]);
 

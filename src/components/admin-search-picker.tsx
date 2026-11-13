@@ -1,6 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export interface PickerResult {
   id: string;
@@ -83,9 +86,9 @@ export function SearchPicker({
             <strong className="block truncate">{value.label}</strong>
             {value.detail && <span className="block truncate text-xs text-muted-foreground">{value.detail}</span>}
           </span>
-          <button type="button" aria-label={`Clear ${label.toLowerCase()}`} className="rounded p-1 hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none" onClick={() => onChange(null)}>
+          <Button type="button" variant="ghost" size="icon" aria-label={`Clear ${label.toLowerCase()}`} className="size-7" onClick={() => onChange(null)}>
             <X aria-hidden className="size-4" />
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -93,10 +96,10 @@ export function SearchPicker({
   const status = loading ? 'Searching…' : failed ? failed : query.trim().length < 2 ? emptyHint : results.length ? `${results.length} result${results.length === 1 ? '' : 's'}` : 'No matches. Try a different spelling.';
   return (
     <div className="relative grid gap-1.5">
-      <label htmlFor={id} className="text-sm font-semibold">{label}</label>
+      <Label htmlFor={id} className="text-sm font-semibold">{label}</Label>
       <div className="relative">
         <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <input
+        <Input
           id={id}
           role="combobox"
           aria-expanded={open}
@@ -106,7 +109,7 @@ export function SearchPicker({
           autoComplete="off"
           placeholder={placeholder}
           value={query}
-          className="h-10 w-full rounded-md border border-input bg-background pr-3 pl-9 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="pl-9"
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);

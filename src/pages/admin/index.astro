@@ -2,6 +2,7 @@
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import {
   ArrowRight,
+  BarChart3,
   BookOpen,
   CheckCircle2,
   FileText,
@@ -18,10 +19,16 @@ import { isGovernanceResolution, listProposals } from '../../lib/store.ts';
 import { groupParticipationFeed, type ParticipationActivity } from '../../lib/participation-feed.ts';
 import { PROPOSAL_VOTES } from '../../lib/vote-storage.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
-import { buildBallotProgressRows, buildBranchSummaryRows } from '../../lib/admin-reporting.ts';
+import { buildBallotProgressRows } from '../../lib/admin-reporting.ts';
 import ActivityTimeline from '../../components/blocks/timeline-3';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import Card from '../../components/admin/Card.astro';
+import CardAction from '../../components/admin/CardAction.astro';
+import CardContent from '../../components/admin/CardContent.astro';
+import CardDescription from '../../components/admin/CardDescription.astro';
+import CardHeader from '../../components/admin/CardHeader.astro';
+import CardTitle from '../../components/admin/CardTitle.astro';
 import Alert from '../../components/admin/Alert.astro';
 import AlertTitle from '../../components/admin/AlertTitle.astro';
 import AlertDescription from '../../components/admin/AlertDescription.astro';
@@ -48,14 +55,6 @@ const stageCounts = {
   decide: proposals.filter((p) => p.stage === 'decide').length,
   implement: proposals.filter((p) => p.stage === 'implement').length,
 };
-
-const pipelineTotal = Math.max(proposals.length, 1);
-const pipelineSegments = [
-  { label: 'Intake', value: stageCounts.propose, color: '#b8a8d9', href: '/admin/proposals/?stage=propose' },
-  { label: 'Deliberation', value: stageCounts.deliberate, color: '#7c5cb0', href: '/admin/proposals/?stage=deliberate' },
-  { label: 'Active ballots', value: stageCounts.decide, color: '#05d4e5', href: '/admin/proposals/?stage=decide' },
-  { label: 'Implement', value: stageCounts.implement, color: '#260b59', href: '/admin/proposals/?stage=implement' },
-].map((segment) => ({ ...segment, percent: (segment.value / pipelineTotal) * 100 }));
 
 const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
 const showIdentifiableBallots = canViewIdentifiableBallots(user);
@@ -168,21 +167,8 @@ const [ballotResults, registry, scopedBranches] = await Promise.all([
       : Promise.resolve([]),
 ]);
 const branchNames = new Map(scopedBranches.map((branch: any) => [String(branch.branchId), String(branch.name)]));
-const scopedBranchIds = scopedBranches.map((branch: any) => String(branch.branchId));
-const branchCountPairs = await Promise.all(
-  scopedBranchIds.map(async (branchId) => [
-    branchId,
-    await db.collection('branch_memberships').countDocuments({ status: 'active', branchId }),
-  ] as const),
-);
-const verifiedCountsByBranch = new Map<string, number>(branchCountPairs);
 const ballotProgressRows = buildBallotProgressRows(proposals, branchNames);
-const branchSummaryRows = buildBranchSummaryRows(
-  proposals,
-  scopedBranches as any[],
-  verifiedCountsByBranch,
-  user.isStaff ? undefined : new Set(scopedBranchIds),
-);
+const expiredBallots = ballotProgressRows.filter((row) => row.bound && row.expired);
 const ratifiedIds = new Set(registry.map((policy) => policy.proposalId));
 const awaitingRatification = ballotResults
   .filter((result) => !ratifiedIds.has(result.proposalId))
@@ -203,10 +189,19 @@ const resolutionsAwaitingOutcome = ballotResults
   );
 const awaitingPublication = user.isAdmin ? registry.filter((policy) => policy.status === 'adopted' && policy.publicationStatus === 'unpublished') : [];
 const proposalIds = proposals.map((proposal) => proposal.proposalId);
-const unresolvedAmendments = proposalIds.length
-  ? await db.collection('amendments').countDocuments({ proposalId: { $in: proposalIds }, status: { $in: ['proposed', 'conflict', 'endorsed'] } })
-  : 0;
-const membersAwaitingReview = user.isAdmin ? await db.collection('memberships').countDocuments({ status: 'pending' }) : 0;
+const activeDeliberationIds = proposals
+  .filter((proposal) => proposal.stage === 'deliberate' || proposal.stage === 'decide')
+  .map((proposal) => proposal.proposalId);
+const [unresolvedAmendments, membersAwaitingReview, unrespondedComments] = await Promise.all([
+  proposalIds.length
+    ? db.collection('amendments').countDocuments({ proposalId: { $in: proposalIds }, status: { $in: ['proposed', 'conflict', 'endorsed'] } })
+    : Promise.resolve(0),
+  user.isAdmin ? db.collection('memberships').countDocuments({ status: 'pending' }) : Promise.resolve(0),
+  activeDeliberationIds.length
+    ? db.collection('comments').find({ proposalId: { $in: activeDeliberationIds }, feedback: { $exists: false } }).project({ proposalId: 1 }).toArray()
+    : Promise.resolve([]),
+]);
+const unrespondedProposalIds = [...new Set(unrespondedComments.map((c: any) => String(c.proposalId)))];
 
 type AttentionTone = 'warning' | 'info' | 'destructive' | 'success';
 interface AttentionGroup {
@@ -226,11 +221,23 @@ if (activeBallotsNeedingReview.length) {
     key: 'ballot-wording',
     title: 'Ballot wording needs review',
     description: 'These ballots have no bound wording revision. Bind the reviewed revision before recording an outcome.',
-    names: activeBallotsNeedingReview.map((proposal) => ({ title: proposal.title, href: `/admin/proposals/${proposal.slug}/` })),
-    href: '/admin/proposals/?stage=decide',
-    cta: 'Review ballots',
+    names: activeBallotsNeedingReview.map((proposal) => ({ title: proposal.title, href: `/admin/proposals/${proposal.slug}/#bind-ballot` })),
+    href: '/admin/ballots/?view=unbound',
+    cta: 'Review unbound ballots',
     tone: 'warning',
     count: activeBallotsNeedingReview.length,
+  });
+}
+if (expiredBallots.length) {
+  attentionGroups.push({
+    key: 'expired-ballots',
+    title: 'Ballots past closing date',
+    description: 'Voting has closed on these bound ballots. Record the formal ballot outcome.',
+    names: expiredBallots.map((row) => ({ title: row.title, href: `/admin/proposals/${row.slug}/#record-outcome` })),
+    href: '/admin/ballots/?view=expired',
+    cta: 'Record outcomes',
+    tone: 'info',
+    count: expiredBallots.length,
   });
 }
 if (awaitingRatification.length) {
@@ -279,6 +286,21 @@ if (unresolvedAmendments > 0) {
     cta: 'Review amendments',
     tone: 'warning',
     count: unresolvedAmendments,
+  });
+}
+if (unrespondedComments.length > 0) {
+  const unrespondedProposals = unrespondedProposalIds
+    .map((id) => proposalMap.get(id))
+    .filter((proposal): proposal is NonNullable<typeof proposal> => Boolean(proposal));
+  attentionGroups.push({
+    key: 'contributions',
+    title: 'Member contributions awaiting response',
+    description: 'Record whether deliberation comments were incorporated, considered, deferred, or declined.',
+    names: unrespondedProposals.map((proposal) => ({ title: proposal.title, href: `/admin/proposals/${proposal.slug}/#record-discussion` })),
+    href: unrespondedProposals[0] ? `/admin/proposals/${unrespondedProposals[0].slug}/#record-discussion` : '/admin/proposals/',
+    cta: 'Respond to contributions',
+    tone: 'info',
+    count: unrespondedComments.length,
   });
 }
 if (user.isAdmin && membersAwaitingReview > 0) {
@@ -348,221 +370,148 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
         <!-- Main Column: Needs Attention Action Queue + Recent Participation -->
         <div class="project-workspace-main">
           <!-- Section 1: Needs Attention Queue -->
-          <section class="overview-section" aria-labelledby="attention-heading">
-            <div class="overview-section__head">
-              <div>
-                <h2 id="attention-heading">Needs attention</h2>
-                <p>Governance actions grouped by the decision or review they require.</p>
-              </div>
-              <Badge variant={attentionCount ? 'warning' : 'success'}>
-                {attentionCount ? `${attentionCount} open` : 'All clear'}
-              </Badge>
-            </div>
-
-            {attentionGroups.length ? (
-              <ul class="attention-list">
-                {attentionGroups.map((group) => (
-                  <li class="attention-row">
-                    <div class="attention-row__main">
-                      <div class="attention-row__title">
-                        <Badge variant={group.tone}>
-                          {group.tone === 'destructive' ? 'Urgent' : group.tone === 'warning' ? 'Review' : 'Action'}
-                        </Badge>
-                        <strong>{group.title}</strong>
-                        <span class="admin-attention-count tabular">{group.count}</span>
+          <Card class="gap-0">
+            <CardHeader class="border-b pb-4">
+              <CardTitle class="text-base">Needs attention</CardTitle>
+              <CardDescription>Governance actions grouped by the decision or review they require.</CardDescription>
+              <CardAction>
+                <Badge variant={attentionCount ? 'warning' : 'success'}>
+                  {attentionCount ? `${attentionCount} open` : 'All clear'}
+                </Badge>
+              </CardAction>
+            </CardHeader>
+            <CardContent class="p-0">
+              {attentionGroups.length ? (
+                <ul class="divide-y m-0 list-none p-0">
+                  {attentionGroups.map((group) => (
+                    <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                      <div class="grid min-w-0 flex-1 gap-1">
+                        <div class="flex flex-wrap items-center gap-2 text-sm">
+                          <Badge variant={group.tone}>
+                            {group.tone === 'destructive' ? 'Urgent' : group.tone === 'warning' ? 'Review' : 'Action'}
+                          </Badge>
+                          <strong class="text-foreground">{group.title}</strong>
+                          <span class="tabular text-xs font-semibold text-muted-foreground">{group.count}</span>
+                        </div>
+                        <p class="m-0 text-xs text-muted-foreground">{group.description}</p>
+                        {group.names.length > 0 && (
+                          <p class="m-0 text-xs text-muted-foreground">
+                            {group.names.slice(0, 3).map((item, index) => (
+                              <>
+                                {index > 0 && <span aria-hidden="true"> · </span>}
+                                <a href={item.href} class="font-medium text-foreground underline underline-offset-2">{item.title}</a>
+                              </>
+                            ))}
+                            {group.names.length > 3 ? ` · and ${group.names.length - 3} more` : ''}
+                          </p>
+                        )}
                       </div>
-                      <p class="attention-row__desc">{group.description}</p>
-                      {group.names.length > 0 && (
-                        <p class="attention-row__links">
-                          {group.names.slice(0, 3).map((item, index) => (
-                            <>
-                              {index > 0 && <span aria-hidden="true"> · </span>}
-                              <a href={item.href}>{item.title}</a>
-                            </>
-                          ))}
-                          {group.names.length > 3 ? ` · and ${group.names.length - 3} more` : ''}
-                        </p>
-                      )}
-                    </div>
-                    <Button href={group.href} variant="outline" size="sm" className="shrink-0">
-                      {group.cta}<ArrowRight />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div class="attention-empty">
-                <strong>No outstanding governance actions</strong>
-                <p>Ballots, ratifications, and member verifications are up to date.</p>
-              </div>
-            )}
-          </section>
+                      <Button href={group.href} variant="outline" size="sm" className="shrink-0">
+                        {group.cta}<ArrowRight />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div class="p-5 text-sm">
+                  <strong class="block text-foreground">No outstanding governance actions</strong>
+                  <p class="mt-1 mb-0 text-muted-foreground">Ballots, ratifications, and member verifications are up to date.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <!-- Section 2: Recent Member Participation -->
-          <section class="overview-section" aria-labelledby="participation-heading">
-            <div class="overview-section__head">
-              <div>
-                <h2 id="participation-heading">Recent member participation</h2>
-                <p>Verified votes, deliberation stances, and new proposals over the last 7 days.</p>
-              </div>
-              <Button href="/admin/proposals/" variant="outline" size="sm">Proposal register</Button>
-            </div>
-
-            <div class="participation-strip">
-              <div>
-                <strong class="tabular">{voteActivities.length}</strong>
-                <span>Recent votes</span>
-              </div>
-              <div>
-                <strong class="tabular">{commentActivities.length}</strong>
-                <span>Deliberation stances</span>
-              </div>
-              <div>
-                <strong class="tabular">{firstParticipants.size}</strong>
-                <span>First-time participants</span>
-              </div>
-            </div>
-
-            <div class="participation-timeline-wrap">
-              <ActivityTimeline
-                client:load
-                groups={adminTimeline}
-                filters={[
-                  { id: 'all', label: 'All' },
-                  { id: 'vote', label: 'Votes' },
-                  { id: 'contribution', label: 'Contributions' },
-                  { id: 'proposal', label: 'Proposals' },
-                ]}
-                searchable
-                emptyMessage="No member activity in the last seven days."
-              />
-            </div>
-          </section>
-
-          <!-- Section 3: Open Ballot Progress & Branch Summary -->
-          <section class="overview-section" aria-labelledby="reporting-heading">
-            <div class="overview-section__head">
-              <div>
-                <h2 id="reporting-heading">Ballot progress &amp; branch summary</h2>
-                <p>Aggregate proposal status, ballot totals, and branch activity. Individual votes remain confidential.</p>
-              </div>
-              <Button href="/api/admin/reports/proposals.csv" variant="outline" size="sm">Export CSV summary</Button>
-            </div>
-
-            {ballotProgressRows.length > 0 ? (
-              <div class="admin-report-block">
-                <h3>Decide stage ({ballotProgressRows.length})</h3>
-                <div class="admin-report-table-wrap">
-                  <table class="admin-report-table">
-                    <thead>
-                      <tr>
-                        <th>Ballot</th>
-                        <th>Scope</th>
-                        <th>Wording</th>
-                        <th class="tabular">Approve / Abstain / Reject</th>
-                        <th class="tabular">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ballotProgressRows.map((row) => (
-                        <tr>
-                          <td>
-                            <a href={`/admin/proposals/${row.slug}/`}>{row.proposalId} · {row.title}</a>
-                          </td>
-                          <td>{row.branchName}</td>
-                          <td>
-                            <Badge variant={row.bound ? (row.expired ? 'warning' : 'success') : 'destructive'}>
-                              {row.bound ? (row.expired ? 'Closed' : 'Bound') : 'Unbound'}
-                            </Badge>
-                          </td>
-                          <td class="tabular">{row.approve} / {row.abstain} / {row.reject}</td>
-                          <td class="tabular"><strong>{row.total}</strong></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          <Card class="gap-0">
+            <CardHeader class="border-b pb-4">
+              <CardTitle class="text-base">Recent member participation</CardTitle>
+              <CardDescription>Verified votes, deliberation stances, and new proposals over the last 7 days.</CardDescription>
+              <CardAction>
+                <Button href="/admin/proposals/" variant="outline" size="sm">Proposals &amp; motions</Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent class="grid gap-4 p-5">
+              <div class="participation-strip">
+                <div>
+                  <strong class="tabular">{voteActivities.length}</strong>
+                  <span>Recent votes</span>
+                </div>
+                <div>
+                  <strong class="tabular">{commentActivities.length}</strong>
+                  <span>Deliberation stances</span>
+                </div>
+                <div>
+                  <strong class="tabular">{firstParticipants.size}</strong>
+                  <span>First-time participants</span>
                 </div>
               </div>
-            ) : (
-              <p class="text-sm text-muted-foreground m-0 mb-4">No ballots are currently open in Stage 3 (Decide).</p>
-            )}
 
-            {branchSummaryRows.length > 0 && (
-              <div class="admin-report-block">
-                <h3>Branch summary</h3>
-                <div class="admin-report-table-wrap">
-                  <table class="admin-report-table">
-                    <thead>
-                      <tr>
-                        <th>Branch</th>
-                        <th class="tabular">Verified members</th>
-                        <th class="tabular">Active proposals</th>
-                        <th class="tabular">Decide stage</th>
-                        <th class="tabular">Total votes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {branchSummaryRows.map((row) => (
-                        <tr>
-                          <td>{row.branchName}</td>
-                          <td class="tabular">{row.verifiedMembers}</td>
-                          <td class="tabular">{row.propose + row.deliberate + row.decide + row.implement}</td>
-                          <td class="tabular">{row.decide}</td>
-                          <td class="tabular">{row.totalVotes}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {adminTimeline.length > 0 ? (
+                <ActivityTimeline
+                  client:load
+                  groups={adminTimeline}
+                  filters={[
+                    { id: 'all', label: 'All' },
+                    { id: 'vote', label: 'Votes' },
+                    { id: 'contribution', label: 'Contributions' },
+                    { id: 'proposal', label: 'Proposals' },
+                  ]}
+                  searchable
+                  emptyMessage="No member activity in the last seven days."
+                />
+              ) : (
+                <div class="rounded-lg border bg-muted/30 p-4 text-sm">
+                  <strong class="block text-foreground">No member activity in the last seven days</strong>
+                  <p class="mt-1 mb-0 text-muted-foreground">New votes, comments, and proposals will appear here as members participate.</p>
                 </div>
-              </div>
-            )}
-          </section>
+              )}
+            </CardContent>
+          </Card>
+
+          <!-- Section 3: Ballots & Reporting Entry Points -->
+          <Card class="gap-0">
+            <CardHeader>
+              <CardTitle class="text-base">Ballots &amp; reports</CardTitle>
+              <CardDescription>
+                {ballotProgressRows.length} active ballot{ballotProgressRows.length === 1 ? '' : 's'}
+                {activeBallotsNeedingReview.length ? ` · ${activeBallotsNeedingReview.length} unbound` : ''}
+                {expiredBallots.length ? ` · ${expiredBallots.length} past closing date` : ''}.
+                Open the ballot register to bind wording or record outcomes, or generate CSV and PDF reports.
+              </CardDescription>
+              <CardAction>
+                <div class="flex flex-wrap gap-2">
+                  <Button href="/admin/ballots/" variant="outline" size="sm">Ballots &amp; decisions<ArrowRight /></Button>
+                  <Button href="/admin/reports/" variant="outline" size="sm">Reports &amp; PDFs<ArrowRight /></Button>
+                </div>
+              </CardAction>
+            </CardHeader>
+          </Card>
         </div>
 
-        <!-- Right Contextual Rail: Pipeline distribution, Workspaces, Authority summary -->
-        <aside class="project-workspace-rail" aria-label="Pipeline distribution and administration workspaces">
-          <div class="project-rail-block">
-            <h3>
-              <span>Pipeline distribution</span>
-              <span class="tabular text-xs font-normal text-muted-foreground">{proposals.length} total</span>
-            </h3>
-            <div
-              class="flex h-2.5 overflow-hidden rounded-full bg-muted"
-              role="img"
-              aria-label={`Pipeline: ${stageCounts.propose} intake, ${stageCounts.deliberate} deliberation, ${stageCounts.decide} active ballots, ${stageCounts.implement} implementation`}
-            >
-              {pipelineSegments.map((segment) => (
-                <span
-                  style={`width:${segment.percent}%;background:${segment.color}`}
-                  title={`${segment.label}: ${segment.value}`}
-                  class="h-full"
-                ></span>
-              ))}
-            </div>
-            <dl class="project-rail-props">
-              {pipelineSegments.map((segment) => (
-                <div>
-                  <dt>
-                    <span class="size-2 rounded-full" style={`background:${segment.color}`}></span>
-                    <a href={segment.href} class="text-muted-foreground no-underline hover:underline">{segment.label}</a>
-                  </dt>
-                  <dd class="tabular">{segment.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-
+        <!-- Right Contextual Rail: Workspaces & Authority summary -->
+        <aside class="project-workspace-rail" aria-label="Administration workspaces and authority">
           <div class="project-rail-block">
             <h3>Administration workspaces</h3>
             <div class="project-rail-notes">
+              <a href="/admin/ballots/" class="project-rail-note">
+                <span class="project-rail-note__icon"><Gavel aria-hidden="true" /></span>
+                <div class="project-rail-note__body">
+                  <div class="project-rail-note__head">
+                    <strong>Ballots &amp; decisions</strong>
+                    <span class="tabular">{ballotProgressRows.length}</span>
+                  </div>
+                  <p>Bind ballot wording, monitor participation, and record outcomes.</p>
+                </div>
+              </a>
+
               <a href="/admin/proposals/" class="project-rail-note">
                 <span class="project-rail-note__icon"><FileText aria-hidden="true" /></span>
                 <div class="project-rail-note__body">
                   <div class="project-rail-note__head">
-                    <strong>Proposals &amp; Decisions</strong>
+                    <strong>Proposals &amp; motions</strong>
                     <span class="tabular">{proposals.length}</span>
                   </div>
-                  <p>Manage stages, bind ballot wording, and review amendments.</p>
+                  <p>Manage proposals, amendments, and contributor responses.</p>
                 </div>
               </a>
 
@@ -571,7 +520,7 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
                   <span class="project-rail-note__icon"><BookOpen aria-hidden="true" /></span>
                   <div class="project-rail-note__body">
                     <div class="project-rail-note__head">
-                      <strong>Policy Registry</strong>
+                      <strong>Policy registry</strong>
                       <span class="tabular">{registry.length}</span>
                     </div>
                     <p>Ratify successful ballots and authorise public publication.</p>
@@ -584,7 +533,7 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
                   <span class="project-rail-note__icon"><Users aria-hidden="true" /></span>
                   <div class="project-rail-note__body">
                     <div class="project-rail-note__head">
-                      <strong>Members &amp; Access</strong>
+                      <strong>Members &amp; access</strong>
                       {membersAwaitingReview > 0 && <span class="tabular">{membersAwaitingReview} pending</span>}
                     </div>
                     <p>Verify member eligibility and assign platform roles.</p>
@@ -596,9 +545,19 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
                 <span class="project-rail-note__icon"><GitBranch aria-hidden="true" /></span>
                 <div class="project-rail-note__body">
                   <div class="project-rail-note__head">
-                    <strong>Branches &amp; Electorates</strong>
+                    <strong>Branches</strong>
                   </div>
-                  <p>Configure branch recognition, electorates, and referrals.</p>
+                  <p>Manage branch participation, electorates, and referrals.</p>
+                </div>
+              </a>
+
+              <a href="/admin/reports/" class="project-rail-note">
+                <span class="project-rail-note__icon"><BarChart3 aria-hidden="true" /></span>
+                <div class="project-rail-note__body">
+                  <div class="project-rail-note__head">
+                    <strong>Reports &amp; PDF exports</strong>
+                  </div>
+                  <p>Download proposal PDF briefs and aggregate CSV summaries.</p>
                 </div>
               </a>
             </div>
@@ -621,117 +580,6 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
 </AdminLayout>
 
 <style>
-  .overview-section {
-    display: grid;
-    gap: 0.9rem;
-  }
-
-  .overview-section + .overview-section {
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--horizon-line);
-  }
-
-  .overview-section__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-
-  .overview-section__head h2 {
-    margin: 0;
-    font-family: var(--font-newsreader), Georgia, serif;
-    font-size: 1.35rem;
-    font-weight: 600;
-    color: var(--horizon-ink);
-  }
-
-  .overview-section__head p {
-    margin: 0.2rem 0 0;
-    font-size: 0.85rem;
-    color: var(--horizon-muted);
-  }
-
-  .attention-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.65rem;
-    background: var(--horizon-white);
-    overflow: hidden;
-  }
-
-  .attention-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.85rem 1.25rem;
-    padding: 0.9rem 1.1rem;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-
-  .attention-row:last-child {
-    border-bottom: 0;
-  }
-
-  .attention-row__main {
-    min-width: 0;
-    flex: 1;
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .attention-row__title {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.45rem;
-    font-size: 0.9rem;
-    color: var(--horizon-ink);
-  }
-
-  .attention-row__desc {
-    margin: 0;
-    font-size: 0.83rem;
-    color: var(--horizon-muted);
-  }
-
-  .attention-row__links {
-    margin: 0;
-    font-size: 0.78rem;
-    color: var(--horizon-muted);
-  }
-
-  .attention-row__links a {
-    color: var(--horizon-ink);
-    font-weight: 500;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
-  .attention-empty {
-    padding: 1.1rem 1.25rem;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.6rem;
-    background: var(--horizon-surface);
-    display: grid;
-    gap: 0.2rem;
-  }
-
-  .attention-empty strong {
-    font-size: 0.9rem;
-    color: var(--horizon-ink);
-  }
-
-  .attention-empty p {
-    margin: 0;
-    font-size: 0.83rem;
-    color: var(--horizon-muted);
-  }
-
   .participation-strip {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -784,57 +632,5 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
     .participation-strip > div:last-child {
       border-bottom: 0;
     }
-  }
-
-  .admin-report-block {
-    margin-top: 1rem;
-  }
-
-  .admin-report-block h3 {
-    margin: 0 0 0.5rem;
-    font-size: 0.92rem;
-    font-weight: 600;
-    color: var(--horizon-purple);
-  }
-
-  .admin-report-table-wrap {
-    overflow-x: auto;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.65rem;
-    background: var(--horizon-white);
-  }
-
-  .admin-report-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.84rem;
-  }
-
-  .admin-report-table th,
-  .admin-report-table td {
-    padding: 0.6rem 0.8rem;
-    text-align: left;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-
-  .admin-report-table th {
-    font-size: 0.76rem;
-    font-weight: 600;
-    color: var(--horizon-muted);
-    background: var(--horizon-lavender-soft);
-  }
-
-  .admin-report-table tr:last-child td {
-    border-bottom: 0;
-  }
-
-  .admin-report-table a {
-    color: var(--horizon-purple);
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .admin-report-table a:hover {
-    text-decoration: underline;
   }
 </style>

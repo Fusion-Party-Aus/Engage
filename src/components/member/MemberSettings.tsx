@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldSeparator, FieldTitle } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -594,11 +595,9 @@ function PasskeysSection() {
                 label="Automatic passkey prompt"
               >
                 <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-[var(--horizon-purple-deep)]">
-                  <input
+                  <Checkbox
                     checked={autoPrompt}
-                    className="accent-[var(--horizon-purple)]"
                     onChange={(event) => toggleAutoPrompt(event.target.checked)}
-                    type="checkbox"
                   />
                   <span>Auto-prompt on sign-in</span>
                 </label>

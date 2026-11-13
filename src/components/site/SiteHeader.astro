@@ -104,7 +104,7 @@ if (isStaff) {
             </svg>
           </a>
           <Button href="/member/" size="sm" variant="outline" className="h-9 px-3.5 text-sm">My Engage</Button>
-          <button class="site-signout" type="button" data-signout>Sign out</button>
+          <Button className="site-signout" type="button" variant="ghost" size="sm" data-signout>Sign out</Button>
         </>
       ) : (
         <Button href="/member/" size="sm" className="h-9 px-4 text-sm">Sign in</Button>
@@ -144,7 +144,7 @@ if (isStaff) {
               </p>
               <Button href="/member/" className="w-full">My Engage</Button>
               <Button href="/member/?view=notifications" variant="outline" className="w-full">Notifications</Button>
-              <button class="site-menu__signout" type="button" data-signout>Sign out</button>
+              <Button className="site-menu__signout" type="button" variant="ghost" className="w-full" data-signout>Sign out</Button>
             </>
           ) : (
             <Button href="/member/" className="w-full">Sign in</Button>

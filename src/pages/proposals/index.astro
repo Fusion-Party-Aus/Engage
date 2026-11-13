@@ -3,6 +3,7 @@ import { discoveryFocus } from '../../lib/proposal-discovery.ts';
 import { ballotDeadlineLabel, ballotExpired } from '../../lib/ballot-deadline.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { Button } from '../../components/ui/button';
+import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
 import { Badge } from '../../components/ui/badge';
@@ -268,9 +269,9 @@ const hasActiveFilters =
         <fieldset class="participation-filters">
           <legend>For me</legend>
           <input type="hidden" name="focus" value={initialFocus === 'recent' ? 'recent' : 'all'} />
-          {user?.canParticipate && initialStage === 'decide' && <label><input id="needs-my-vote" type="checkbox" name="needsVote" value="1" checked={initialFocus === 'needs-vote'} data-auto-submit /> Needs my vote <span class="tabular">{myOutstandingVotes.length}</span></label>}
+          {user?.canParticipate && initialStage === 'decide' && <label><Checkbox id="needs-my-vote" name="needsVote" value="1" defaultChecked={initialFocus === 'needs-vote'} data-auto-submit /> Needs my vote <span class="tabular">{myOutstandingVotes.length}</span></label>}
           {user?.canParticipate && initialStage !== 'decide' && <a class="personal-vote-link" href={buildFilterUrl({ stage: 'decide', focus: 'needs-vote', needsVote: null, page: '1' })}>Needs my vote <span class="tabular">{myOutstandingVotes.length}</span></a>}
-          {user && <label><input id="joined-discussions" type="checkbox" name="joined" value="1" checked={joinedOnly} data-auto-submit /> Discussions I’ve joined</label>}
+          {user && <label><Checkbox id="joined-discussions" name="joined" value="1" defaultChecked={joinedOnly} data-auto-submit /> Discussions I’ve joined</label>}
         </fieldset>
         <div class="search-row">
           <label for="proposal-search" class="sr-only">Search proposals by title, topic or ID</label>

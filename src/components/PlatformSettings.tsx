@@ -664,12 +664,13 @@ export default function PlatformSettings({ initialConfig, initialEvents }: { ini
         <ul className="flex min-w-0 gap-1 overflow-x-auto pb-1 lg:grid lg:overflow-visible lg:pb-0">
           {SECTIONS.map(({ key, label, hint, icon: Icon }) => (
             <li key={key} className="shrink-0">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => go(key)}
                 aria-current={active === key ? 'page' : undefined}
                 className={cn(
-                  'flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                  'h-auto w-full items-start justify-start gap-2.5 rounded-lg px-3 py-2 text-left',
                   active === key ? 'bg-[var(--horizon-lavender)] text-[var(--horizon-purple-deep)]' : 'hover:bg-[var(--horizon-lavender-soft)]',
                 )}
               >
@@ -678,7 +679,7 @@ export default function PlatformSettings({ initialConfig, initialEvents }: { ini
                   <span className="block text-sm font-semibold">{label}</span>
                   <span className="hidden text-xs text-muted-foreground lg:block">{hint}</span>
                 </span>
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

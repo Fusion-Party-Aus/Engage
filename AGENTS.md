@@ -149,6 +149,46 @@ Horizon is Engage's visual design system.
 - Reuse accessible, maintained components where appropriate.
 - Do not preserve legacy styling or compatibility layers when they conflict with an explicitly approved redesign.
 
+### Shadcn primitives are mandatory
+
+Engage has one control layer: the shadcn-compatible primitives in `src/components/ui`. Horizon supplies the visual language through those primitives' variants and CSS tokens. Do not create a parallel set of HTML controls or a second visual system in page CSS.
+
+| Need | Required component | Not acceptable |
+|---|---|---|
+| Action or navigation action | `Button` (`href` for links) | styled `<button>` or styled `<a>` |
+| Single-line field | `Input` | raw `<input>` except `type="hidden"` |
+| Multi-line field | `Textarea` | raw `<textarea>` |
+| Select | `NativeSelect` | raw `<select>` |
+| Checkbox | `Checkbox` | raw `<input type="checkbox">` |
+| Switch | `Switch` | custom checkbox styling |
+| Single or multi choice control | `Toggle`, `ToggleGroup` | hidden inputs with styled labels |
+| Data table | `Table` family | raw `<table>` |
+| Status or label | `Badge` | ad-hoc spans or coloured text |
+| Inline message | `Alert`, `AlertTitle`, `AlertDescription` | coloured `<div>` panels |
+| Field label, hint, error | `Field` (`ui/field` or `admin/Field.astro`) | hand-written label and help markup |
+| Modal | `Dialog`, `AlertDialog` | custom overlay markup |
+| Surface or panel | `Card` family (`ui/card` for React, `admin/Card.astro` wrappers for Astro) | page-specific card CSS |
+
+Rules:
+
+- A raw interactive element is a defect unless it is a hidden form input, a native file input the `Input` primitive cannot express, or a disclosure `<details>` element where no primitive exists.
+- Plain text navigation may use `<a>`. Anything presented as an action must use `Button`.
+- If a needed primitive is missing, add it from shadcn to `src/components/ui` rather than hand-rolling it. For an Astro-only page, add a thin wrapper in `src/components/admin` that imports the same variants and markup contract.
+- Specialised composites (comment composer, filter bar, ballot control) are allowed only when they compose primitives. Do not re-create a button, select, input, checkbox or toggle with custom CSS.
+- Express variation through primitive variants and `className`, not by writing a new control. Preserve the primitive's focus, disabled, invalid, hover and keyboard behaviour.
+- Never hide a native input and draw a replacement label without a visible focus state. Use `ToggleGroup` or `Checkbox` so keyboard focus remains visible.
+- Use Horizon semantic tokens only. Do not use arbitrary Tailwind palette utilities (for example `text-amber-800`) or hardcoded colour values. Never reference a CSS custom property that is not defined in `src/styles/global.css`.
+- A one-off layout (grid, strip, rail) may use page CSS. A one-off control (button, field, pill, table) may not.
+- Pages that bypass these rules are defects. Migrate them when touched; never copy them as precedent.
+
+**Audit check.** For every changed file, run:
+
+```sh
+rg -n '<(button|select|input|textarea|table|dialog)\b' <changed-files>
+```
+
+The only acceptable matches are `type="hidden"` inputs and the primitive implementations in `src/components/ui`. Any other match must be replaced or explicitly justified in the final report.
+
 ### Avoid common AI-generated UI defects
 
 Do not produce:
@@ -326,6 +366,8 @@ For relevant changes:
 - Check console errors and failed requests.
 - Confirm backend actions produce the intended persisted outcome.
 - Review the final interface for verbosity, hierarchy, accessibility, and exposed implementation details.
+- Audit changed files for raw controls using the command in Section 4, and verify keyboard focus visibility for every composed control.
+- Confirm no new arbitrary palette values or undefined Horizon custom properties were introduced.
 
 Where visual inspection or end-to-end testing is unavailable, explicitly report that limitation. Do not claim verification that did not happen.
 
@@ -355,12 +397,14 @@ Before declaring work complete, answer:
 - Is the hierarchy clear?
 - Is it usable on mobile?
 - Are accessibility requirements met?
+- Are all new controls built from shadcn primitives with Horizon variants?
 
 **Engineering**
 - Does the workflow work end to end?
 - Are errors, permissions, and edge cases handled?
 - Are governance invariants preserved?
 - Is obsolete or unnecessary code removed?
+- Are the raw-control and undefined-token audits clean?
 - Are verification, commits, and changelog complete?
 
 **If the interface looks like something built for a developer to debug rather than a member or administrator to use, redesign it before calling the work finished.**
