@@ -1,51 +1,45 @@
 ---
-import { digestEnabled, engageConsentState } from "../../lib/digest-preferences.ts";
-import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
-const { preference, saved = false, existingMember = false } = Astro.props;
-const consent=engageConsentState(preference,existingMember);
-const consentLabel={
- 'explicit-opt-in':'You have opted in to Engage participation emails.',
- 'explicit-opt-out':'You have opted out of Engage participation emails.',
- 'legacy-unrecorded':'Your account predates notification preferences. No explicit choice is recorded; Engage participation emails use the legacy opt-out setting where permitted. You can change this below.',
- 'new-unrecorded':'No opt-in is recorded. Optional Engage digests stay off until you choose them.',
- 'unclassified-unrecorded':'Your registration cohort needs review; no explicit email preference is recorded.',
- 'suppressed':'Email delivery is restricted after a bounce, complaint or other delivery restriction.',
-}[consent];
+import { NotificationCenter, type InAppNotificationItem, type PushSubscriptionSummary } from './NotificationCenter';
+import { resolveUnifiedPreferences } from '../../lib/notifications.ts';
+
+interface Props {
+  preference: Record<string, any> | null;
+  saved?: boolean;
+  existingMember?: boolean;
+  inAppNotifications?: InAppNotificationItem[];
+  pushSubscriptions?: PushSubscriptionSummary[];
+  pushConfigured?: boolean;
+  vapidPublicKey?: string | null;
+}
+
+const {
+  preference,
+  saved = false,
+  existingMember = false,
+  inAppNotifications = [],
+  pushSubscriptions = [],
+  pushConfigured = false,
+  vapidPublicKey = null,
+} = Astro.props;
+
+const initialPreferences = resolveUnifiedPreferences(preference, existingMember);
 ---
-<section class="email-preferences" aria-labelledby="notifications-heading">
- <h2 id="notifications-heading">Notifications</h2>
- <p>Choose which Engage emails you receive. Each category is saved separately.</p>
- {saved && <p role="status">Notification preferences saved.</p>}
- <section aria-labelledby="essential-notifications-heading">
-  <h3 id="essential-notifications-heading">Essential account notifications</h3>
-  <p>Account administration and critical voting-related information. Sign-in links and security alerts are always sent so you can access and protect your account.</p>
-  <form method="post" action="/api/email/preferences">
-   <input type="hidden" name="category" value="essential" />
-   <label><Checkbox name="accountNotificationsEnabled" value="true" defaultChecked={preference?.accountNotificationsEnabled !== false} /> Send account administration and critical voting notices</label>
-   <Button type="submit" size="sm">Save account notifications</Button>
-  </form>
- </section>
- <section aria-labelledby="engage-notifications-heading">
-  <h3 id="engage-notifications-heading">Engage digests</h3>
-  <p>Summaries of activity on Engage: unvoted proposals, participation updates and ballots closing within seven days. Current reminder digests include eligible ballots you haven’t voted on, with each ballot reminded once.</p>
-  <p>{consentLabel}</p>
-  <p>{existingMember ? "Digests were enabled for existing Engage accounts. Turn them off here or unsubscribe in any digest." : "Digests stay off for new accounts until you opt in."}</p>
-  {preference?.suppressed ? <p>Digest delivery is paused after a bounce or spam complaint. Contact an administrator to resolve delivery.</p> : <form method="post" action="/api/email/preferences">
-   <input type="hidden" name="category" value="engage" />
-   <label><Checkbox name="digestEnabled" value="true" defaultChecked={digestEnabled(preference, existingMember)} /> Send me Engage digests</label>
-   <Button type="submit" size="sm">Save Engage digests</Button>
-  </form>}
- </section>
- <section aria-labelledby="general-notifications-heading">
-  <h3 id="general-notifications-heading">General communications</h3>
-  <p>Newsletters, campaigns and broader party updates. This preference is separate from Engage digests and your account notifications.</p>
-  <form method="post" action="/api/email/preferences">
-   <input type="hidden" name="category" value="general" />
-   <label><Checkbox name="generalCommunicationsEnabled" value="true" defaultChecked={preference?.generalCommunicationsEnabled === true} /> Receive general party communications through Engage</label>
-   <Button type="submit" size="sm">Save general communications</Button>
-  </form>
- </section>
- <small>Every digest includes an unsubscribe link. Delivery, bounce and unsubscribe reporting help keep emails reliable. Changing these settings does not change your membership.</small>
+
+<section class="grid gap-4" aria-labelledby="notifications-center-heading">
+  <div class="sr-only">
+    <h2 id="notifications-center-heading">Notifications &amp; Delivery Preferences</h2>
+  </div>
+  {saved && (
+    <p role="status" class="text-sm font-medium text-foreground m-0">
+      Preferences saved.
+    </p>
+  )}
+  <NotificationCenter
+    client:load
+    initialPreferences={initialPreferences}
+    initialNotifications={inAppNotifications}
+    initialSubscriptions={pushSubscriptions}
+    pushConfigured={pushConfigured}
+    vapidPublicKey={vapidPublicKey}
+  />
 </section>
-<style>.email-preferences{padding:1.25rem;background:#f8f5fc;border:1px solid #ded6e7;border-radius:.75rem;margin:1rem 0}.email-preferences section{padding:1rem 0;border-top:1px solid #ded6e7}h2,h3{font-family:Newsreader,Georgia,serif}h2{font-size:1.8rem}h3{font-size:1.4rem}p,small{line-height:1.6}form{display:flex;flex-wrap:wrap;align-items:center;gap:1rem;margin:1rem 0}label{display:flex;gap:.5rem;align-items:center}button{background:#32105a;color:white;padding:.65rem 1rem;border-radius:2rem;cursor:pointer}small{display:block;color:#54465f}</style>

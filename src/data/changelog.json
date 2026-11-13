@@ -1,171 +1,229 @@
 [
   {
-    "hash": "e74e9a8",
+    "hash": "4de4408",
     "date": "2026-11-13",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "ui",
-    "summary": "Migrate custom controls to shadcn primitives"
+    "type": "fix",
+    "category": "fix",
+    "scope": "deploy",
+    "summary": "Stop repeated Coolify deployments after health failures"
   },
   {
-    "hash": "4e6d909",
+    "hash": "d9f9e02",
     "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "agents",
-    "summary": "Enforce shadcn primitive usage"
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Update changelog snapshot"
   },
   {
-    "hash": "7035cb8",
+    "hash": "3f82960",
     "date": "2026-11-13",
     "type": "test",
     "category": "ops",
-    "scope": "admin",
-    "summary": "Add proposal PDF tests, CSV scope fix and changelog"
+    "scope": "notifications",
+    "summary": "Add notification/PWA tests, preview script, and docs"
   },
   {
-    "hash": "2a36858",
+    "hash": "dccbc33",
     "date": "2026-11-13",
     "type": "feat",
     "category": "feature",
-    "scope": "reports",
-    "summary": "Add on-demand proposal PDF report generation"
+    "scope": "member",
+    "summary": "Add unified NotificationCenter UI for inbox, email, and push"
   },
   {
-    "hash": "db42dff",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Overhaul proposal workspace with progressive disclosure and feedback"
-  },
-  {
-    "hash": "72fa6db",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Redesign navigation, overview, ballots and reporting IA"
-  },
-  {
-    "hash": "3be9aba",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Update snapshot after main merge"
-  },
-  {
-    "hash": "60a5e47",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "governance",
-    "summary": "Address PR #20 review findings"
-  },
-  {
-    "hash": "31ddb19",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "research",
-    "summary": "Record verification and refresh changelog"
-  },
-  {
-    "hash": "b73bc7b",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "research",
-    "summary": "Compare participatory governance patterns with Engage"
-  },
-  {
-    "hash": "e25e362",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record PR #20 review fixes"
-  },
-  {
-    "hash": "dc0e7bd",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "governance",
-    "summary": "Address PR #20 CodeRabbit review comments"
-  },
-  {
-    "hash": "0b36edf",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record in-app notifications update"
-  },
-  {
-    "hash": "4d4c38e",
+    "hash": "e9ae209",
     "date": "2026-11-13",
     "type": "feat",
     "category": "feature",
     "scope": "notifications",
-    "summary": "Surface contribution responses and catch-up alerts in header and My Engage"
+    "summary": "Add self-hosted VAPID Web Push, in-app inbox, and unified preferences"
   },
   {
-    "hash": "a955120",
+    "hash": "e770d23",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "pwa",
+    "summary": "Generate app icons from Horizon SVG logo"
+  },
+  {
+    "hash": "94d2f18",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "pwa",
+    "summary": "Add installable Engage manifest, Horizon icons, and safe service worker"
+  },
+  {
+    "hash": "6a1aef1",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "email",
+    "summary": "Add explicit approval-gated batch re-engagement workflow"
+  },
+  {
+    "hash": "76afecb",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "email",
+    "summary": "Add responsive Horizon email templates for all lifecycle notifications"
+  },
+  {
+    "hash": "a13bbb1",
     "date": "2026-11-13",
     "type": "chore",
     "category": "ops",
     "scope": "changelog",
-    "summary": "Record review fixes and comment composer update"
+    "summary": "Record extensibility sprint and ballot expiry migration"
   },
   {
-    "hash": "631c7cf",
+    "hash": "715fe72",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "architecture",
+    "summary": "Add integration seams, authorised read models, resilience helpers, and indexes"
+  },
+  {
+    "hash": "0cb2d1b",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Enforce scoped RBAC permissions across admin API endpoints"
+  },
+  {
+    "hash": "a4527ba",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "governance",
+    "summary": "Decouple ballot/decision records and add provenance relationship validation"
+  },
+  {
+    "hash": "98094d1",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "governance",
+    "summary": "Add extensible matter registry and type-aware lifecycle validation"
+  },
+  {
+    "hash": "2e458bd",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballots",
+    "summary": "Add 14 Jan 2027 open ballot expiry migration and prominent deadline display"
+  },
+  {
+    "hash": "6cd3ffc",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record governance resolution classification fix"
+  },
+  {
+    "hash": "54366eb",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Document safe policy registry reconciliation for misclassified resolutions"
+  },
+  {
+    "hash": "fb871d6",
     "date": "2026-11-13",
     "type": "fix",
     "category": "fix",
     "scope": "governance",
-    "summary": "Address review findings and add Reddit-style comment composer"
+    "summary": "Exclude governance resolutions from policy ratification and publication workflows"
   },
   {
-    "hash": "a02e501",
+    "hash": "2744bea",
     "date": "2026-11-13",
     "type": "chore",
     "category": "ops",
     "scope": "changelog",
-    "summary": "Record usability, governance and reporting updates"
+    "summary": "Record RBAC audit and configurable roles"
   },
   {
-    "hash": "be7c90e",
+    "hash": "f8b1d04",
     "date": "2026-11-13",
     "type": "feat",
     "category": "feature",
-    "scope": "admin",
-    "summary": "Add ballot progress, branch summary, and privacy-preserving CSV export"
+    "scope": "rbac",
+    "summary": "Add configurable scoped roles, permission evaluation, and admin UI"
   },
   {
-    "hash": "568cab8",
+    "hash": "01c6a42",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Enforce archived proposal review permission on GET /api/amendments"
+  },
+  {
+    "hash": "ec15e83",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rbac",
+    "summary": "Document RBAC audit, permission matrix, and configurable roles spec"
+  },
+  {
+    "hash": "66c8d65",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record governance transparency sprint"
+  },
+  {
+    "hash": "554d0bf",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "reporting",
+    "summary": "Enforce branch admin scope and add PDF confidentiality disclosures"
+  },
+  {
+    "hash": "12b5f88",
     "date": "2026-11-13",
     "type": "feat",
     "category": "feature",
     "scope": "governance",
-    "summary": "Add contributor feedback, proposal supersession, and resolution lifecycle support"
+    "summary": "Add evidence-backed contribution outcomes and historical safety checks"
   },
   {
-    "hash": "c1b3ec9",
+    "hash": "f90e2cc",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Specify historical access, reporting privacy, and AI briefing design"
+  },
+  {
+    "hash": "b271a70",
+    "date": "2026-11-13",
+    "type": "update",
+    "category": "ops",
+    "scope": "platform",
+    "summary": "Feat/usability governance sprint (#22)",
+    "details": "* feat(admin): redesign navigation, overview, ballots and reporting IA * feat(admin): overhaul proposal workspace with progressive disclosure and feedback * feat(reports): add on-demand proposal PDF report generation * test(admin): add proposal PDF tests, CSV scope fix and changelog * docs(agents): enforce shadcn primitive usage * refactor(ui): migrate custom controls to shadcn primitives * chore(changelog): record shadcn primitive migration"
+  },
+  {
+    "hash": "94c0caa",
     "date": "2026-11-13",
     "type": "feat",
     "category": "feature",
-    "scope": "policies",
-    "summary": "Link empty policy registry directly to fusionparty.org.au/policy"
-  },
-  {
-    "hash": "802aa20",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "discovery",
-    "summary": "Surface Sense Box and next actions when caught up on ballots"
+    "scope": "platform",
+    "summary": "Usability, governance lifecycle, contributor feedback & admin reporting (#20)",
+    "details": "* feat(platform): redirect reclaim.fusionparty.org.au to Engage The Reclaim policy site is retired. A Worker bound to the reclaim custom domain now answers every request with a 301 to the same path on engage.fusionparty.org.au, preserving query strings so Engage's existing legacy redirects (pending-vote, all-policies, reclaim-our-*) still resolve. The previous reclaim Worker is left deployed for rollback. * chore(changelog): record Reclaim domain redirect * feat(platform): map Reclaim division paths to Engage proposals Old links to /reclaim-our-economy/<proposal>/ and /reclaim-our-future/<proposal>/ now land on /proposals/<proposal>/ instead of a 404 on Engage. Retired section index pages, whose names are not proposal slugs, resolve to the proposal list. Other paths and query strings are unchanged. * chore(changelog): record Reclaim path mapping * feat(discovery): surface Sense Box and next actions when caught up on ballots * feat(policies): link empty policy registry directly to fusionparty.org.au/policy * feat(governance): add contributor feedback, proposal supersession, and resolution lifecycle support * feat(admin): add ballot progress, branch summary, and privacy-preserving CSV export * chore(changelog): record usability, governance and reporting updates * fix(governance): address review findings and add Reddit-style comment composer * chore(changelog): record review fixes and comment composer update * feat(notifications): surface contribution responses and catch-up alerts in header and My Engage * chore(changelog): record in-app notifications update * fix(governance): address PR #20 CodeRabbit review comments * chore(changelog): record PR #20 review fixes * docs(research): compare participatory governance patterns with Engage * docs(research): record verification and refresh changelog * fix(governance): address PR #20 review findings * chore(changelog): update snapshot after main merge * docs(research): validate governance patterns with REA runtime evidence * chore(changelog): record REA governance research"
   },
   {
     "hash": "b8af56b",
@@ -183,40 +241,6 @@
     "scope": "repo",
     "summary": "Add CODEOWNERS for default review routing (#18)",
     "details": "Every path defaults to @finneh4249 so pull requests are routed to a single accountable reviewer. Ownership is advisory only: the main ruleset keeps a one-approval requirement for all contributors."
-  },
-  {
-    "hash": "27374e2",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Reclaim path mapping"
-  },
-  {
-    "hash": "a00b21f",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Map Reclaim division paths to Engage proposals",
-    "details": "Old links to /reclaim-our-economy/<proposal>/ and /reclaim-our-future/<proposal>/ now land on /proposals/<proposal>/ instead of a 404 on Engage. Retired section index pages, whose names are not proposal slugs, resolve to the proposal list. Other paths and query strings are unchanged."
-  },
-  {
-    "hash": "bdf93ae",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Reclaim domain redirect"
-  },
-  {
-    "hash": "831bc61",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Redirect reclaim.fusionparty.org.au to Engage",
-    "details": "The Reclaim policy site is retired. A Worker bound to the reclaim custom domain now answers every request with a 301 to the same path on engage.fusionparty.org.au, preserving query strings so Engage's existing legacy redirects (pending-vote, all-policies, reclaim-our-*) still resolve. The previous reclaim Worker is left deployed for rollback."
   },
   {
     "hash": "430bec4",
@@ -625,29 +649,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
-  },
-  {
-    "hash": "31e34df",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
-  },
-  {
-    "hash": "ac9bb41",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "deploy",
-    "summary": "Automate production deployment gated on staging health"
-  },
-  {
-    "hash": "c6edce0",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "audit",
-    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
   }
 ]

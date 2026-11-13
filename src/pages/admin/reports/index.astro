@@ -12,7 +12,7 @@ import {
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { isGovernanceResolution, listProposals } from '../../../lib/store.ts';
-import { buildBranchSummaryRows } from '../../../lib/admin-reporting.ts';
+import { buildBranchSummaryRows, canIncludeProposalInAdminReport } from '../../../lib/admin-reporting.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Input } from '../../../components/ui/input';
@@ -46,12 +46,11 @@ const db = await getDatabase(env);
 const branchAdminIds = user.branchAdminIds ?? [];
 const search = (Astro.url.searchParams.get('q') ?? '').trim();
 
-const rawProposals = user.isStaff
-  ? await listProposals(db, { includeArchived: true })
-  : user.isBranchAdmin
-    ? (await Promise.all(branchAdminIds.map((branch) => listProposals(db, { includeArchived: true, branch })))).flat()
-    : [];
-const proposals = [...new Map(rawProposals.map((proposal) => [proposal.proposalId, proposal])).values()];
+const proposals = (user.isStaff || user.isBranchAdmin)
+  ? (await listProposals(db, { includeArchived: true, user })).filter((proposal) =>
+      canIncludeProposalInAdminReport(user, proposal),
+    )
+  : [];
 
 const scopedBranches = user.isStaff
   ? await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()

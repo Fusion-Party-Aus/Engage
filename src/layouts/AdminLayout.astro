@@ -32,6 +32,7 @@ export type AdminSection =
   | 'ballots'
   | 'policies'
   | 'members'
+  | 'roles'
   | 'branches'
   | 'sense-box'
   | 'reports'
@@ -61,6 +62,7 @@ const workspaceItems = [
 
 const peopleItems = [
   { key: 'members', href: '/admin/members/', label: 'Members', icon: Users, show: isAdmin },
+  { key: 'roles', href: '/admin/roles/', label: 'Roles & permissions', icon: ShieldCheck, show: isAdmin },
   { key: 'branches', href: '/admin/branches/', label: 'Branches', icon: GitBranch, show: canAccessAdmin },
   { key: 'sense-box', href: '/admin/sense-box/', label: 'Sense Box', icon: LifeBuoy, show: canAccessAdmin },
 ].filter((item) => item.show);

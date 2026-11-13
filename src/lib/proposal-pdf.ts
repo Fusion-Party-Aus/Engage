@@ -293,6 +293,12 @@ export function buildProposalPdfReport(input: ProposalPdfReportInput): Uint8Arra
   addKeyValueRow("Originating branch", originatingBranchName);
   addKeyValueRow("Governance authority", authorityBranchName);
   addKeyValueRow("Circulation scope", scopeLabel);
+  addKeyValueRow("Report audience", "Authorised governance administrators");
+  addKeyValueRow(
+    "Confidentiality",
+    "Aggregate ballot totals only; individual member votes are omitted",
+  );
+  addKeyValueRow("Data currency", `Generated ${formatDate(generatedAt)}`);
   if (policyRecord) {
     addKeyValueRow(
       "Policy registry",

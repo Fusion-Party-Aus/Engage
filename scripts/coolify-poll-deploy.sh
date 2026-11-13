@@ -23,7 +23,8 @@ CONFIG="${ENGAGE_COOLIFY_POLL_CONFIG:-/home/ethan/engage-coolify-poll/poll.env}"
 : "${REPO_URL:?REPO_URL is required}"
 : "${BRANCH:?BRANCH is required}"
 STATE_DIR="${STATE_DIR:-/home/ethan/engage-coolify-poll/state}"
-STAGING_HEALTH_URL="${STAGING_HEALTH_URL:-http://192.168.86.199:4400/api/health}"
+STAGING_HEALTH_URL="${STAGING_HEALTH_URL:-http://127.0.0.1:4400/api/health}"
+STAGING_SSH_TARGET="${STAGING_SSH_TARGET:-alpine}"
 
 umask 077
 mkdir -p "$STATE_DIR"
@@ -40,6 +41,7 @@ fi
 
 staging_state="$STATE_DIR/$STAGING_APP_UUID.sha"
 prod_state="$STATE_DIR/$PROD_APP_UUID.sha"
+attempt_state="$STATE_DIR/$STAGING_APP_UUID.attempt.sha"
 last_prod="$(cat "$prod_state" 2>/dev/null || true)"
 
 if [ "$current" = "$last_prod" ]; then
@@ -63,49 +65,59 @@ get_deployment_status() {
     sed -n 's/.*"status":"\([^"]*\)".*/\1/p'
 }
 
-log "branch $BRANCH moved ${last_prod:-<none>} -> $current; starting Staging deployment ($STAGING_APP_UUID)"
-
-staging_dep="$(deploy_app "$STAGING_APP_UUID" "staging")"
-if [ -z "$staging_dep" ]; then
-  log "ERROR: Failed to queue Coolify deployment for staging"
-  exit 1
+# A failed commit needs operator review; remove attempt.sha to retry it.
+if [ "$current" = "$(cat "$attempt_state" 2>/dev/null || true)" ]; then
+  exit 0
 fi
+printf '%s\n' "$current" > "$attempt_state"
 
-log "queued Staging deployment $staging_dep at commit $current; waiting for Staging build..."
-
-# Wait up to 35 minutes for Staging deployment (Astro compile can take significant CPU time on low-power hosts)
 max_wait=2100
 interval=15
-elapsed=0
-staging_success=0
 
-while [ "$elapsed" -lt "$max_wait" ]; do
-  sleep "$interval"
-  elapsed=$((elapsed + interval))
-  status="$(get_deployment_status "$staging_dep")"
-  
-  if [ "$status" = "finished" ]; then
-    log "Staging build finished successfully in ${elapsed}s"
-    staging_success=1
-    break
-  elif [ "$status" = "failed" ] || [ "$status" = "error" ] || [ "$status" = "cancelled" ]; then
-    log "ERROR: Staging deployment ended with status '$status'. Aborting promotion to production."
+if [ "$current" != "$(cat "$staging_state" 2>/dev/null || true)" ]; then
+  log "branch $BRANCH moved ${last_prod:-<none>} -> $current; starting Staging deployment ($STAGING_APP_UUID)"
+
+  staging_dep="$(deploy_app "$STAGING_APP_UUID" "staging")"
+  if [ -z "$staging_dep" ]; then
+    log "ERROR: Failed to queue Coolify deployment for staging"
     exit 1
   fi
-done
 
-if [ "$staging_success" -ne 1 ]; then
-  log "ERROR: Staging deployment timed out after ${max_wait}s. Aborting promotion to production."
-  exit 1
+  log "queued Staging deployment $staging_dep at commit $current; waiting for Staging build..."
+
+  # Wait up to 35 minutes for Staging deployment (Astro compile can take significant CPU time on low-power hosts)
+  elapsed=0
+  staging_success=0
+
+  while [ "$elapsed" -lt "$max_wait" ]; do
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+    status="$(get_deployment_status "$staging_dep")"
+  
+    if [ "$status" = "finished" ]; then
+      log "Staging build finished successfully in ${elapsed}s"
+      staging_success=1
+      break
+    elif [ "$status" = "failed" ] || [ "$status" = "error" ] || [ "$status" = "cancelled" ]; then
+      log "ERROR: Staging deployment ended with status '$status'. Aborting promotion to production."
+      exit 1
+    fi
+  done
+
+  if [ "$staging_success" -ne 1 ]; then
+    log "ERROR: Staging deployment timed out after ${max_wait}s. Aborting promotion to production."
+    exit 1
+  fi
+
+  printf '%s\n' "$current" > "$staging_state"
 fi
-
-printf '%s\n' "$current" > "$staging_state"
 
 # Verify Staging Health Check
 log "Verifying Staging health at $STAGING_HEALTH_URL..."
 health_ok=0
 for i in {1..12}; do
-  if curl -fsS -m 5 "$STAGING_HEALTH_URL" >/dev/null 2>&1; then
+  if ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=5 \
+    "$STAGING_SSH_TARGET" "curl -fsS -m 5 $(printf '%q' "$STAGING_HEALTH_URL")" >/dev/null 2>&1; then
     health_ok=1
     break
   fi
@@ -117,7 +129,7 @@ if [ "$health_ok" -ne 1 ]; then
   exit 1
 fi
 
-log "Staging is 100% HEALTHY and GREEN! Promoting commit $current to Production ($PROD_APP_UUID)..."
+log "Staging health check passed. Promoting commit $current to Production ($PROD_APP_UUID)..."
 
 prod_dep="$(deploy_app "$PROD_APP_UUID" "production")"
 if [ -z "$prod_dep" ]; then
@@ -126,4 +138,23 @@ if [ -z "$prod_dep" ]; then
 fi
 
 log "queued Production deployment $prod_dep at commit $current"
-printf '%s\n' "$current" > "$prod_state"
+# Queued is not deployed: only record production after Coolify confirms success.
+elapsed=0
+while [ "$elapsed" -lt "$max_wait" ]; do
+  sleep "$interval"
+  elapsed=$((elapsed + interval))
+  status="$(get_deployment_status "$prod_dep")"
+  case "$status" in
+    finished)
+      printf '%s\n' "$current" > "$prod_state"
+      log "Production deployment finished for $current"
+      exit 0
+      ;;
+    failed|error|cancelled)
+      log "ERROR: Production deployment ended with status '$status'."
+      exit 1
+      ;;
+  esac
+done
+log "ERROR: Production deployment timed out; check Coolify before retrying."
+exit 1

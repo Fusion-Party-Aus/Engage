@@ -217,6 +217,39 @@ describe("admin reporting", () => {
       const csvText = await vicRes.text();
       assert.ok(csvText.includes(vicProp.proposalId));
       assert.ok(!csvText.includes(nswProp.proposalId));
+
+      // Cross-branch private or archived proposal with jurisdictionBranchId='vic' must NOT leak to vic branch admin
+      const nswPrivateForVic = await saveProposal(db, adminUser, {
+        title: "NSW Private Draft Targeting VIC",
+        space: "Governance",
+        summary: "Private draft from NSW.",
+        outcomes: ["Outcome"],
+        details: "Details.",
+        originatingBranchId: "nsw",
+        jurisdictionBranchId: "vic",
+        publicationScope: "private",
+      });
+      const nswArchivedForVic = await saveProposal(db, adminUser, {
+        title: "NSW Archived Proposal Targeting VIC",
+        space: "Governance",
+        summary: "Archived from NSW.",
+        outcomes: ["Outcome"],
+        details: "Details.",
+        originatingBranchId: "nsw",
+        jurisdictionBranchId: "vic",
+        stage: "archived",
+      });
+      const scopedRes = await exportProposalsCsv({
+        locals: { runtime: { env } },
+        request: new Request("http://localhost/api/admin/reports/proposals.csv", {
+          headers: { cookie: memberCookie },
+        }),
+        url: new URL("http://localhost/api/admin/reports/proposals.csv"),
+      } as never);
+      assert.equal(scopedRes.status, 200);
+      const scopedCsv = await scopedRes.text();
+      assert.ok(!scopedCsv.includes(nswPrivateForVic.proposalId));
+      assert.ok(!scopedCsv.includes(nswArchivedForVic.proposalId));
     } finally {
       await db
         .collection("branch_memberships")

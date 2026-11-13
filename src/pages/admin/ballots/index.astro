@@ -11,8 +11,9 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { ballotDeadlineShortLabel } from '../../../lib/ballot-deadline.ts';
 import { isGovernanceResolution, listProposals } from '../../../lib/store.ts';
-import { buildBallotProgressRows } from '../../../lib/admin-reporting.ts';
+import { buildBallotProgressRows, canIncludeProposalInAdminReport } from '../../../lib/admin-reporting.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import {
@@ -45,12 +46,11 @@ const db = await getDatabase(env);
 const filter = (Astro.url.searchParams.get('view') ?? 'all').trim();
 const branchAdminIds = user.branchAdminIds ?? [];
 
-const rawProposals = user.isStaff
-  ? await listProposals(db, { includeArchived: true })
-  : user.isBranchAdmin
-    ? (await Promise.all(branchAdminIds.map((branch) => listProposals(db, { includeArchived: true, branch })))).flat()
-    : [];
-const proposals = [...new Map(rawProposals.map((proposal) => [proposal.proposalId, proposal])).values()];
+const proposals = (user.isStaff || user.isBranchAdmin)
+  ? (await listProposals(db, { includeArchived: true, user })).filter((proposal) =>
+      canIncludeProposalInAdminReport(user, proposal),
+    )
+  : [];
 const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
 const proposalIds = proposals.map((proposal) => proposal.proposalId);
 
@@ -97,7 +97,7 @@ const postBallotPending = ballotResults
   });
 
 const formatDate = (value: unknown) =>
-  value ? new Date(String(value)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No closing date';
+  value ? ballotDeadlineShortLabel(value instanceof Date ? value : String(value)) : 'No closing date';
 ---
 
 <AdminLayout

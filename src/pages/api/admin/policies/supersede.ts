@@ -1,13 +1,19 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import {
+  detectCircularSupersession,
+  recordGovernanceEvent,
+} from "../../../../lib/governance-relationships.ts";
+import { hasPermission } from "../../../../lib/rbac.ts";
+import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin)
+  if (!hasPermission(user, "policies.publish"))
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -69,11 +75,51 @@ export const POST: APIRoute = async ({ request, locals }) => {
         },
         { status: 409 },
       );
-    if (oldPolicy.publicationStatus !== "published" && !priorEvent)
+    const [oldProposal, successorProposal] = await Promise.all([
+      db
+        .collection("proposals")
+        .findOne({ proposalId: String(oldPolicy.proposalId ?? policyId) }),
+      db
+        .collection("proposals")
+        .findOne({
+          proposalId: String(successor.proposalId ?? successorPolicyId),
+        }),
+    ]);
+    if (
+      isPolicyRegistryRecordForResolution(
+        oldPolicy as { policyId?: string; proposalId?: string; kind?: string },
+        oldProposal as { kind?: string; proposalId?: string } | null,
+      ) ||
+      isPolicyRegistryRecordForResolution(
+        successor as { policyId?: string; proposalId?: string; kind?: string },
+        successorProposal as { kind?: string; proposalId?: string } | null,
+      )
+    )
       return Response.json(
-        { error: "Policy publication has already changed." },
+        {
+          error:
+            "Governance resolutions cannot be superseded through the Policy Registry.",
+        },
         { status: 409 },
       );
+    if (oldPolicy.publicationStatus !== "published" && !priorEvent)
+      return Response.json(
+        { error: "Only a published policy can be superseded." },
+        { status: 409 },
+      );
+    if (await detectCircularSupersession(db, policyId, successorPolicyId)) {
+      return Response.json(
+        { error: "Circular supersession relationships are not permitted." },
+        { status: 409 },
+      );
+    }
+    await recordGovernanceEvent(db, {
+      eventType: "policy.superseded",
+      matterId: policyId,
+      actorId: user.memberId,
+      reason,
+      metadata: { successorPolicyId },
+    });
     const event = {
       eventId: `supersede-${key}`,
       idempotencyKey: key,

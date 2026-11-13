@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { hasPermission } from "../../../../lib/rbac.ts";
 import {
   getSiteConfig,
   listSiteConfigEvents,
@@ -31,7 +32,7 @@ async function authorise(request: Request, locals: unknown) {
   const user = await getSessionUser(request, env);
   if (!user)
     return { env, user, error: Response.json({ error: "Sign in required." }, { status: 401 }) };
-  if (!user.isAdmin)
+  if (!hasPermission(user, "settings.manage"))
     return {
       env,
       user,

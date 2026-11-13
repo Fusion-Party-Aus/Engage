@@ -6,6 +6,12 @@ import {
   BRANCH_SUBSCRIPTIONS,
   migrateBranchParticipation,
 } from "./branch-participation.ts";
+import {
+  OPEN_BALLOT_EXPIRY_MIGRATION,
+  applyOpenBallotExpiryMigration,
+  previewOpenBallotExpiryMigration,
+  type BallotExpiryMigrationReport,
+} from "./ballot-expiry-migration.ts";
 
 /**
  * Durable, restartable database migrations for the administration workspace.
@@ -17,9 +23,11 @@ export const MIGRATIONS_COLLECTION = "data_migrations";
 export const STANDARD_BRANCHES_MIGRATION = "standard-branches";
 export const BRANCH_PARTICIPATION_MIGRATION = "branch-participation";
 
+export { OPEN_BALLOT_EXPIRY_MIGRATION };
 export type MigrationId =
   | typeof STANDARD_BRANCHES_MIGRATION
-  | typeof BRANCH_PARTICIPATION_MIGRATION;
+  | typeof BRANCH_PARTICIPATION_MIGRATION
+  | typeof OPEN_BALLOT_EXPIRY_MIGRATION;
 
 export interface StandardBranchDefinition {
   branchId: string;
@@ -184,7 +192,8 @@ export interface MigrationStatus {
   requires?: MigrationId[];
   preview:
     | { kind: "branches"; data: StandardBranchPreview }
-    | { kind: "participation"; data: BranchParticipationPreview };
+    | { kind: "participation"; data: BranchParticipationPreview }
+    | { kind: "ballot-expiry"; data: BallotExpiryMigrationReport };
   lastRun?: MigrationRunRecord;
 }
 
@@ -204,18 +213,24 @@ function serializeRun(row: Record<string, any> | null | undefined): MigrationRun
 }
 
 export async function getMigrationStatus(db: Db): Promise<MigrationStatus[]> {
-  const [branchPreview, participationPreview, records] = await Promise.all([
-    previewStandardBranches(db),
-    previewBranchParticipation(db),
-    db
-      .collection(MIGRATIONS_COLLECTION)
-      .find({
-        migrationId: {
-          $in: [STANDARD_BRANCHES_MIGRATION, BRANCH_PARTICIPATION_MIGRATION],
-        },
-      })
-      .toArray(),
-  ]);
+  const [branchPreview, participationPreview, ballotExpiryPreview, records] =
+    await Promise.all([
+      previewStandardBranches(db),
+      previewBranchParticipation(db),
+      previewOpenBallotExpiryMigration(db),
+      db
+        .collection(MIGRATIONS_COLLECTION)
+        .find({
+          migrationId: {
+            $in: [
+              STANDARD_BRANCHES_MIGRATION,
+              BRANCH_PARTICIPATION_MIGRATION,
+              OPEN_BALLOT_EXPIRY_MIGRATION,
+            ],
+          },
+        })
+        .toArray(),
+    ]);
   const byId = new Map(
     records.map((row: any) => [String(row.migrationId), row]),
   );
@@ -223,11 +238,15 @@ export async function getMigrationStatus(db: Db): Promise<MigrationStatus[]> {
   const participationRecord = serializeRun(
     byId.get(BRANCH_PARTICIPATION_MIGRATION),
   );
+  const ballotExpiryRecord = serializeRun(
+    byId.get(OPEN_BALLOT_EXPIRY_MIGRATION),
+  );
   const branchesMissing = branchPreview.missing > 0;
   const participationOutstanding =
     participationPreview.annotatedMemberships > 0 ||
     participationPreview.createdSubscriptions > 0 ||
     participationPreview.assignedProposals > 0;
+  const ballotExpiryOutstanding = ballotExpiryPreview.counts.eligible > 0;
 
   const branchStatus: MigrationRunStatus =
     branchRecord?.status === "running"
@@ -244,6 +263,12 @@ export async function getMigrationStatus(db: Db): Promise<MigrationStatus[]> {
   else if (participationRecord?.status === "failed") participationStatus = "failed";
   else if (participationOutstanding) participationStatus = "pending";
   else participationStatus = "completed";
+
+  let ballotExpiryStatus: MigrationRunStatus;
+  if (ballotExpiryRecord?.status === "running") ballotExpiryStatus = "running";
+  else if (ballotExpiryRecord?.status === "failed") ballotExpiryStatus = "failed";
+  else if (ballotExpiryOutstanding) ballotExpiryStatus = "pending";
+  else ballotExpiryStatus = "completed";
 
   return [
     {
@@ -267,13 +292,24 @@ export async function getMigrationStatus(db: Db): Promise<MigrationStatus[]> {
       preview: { kind: "participation", data: participationPreview },
       lastRun: participationRecord,
     },
+    {
+      id: OPEN_BALLOT_EXPIRY_MIGRATION,
+      title: "Open ballot expiry (14 January 2027)",
+      description:
+        "Assigns Thursday, 14 January 2027 at 11:59 pm AEDT (Australia/Melbourne) to open formal ballots without an existing closing date. Preserves existing configured deadlines, closed/archived ballots, revisions, and votes.",
+      status: ballotExpiryStatus,
+      ready: ballotExpiryStatus === "pending" || ballotExpiryStatus === "failed",
+      preview: { kind: "ballot-expiry", data: ballotExpiryPreview },
+      lastRun: ballotExpiryRecord,
+    },
   ];
 }
 
 function assertMigrationId(value: unknown): MigrationId {
   if (
     value !== STANDARD_BRANCHES_MIGRATION &&
-    value !== BRANCH_PARTICIPATION_MIGRATION
+    value !== BRANCH_PARTICIPATION_MIGRATION &&
+    value !== OPEN_BALLOT_EXPIRY_MIGRATION
   ) {
     throw new MigrationError("Choose a database migration to run.", 400);
   }
@@ -365,7 +401,9 @@ export async function runMigration(
     const result =
       migrationId === STANDARD_BRANCHES_MIGRATION
         ? await seedStandardBranches(db)
-        : await migrateBranchParticipation(db);
+        : migrationId === BRANCH_PARTICIPATION_MIGRATION
+          ? await migrateBranchParticipation(db)
+          : (await applyOpenBallotExpiryMigration(db, { actorId, dryRun: false })).counts;
     const serializable: Record<string, number | boolean | string> = {
       ...Object.fromEntries(
         Object.entries(result).map(([key, value]) => [
@@ -404,6 +442,9 @@ export async function runAllMigrations(
   );
   results.push(
     await runMigration(db, BRANCH_PARTICIPATION_MIGRATION, actorId),
+  );
+  results.push(
+    await runMigration(db, OPEN_BALLOT_EXPIRY_MIGRATION, actorId),
   );
   return results;
 }

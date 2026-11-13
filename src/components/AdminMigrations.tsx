@@ -21,6 +21,7 @@ import type {
   MigrationStatus,
   StandardBranchPreview,
 } from '@/lib/migrations';
+import type { BallotExpiryMigrationReport } from '@/lib/ballot-expiry-migration';
 
 const STATUS_COPY: Record<
   MigrationStatus['status'],
@@ -63,6 +64,23 @@ function participationPreview(preview: BranchParticipationPreview) {
       `${preview.annotatedMemberships} membership record${preview.annotatedMemberships === 1 ? '' : 's'} to annotate`,
       `${preview.createdSubscriptions} following preference${preview.createdSubscriptions === 1 ? '' : 's'} to add`,
       `${preview.assignedProposals} open proposal${preview.assignedProposals === 1 ? '' : 's'} to assign to National governance`,
+    ].join(' · '),
+  };
+}
+
+function ballotExpiryPreview(preview: BallotExpiryMigrationReport) {
+  const { eligible, skipped, conflicting } = preview.counts;
+  if (!eligible && !conflicting) {
+    return {
+      headline: 'All open formal ballots already have a closing date.',
+      detail: `${skipped} existing deadline${skipped === 1 ? '' : 's'} preserved.`,
+    };
+  }
+  return {
+    headline: `${eligible} open ballot${eligible === 1 ? '' : 's'} ready for ${preview.targetDeadlineLabel}.`,
+    detail: [
+      `${skipped} with existing deadline preserved`,
+      `${conflicting} needing manual review`,
     ].join(' · '),
   };
 }
@@ -218,7 +236,9 @@ export default function AdminMigrations({ initial }: { initial: MigrationStatus[
               }
             : migration.preview.kind === 'branches'
               ? branchPreview(migration.preview.data)
-              : participationPreview(migration.preview.data);
+              : migration.preview.kind === 'participation'
+                ? participationPreview(migration.preview.data)
+                : ballotExpiryPreview(migration.preview.data);
           const running = migration.status === 'running' || busy === migration.id;
           const complete = migration.status === 'completed';
           return (

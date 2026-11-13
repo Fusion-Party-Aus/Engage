@@ -3,10 +3,14 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { Db } from "mongodb";
 import type { PlatformEnv, ProposalSummaryView, SessionUser } from "./types.ts";
 import { ballotDeadlineLabel, ballotExpired, closesWithinSevenDays } from "./ballot-deadline.ts";
+import {
+  escapeEmailHtml,
+  renderDigestEmail,
+} from "./email-templates.ts";
 import { listMembers, listProposals, canViewProposal } from "./store.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 
-export const escapeEmailHtml = (value: string) => value.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
+export { escapeEmailHtml };
 import { digestEnabled, ensureDigestCohort } from "./digest-preferences.ts";
 export function safeEqual(a: string, b: string) {
   const aa = Buffer.from(a), bb = Buffer.from(b);
@@ -35,11 +39,7 @@ function digestCta(origin:string, href:string) {
   return url.href;
 }
 export function renderDigest(name: string, ballots: DigestBallot[], origin: string, unsubscribeUrl: string, existingDefault = false) {
-  const subscriptionExplanation = existingDefault ? "Ballot reminders were enabled for your existing Engage account. You can turn them off at any time." : "You receive this because you enabled Engage ballot reminders.";
-  const e = escapeEmailHtml;
-  const text = `Hello ${name || "member"},\n\n${ballots.length} ballot(s) close within seven days and still need your vote.\n\n` + ballots.map(b=>`${b.title}\nCloses ${ballotDeadlineLabel(b.closesAt)}\n${digestCta(origin,b.href)}`).join("\n\n") + `\n\nMy Engage: ${origin}/member/\nEmail preferences: ${origin}/member/?view=notifications\nUnsubscribe: ${unsubscribeUrl}\n\n${subscriptionExplanation} Voting is optional; review the exact wording before deciding.`;
-  const html = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Engage ballot digest</title></head><body style="margin:0;background:#f2eef9;color:#271047;font-family:Outfit,Arial,sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="600" style="width:100%;max-width:600px;background:#fff;border-radius:12px" cellpadding="0" cellspacing="0"><tr><td style="background:#32105a;color:white;padding:28px;border-bottom:6px solid #00c9d2"><p style="margin:0;font-size:12px;letter-spacing:3px">FUSION · HORIZON</p><p style="font-family:Newsreader,Georgia,serif;font-size:38px;margin:8px 0 0">Engage</p></td></tr><tr><td style="padding:28px"><h1 style="font-family:Newsreader,Georgia,serif;font-size:30px;line-height:1.15">A few decisions need your voice.</h1><p>Hello ${e(name || "member")},</p><p>These ${ballots.length} ballot(s) close within seven days. You haven’t voted on them yet.</p>${ballots.map(b=>`<div style="border-top:1px solid #ded6e7;padding:22px 0"><h2 style="font-family:Newsreader,Georgia,serif;font-size:24px;margin:0 0 10px">${e(b.title)}</h2><p style="font-size:14px;line-height:1.6">Closes ${e(ballotDeadlineLabel(b.closesAt))}</p><a style="display:inline-block;background:#00c9d2;color:#271047;padding:12px 20px;border-radius:24px;font-weight:bold;text-decoration:none" href="${e(digestCta(origin,b.href))}">Read the wording &amp; vote →</a></div>`).join("")}<p style="line-height:1.6">Voting is optional. Your choice is yours—review the exact wording and supporting discussion before deciding.</p><p><a href="${origin}/member/" style="color:#32105a">Open My Engage →</a></p></td></tr><tr><td style="padding:24px 28px;background:#f8f5fc;font-size:12px;line-height:1.7;color:#54465f">Fusion Party Australia · Engage member participation<br>${e(subscriptionExplanation)} <a href="${origin}/member/?view=notifications">Email preferences</a> · <a href="${e(unsubscribeUrl)}">Unsubscribe from reminders</a><br>Unsubscribing affects Engage digests only; account notifications, general communications and membership are separate.</td></tr></table></td></tr></table></body></html>`;
-  return {subject:`Engage: ${ballots.length} ballot${ballots.length === 1 ? "" : "s"} closing soon`, text, html};
+  return renderDigestEmail(name, ballots, origin, unsubscribeUrl, existingDefault);
 }
 
 export type OutstandingBallot = Omit<DigestBallot,'closesAt'> & {closesAt?:Date};

@@ -1,16 +1,17 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { requireApiPermission } from "../../../../lib/rbac.ts";
+import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
 
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user?.isAdmin)
-    return Response.json(
-      { error: "Administrator access required." },
-      { status: user ? 403 : 401 },
-    );
+  const denied = requireApiPermission(user, "policies.publish", {
+    message: "Administrator access required.",
+  });
+  if (denied || !user) return denied ?? Response.json({ error: "Sign in required." }, { status: 401 });
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const policyId = String(body.policyId ?? "");
@@ -23,6 +24,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return Response.json(
         { error: "Ratified policy not found." },
         { status: 404 },
+      );
+    const linkedProposal = await db
+      .collection("proposals")
+      .findOne({ proposalId: String(policy.proposalId ?? policyId) });
+    if (
+      isPolicyRegistryRecordForResolution(
+        policy as { policyId?: string; proposalId?: string; kind?: string },
+        linkedProposal as { kind?: string; proposalId?: string } | null,
+      )
+    )
+      return Response.json(
+        {
+          error:
+            "Governance resolutions cannot be published in the Policy Registry.",
+        },
+        { status: 409 },
       );
     if (
       policy.status !== "adopted" ||

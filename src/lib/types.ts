@@ -55,6 +55,9 @@ export interface PlatformEnv {
   ENGAGE_SOCIAL_LINKS_JSON?: string;
   ENGAGE_STATE_SITES_JSON?: string;
   ENGAGE_REPO_URL?: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
 }
 
 export interface SessionUser {
@@ -75,6 +78,8 @@ export interface SessionUser {
   followedBranchIds?: string[];
   /** Organisational membership facts verified by a branch authority. */
   verifiedBranchIds?: string[];
+  /** Effective granular permissions resolved from legacy and configurable roles. */
+  permissions?: import("./rbac.ts").EffectivePermissionsSnapshot;
 }
 
 export interface BranchMembershipRecord {
@@ -196,9 +201,22 @@ export type ContributionFeedbackStatus =
   | "deferred"
   | "declined";
 
+export type ContributionFeedbackEvidenceKind =
+  | "amendment"
+  | "revision"
+  | "decision"
+  | "policy";
+
+export interface ContributionFeedbackEvidence {
+  kind: ContributionFeedbackEvidenceKind;
+  recordId: string;
+  label?: string;
+}
+
 export interface ContributionFeedback {
   status: ContributionFeedbackStatus;
   note?: string;
+  evidence?: ContributionFeedbackEvidence;
   updatedBy: string;
   updatedByName: string;
   updatedAt: Date;
@@ -207,6 +225,7 @@ export interface ContributionFeedback {
 export interface ContributionFeedbackHistoryEntry {
   action: ContributionFeedbackStatus | "cleared";
   note?: string;
+  evidence?: ContributionFeedbackEvidence;
   updatedBy: string;
   updatedByName: string;
   updatedAt: Date;

@@ -7,16 +7,28 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { isPolicyRegistryRecordForResolution } from '../../lib/store.ts';
 export const prerender = false;
 const db = await getDatabase(runtimeEnv(Astro.locals));
 const q = (Astro.url.searchParams.get('q') ?? '').trim().toLowerCase();
 const jurisdiction = Astro.url.searchParams.get('jurisdiction') ?? '';
 const branchId = Astro.url.searchParams.get('branch') ?? '';
 const showHistory = Astro.url.searchParams.get('history') === '1';
-const [records, branches] = await Promise.all([
+const [rawRecords, branches, resolutionProposals] = await Promise.all([
   db.collection('policy_registry').find({ publicationStatus: { $in: ['published', 'withdrawn', 'superseded'] } }).sort({ title: 1 }).toArray(),
   db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
+  db.collection('proposals').find({}, { projection: { proposalId: 1, kind: 1 } }).toArray(),
 ]);
+const proposalKindMap = new Map(
+  resolutionProposals.map((p: any) => [String(p.proposalId), { proposalId: String(p.proposalId), kind: p.kind ? String(p.kind) : undefined }]),
+);
+const records = rawRecords.filter(
+  (policy: any) =>
+    !isPolicyRegistryRecordForResolution(
+      policy,
+      proposalKindMap.get(String(policy.proposalId ?? policy.policyId ?? '')),
+    ),
+);
 const policies = records.filter((policy: any) => (showHistory ? policy.publicationStatus !== 'published' : policy.publicationStatus === 'published') && (!q || `${policy.title} ${policy.summary} ${policy.category ?? ''} ${policy.approvedWording}`.toLowerCase().includes(q)) && (!jurisdiction || policy.jurisdiction === jurisdiction) && (!branchId || policy.jurisdictionBranchId === branchId));
 const jurisdictions = [...new Set(records.map((policy: any) => policy.jurisdiction).filter(Boolean))] as string[];
 const statusLabel = (status: string) => status === 'published' ? 'Published policy' : status === 'withdrawn' ? 'Withdrawn from publication' : 'Superseded policy';

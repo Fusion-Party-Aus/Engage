@@ -120,9 +120,9 @@ test('existing voters are excluded from the new first-vote cohort',async()=>{
 });
 test('dry-run endpoint rejects anonymous access and non-admin members',async()=>{
  const {GET}=await import('../pages/api/admin/email/reengagement.ts');
- for(const cookie of ['', 'engage_dev_user=member']) {
+ for(const [cookie, expectedStatus] of [['', 401], ['engage_dev_user=member', 403]] as const) {
  const response=await GET({request:new Request('https://example.test/api/admin/email/reengagement',{headers:{cookie}}),url:new URL('https://example.test/api/admin/email/reengagement'),locals:{env:{APP_MODE:'preview',MONGODB_URI:''}}} as never);
- assert.equal(response.status,403);
+ assert.equal(response.status,expectedStatus);
  }
 });
 test('shared outstanding discovery includes undated amendment ballots and digest keeps its seven-day window',async()=>{

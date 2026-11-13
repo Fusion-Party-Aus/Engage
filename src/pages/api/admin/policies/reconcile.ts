@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -21,6 +22,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .toArray();
   let completed = 0;
   for (const event of events) {
+    const policyRow = await db
+      .collection("policy_registry")
+      .findOne({ policyId: event.policyId });
+    if (!policyRow) continue;
+    const linkedProposal = await db
+      .collection("proposals")
+      .findOne({ proposalId: String(policyRow.proposalId ?? event.policyId) });
+    if (
+      isPolicyRegistryRecordForResolution(
+        policyRow as { policyId?: string; proposalId?: string; kind?: string },
+        linkedProposal as { kind?: string; proposalId?: string } | null,
+      )
+    ) {
+      continue;
+    }
     const transition = event.transition ?? "published";
     const update =
       transition === "withdrawn"

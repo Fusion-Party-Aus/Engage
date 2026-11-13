@@ -84,7 +84,7 @@ for (const amendment of amendmentRows) {
   const current = amendment.revisionHistory.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
 }
-const [ballotResult, policy, relatedProposals, branches, visibleOtherProposals] = proposal
+const [ballotResult, rawPolicy, relatedProposals, branches, visibleOtherProposals] = proposal
   ? await Promise.all([
       db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
@@ -101,6 +101,7 @@ const allOtherProposals = proposal
     )
   : [];
 const isResolution = Boolean(proposal && isGovernanceResolution(proposal));
+const policy = isResolution ? null : rawPolicy;
 
 const branchNameFor = (branchId?: string) =>
   branchId ? String(branches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
@@ -946,6 +947,17 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                     const fb = comment.feedback;
                     const fbHistory = comment.feedbackHistory ?? [];
                     const fbVariant = fb?.status === 'incorporated' ? 'success' : fb?.status === 'considered' ? 'info' : fb?.status === 'deferred' ? 'warning' : 'outline';
+                    const fbEvidence = fb?.evidence
+                      ? {
+                          label: fb.evidence.label ?? fb.evidence.recordId,
+                          href:
+                            fb.evidence.kind === 'policy' &&
+                            policy &&
+                            ['published', 'withdrawn', 'superseded'].includes(String(policy.publicationStatus ?? ''))
+                              ? `/policies/${encodeURIComponent(fb.evidence.recordId)}/`
+                              : `${publicUrl}#${fb.evidence.kind === 'decision' ? 'proposal-vote' : `${fb.evidence.kind}-${encodeURIComponent(fb.evidence.recordId)}`}`,
+                        }
+                      : null;
                     return (
                       <li data-comment-item={comment.commentId}>
                         <div class="admin-record-comment__head">
@@ -962,7 +974,14 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         {fb && (
                           <p class="text-xs text-muted-foreground mt-2 mb-0">
                             <strong>{fb.updatedByName}</strong> marked <em>{fb.status}</em>
-                            {fb.note ? `: “${fb.note}”` : ''} · {formatDate(fb.updatedAt)}
+                            {fb.note ? `: “${fb.note}”` : ''}
+                            {fbEvidence ? (
+                              <>
+                                {' · Evidence: '}
+                                <a class="underline" href={fbEvidence.href}>{fbEvidence.label}</a>
+                              </>
+                            ) : null}
+                            {' · '}{formatDate(fb.updatedAt)}
                           </p>
                         )}
                         {fbHistory.length > 1 && (
@@ -973,6 +992,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                                 <li>
                                   <strong>{entry.action}</strong> by {entry.updatedByName} ({formatDate(entry.updatedAt)})
                                   {entry.note ? ` — ${entry.note}` : ''}
+                                  {entry.evidence ? ` · Evidence: ${entry.evidence.label ?? entry.evidence.recordId}` : ''}
                                 </li>
                               ))}
                             </ul>
@@ -995,6 +1015,36 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                                   <Input id={`feedback-note-${comment.commentId}`} name="note" maxLength={500} defaultValue={fb?.note ?? ''} placeholder="Explain how this contribution was handled" />
                                 </Field>
                               </div>
+                              <Field label="Supporting evidence (optional)" htmlFor={`feedback-evidence-${comment.commentId}`}>
+                                <NativeSelect
+                                  id={`feedback-evidence-${comment.commentId}`}
+                                  name="evidenceRef"
+                                  defaultValue={fb?.evidence ? `${fb.evidence.kind}:${fb.evidence.recordId}` : ''}
+                                >
+                                  <option value="">None (note only)</option>
+                                  {revisions.map((rev: any, idx: number) => (
+                                    <option value={`revision:${String(rev.revisionId)}`}>
+                                      Revision: {revisionDisplayLabel({ revisionId: String(rev.revisionId), createdAt: rev.createdAt, ordinal: revisions.length - idx })}
+                                      {rev.revisionId === proposal.ballotRevisionId ? ' (ballot wording)' : ''}
+                                    </option>
+                                  ))}
+                                  {amendmentRows.filter((a: any) => a.status !== 'withdrawn').map((am: any) => (
+                                    <option value={`amendment:${String(am.amendmentId)}`}>
+                                      Amendment: {String(am.changes?.title ?? am.title ?? am.amendmentId)} ({String(am.status ?? 'proposed')})
+                                    </option>
+                                  ))}
+                                  {ballotResult && (
+                                    <option value={`decision:${String(ballotResult.decisionEventId ?? proposal.proposalId)}`}>
+                                      Decision: Ballot outcome ({String(ballotResult.result ?? 'recorded')})
+                                    </option>
+                                  )}
+                                  {policy && (
+                                    <option value={`policy:${String(policy.policyId)}`}>
+                                      Policy: {String(policy.title ?? policy.policyId)} ({String(policy.publicationStatus ?? 'unpublished')})
+                                    </option>
+                                  )}
+                                </NativeSelect>
+                              </Field>
                               <div class="admin-actions">
                                 <Button variant="outline" size="sm" type="submit">Save response</Button>
                                 {fb && (
@@ -1358,6 +1408,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
       void sendFeedback({
         status: String(fields.get('status') ?? ''),
         note: String(fields.get('note') ?? ''),
+        evidenceRef: String(fields.get('evidenceRef') ?? ''),
       });
     });
 

@@ -2,10 +2,13 @@ import { recordLifecycle, recordParticipation, notePriorParticipation } from "./
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { validPersonName } from "./auth.ts";
+import { hasPermission } from "./rbac.ts";
 import type {
   CommentRecord,
   CommentStance,
   ContributionFeedback,
+  ContributionFeedbackEvidence,
+  ContributionFeedbackEvidenceKind,
   ContributionFeedbackHistoryEntry,
   ContributionFeedbackStatus,
   MemberRecord,
@@ -26,17 +29,46 @@ import type {
 import { createHash, randomUUID } from "node:crypto";
 
 import { ballotExpired } from "./ballot-deadline.ts";
+import {
+  matterHasCapability,
+  normalizeMatterType,
+  validateMatterTransition,
+} from "./matters.ts";
 
 export const PENDING_VOTE_PREFERENCES = "pending_vote_preferences";
 
 export function isGovernanceResolution(proposal: {
   kind?: string;
-  proposalId: string;
+  proposalId?: string;
+  policyId?: string;
 }): boolean {
-  return (
-    proposal.kind === "resolution" ||
-    proposal.proposalId.toUpperCase().startsWith("GOV-")
-  );
+  const id = String(proposal.proposalId ?? proposal.policyId ?? "");
+  return normalizeKind(proposal.kind, id) === "resolution";
+}
+
+export function isPolicyProposal(proposal: {
+  kind?: string;
+  proposalId?: string;
+  policyId?: string;
+}): boolean {
+  try {
+    return matterHasCapability(proposal, "supportsPolicyPublication");
+  } catch {
+    return false;
+  }
+}
+
+export function isPolicyRegistryRecordForResolution(
+  policy: { policyId?: string; proposalId?: string; kind?: string },
+  linkedProposal?: { kind?: string; proposalId?: string } | null,
+): boolean {
+  if (linkedProposal) {
+    return isGovernanceResolution(linkedProposal);
+  }
+  return isGovernanceResolution({
+    kind: policy.kind,
+    proposalId: String(policy.proposalId ?? policy.policyId ?? ""),
+  });
 }
 
 export function getDefaultProvenanceLabel(
@@ -107,36 +139,16 @@ export function normalizeStage(
 }
 
 export function normalizeKind(value: unknown, proposalId = ""): ProposalKind {
-  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (raw === "resolution" || raw === "governance") return "resolution";
-  if (raw === "policy") return "policy";
-  if (proposalId.toUpperCase().startsWith("GOV-")) return "resolution";
-  return "policy";
+  return normalizeMatterType(value, proposalId) as ProposalKind;
 }
 
 export function validateStageTransition(
   fromStage: ProposalStage,
   toStage: ProposalStage,
+  kind: ProposalKind | string = "policy",
 ): void {
-  if (fromStage === toStage) return;
-  if (!VALID_STAGES.includes(toStage)) {
-    throw new Error(
-      `Invalid lifecycle stage: '${toStage}'. Must be propose, deliberate, decide, implement, or archived.`,
-    );
-  }
-  if (
-    fromStage === "propose" &&
-    (toStage === "decide" || toStage === "implement")
-  ) {
-    throw new Error(
-      "Proposals in Stage 1 (Propose) must undergo member deliberation before entering Decide or Implement.",
-    );
-  }
-  if (fromStage === "deliberate" && toStage === "implement") {
-    throw new Error(
-      "Proposals in Stage 2 (Deliberate) must be voted on in the Decide stage before entering Implement.",
-    );
-  }
+  const matterType = normalizeMatterType(kind);
+  validateMatterTransition(matterType, fromStage, toStage);
 }
 
 export function isProposalLocked(
@@ -240,7 +252,14 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
   const space = String(raw.space || raw.category || "General");
   const summary = String(raw.summary || raw.statement || "");
   const stage = normalizeStage(raw.stage || raw.status || "deliberate");
-  const kind = normalizeKind(raw.kind, proposalId);
+  let kind: ProposalKind | string = "policy";
+  try {
+    kind = normalizeKind(raw.kind, proposalId);
+  } catch {
+    kind = typeof raw.kind === "string" && raw.kind.trim()
+      ? raw.kind.trim().toLowerCase()
+      : "policy";
+  }
   return {
     proposalId,
     slug: String(raw.slug || slugify(raw.title || proposalId)),
@@ -698,7 +717,7 @@ export async function saveProposal(
         );
       }
       const targetStage = normalizeStage(rawStageInput, existing.stage);
-      validateStageTransition(existing.stage, targetStage);
+      validateStageTransition(existing.stage, targetStage, existing.kind);
       if (targetStage === "decide" && !user.isStaff && canManageExisting) {
         const branchId = existing.governanceAuthorityBranchId;
         if (
@@ -833,6 +852,22 @@ export async function saveProposal(
           throw new Error(
             `Successor proposal '${candidate}' was not found.`,
           );
+        }
+        const visited = new Set<string>([existing.proposalId]);
+        let cursor: ProposalRecord | null = target;
+        let hops = 0;
+        while (cursor && hops < 50) {
+          if (visited.has(cursor.proposalId)) {
+            throw new Error("Supersession chain cannot contain a cycle.");
+          }
+          visited.add(cursor.proposalId);
+          const nextId: string | undefined = cursor.supersededByProposalId?.trim();
+          if (!nextId) break;
+          if (visited.has(nextId)) {
+            throw new Error("Supersession chain cannot contain a cycle.");
+          }
+          cursor = await col.findOne({ proposalId: nextId });
+          hops += 1;
         }
         supersededByProposalId = target.proposalId;
       }
@@ -1454,12 +1489,322 @@ const VALID_FEEDBACK_STATUSES: ContributionFeedbackStatus[] = [
   "declined",
 ];
 
+const VALID_EVIDENCE_KINDS: ContributionFeedbackEvidenceKind[] = [
+  "amendment",
+  "revision",
+  "decision",
+  "policy",
+];
+
+function parseEvidenceInput(
+  body: Record<string, unknown>,
+): { kind: ContributionFeedbackEvidenceKind; recordId: string } | null {
+  if (typeof body.evidenceRef === "string") {
+    const ref = body.evidenceRef.trim();
+    if (!ref) return null;
+    const colon = ref.indexOf(":");
+    if (colon <= 0) {
+      throw new Error("Choose a valid supporting evidence record.");
+    }
+    const kind = ref.slice(0, colon).trim().toLowerCase();
+    const recordId = ref.slice(colon + 1).trim();
+    if (
+      !VALID_EVIDENCE_KINDS.includes(kind as ContributionFeedbackEvidenceKind) ||
+      !recordId
+    ) {
+      throw new Error("Choose a valid supporting evidence record.");
+    }
+    return { kind: kind as ContributionFeedbackEvidenceKind, recordId };
+  }
+  if (body.evidence && typeof body.evidence === "object") {
+    const raw = body.evidence as Record<string, unknown>;
+    const kind =
+      typeof raw.kind === "string" ? raw.kind.trim().toLowerCase() : "";
+    const recordId =
+      typeof raw.recordId === "string" ? raw.recordId.trim() : "";
+    if (!kind && !recordId) return null;
+    if (
+      !VALID_EVIDENCE_KINDS.includes(kind as ContributionFeedbackEvidenceKind) ||
+      !recordId
+    ) {
+      throw new Error("Choose a valid supporting evidence record.");
+    }
+    return { kind: kind as ContributionFeedbackEvidenceKind, recordId };
+  }
+  return null;
+}
+
+function formatEvidenceDate(value: unknown): string {
+  if (!value) return "";
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+async function resolveAndValidateEvidence(
+  db: Db,
+  proposal: ProposalRecord,
+  user: SessionUser,
+  input: { kind: ContributionFeedbackEvidenceKind; recordId: string },
+): Promise<ContributionFeedbackEvidence> {
+  const { kind, recordId } = input;
+  if (kind === "amendment") {
+    const amendment: any = await db
+      .collection("amendments")
+      .findOne({ amendmentId: recordId, proposalId: proposal.proposalId });
+    if (!amendment || amendment.status === "withdrawn") {
+      throw new Error(
+        "Referenced amendment was not found on this proposal.",
+      );
+    }
+    const prefix =
+      amendment.status === "applied"
+        ? "Applied amendment"
+        : `Amendment (${String(amendment.status ?? "proposed")})`;
+    const title = String(amendment.title ?? recordId).trim().slice(0, 100);
+    return { kind, recordId, label: `${prefix}: ${title}` };
+  }
+  if (kind === "revision") {
+    const revision: any = await db
+      .collection("proposal_revisions")
+      .findOne({ revisionId: recordId, proposalId: proposal.proposalId });
+    if (!revision) {
+      throw new Error(
+        "Referenced revision was not found on this proposal.",
+      );
+    }
+    const dateLabel = formatEvidenceDate(revision.createdAt);
+    const isBallot = proposal.ballotRevisionId === recordId;
+    const label = isBallot
+      ? `Ballot revision${dateLabel ? ` (${dateLabel})` : ""}`
+      : `Proposal revision${dateLabel ? ` (${dateLabel})` : ""}`;
+    return { kind, recordId, label };
+  }
+  if (kind === "decision") {
+    const ballotResult: any = await db
+      .collection("ballot_results")
+      .findOne({ proposalId: proposal.proposalId });
+    if (
+      !ballotResult ||
+      (recordId !== proposal.proposalId &&
+        recordId !== String(ballotResult.decisionEventId ?? ""))
+    ) {
+      throw new Error(
+        "Referenced ballot decision was not found on this proposal.",
+      );
+    }
+    const outcome = String(ballotResult.result ?? "recorded");
+    return {
+      kind,
+      recordId: String(ballotResult.decisionEventId ?? proposal.proposalId),
+      label: `Ballot outcome: ${outcome}`,
+    };
+  }
+  const policy: any = await db
+    .collection("policy_registry")
+    .findOne({ policyId: recordId });
+  if (!policy) {
+    throw new Error("Referenced policy record was not found.");
+  }
+  const pubStatus = String(policy.publicationStatus ?? "unpublished");
+  const isPublishedState = ["published", "withdrawn", "superseded"].includes(
+    pubStatus,
+  );
+  if (
+    !isPublishedState &&
+    (policy.proposalId !== proposal.proposalId ||
+      (!user.isStaff && !user.isAdmin))
+  ) {
+    throw new Error("Referenced policy record is not accessible.");
+  }
+  const title = String(policy.title ?? recordId).trim().slice(0, 100);
+  const label =
+    pubStatus === "published"
+      ? `Adopted policy: ${title}`
+      : `Policy record (${pubStatus}): ${title}`;
+  return { kind, recordId, label };
+}
+
+export interface ResolvedContributionEvidence {
+  kind: ContributionFeedbackEvidenceKind;
+  recordId: string;
+  label: string;
+  href?: string;
+}
+
+/**
+ * Resolve contribution feedback evidence for display, re-checking viewer
+ * permissions and current record existence so inaccessible or withdrawn
+ * targets never leak titles, identifiers or broken links.
+ */
+export async function resolveContributionEvidenceMap(
+  db: Db,
+  proposal: ProposalRecord,
+  comments: CommentRecord[],
+  user: SessionUser | null,
+): Promise<Map<string, ResolvedContributionEvidence>> {
+  const result = new Map<string, ResolvedContributionEvidence>();
+  const evidenceItems: ContributionFeedbackEvidence[] = [];
+  for (const c of comments) {
+    if (c.feedback?.evidence) evidenceItems.push(c.feedback.evidence);
+    for (const h of c.feedbackHistory ?? []) {
+      if (h.evidence) evidenceItems.push(h.evidence);
+    }
+  }
+  if (evidenceItems.length === 0) return result;
+
+  const amendmentIds = [
+    ...new Set(
+      evidenceItems
+        .filter((e) => e.kind === "amendment")
+        .map((e) => e.recordId),
+    ),
+  ];
+  const revisionIds = [
+    ...new Set(
+      evidenceItems
+        .filter((e) => e.kind === "revision")
+        .map((e) => e.recordId),
+    ),
+  ];
+  const policyIds = [
+    ...new Set(
+      evidenceItems
+        .filter((e) => e.kind === "policy")
+        .map((e) => e.recordId),
+    ),
+  ];
+  const hasDecision = evidenceItems.some((e) => e.kind === "decision");
+
+  const [amendments, revisions, policies, ballotResult] = await Promise.all([
+    amendmentIds.length
+      ? db
+          .collection("amendments")
+          .find({
+            proposalId: proposal.proposalId,
+            amendmentId: { $in: amendmentIds },
+          })
+          .toArray()
+      : Promise.resolve([]),
+    revisionIds.length
+      ? db
+          .collection("proposal_revisions")
+          .find({
+            proposalId: proposal.proposalId,
+            revisionId: { $in: revisionIds },
+          })
+          .toArray()
+      : Promise.resolve([]),
+    policyIds.length
+      ? db
+          .collection("policy_registry")
+          .find({ policyId: { $in: policyIds } })
+          .toArray()
+      : Promise.resolve([]),
+    hasDecision
+      ? db
+          .collection("ballot_results")
+          .findOne({ proposalId: proposal.proposalId })
+      : Promise.resolve(null),
+  ]);
+
+  const amendmentById = new Map<string, any>(
+    amendments.map((a: any) => [String(a.amendmentId), a]),
+  );
+  const revisionById = new Map<string, any>(
+    revisions.map((r: any) => [String(r.revisionId), r]),
+  );
+  const policyById = new Map<string, any>(
+    policies.map((p: any) => [String(p.policyId), p]),
+  );
+
+  for (const item of evidenceItems) {
+    const key = `${item.kind}:${item.recordId}`;
+    if (result.has(key)) continue;
+
+    if (item.kind === "amendment") {
+      const am = amendmentById.get(item.recordId);
+      if (!am || am.status === "withdrawn") continue;
+      const prefix =
+        am.status === "applied"
+          ? "Applied amendment"
+          : `Amendment (${String(am.status ?? "proposed")})`;
+      result.set(key, {
+        kind: item.kind,
+        recordId: item.recordId,
+        label: `${prefix}: ${String(am.title ?? item.recordId)}`,
+        href: `#amendment-${encodeURIComponent(item.recordId)}`,
+      });
+    } else if (item.kind === "revision") {
+      const rev = revisionById.get(item.recordId);
+      if (!rev) continue;
+      const dateLabel = formatEvidenceDate(rev.createdAt);
+      const isBallot = proposal.ballotRevisionId === item.recordId;
+      result.set(key, {
+        kind: item.kind,
+        recordId: item.recordId,
+        label: isBallot
+          ? `Ballot revision${dateLabel ? ` (${dateLabel})` : ""}`
+          : `Proposal revision${dateLabel ? ` (${dateLabel})` : ""}`,
+        href: `#revision-${encodeURIComponent(item.recordId)}`,
+      });
+    } else if (item.kind === "decision") {
+      if (!ballotResult) continue;
+      if (
+        item.recordId !== proposal.proposalId &&
+        item.recordId !== String(ballotResult.decisionEventId ?? "")
+      ) {
+        continue;
+      }
+      result.set(key, {
+        kind: item.kind,
+        recordId: item.recordId,
+        label: `Ballot outcome: ${String(ballotResult.result ?? "recorded")}`,
+        href: "#proposal-vote",
+      });
+    } else if (item.kind === "policy") {
+      const pol = policyById.get(item.recordId);
+      if (!pol) continue;
+      const pubStatus = String(pol.publicationStatus ?? "unpublished");
+      const isPublicRecord = [
+        "published",
+        "withdrawn",
+        "superseded",
+      ].includes(pubStatus);
+      if (!isPublicRecord && !user?.isStaff && !user?.isAdmin) continue;
+      result.set(key, {
+        kind: item.kind,
+        recordId: item.recordId,
+        label:
+          pubStatus === "published"
+            ? `Adopted policy: ${String(pol.title ?? item.recordId)}`
+            : `Policy record (${pubStatus}): ${String(pol.title ?? item.recordId)}`,
+        ...(isPublicRecord
+          ? { href: `/policies/${encodeURIComponent(item.recordId)}/` }
+          : {}),
+      });
+    }
+  }
+
+  return result;
+}
+
 export function canRespondToContribution(
   user: SessionUser | null,
   proposal: Pick<ProposalRecord, "authorId" | "originatingBranchId">,
 ): boolean {
   if (!user) return false;
-  if (user.isStaff || user.isAdmin) return true;
+  if (
+    user.isStaff ||
+    user.isAdmin ||
+    hasPermission(user, "contributions.respond", proposal.originatingBranchId)
+  ) {
+    return true;
+  }
   if (
     user.isBranchAdmin &&
     proposal.originatingBranchId &&
@@ -1538,9 +1883,15 @@ export async function setCommentFeedback(
     return { feedback: null, feedbackHistory };
   }
 
+  const evidenceInput = parseEvidenceInput(body);
+  const evidence = evidenceInput
+    ? await resolveAndValidateEvidence(db, proposal, user, evidenceInput)
+    : undefined;
+
   const feedback: ContributionFeedback = {
     status: rawStatus as ContributionFeedbackStatus,
     ...(note ? { note } : {}),
+    ...(evidence ? { evidence } : {}),
     updatedBy: user.memberId,
     updatedByName,
     updatedAt,
@@ -1548,6 +1899,7 @@ export async function setCommentFeedback(
   const entry: ContributionFeedbackHistoryEntry = {
     action: feedback.status,
     ...(note ? { note } : {}),
+    ...(evidence ? { evidence } : {}),
     updatedBy: user.memberId,
     updatedByName,
     updatedAt,

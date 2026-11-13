@@ -14,7 +14,7 @@ import { digestBallots, renderDigest, runBallotDigests, unsubscribeToken, readUn
 import { castVote, listOutstandingDecisions, promotePendingVotePreferences, savePendingVotePreference, PENDING_VOTE_PREFERENCES } from "./store.ts";
 import type { ProposalSummaryView, SessionUser } from "./types.ts";
 import { PROPOSAL_VOTES } from "./vote-storage.ts";
-const now = new Date("2026-12-20T00:00:00Z");
+const now = new Date("2027-01-10T00:00:00Z");
 const memberId = new ObjectId().toString();
 const user: SessionUser = {memberId,name:"Member",email:"member@example.test",role:"member",status:"verified",canParticipate:true,isStaff:false,isAdmin:false};
 const proposal = (id:string,approve=3,reject=3,abstain=0,comments=0):ProposalSummaryView => ({proposalId:id,slug:id,title:id,space:"General",summary:"Summary",outcomes:[],details:"",stage:"decide",publicationScope:"national",createdAt:now,updatedAt:now,ballotRevisionId:"r1",ballotClosesAt:new Date(CURRENT_BALLOT_CLOSES_AT),votes:{approve,reject,abstain,total:approve+reject+abstain},commentCount:comments});
@@ -33,13 +33,13 @@ test("rankings exclude tiny samples, distinguish abstentions and tie-break by pa
  assert.equal(rankProposals([tiny],"approved").length,0);
  assert.equal(rankProposals([proposal("unanimous",5,0)],"divisive").length,0);
 });
-test("deadline is end of Thursday 24 December Melbourne, exclusive and fail-closed",()=>{
+test("deadline is end of Thursday 14 January 2027 Melbourne, exclusive and fail-closed",()=>{
  const p=proposal("P");
- assert.equal(ballotExpired(p,new Date("2026-12-24T12:59:59.999Z")),false);
+ assert.equal(ballotExpired(p,new Date("2027-01-14T12:59:59.999Z")),false);
  assert.equal(ballotExpired(p,new Date(CURRENT_BALLOT_CLOSES_AT)),true);
  assert.equal(ballotExpired({ballotClosesAt:"bad"}),true);
  assert.equal(closesWithinSevenDays(p,now),true);
- assert.equal(closesWithinSevenDays(p,new Date("2026-12-10")),false);
+ assert.equal(closesWithinSevenDays(p,new Date("2027-01-01")),false);
 });
 test("closed ballots reject formal votes, saved choices and promotion and leave outstanding queue",async()=>{
  const {db}=await fixture();

@@ -109,6 +109,12 @@ export async function initializeDatabase(db: Db): Promise<void> {
     db.collection("engagement_email_outbox").createIndex({providerId:1}),
     db.collection("engagement_email_outbox").createIndex({memberId:1,createdAt:-1}),
     db.collection("engagement_email_events").createIndex({providerId:1}),
+    db.collection("engagement_reengagement_campaigns").createIndex({campaignId:1},{unique:true}),
+    db.collection("push_subscriptions").createIndex({memberId:1,endpoint:1},{unique:true}),
+    db.collection("push_subscriptions").createIndex({subscriptionId:1},{unique:true}),
+    db.collection("member_notifications").createIndex({memberId:1,createdAt:-1}),
+    db.collection("member_notifications").createIndex({notificationId:1},{unique:true}),
+    db.collection("notification_deliveries").createIndex({dedupeKey:1},{unique:true}),
   ]);
   try {
     await ensureVoteStorage(db);
@@ -148,6 +154,30 @@ export async function initializeDatabase(db: Db): Promise<void> {
       db
         .collection("proposals")
         .createIndex({ authorId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("ballots")
+        .createIndex({ ballotId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("ballots")
+        .createIndex({ matterId: 1, status: 1 })
+        .catch(() => {}),
+      db
+        .collection("governance_events")
+        .createIndex({ eventId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("governance_events")
+        .createIndex({ matterId: 1, createdAt: -1 })
+        .catch(() => {}),
+      db
+        .collection("governance_relationships")
+        .createIndex({ sourceMatterId: 1, relationshipType: 1 })
+        .catch(() => {}),
+      db
+        .collection("governance_relationships")
+        .createIndex({ targetMatterId: 1, relationshipType: 1 })
         .catch(() => {}),
       db
         .collection("memberships")

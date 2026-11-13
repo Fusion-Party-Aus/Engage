@@ -5,6 +5,7 @@ import { getDatabase, runtimeEnv } from "../../lib/db.ts";
 import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import { createAmendmentRevision } from "../../lib/amendments.ts";
 import {
+  canReviewArchivedProposal,
   canViewProposal,
   normalizeProposalDoc,
 } from "../../lib/store.ts";
@@ -19,9 +20,12 @@ export const GET: APIRoute = async ({ url, locals, request }) => {
     return Response.json({ error: "proposalId is required." }, { status: 400 });
   const db = await getDatabase(env);
   const proposal = await db.collection("proposals").findOne({ proposalId });
+  const normalizedProposal = proposal ? normalizeProposalDoc(proposal) : null;
   if (
-    !proposal ||
-    !canViewProposal(normalizeProposalDoc(proposal), user)
+    !normalizedProposal ||
+    !canViewProposal(normalizedProposal, user) ||
+    (normalizedProposal.stage === "archived" &&
+      !canReviewArchivedProposal(normalizedProposal, user))
   )
     return Response.json({ error: "Proposal not found." }, { status: 404 });
   const query: Record<string, unknown> = { proposalId };

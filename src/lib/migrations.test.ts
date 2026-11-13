@@ -140,7 +140,11 @@ describe("durable database migrations", () => {
     const first = await runAllMigrations(db, "admin-2");
     assert.deepEqual(
       first.map((item) => item.migrationId),
-      [STANDARD_BRANCHES_MIGRATION, BRANCH_PARTICIPATION_MIGRATION],
+      [
+        STANDARD_BRANCHES_MIGRATION,
+        BRANCH_PARTICIPATION_MIGRATION,
+        "open-ballot-expiry-2027-01-14",
+      ],
     );
     const second = await runAllMigrations(db, "admin-2");
     assert.equal(second[0]?.result.created, 0);
@@ -186,7 +190,7 @@ describe("durable database migrations", () => {
     } as never);
     assert.equal(admin.status, 200);
     const payload = (await admin.json()) as { migrations: unknown[] };
-    assert.equal(payload.migrations.length, 2);
+    assert.equal(payload.migrations.length, 3);
   });
 });
 
