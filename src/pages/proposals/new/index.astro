@@ -5,19 +5,26 @@ import { Badge } from '../../../components/ui/badge';
 import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
-import { NativeSelect } from '../../../components/ui/native-select';
 import { Textarea } from '../../../components/ui/textarea';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
+import ProposalScopeSelector from '../../../components/proposal/ProposalScopeSelector';
 import { ImagePlus, Link as LinkIcon } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import {
+  defaultProposalScopeKey,
+  listAuthorisedProposalScopes,
+} from '../../../lib/proposal-scope.ts';
 
 export const prerender = false;
 const env = runtimeEnv(Astro.locals);
 const [user, db] = await Promise.all([getSessionUser(Astro.request, env), getDatabase(env)]);
 const branches = user?.isAdmin || user?.isBranchAdmin
-  ? await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()
+  ? await db.collection('branches').find({ recognised: true }).sort({ kind: 1, name: 1 }).toArray()
   : [];
+const scopeOptions = user ? listAuthorisedProposalScopes(user, branches) : [];
+const defaultScopeKey = user ? defaultProposalScopeKey(user, scopeOptions) : 'national';
+const showScopeSelector = Boolean(user && (user.isAdmin || user.isBranchAdmin) && scopeOptions.length > 1);
 
 const quickTopics = [
   'Climate & Energy',
@@ -76,16 +83,19 @@ const quickTopics = [
           </div>
         </div>
 
-        {(user?.isAdmin || user?.isBranchAdmin) && (
-          <Field label="Proposal scope" htmlFor="proposal-branch">
-            <NativeSelect id="proposal-branch" name="branch" required>
-              <option value="national">National</option>
-              {branches.filter((branch: any) => user?.isAdmin || user?.branchAdminIds?.includes(branch.branchId)).map((branch: any) => (
-                <option value={branch.branchId}>{branch.name}</option>
-              ))}
-            </NativeSelect>
-            <p class="field-hint">Branch proposals are visible within their branch and require a branch administrator to create.</p>
-          </Field>
+        {showScopeSelector && (
+          <ProposalScopeSelector
+            client:load
+            options={scopeOptions.map(({ key, label, branchName }) => ({
+              key,
+              label,
+              ...(key !== 'national' && branchName && branchName !== label
+                ? { branchName }
+                : {}),
+            }))}
+            defaultValue={defaultScopeKey}
+            hint="National proposals are open to every member. A state, territory or local proposal stays within that branch."
+          />
         )}
 
         <Field label="What would change? (Summary)" htmlFor="proposal-summary">
@@ -215,7 +225,7 @@ const quickTopics = [
     const data = new FormData(form);
     const attachmentUrl = String(data.get('attachmentUrl') ?? '').trim();
     const attachmentDescription = String(data.get('attachmentDescription') ?? '').trim();
-    const branchVal = String(data.get('branch') ?? 'national').trim();
+    const scopeKey = String(data.get('scope') ?? '').trim();
     const payload = {
       title: data.get('title'),
       space: data.get('space'),
@@ -228,7 +238,7 @@ const quickTopics = [
       ...(attachmentUrl ? { attachmentUrl } : {}),
       ...(attachmentDescription ? { attachmentDescription } : {}),
       stage: 'propose',
-      ...(branchVal && branchVal !== 'national' ? { originatingBranchId: branchVal } : {}),
+      ...(scopeKey ? { scope: scopeKey } : {}),
     };
     try {
       const response = await fetch('/api/proposals', {
