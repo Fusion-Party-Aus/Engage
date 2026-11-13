@@ -1,5 +1,53 @@
 [
   {
+    "hash": "715fe72",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "architecture",
+    "summary": "Add integration seams, authorised read models, resilience helpers, and indexes"
+  },
+  {
+    "hash": "0cb2d1b",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Enforce scoped RBAC permissions across admin API endpoints"
+  },
+  {
+    "hash": "a4527ba",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "governance",
+    "summary": "Decouple ballot/decision records and add provenance relationship validation"
+  },
+  {
+    "hash": "98094d1",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "governance",
+    "summary": "Add extensible matter registry and type-aware lifecycle validation"
+  },
+  {
+    "hash": "2e458bd",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballots",
+    "summary": "Add 14 Jan 2027 open ballot expiry migration and prominent deadline display"
+  },
+  {
+    "hash": "6cd3ffc",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record governance resolution classification fix"
+  },
+  {
     "hash": "54366eb",
     "date": "2026-11-13",
     "type": "docs",
@@ -601,58 +649,5 @@
     "category": "feature",
     "scope": "editor",
     "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
-  },
-  {
-    "hash": "e7d793a",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record Engage production cutover and verification",
-    "details": "Record the approved cutover of 4660690... to the prebuilt image, the final quiescent backup and off-host checksum, the 37-ballot/194-vote migration and preservation comparison, image and route verification, and the retained rollback state."
-  },
-  {
-    "hash": "4660690",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record member ballot refinement verification",
-    "details": "Record the approved ballot hierarchy: segmented control, single results block, zero-vote empty state, compact privacy line, full-width action and 390px browser validation. Full route matrix 109/109 and dedicated ballot checks 14/14."
-  },
-  {
-    "hash": "2b85970",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Refine member ballot hierarchy and voting control",
-    "details": "Replace the tall three-card radio composition with a single-row shadcn/Radix segmented control for Approve, Abstain and Reject. The primary action is full-width with a matching radius, uses a neutral disabled treatment and reserves the Horizon accent for an enabled vote. Move results into one compact block, show a simple empty state for zero-vote ballots, reduce the privacy disclosure to a persistent one-line notice, and move revision metadata into a small readable line. Keep selected state, keyboard navigation, existing votes and closed-ballot read-only behaviour."
-  },
-  {
-    "hash": "153e909",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Integrate Coolify cutover evidence and final verification record",
-    "details": "Merge the deployment workstream documentation with the release: storage and prebuilt-image verification, no-rebuild deployment path, quiescent backup helper, staging verification, rollback procedure and approval-gated cutover checklist. Distinguish the 2026-11-08 rehearsal image from the final release identity so the artifact cannot be mistaken for the approved cutover image. Add the production-readiness audit, application handover and final integrated verification record. Ignore the preserved research corpus."
-  },
-  {
-    "hash": "33cc170",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "legal",
-    "summary": "Integrate Privacy Policy, Terms of Use and acceptance controls",
-    "details": "Add owner-authorised legal documents at /privacy/ and /terms/ with the confirmed operator, ABN, registered party name, contact and correspondence address. The documents are explicit about identifiable ballots, national administrator access, small-ballot re-identification risk, retention limits, third-party processors and administrative ballot controls, and remain noindex while publication is pending. Add a server-side acceptance record, API and member gate, and enforce the gate on vote, comment, endorsement, proposal and amendment writes. Activation is interlocked: the gate remains inactive until both documents are published with real effective dates and LEGAL_ACCEPTANCE_ENABLED is set. Add the ballot-context privacy notice, footer and sign-in legal links, and regression tests."
   }
 ]
