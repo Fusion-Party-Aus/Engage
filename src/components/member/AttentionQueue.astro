@@ -97,7 +97,7 @@ const estMins = Math.max(1, Math.ceil((items.length * 45) / 60));
                 {item.branchName && <span class="attention-branch">{item.branchName}</span>}
               </div>
               <a class="attention-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
-              {item.ballotClosesAt && <p>Closes {ballotDeadlineLabel(item.ballotClosesAt)}</p>}
+              {item.ballotClosesAt && <p><time datetime={new Date(item.ballotClosesAt).toISOString()} data-ballot-deadline data-prefix="Closes">Closes {ballotDeadlineLabel(item.ballotClosesAt)}</time></p>}
             </div>
             <Button href={`/proposals/${item.slug}/#proposal-vote`} size="sm" variant="outline">
               Vote (~45s)
@@ -120,7 +120,7 @@ const estMins = Math.max(1, Math.ceil((items.length * 45) / 60));
                     {item.branchName && <span class="attention-branch">{item.branchName}</span>}
                   </div>
                   <a class="attention-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
-              {item.ballotClosesAt && <p>Closes {ballotDeadlineLabel(item.ballotClosesAt)}</p>}
+              {item.ballotClosesAt && <p><time datetime={new Date(item.ballotClosesAt).toISOString()} data-ballot-deadline data-prefix="Closes">Closes {ballotDeadlineLabel(item.ballotClosesAt)}</time></p>}
                 </div>
                 <Button href={`/proposals/${item.slug}/#proposal-vote`} size="sm" variant="ghost">Vote →</Button>
               </li>

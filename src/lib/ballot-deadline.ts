@@ -80,3 +80,60 @@ export function closesWithinSevenDays(
   if (!ballot.ballotClosesAt || ballotExpired(ballot, now)) return false;
   return new Date(ballot.ballotClosesAt).getTime() <= now.getTime() + 7 * 86400000;
 }
+
+/**
+ * Relative deadline string, e.g. "in 2 months", "in 3 days", "2 hours ago".
+ */
+export function formatRelativeDeadline(
+  value: Date | string,
+  now = new Date(),
+): string {
+  const target = new Date(value).getTime();
+  if (!Number.isFinite(target)) {
+    throw new RangeError(`Invalid ballot deadline: ${String(value)}`);
+  }
+  const diffSec = Math.round((target - now.getTime()) / 1000);
+  const absSec = Math.abs(diffSec);
+  const rtf = new Intl.RelativeTimeFormat("en-AU", { numeric: "auto" });
+
+  if (absSec < 60) {
+    return diffSec >= 0 ? "in less than a minute" : "just now";
+  }
+  const diffMin = Math.round(diffSec / 60);
+  if (Math.abs(diffMin) < 60) {
+    return rtf.format(diffMin, "minute");
+  }
+  const diffHours = Math.round(diffSec / 3600);
+  if (Math.abs(diffHours) < 24) {
+    return rtf.format(diffHours, "hour");
+  }
+  const diffDays = Math.round(diffSec / 86400);
+  if (Math.abs(diffDays) < 30) {
+    return rtf.format(diffDays, "day");
+  }
+  const diffMonths = Math.round(diffDays / 30);
+  if (Math.abs(diffMonths) < 12) {
+    return rtf.format(diffMonths, "month");
+  }
+  return rtf.format(Math.round(diffDays / 365), "year");
+}
+
+/**
+ * Full deadline formatted in the caller's local timezone (or explicit `timeZone`)
+ * with short timezone abbreviation, e.g. "Thursday, 14 January 2027 at 8:59 pm AWST".
+ */
+export function formatLocalDeadline(
+  value: Date | string,
+  timeZone?: string,
+): string {
+  return new Intl.DateTimeFormat("en-AU", {
+    ...(timeZone ? { timeZone } : {}),
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(inclusiveDisplayInstant(value));
+}

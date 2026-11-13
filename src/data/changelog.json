@@ -1,5 +1,13 @@
 [
   {
+    "hash": "14ae304",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Look up encrypted votes by blind index in member queues and activity (#45)"
+  },
+  {
     "hash": "2717d4e",
     "date": "2026-11-13",
     "type": "chore",
@@ -46,6 +54,15 @@
     "category": "feature",
     "scope": "verification",
     "summary": "Verify members from Underground CRM"
+  },
+  {
+    "hash": "32edbcc",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "research",
+    "summary": "Cross-industry product and UX research (#25)",
+    "details": "* docs(research): add cross-industry product and UX research Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence. * chore(changelog): record cross-industry research * fix(api): enforce minimal response DTOs, ballot privacy, and bounded pagination * feat(proposals): separate geographic scope from branch identity Add a canonical proposal scope model with stable keys (national, nsw, vic, ...) and consistent labels from the site's state configuration. Branch records remain the organisational identity; legacy records resolve to the canonical scope without being rewritten. Server validation now rejects display labels, non-string or conflicting scopes and ambiguous duplicate geography, and enforces branch administration independently of the rendered controls. * feat(proposals): use an accessible scope selector Replace the native proposal-scope dropdown with the existing ToggleGroup primitive, giving a single National option, consistently named states and territories, visible focus, keyboard navigation and responsive wrapping. Default to the member's authorised branch where one applies and submit the canonical scope key rather than a display label. * chore(changelog): refresh snapshot after proposal scope changes * fix(security): harden RBAC boundaries, CSRF origin checks, and markdown links * feat(ballots): add AES-256-GCM encrypted vote storage, blind indexing, and migration * refactor(auth): unify legacy administrative permission resolution * chore(changelog): record permission resolution consolidation * fix(security): handle rotated blind-index upserts and proxy-safe CSRF origins * feat(site): add branded 403, 404 and 500 error pages * chore(changelog): refresh snapshot after status pages * feat(auth): separate participation, voting and administration Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work. * chore(changelog): record authorisation consolidation * test(ci): update member lifecycle browser check for unified notification center * feat(site): open notifications in a header popover The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu. * chore(changelog): refresh snapshot after notification popover * fix(security): allow national RBAC grants in branch search and preserve scope on read * feat(auth): support multiple roles and a grouped scope select Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips. * chore(changelog): record multi-role and grouped scope select"
   },
   {
     "hash": "d417ab5",
@@ -641,21 +658,5 @@
     "category": "fix",
     "scope": "analytics",
     "summary": "Initialize Plausible tracking on production"
-  },
-  {
-    "hash": "71a98bb",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "analytics",
-    "summary": "Install Plausible tracker package"
-  },
-  {
-    "hash": "b98af1d",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "time",
-    "summary": "Display time in user's local timezone"
   }
 ]
