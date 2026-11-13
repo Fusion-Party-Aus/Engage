@@ -1,0 +1,40 @@
+---
+import ErrorLayout from '../layouts/ErrorLayout.astro';
+import ErrorPage from '../components/site/ErrorPage.astro';
+
+export const prerender = false;
+Astro.response.status = 500;
+Astro.response.headers.set('Cache-Control', 'no-store');
+
+const retryHref = Astro.url.pathname.startsWith('/500') ? '/' : `${Astro.url.pathname}${Astro.url.search}`;
+---
+
+<ErrorLayout title="Something went wrong · Engage">
+  <ErrorPage
+    code="500"
+    label="Server error"
+    title="Something went wrong."
+    description="The page couldn’t be loaded. Try again in a moment."
+    actions={[
+      { href: retryHref, label: 'Try again', variant: 'default' },
+      { href: '/', label: 'Engage home', variant: 'outline' },
+    ]}
+    links={[
+      {
+        href: '/proposals/',
+        label: 'Proposal register',
+        description: 'Ideas, discussions, and open ballots.',
+      },
+      {
+        href: '/policies/',
+        label: 'Policy registry',
+        description: 'Ratified and published party policy.',
+      },
+      {
+        href: '/how-it-works/',
+        label: 'How Engage works',
+        description: 'The four governance stages, in one page.',
+      },
+    ]}
+  />
+</ErrorLayout>

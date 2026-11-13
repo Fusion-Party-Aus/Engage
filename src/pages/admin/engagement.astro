@@ -12,7 +12,7 @@ import '../../styles/engagement.css';
 export const prerender=false;
 Astro.response.headers.set('Cache-Control','private, no-store');
 const env=runtimeEnv(Astro.locals), user=await getSessionUser(Astro.request,env);
-if (!user?.isAdmin) return new Response('Administrator access required',{status:403});
+if (!user?.isAdmin) return Astro.rewrite('/403/');
 const period=Number(Astro.url.searchParams.get('days') || 30);
 const days=[7,30,90].includes(period) ? period : 30;
 const since=new Date(Date.now()-days*86400000);

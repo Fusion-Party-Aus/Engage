@@ -1,0 +1,49 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+import ErrorPage from '../components/site/ErrorPage.astro';
+
+export const prerender = false;
+Astro.response.status = 404;
+Astro.response.headers.set('Cache-Control', 'no-store');
+
+const suggestions = [
+  {
+    href: '/proposals/',
+    label: 'Proposal register',
+    description: 'Ideas, discussions, and open ballots.',
+  },
+  {
+    href: '/policies/',
+    label: 'Policy registry',
+    description: 'Ratified and published party policy.',
+  },
+  {
+    href: '/how-it-works/',
+    label: 'How Engage works',
+    description: 'The four governance stages, in one page.',
+  },
+  {
+    href: '/member/',
+    label: 'My Engage',
+    description: 'Your ballots, notifications, and activity.',
+  },
+];
+---
+
+<SiteLayout
+  title="Page not found · Engage"
+  description="The page you’re looking for doesn’t exist or has moved."
+  noIndex
+>
+  <ErrorPage
+    code="404"
+    label="Page not found"
+    title="We couldn’t find that page."
+    description="The link may be out of date, or the page has moved."
+    actions={[
+      { href: '/', label: 'Engage home', variant: 'default' },
+      { href: '/proposals/', label: 'Browse proposals', variant: 'outline' },
+    ]}
+    links={suggestions}
+  />
+</SiteLayout>

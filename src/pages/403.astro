@@ -1,0 +1,68 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+import ErrorPage from '../components/site/ErrorPage.astro';
+import { getSessionUser } from '../lib/auth.ts';
+import { runtimeEnv } from '../lib/db.ts';
+
+export const prerender = false;
+Astro.response.status = 403;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+
+const suggestions = [
+  {
+    href: '/member/',
+    label: 'My Engage',
+    description: 'Ballots, notifications, and your activity.',
+  },
+  {
+    href: '/proposals/',
+    label: 'Proposal register',
+    description: 'Ideas, discussions, and open ballots.',
+  },
+  {
+    href: '/how-it-works/',
+    label: 'How Engage works',
+    description: 'The four governance stages, in one page.',
+  },
+  {
+    href: '/policies/',
+    label: 'Policy registry',
+    description: 'Ratified and published party policy.',
+  },
+];
+---
+
+<SiteLayout
+  title="Access denied · Engage"
+  description="Your account doesn’t have permission to view this page."
+  noIndex
+>
+  {user ? (
+    <ErrorPage
+      code="403"
+      label="Access denied"
+      title="You don’t have access to this page."
+      description="Your account doesn’t have permission for this area. A party administrator can check your roles if you think that’s wrong."
+      actions={[
+        { href: '/member/', label: 'Open My Engage', variant: 'default' },
+        { href: '/', label: 'Engage home', variant: 'outline' },
+      ]}
+      links={suggestions}
+    />
+  ) : (
+    <ErrorPage
+      code="403"
+      label="Sign in required"
+      title="You need to sign in to view this page."
+      description="Sign in with your Fusion member account, then try again."
+      actions={[
+        { href: '/member/', label: 'Sign in', variant: 'default' },
+        { href: '/', label: 'Engage home', variant: 'outline' },
+      ]}
+      links={suggestions}
+    />
+  )}
+</SiteLayout>
