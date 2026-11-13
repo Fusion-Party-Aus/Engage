@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { getDatabase } from "./db.ts";
-import { addComment, getProposalDetail, listProposals, saveProposal, setCommentFeedback } from "./store.ts";
+import { addComment, getProposalDetail, listProposals, resolveContributionEvidenceMap, saveProposal, setCommentFeedback } from "./store.ts";
 import { buildMemberCatchUp, listMemberActivityStream } from "./member-activity.ts";
 import type { SessionUser } from "./types.ts";
 
@@ -230,5 +230,194 @@ describe("contributor feedback and proposal supersession", () => {
     const detailAfterClear = await getProposalDetail(db, oldProposal.proposalId, adminUser);
     assert.equal(detailAfterClear?.proposal.supersededByProposalId, undefined);
     assert.equal(detailAfterClear?.proposal.supersededByNote, undefined);
+  });
+
+  it("attaches validated evidence to contribution feedback, preserves history, and enforces permissions", async () => {
+    const db = await getDatabase({ APP_MODE: "development" });
+    const proposal = await saveProposal(db, authorUser, {
+      title: "Evidence-Backed Feedback Proposal",
+      space: "Governance",
+      summary: "Proposal testing evidence links.",
+      outcomes: ["Add explicit safeguard"],
+      details: "Initial proposal details.",
+    });
+    const otherProposal = await saveProposal(db, authorUser, {
+      title: "Separate Unrelated Proposal",
+      space: "Governance",
+      summary: "Another proposal.",
+      outcomes: ["Other outcome"],
+      details: "Other details.",
+    });
+
+    const revisions = await db
+      .collection("proposal_revisions")
+      .find({ proposalId: proposal.proposalId })
+      .toArray();
+    const otherRevisions = await db
+      .collection("proposal_revisions")
+      .find({ proposalId: otherProposal.proposalId })
+      .toArray();
+    const revId = String(revisions[0]!.revisionId);
+    const otherRevId = String(otherRevisions[0]!.revisionId);
+
+    await db.collection("amendments").insertOne({
+      amendmentId: "am-ev-1",
+      proposalId: proposal.proposalId,
+      title: "Clarify quorum threshold",
+      status: "applied",
+      baseRevisionId: revId,
+      appliedRevisionId: revId,
+      createdAt: new Date(),
+    });
+    await db.collection("amendments").insertOne({
+      amendmentId: "am-ev-withdrawn",
+      proposalId: proposal.proposalId,
+      title: "Withdrawn amendment",
+      status: "withdrawn",
+      baseRevisionId: revId,
+      createdAt: new Date(),
+    });
+    await db.collection("policy_registry").insertOne({
+      policyId: "pol-ev-unpub",
+      proposalId: proposal.proposalId,
+      title: "Unpublished Ratified Policy",
+      publicationStatus: "unpublished",
+      createdAt: new Date(),
+    });
+    await db.collection("policy_registry").insertOne({
+      policyId: "pol-ev-pub",
+      proposalId: proposal.proposalId,
+      title: "Published Governance Policy",
+      publicationStatus: "published",
+      createdAt: new Date(),
+    });
+
+    const comment = await addComment(db, otherMember, {
+      proposalId: proposal.proposalId,
+      stance: "concern",
+      body: "Quorum threshold needs clarification.",
+    });
+
+    // Reject cross-proposal revision evidence
+    await assert.rejects(
+      () =>
+        setCommentFeedback(db, authorUser, {
+          commentId: comment.commentId,
+          status: "incorporated",
+          evidenceRef: `revision:${otherRevId}`,
+        }),
+      /not found/i,
+    );
+
+    // Reject withdrawn amendment evidence
+    await assert.rejects(
+      () =>
+        setCommentFeedback(db, authorUser, {
+          commentId: comment.commentId,
+          status: "incorporated",
+          evidenceRef: "amendment:am-ev-withdrawn",
+        }),
+      /not found/i,
+    );
+
+    // Non-staff author cannot attach unpublished policy record
+    await assert.rejects(
+      () =>
+        setCommentFeedback(db, authorUser, {
+          commentId: comment.commentId,
+          status: "incorporated",
+          evidenceRef: "policy:pol-ev-unpub",
+        }),
+      /not accessible/i,
+    );
+
+    // Author can attach valid applied amendment evidence
+    const withAmendment = await setCommentFeedback(db, authorUser, {
+      commentId: comment.commentId,
+      status: "incorporated",
+      note: "Applied via amendment.",
+      evidenceRef: "amendment:am-ev-1",
+    });
+    assert.equal(withAmendment.feedback?.evidence?.kind, "amendment");
+    assert.equal(withAmendment.feedback?.evidence?.recordId, "am-ev-1");
+    assert.match(withAmendment.feedback?.evidence?.label ?? "", /Applied amendment: Clarify quorum threshold/);
+
+    // Admin can attach unpublished policy, and ordinary members do not see its title/link
+    await setCommentFeedback(db, adminUser, {
+      commentId: comment.commentId,
+      status: "incorporated",
+      evidenceRef: "policy:pol-ev-unpub",
+    });
+    const detailForMember = await getProposalDetail(db, proposal.proposalId, otherMember);
+    assert.ok(detailForMember);
+    const memberEvidence = await resolveContributionEvidenceMap(
+      db,
+      detailForMember.proposal,
+      detailForMember.comments,
+      otherMember,
+    );
+    assert.equal(memberEvidence.has("policy:pol-ev-unpub"), false);
+    assert.equal(memberEvidence.has("amendment:am-ev-1"), true);
+
+    // Published policy resolves with public link and history preserves all evidence entries
+    const withPubPolicy = await setCommentFeedback(db, authorUser, {
+      commentId: comment.commentId,
+      status: "incorporated",
+      evidenceRef: "policy:pol-ev-pub",
+    });
+    assert.equal(withPubPolicy.feedbackHistory.length, 3);
+    assert.equal(withPubPolicy.feedbackHistory[0]?.evidence?.recordId, "am-ev-1");
+    const detailAfter = await getProposalDetail(db, proposal.proposalId, otherMember);
+    assert.ok(detailAfter);
+    const pubEvidence = await resolveContributionEvidenceMap(
+      db,
+      detailAfter.proposal,
+      detailAfter.comments,
+      otherMember,
+    );
+    assert.equal(pubEvidence.get("policy:pol-ev-pub")?.href, "/policies/pol-ev-pub/");
+  });
+
+  it("rejects multi-hop circular supersession chains", async () => {
+    const db = await getDatabase({ APP_MODE: "development" });
+    const propA = await saveProposal(db, adminUser, {
+      title: "Cycle Proposal A",
+      space: "Governance",
+      summary: "Proposal A.",
+      outcomes: ["Outcome A"],
+      details: "Details A.",
+    });
+    const propB = await saveProposal(db, adminUser, {
+      title: "Cycle Proposal B",
+      space: "Governance",
+      summary: "Proposal B.",
+      outcomes: ["Outcome B"],
+      details: "Details B.",
+    });
+    const propC = await saveProposal(db, adminUser, {
+      title: "Cycle Proposal C",
+      space: "Governance",
+      summary: "Proposal C.",
+      outcomes: ["Outcome C"],
+      details: "Details C.",
+    });
+
+    await saveProposal(db, adminUser, {
+      proposalId: propA.proposalId,
+      supersededByProposalId: propB.proposalId,
+    });
+    await saveProposal(db, adminUser, {
+      proposalId: propB.proposalId,
+      supersededByProposalId: propC.proposalId,
+    });
+
+    await assert.rejects(
+      () =>
+        saveProposal(db, adminUser, {
+          proposalId: propC.proposalId,
+          supersededByProposalId: propA.proposalId,
+        }),
+      /cycle/i,
+    );
   });
 });

@@ -196,9 +196,22 @@ export type ContributionFeedbackStatus =
   | "deferred"
   | "declined";
 
+export type ContributionFeedbackEvidenceKind =
+  | "amendment"
+  | "revision"
+  | "decision"
+  | "policy";
+
+export interface ContributionFeedbackEvidence {
+  kind: ContributionFeedbackEvidenceKind;
+  recordId: string;
+  label?: string;
+}
+
 export interface ContributionFeedback {
   status: ContributionFeedbackStatus;
   note?: string;
+  evidence?: ContributionFeedbackEvidence;
   updatedBy: string;
   updatedByName: string;
   updatedAt: Date;
@@ -207,6 +220,7 @@ export interface ContributionFeedback {
 export interface ContributionFeedbackHistoryEntry {
   action: ContributionFeedbackStatus | "cleared";
   note?: string;
+  evidence?: ContributionFeedbackEvidence;
   updatedBy: string;
   updatedByName: string;
   updatedAt: Date;

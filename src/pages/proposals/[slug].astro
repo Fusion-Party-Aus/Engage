@@ -16,7 +16,7 @@ import { NativeSelect } from '../../components/ui/native-select';
 import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { canRespondToContribution, getProposalDetail, isGovernanceResolution, listOutstandingDecisions } from '../../lib/store.ts';
+import { canRespondToContribution, canViewProposal, getProposalDetail, isGovernanceResolution, listOutstandingDecisions, normalizeProposalDoc, resolveContributionEvidenceMap } from '../../lib/store.ts';
 import { getProposalEligibility, type ParticipationEligibility } from '../../lib/branch-participation.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import type { ProposalStage } from '../../lib/types.ts';
@@ -70,10 +70,11 @@ const [
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
       db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
       db.collection('proposals')
-        .find({ space: proposal.space, proposalId: { $ne: proposal.proposalId } })
+        .find({ space: proposal.space, proposalId: { $ne: proposal.proposalId }, stage: { $ne: 'archived' } })
         .sort({ updatedAt: -1 })
-        .limit(4)
-        .toArray(),
+        .limit(12)
+        .toArray()
+        .then((rows) => rows.filter((row: any) => canViewProposal(normalizeProposalDoc(row), user)).slice(0, 4)),
       db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray(),
       user?.canParticipate && proposal.stage === 'decide'
         ? listOutstandingDecisions(db, user.memberId, user)
@@ -94,7 +95,7 @@ const ballotRevisionLabel = proposal?.ballotRevisionId
 const relatedBranchIds = proposal
   ? [...new Set([proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)))]
   : [];
-const [relatedBranches, allAmendmentRevisions] = await Promise.all([
+const [relatedBranches, allAmendmentRevisions, evidenceMap] = await Promise.all([
   relatedBranchIds.length
     ? db.collection('branches').find({ branchId: { $in: relatedBranchIds } }).toArray()
     : Promise.resolve([]),
@@ -104,7 +105,42 @@ const [relatedBranches, allAmendmentRevisions] = await Promise.all([
         .sort({ createdAt: 1 })
         .toArray()
     : Promise.resolve([]),
+  proposal && detail
+    ? resolveContributionEvidenceMap(db, proposal, detail.comments, user)
+    : Promise.resolve(new Map()),
 ]);
+
+const evidencePolicyPublic = Boolean(
+  policyRecord && ['published', 'withdrawn', 'superseded'].includes(String(policyRecord.publicationStatus ?? '')),
+);
+const evidenceOptions = proposal
+  ? [
+      ...revisions.map((revision: any, index: number) => ({
+        group: 'Proposal revisions',
+        value: `revision:${String(revision.revisionId)}`,
+        label: `${revisionDisplayLabel({ revisionId: String(revision.revisionId), createdAt: revision.createdAt, ordinal: revisions.length - index })}${revision.revisionId === proposal.ballotRevisionId ? ' (ballot wording)' : ''}`,
+      })),
+      ...amendmentRows.map((amendment: any) => ({
+        group: 'Amendments',
+        value: `amendment:${String(amendment.amendmentId)}`,
+        label: `${String(amendment.changes?.title ?? amendment.title ?? 'Amendment')} (${String(amendment.status ?? 'proposed')})`,
+      })),
+      ...(ballotResult
+        ? [{
+            group: 'Recorded decision',
+            value: `decision:${String(ballotResult.decisionEventId ?? proposal.proposalId)}`,
+            label: `Ballot outcome: ${String(ballotResult.result ?? 'recorded')}`,
+          }]
+        : []),
+      ...(policyRecord && (evidencePolicyPublic || user?.isStaff || user?.isAdmin)
+        ? [{
+            group: 'Policy registry',
+            value: `policy:${String(policyRecord.policyId)}`,
+            label: `${String(policyRecord.title ?? policyRecord.policyId)} (${String(policyRecord.publicationStatus ?? 'unpublished')})`,
+          }]
+        : []),
+    ]
+  : [];
 const branchNameFor = (branchId?: string) =>
   branchId ? String(relatedBranches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
 const eligibility: ParticipationEligibility | null = proposal
@@ -205,13 +241,17 @@ const isResolution = proposal ? isGovernanceResolution(proposal) : false;
 const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
 
 const policyStatusLabel = policyRecord
-  ? `${String(policyRecord.status ?? 'adopted')} · ${String(policyRecord.publicationStatus ?? 'unpublished')}`
-  : proposal?.stage === 'implement'
-    ? 'Pending ratification'
+  ? policyRecord.publicationStatus === 'unpublished'
+    ? 'Ratified · awaiting publication'
+    : `${String(policyRecord.status ?? 'adopted')} · ${String(policyRecord.publicationStatus ?? 'unpublished')}`
+  : ballotResult?.result === 'successful' || proposal?.stage === 'implement'
+    ? 'Awaiting ratification'
     : 'Not yet adopted';
 
 const resolutionStatusLabel = proposal?.supersededByProposalId
-  ? `Superseded by ${proposal.supersededByProposalId}`
+  ? supersededByProposal
+    ? `Superseded by ${supersededByProposal.proposalId}`
+    : 'Superseded'
   : proposal?.stage === 'archived'
     ? 'Archived'
     : proposal?.implementationNote
@@ -229,13 +269,13 @@ const ballotResultLabel = ballotResult
 const decisionChain = proposal
   ? [
       { label: 'Workflow stage', value: stageStepLabel(proposal.stage), href: '#proposal-brief', state: 'done' },
-      { label: 'Ballot wording', value: proposal.ballotRevisionId ? ballotRevisionLabel : 'Wording not yet locked', href: '#proposal-vote', state: proposal.ballotRevisionId ? 'done' : proposal.stage === 'decide' ? 'current' : 'pending' },
+      { label: 'Ballot wording', value: proposal.ballotRevisionId ? ballotRevisionLabel : 'Wording not yet locked', href: proposal.ballotRevisionId ? `#revision-${encodeURIComponent(String(proposal.ballotRevisionId))}` : '#proposal-vote', state: proposal.ballotRevisionId ? 'done' : proposal.stage === 'decide' ? 'current' : 'pending' },
       { label: 'Returning officer result', value: ballotResultLabel, href: ballotResult ? '#proposal-vote' : undefined, state: ballotResult ? 'done' : 'pending' },
       isResolution
         ? {
             label: 'Resolution outcome',
             value: resolutionStatusLabel,
-            href: undefined,
+            href: supersededByProposal ? `/proposals/${supersededByProposal.slug}/` : undefined,
             state:
               proposal.supersededByProposalId ||
               proposal.stage === 'archived' ||
@@ -247,7 +287,7 @@ const decisionChain = proposal
         : {
             label: 'Policy Registry',
             value: policyStatusLabel,
-            href: policyRecord ? `/policies/${encodeURIComponent(String(policyRecord.policyId))}/` : undefined,
+            href: evidencePolicyPublic && policyRecord ? `/policies/${encodeURIComponent(String(policyRecord.policyId))}/` : undefined,
             state: policyRecord?.publicationStatus === 'published' ? 'done' : policyRecord ? 'current' : 'pending',
           },
     ]
@@ -394,6 +434,12 @@ const initialsFor = (name: string) =>
 
           <h1 class="proposal-hero__title">{proposal.title}</h1>
           <p class="proposal-hero__summary">{proposal.summary}</p>
+          {proposal.stage === 'archived' && (
+            <div class="superseded-notice" role="status">
+              <strong>Archived record (read-only):</strong>{' '}
+              This proposal is no longer active for participation or voting. Historical wording and recorded outcomes remain visible for reference.
+            </div>
+          )}
           {proposal.supersededByProposalId && (
             <div class="superseded-notice">
               <strong>Superseded:</strong>{' '}
@@ -570,7 +616,7 @@ const initialsFor = (name: string) =>
               <dd>
                 {isResolution ? (
                   <strong>{resolutionStatusLabel}</strong>
-                ) : policyRecord ? (
+                ) : evidencePolicyPublic && policyRecord ? (
                   <a class="fact-link" href={`/policies/${encodeURIComponent(String(policyRecord.policyId))}/`}>
                     {policyStatusLabel} →
                   </a>
@@ -833,7 +879,7 @@ const initialsFor = (name: string) =>
                           ? 'info'
                           : 'warning';
                     return (
-                      <article class="amendment-card">
+                      <article class="amendment-card" id={`amendment-${String(amendment.amendmentId)}`}>
                         <div class="amendment-card__head">
                           <div class="amendment-card__title">
                             <span class="amendment-badge tabular">Amendment #{index + 1}</span>
@@ -1193,41 +1239,72 @@ const initialsFor = (name: string) =>
                           </div>
 
                           <div class="comment-feedback-slot" data-feedback-slot={c.commentId}>
-                            {c.feedback && (
-                              <div class="comment-feedback">
-                                <Badge variant={feedbackStatusVariant(c.feedback.status)}>
-                                  {feedbackStatusLabel(c.feedback.status)}
-                                </Badge>
-                                <div class="comment-feedback__copy">
-                                  {c.feedback.note && <p>{c.feedback.note}</p>}
-                                  <small>
-                                    Response by {c.feedback.updatedByName} ·{' '}
-                                    {new Date(c.feedback.updatedAt).toLocaleDateString('en-AU', {
-                                      day: 'numeric',
-                                      month: 'short',
-                                      year: 'numeric',
-                                    })}
-                                  </small>
+                            {c.feedback && (() => {
+                              const resolvedEvidence = c.feedback.evidence
+                                ? evidenceMap.get(`${c.feedback.evidence.kind}:${c.feedback.evidence.recordId}`)
+                                : undefined;
+                              return (
+                                <div class="comment-feedback">
+                                  <Badge variant={feedbackStatusVariant(c.feedback.status)}>
+                                    {feedbackStatusLabel(c.feedback.status)}
+                                  </Badge>
+                                  <div class="comment-feedback__copy">
+                                    {c.feedback.note && <p>{c.feedback.note}</p>}
+                                    {resolvedEvidence && (
+                                      <p class="comment-feedback__evidence">
+                                        <strong>Evidence:</strong>{' '}
+                                        {resolvedEvidence.href ? (
+                                          <a href={resolvedEvidence.href}>{resolvedEvidence.label}</a>
+                                        ) : (
+                                          <span>{resolvedEvidence.label}</span>
+                                        )}
+                                      </p>
+                                    )}
+                                    <small>
+                                      Response by {c.feedback.updatedByName} ·{' '}
+                                      {new Date(c.feedback.updatedAt).toLocaleDateString('en-AU', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })}
+                                    </small>
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                           </div>
 
                           {c.feedbackHistory && (c.feedbackHistory.length > 1 || (!c.feedback && c.feedbackHistory.length > 0)) && (
                             <details class="comment-feedback-history">
                               <summary>Response history ({c.feedbackHistory.length})</summary>
                               <ul>
-                                {c.feedbackHistory.map((entry) => (
-                                  <li>
-                                    <strong>{entry.action === 'cleared' ? 'Cleared' : feedbackStatusLabel(entry.action)}</strong>
-                                    {entry.note ? ` — ${entry.note}` : ''} · {entry.updatedByName} (
-                                    {new Date(entry.updatedAt).toLocaleDateString('en-AU', {
-                                      day: 'numeric',
-                                      month: 'short',
-                                      year: 'numeric',
-                                    })})
-                                  </li>
-                                ))}
+                                {c.feedbackHistory.map((entry) => {
+                                  const histEvidence = entry.evidence
+                                    ? evidenceMap.get(`${entry.evidence.kind}:${entry.evidence.recordId}`)
+                                    : undefined;
+                                  return (
+                                    <li>
+                                      <strong>{entry.action === 'cleared' ? 'Cleared' : feedbackStatusLabel(entry.action)}</strong>
+                                      {entry.note ? ` — ${entry.note}` : ''}
+                                      {histEvidence ? (
+                                        <>
+                                          {' · '}
+                                          {histEvidence.href ? (
+                                            <a href={histEvidence.href}>{histEvidence.label}</a>
+                                          ) : (
+                                            <span>{histEvidence.label}</span>
+                                          )}
+                                        </>
+                                      ) : null}
+                                      {' · '}{entry.updatedByName} (
+                                      {new Date(entry.updatedAt).toLocaleDateString('en-AU', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })})
+                                    </li>
+                                  );
+                                })}
                               </ul>
                             </details>
                           )}
@@ -1262,6 +1339,22 @@ const initialsFor = (name: string) =>
                                   />
                                   <Button type="submit" variant="outline" size="sm" className="comment-feedback-save">Save</Button>
                                 </div>
+                                {evidenceOptions.length > 0 && (
+                                  <div class="comment-feedback-form__evidence">
+                                    <label for={`feedback-evidence-${c.commentId}`} class="sr-only">Supporting evidence (optional)</label>
+                                    <NativeSelect
+                                      id={`feedback-evidence-${c.commentId}`}
+                                      name="evidenceRef"
+                                      defaultValue={c.feedback?.evidence ? `${c.feedback.evidence.kind}:${c.feedback.evidence.recordId}` : ''}
+                                      size="sm"
+                                    >
+                                      <option value="">Supporting evidence (optional) — None</option>
+                                      {evidenceOptions.map((opt) => (
+                                        <option value={opt.value}>{opt.group}: {opt.label}</option>
+                                      ))}
+                                    </NativeSelect>
+                                  </div>
+                                )}
                                 <span class="comment-feedback-status" role="status" aria-live="polite"></span>
                               </form>
                             </details>
@@ -1298,7 +1391,7 @@ const initialsFor = (name: string) =>
                       return JSON.stringify(before) === JSON.stringify(after) ? [] : [{ field, before, after }];
                     }) : [];
                     return (
-                      <li class="revision-row">
+                      <li class="revision-row" id={`revision-${String(revision.revisionId)}`}>
                         <div class="revision-row__main">
                           <div class="revision-row__title">
                             <strong>{revisionDisplayLabel({ revisionId: String(revision.revisionId), createdAt: revision.createdAt, ordinal: revisions.length - index })}</strong>
@@ -1844,13 +1937,14 @@ const initialsFor = (name: string) =>
       const fields = new FormData(form);
       const status = String(fields.get('status') ?? 'considered');
       const note = String(fields.get('note') ?? '').trim();
+      const evidenceRef = String(fields.get('evidenceRef') ?? '').trim();
       saveBtn.disabled = true;
       if (statusMsg) statusMsg.textContent = 'Saving...';
       try {
         const res = await fetch('/api/comments', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ commentId, status, note }),
+          body: JSON.stringify({ commentId, status, note, evidenceRef }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not save response.');
@@ -1858,6 +1952,7 @@ const initialsFor = (name: string) =>
         const drawer = form.closest('details');
         const selectEl = form.querySelector<HTMLSelectElement>('select[name="status"]');
         const noteInput = form.querySelector<HTMLInputElement>('input[name="note"]');
+        const evidenceSelect = form.querySelector<HTMLSelectElement>('select[name="evidenceRef"]');
         const summaryEl = drawer?.querySelector<HTMLElement>('summary');
         if (slot) {
           if (!data.feedback) {
@@ -1865,6 +1960,7 @@ const initialsFor = (name: string) =>
             selectEl?.querySelector('option[value="clear"]')?.remove();
             if (selectEl) selectEl.value = 'considered';
             if (noteInput) noteInput.value = '';
+            if (evidenceSelect) evidenceSelect.value = '';
             if (summaryEl) summaryEl.textContent = 'Record response';
           } else {
             const labelMap: Record<string, string> = {
@@ -1883,11 +1979,28 @@ const initialsFor = (name: string) =>
             const label = labelMap[statusKey] ?? 'Considered';
             const variantClasses = badgeClassMap[statusKey] ?? badgeClassMap.declined;
             const noteHtml = data.feedback.note ? `<p>${escapeHtmlClient(String(data.feedback.note))}</p>` : '';
+            const ev = data.feedback.evidence;
+            let evidenceHtml = '';
+            if (ev && ev.recordId) {
+              const evHref =
+                ev.kind === 'amendment'
+                  ? `#amendment-${encodeURIComponent(String(ev.recordId))}`
+                  : ev.kind === 'revision'
+                    ? `#revision-${encodeURIComponent(String(ev.recordId))}`
+                    : ev.kind === 'decision'
+                      ? '#proposal-vote'
+                      : ev.kind === 'policy' && String(ev.label ?? '').startsWith('Adopted policy:')
+                        ? `/policies/${encodeURIComponent(String(ev.recordId))}/`
+                        : '';
+              const evLabel = escapeHtmlClient(String(ev.label || ev.recordId));
+              evidenceHtml = `<p class="comment-feedback__evidence"><strong>Evidence:</strong> ${evHref ? `<a href="${evHref}">${evLabel}</a>` : `<span>${evLabel}</span>`}</p>`;
+            }
             slot.innerHTML = `
               <div class="comment-feedback">
                 <span data-slot="badge" class="inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${variantClasses}">${escapeHtmlClient(label)}</span>
                 <div class="comment-feedback__copy">
                   ${noteHtml}
+                  ${evidenceHtml}
                   <small>Response by ${escapeHtmlClient(String(data.feedback.updatedByName || 'Author'))} · just now</small>
                 </div>
               </div>
@@ -3731,6 +3844,17 @@ const initialsFor = (name: string) =>
     margin: 0 0 0.2rem;
     font-size: 0.86rem;
     color: var(--horizon-purple-deep);
+  }
+
+  .comment-feedback-slot :global(.comment-feedback__evidence a) {
+    color: var(--horizon-purple);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .comment-feedback-form__evidence {
+    margin-top: 0.45rem;
   }
 
   .comment-feedback-slot :global(.comment-feedback__copy small) {
