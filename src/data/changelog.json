@@ -1,11 +1,27 @@
 [
   {
-    "hash": "8e513e0",
+    "hash": "2a36858",
     "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "research",
-    "summary": "Validate governance patterns with REA runtime evidence"
+    "type": "feat",
+    "category": "feature",
+    "scope": "reports",
+    "summary": "Add on-demand proposal PDF report generation"
+  },
+  {
+    "hash": "db42dff",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Overhaul proposal workspace with progressive disclosure and feedback"
+  },
+  {
+    "hash": "72fa6db",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Redesign navigation, overview, ballots and reporting IA"
   },
   {
     "hash": "3be9aba",
@@ -633,21 +649,5 @@
     "category": "improvement",
     "scope": "server",
     "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
-  },
-  {
-    "hash": "3512e0a",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "workspaces",
-    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
-  },
-  {
-    "hash": "f58e150",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
   }
 ]
