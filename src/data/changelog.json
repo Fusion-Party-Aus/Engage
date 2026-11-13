@@ -1,5 +1,21 @@
 [
   {
+    "hash": "4de4408",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "deploy",
+    "summary": "Stop repeated Coolify deployments after health failures"
+  },
+  {
+    "hash": "d9f9e02",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Update changelog snapshot"
+  },
+  {
     "hash": "3f82960",
     "date": "2026-11-13",
     "type": "test",
@@ -633,21 +649,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
-  },
-  {
-    "hash": "31e34df",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
-  },
-  {
-    "hash": "ac9bb41",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "deploy",
-    "summary": "Automate production deployment gated on staging health"
   }
 ]
