@@ -469,6 +469,13 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
               {(query || stageFilter !== 'all' || branchFilter !== 'all') && (
                 <Button href="/admin/proposals/" size="sm" variant="ghost">Reset</Button>
               )}
+              <Button
+                href={`/api/admin/reports/proposals.csv?stage=${encodeURIComponent(stageFilter)}&branch=${encodeURIComponent(branchFilter)}&q=${encodeURIComponent(query)}`}
+                size="sm"
+                variant="outline"
+              >
+                Export CSV
+              </Button>
             </div>
           </form>
         </div>

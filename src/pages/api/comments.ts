@@ -5,6 +5,7 @@ import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import {
   addComment,
   deleteComment,
+  setCommentFeedback,
   toggleUpvoteComment,
 } from "../../lib/store.ts";
 
@@ -89,5 +90,32 @@ export const DELETE: APIRoute = async ({ request, url, locals }) => {
       },
       { status: 400 },
     );
+  }
+};
+
+export const PUT: APIRoute = async ({ request, locals }) => {
+  const env = runtimeEnv(locals);
+  const user = await getSessionUser(request, env);
+  if (!user)
+    return Response.json({ error: "Sign in required." }, { status: 401 });
+
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    const db = await getDatabase(env);
+    const gate = await requireLegalAcceptance(db, user, env);
+    if (gate) return gate;
+    const result = await setCommentFeedback(db, user, body);
+    return Response.json(result);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Could not save contribution outcome.";
+    const status = message.startsWith("Only administrators")
+      ? 403
+      : message.endsWith("not found.")
+        ? 404
+        : 400;
+    return Response.json({ error: message }, { status });
   }
 };

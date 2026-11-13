@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { getProposalDetail } from '../../../lib/store.ts';
+import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
 import PortableText from '../../../components/PortableText.astro';
@@ -80,14 +80,23 @@ for (const amendment of amendmentRows) {
   const current = amendment.revisionHistory.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
 }
-const [ballotResult, policy, relatedProposals, branches] = proposal
+const [ballotResult, policy, relatedProposals, branches, visibleOtherProposals] = proposal
   ? await Promise.all([
       db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
       db.collection('proposals').find({ space: proposal.space, proposalId: { $ne: proposal.proposalId } }).limit(4).toArray(),
       db.collection('branches').find({}).sort({ name: 1 }).toArray(),
+      listProposals(db, { includeArchived: true, user }),
     ])
-  : [null, null, [], []];
+  : [null, null, [], [], []];
+const allOtherProposals = proposal
+  ? visibleOtherProposals.filter(
+      (other) =>
+        other.proposalId !== proposal.proposalId &&
+        (other.stage !== 'archived' || other.proposalId === proposal.supersededByProposalId),
+    )
+  : [];
+const isResolution = Boolean(proposal && isGovernanceResolution(proposal));
 
 const branchNameFor = (branchId?: string) =>
   branchId ? String(branches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
@@ -149,12 +158,35 @@ const adminChain = proposal
       { label: 'Proposal', value: stageLabel(proposal.stage), state: 'done', href: '#record-decision' },
       { label: 'Ballot wording', value: proposal.ballotRevisionId ? ballotState : 'Wording not bound', state: proposal.ballotRevisionId ? 'done' : 'pending', href: '#record-decision' },
       { label: 'Decision outcome', value: ballotResult ? `${String(ballotResult.result)}${ballotResult.recordedAt ? ` · ${formatDate(ballotResult.recordedAt)}` : ''}` : 'Not recorded', state: ballotResult ? 'done' : 'pending', href: '#record-decision' },
-      {
-        label: 'Policy registry',
-        value: policyState,
-        state: policy?.publicationStatus === 'published' ? 'done' : policy ? 'current' : 'pending',
-        href: policy ? `/policies/${encodeURIComponent(String(policy.policyId))}/` : '#record-decision',
-      },
+      isResolution
+        ? {
+            label: 'Resolution outcome',
+            value: proposal.supersededByProposalId
+              ? `Superseded by ${proposal.supersededByProposalId}`
+              : proposal.stage === 'archived'
+                ? 'Archived'
+                : proposal.implementationNote
+                  ? 'Outcome recorded'
+                  : ballotResult
+                    ? `Ballot ${String(ballotResult.result ?? 'recorded')}`
+                    : proposal.stage === 'implement'
+                      ? 'In implementation'
+                      : 'Pending decision',
+            state:
+              proposal.supersededByProposalId ||
+              proposal.stage === 'archived' ||
+              proposal.implementationNote ||
+              ballotResult
+                ? 'done'
+                : 'pending',
+            href: '#outcome-notes',
+          }
+        : {
+            label: 'Policy registry',
+            value: policyState,
+            state: policy?.publicationStatus === 'published' ? 'done' : policy ? 'current' : 'pending',
+            href: policy ? `/policies/${encodeURIComponent(String(policy.policyId))}/` : '#record-decision',
+          },
     ]
   : [];
 
@@ -311,6 +343,11 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
               Edit wording &amp; metadata
             </Button>
           )}
+          {canManageProposal && (
+            <Button href={`/admin/proposals/?revise=${encodeURIComponent(proposal.proposalId)}#create-policy`} variant="outline" size="sm">
+              Revise as new {isResolution ? 'motion' : 'proposal'}
+            </Button>
+          )}
           <Button href={publicUrl} variant="outline" size="sm"><FileText />Public view</Button>
         </div>
       </div>
@@ -320,7 +357,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
         <div class="project-header__badges">
           <span class="tabular project-id">{proposal.proposalId}</span>
           <Badge variant={stageTone(proposal.stage)}>{stageLabel(proposal.stage)}</Badge>
-          <Badge variant="outline">{proposal.kind === 'resolution' || proposal.proposalId.startsWith('GOV-') ? 'Governance resolution' : 'Policy proposal'}</Badge>
+          <Badge variant="outline">{isResolution ? 'Governance resolution' : 'Policy proposal'}</Badge>
           <Badge variant="muted">{proposal.space}</Badge>
         </div>
         <h1>{proposal.title}</h1>
@@ -585,6 +622,70 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                   Ballot binding and outcome controls require national administrator access, or delegated branch authority where governance authority and jurisdiction match your branch.
                 </p>
               )}
+
+              {canManageProposal && (
+                <div id="outcome-notes" class="admin-action-box">
+                  <div class="admin-action-box__head">
+                    <ListChecks className="size-4" aria-hidden="true" />
+                    <strong>Outcome notes, supersession &amp; archiving</strong>
+                  </div>
+                  <p class="admin-inline-note">
+                    Record implementation or decision outcomes, link a successor {isResolution ? 'motion' : 'proposal'} if superseded, or archive resolved records without altering historical votes or revisions. Linking a successor records supersession only — it does not automatically archive this record; use Archive if you also want to close and hide it from general member lists.
+                  </p>
+                  <form class="proposal-outcome-form grid gap-3" data-proposal-id={proposal.proposalId}>
+                    <Field label="Implementation / decision outcome note" htmlFor={`outcome-note-${proposal.proposalId}`}>
+                      <Textarea
+                        id={`outcome-note-${proposal.proposalId}`}
+                        name="implementationNote"
+                        rows={2}
+                        maxLength={1000}
+                        defaultValue={proposal.implementationNote ?? ''}
+                        placeholder="Summarise the recorded decision, implementation steps, or reason for closing."
+                      />
+                    </Field>
+                    <div class="admin-form-grid">
+                      <Field label="Superseded by proposal ID (optional)" htmlFor={`superseded-by-${proposal.proposalId}`}>
+                        <Input
+                          id={`superseded-by-${proposal.proposalId}`}
+                          name="supersededByProposalId"
+                          list={`superseded-list-${proposal.proposalId}`}
+                          defaultValue={proposal.supersededByProposalId ?? ''}
+                          placeholder="Search or enter proposal ID (leave blank to clear)"
+                        />
+                        <datalist id={`superseded-list-${proposal.proposalId}`}>
+                          {allOtherProposals.map((other: any) => (
+                            <option value={other.proposalId}>{other.title}</option>
+                          ))}
+                        </datalist>
+                      </Field>
+                      <Field label="Supersession note (optional)" htmlFor={`superseded-note-${proposal.proposalId}`}>
+                        <Input
+                          id={`superseded-note-${proposal.proposalId}`}
+                          name="supersededByNote"
+                          maxLength={500}
+                          defaultValue={proposal.supersededByNote ?? ''}
+                          placeholder="e.g. Replaced by updated 2026 motion"
+                        />
+                      </Field>
+                    </div>
+                    <div class="admin-actions">
+                      <Button size="sm" type="submit">Save outcome &amp; status</Button>
+                      {proposal.stage !== 'archived' && (
+                        <Button
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                          data-archive-proposal={proposal.proposalId}
+                          data-title={proposal.title}
+                        >
+                          Archive {isResolution ? 'motion' : 'proposal'}
+                        </Button>
+                      )}
+                      <span class="admin-status" role="status" aria-live="polite"></span>
+                    </div>
+                  </form>
+                </div>
+              )}
             </div>
           </section>
 
@@ -773,7 +874,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
             <dl class="project-rail-props">
               <div>
                 <dt><Tag className="size-3.5" aria-hidden="true" />Classification</dt>
-                <dd><Badge variant="outline">{proposal.kind === 'resolution' || proposal.proposalId.startsWith('GOV-') ? 'Resolution' : 'Policy'}</Badge></dd>
+                <dd><Badge variant="outline">{isResolution ? 'Resolution' : 'Policy'}</Badge></dd>
               </div>
               <div>
                 <dt><User className="size-3.5" aria-hidden="true" />Sponsor / Author</dt>
@@ -950,6 +1051,68 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
         select.value = currentStage;
       } finally {
         select.disabled = false;
+      }
+    });
+  });
+
+  // Inline outcome notes, supersession & archive controls
+  document.querySelectorAll<HTMLFormElement>('.proposal-outcome-form').forEach((form) => {
+    const proposalId = form.dataset.proposalId;
+    const status = form.querySelector<HTMLElement>('[role="status"]');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!proposalId || !form.reportValidity()) return;
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (button) button.disabled = true;
+      try {
+        const fields = new FormData(form);
+        const res = await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            implementationNote: String(fields.get('implementationNote') ?? ''),
+            supersededByProposalId: String(fields.get('supersededByProposalId') ?? ''),
+            supersededByNote: String(fields.get('supersededByNote') ?? ''),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not save outcome details.');
+        if (status) status.textContent = 'Outcome details saved.';
+        location.reload();
+      } catch (err: any) {
+        if (status) status.textContent = err?.message || 'Could not save outcome details.';
+        if (button) button.disabled = false;
+      }
+    });
+
+    const archiveBtn = form.querySelector<HTMLButtonElement>('[data-archive-proposal]');
+    archiveBtn?.addEventListener('click', async () => {
+      if (!proposalId) return;
+      const title = archiveBtn.dataset.title || proposalId;
+      if (!confirm(`Archive "${title}"? All cast votes, comments, and revision history will be preserved, and it will be hidden from general member lists.`)) {
+        return;
+      }
+      archiveBtn.disabled = true;
+      try {
+        const fields = new FormData(form);
+        const res = await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            stage: 'archived',
+            implementationNote: String(fields.get('implementationNote') ?? ''),
+            supersededByProposalId: String(fields.get('supersededByProposalId') ?? ''),
+            supersededByNote: String(fields.get('supersededByNote') ?? ''),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not archive record.');
+        location.reload();
+      } catch (err: any) {
+        if (status) status.textContent = err?.message || 'Could not archive record.';
+        archiveBtn.disabled = false;
       }
     });
   });

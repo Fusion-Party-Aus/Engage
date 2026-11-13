@@ -15,7 +15,7 @@ import { NativeSelect } from '../../components/ui/native-select';
 import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { getProposalDetail, listOutstandingDecisions } from '../../lib/store.ts';
+import { canRespondToContribution, getProposalDetail, isGovernanceResolution, listOutstandingDecisions } from '../../lib/store.ts';
 import { getProposalEligibility, type ParticipationEligibility } from '../../lib/branch-participation.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import type { ProposalStage } from '../../lib/types.ts';
@@ -33,6 +33,27 @@ const detail = await getProposalDetail(db, Astro.params.slug ?? '', user);
 if (!detail) {
   Astro.response.status = 404;
 }
+const supersededByDetail = detail?.proposal?.supersededByProposalId
+  ? await getProposalDetail(db, detail.proposal.supersededByProposalId, user)
+  : null;
+const supersededByProposal = supersededByDetail?.proposal ?? null;
+const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
+const feedbackStatusLabel = (status: string) =>
+  status === 'incorporated'
+    ? 'Incorporated'
+    : status === 'considered'
+      ? 'Considered'
+      : status === 'deferred'
+        ? 'Deferred'
+        : 'Declined';
+const feedbackStatusVariant = (status: string) =>
+  status === 'incorporated'
+    ? ('success' as const)
+    : status === 'considered'
+      ? ('info' as const)
+      : status === 'deferred'
+        ? ('warning' as const)
+        : ('outline' as const);
 
 const proposal = detail?.proposal;
 const [
@@ -145,7 +166,9 @@ const stageGuideText = (stage: ProposalStage) => {
     return 'Open for member discussion, scrutiny, and formal wording amendments before a ballot is opened.';
   }
   if (stage === 'implement') {
-    return 'Ballot has closed. Recorded decisions undergo constitutional ratification before publication in the Policy Registry.';
+    return isResolution
+      ? 'Ballot has closed. Recorded governance decisions are documented and implemented by the relevant branch or committee.'
+      : 'Ballot has closed. Recorded decisions undergo constitutional ratification before publication in the Policy Registry.';
   }
   return 'Initial idea stage. Open for early feedback and refinement before advancing to formal deliberation.';
 };
@@ -176,9 +199,7 @@ const stanceCounts = {
 
 const votes = proposal?.votes ?? { approve: 0, abstain: 0, reject: 0, total: 0 };
 
-const isResolution = proposal
-  ? proposal.kind === 'resolution' || proposal.proposalId.toUpperCase().startsWith('GOV-')
-  : false;
+const isResolution = proposal ? isGovernanceResolution(proposal) : false;
 
 const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
 
@@ -187,6 +208,18 @@ const policyStatusLabel = policyRecord
   : proposal?.stage === 'implement'
     ? 'Pending ratification'
     : 'Not yet adopted';
+
+const resolutionStatusLabel = proposal?.supersededByProposalId
+  ? `Superseded by ${proposal.supersededByProposalId}`
+  : proposal?.stage === 'archived'
+    ? 'Archived'
+    : proposal?.implementationNote
+      ? 'Outcome recorded'
+      : ballotResult
+        ? `Ballot ${String(ballotResult.result ?? 'recorded')}`
+        : proposal?.stage === 'implement'
+          ? 'In implementation'
+          : 'Pending decision';
 
 const ballotResultLabel = ballotResult
   ? `${String(ballotResult.result ?? 'Recorded')}${ballotResult.recordedAt ? ` · ${new Date(ballotResult.recordedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}` : ''}`
@@ -197,12 +230,25 @@ const decisionChain = proposal
       { label: 'Workflow stage', value: stageStepLabel(proposal.stage), href: '#proposal-brief', state: 'done' },
       { label: 'Ballot wording', value: proposal.ballotRevisionId ? ballotRevisionLabel : 'Wording not yet locked', href: '#proposal-vote', state: proposal.ballotRevisionId ? 'done' : proposal.stage === 'decide' ? 'current' : 'pending' },
       { label: 'Returning officer result', value: ballotResultLabel, href: ballotResult ? '#proposal-vote' : undefined, state: ballotResult ? 'done' : 'pending' },
-      {
-        label: 'Policy Registry',
-        value: policyStatusLabel,
-        href: policyRecord ? `/policies/${encodeURIComponent(String(policyRecord.policyId))}/` : undefined,
-        state: policyRecord?.publicationStatus === 'published' ? 'done' : policyRecord ? 'current' : 'pending',
-      },
+      isResolution
+        ? {
+            label: 'Resolution outcome',
+            value: resolutionStatusLabel,
+            href: undefined,
+            state:
+              proposal.supersededByProposalId ||
+              proposal.stage === 'archived' ||
+              proposal.implementationNote ||
+              ballotResult
+                ? 'done'
+                : 'pending',
+          }
+        : {
+            label: 'Policy Registry',
+            value: policyStatusLabel,
+            href: policyRecord ? `/policies/${encodeURIComponent(String(policyRecord.policyId))}/` : undefined,
+            state: policyRecord?.publicationStatus === 'published' ? 'done' : policyRecord ? 'current' : 'pending',
+          },
     ]
   : [];
 
@@ -347,6 +393,20 @@ const initialsFor = (name: string) =>
 
           <h1 class="proposal-hero__title">{proposal.title}</h1>
           <p class="proposal-hero__summary">{proposal.summary}</p>
+          {proposal.supersededByProposalId && (
+            <div class="superseded-notice">
+              <strong>Superseded:</strong>{' '}
+              {supersededByProposal ? (
+                <>
+                  This record has been superseded by{' '}
+                  <a href={`/proposals/${supersededByProposal.slug}/`}>{supersededByProposal.proposalId} · {supersededByProposal.title}</a>.
+                </>
+              ) : (
+                <>This record has been superseded.</>
+              )}
+              {proposal.supersededByNote && <span> {proposal.supersededByNote}</span>}
+            </div>
+          )}
 
 
           <!-- Immediate Next Action Banner (Zero-Friction Entry Point) -->
@@ -505,9 +565,11 @@ const initialsFor = (name: string) =>
               </dd>
             </div>
             <div class="governance-fact">
-              <dt>Policy Registry</dt>
+              <dt>{isResolution ? 'Resolution outcome' : 'Policy Registry'}</dt>
               <dd>
-                {policyRecord ? (
+                {isResolution ? (
+                  <strong>{resolutionStatusLabel}</strong>
+                ) : policyRecord ? (
                   <a class="fact-link" href={`/policies/${encodeURIComponent(String(policyRecord.policyId))}/`}>
                     {policyStatusLabel} →
                   </a>
@@ -790,6 +852,11 @@ const initialsFor = (name: string) =>
                             This amendment overlaps with wording changed since its base revision. An administrator must resolve the conflict before it can be applied.
                           </p>
                         )}
+                        {amendment.resolution?.reason && (
+                          <p class="amendment-resolution-note">
+                            <strong>Review note ({amendment.resolution.outcome}):</strong> {amendment.resolution.reason}
+                          </p>
+                        )}
 
                         <div class="amendment-card__body">
                           {Object.entries(amendment.changes ?? {}).map(([field, value]: [string, any]) => (
@@ -885,23 +952,35 @@ const initialsFor = (name: string) =>
                   </p>
                 </div>
 
-                <!-- Stance Filter Pills -->
-                <div class="stance-filters" role="group" aria-label="Filter contributions by stance">
-                  <button type="button" class="stance-pill is-active" data-stance="all" aria-pressed="true">
-                    All <span class="tabular">{stanceCounts.all}</span>
-                  </button>
-                  <button type="button" class="stance-pill" data-stance="support" aria-pressed="false">
-                    <ThumbsUp aria-hidden="true" className="size-3.5" /> Support <span class="tabular">{stanceCounts.support}</span>
-                  </button>
-                  <button type="button" class="stance-pill" data-stance="concern" aria-pressed="false">
-                    <AlertCircle aria-hidden="true" className="size-3.5" /> Concern <span class="tabular">{stanceCounts.concern}</span>
-                  </button>
-                  <button type="button" class="stance-pill" data-stance="amendment" aria-pressed="false">
-                    <PenLine aria-hidden="true" className="size-3.5" /> Wording <span class="tabular">{stanceCounts.amendment}</span>
-                  </button>
-                  <button type="button" class="stance-pill" data-stance="comment" aria-pressed="false">
-                    <MessageCircle aria-hidden="true" className="size-3.5" /> Comment <span class="tabular">{stanceCounts.comment}</span>
-                  </button>
+                <!-- Stance Filter Pills + Sort -->
+                <div class="deliberation-controls">
+                  <div class="stance-filters" role="group" aria-label="Filter contributions by stance">
+                    <button type="button" class="stance-pill is-active" data-stance="all" aria-pressed="true">
+                      All <span class="tabular">{stanceCounts.all}</span>
+                    </button>
+                    <button type="button" class="stance-pill" data-stance="support" aria-pressed="false">
+                      <ThumbsUp aria-hidden="true" className="size-3.5" /> Support <span class="tabular">{stanceCounts.support}</span>
+                    </button>
+                    <button type="button" class="stance-pill" data-stance="concern" aria-pressed="false">
+                      <AlertCircle aria-hidden="true" className="size-3.5" /> Concern <span class="tabular">{stanceCounts.concern}</span>
+                    </button>
+                    <button type="button" class="stance-pill" data-stance="amendment" aria-pressed="false">
+                      <PenLine aria-hidden="true" className="size-3.5" /> Wording <span class="tabular">{stanceCounts.amendment}</span>
+                    </button>
+                    <button type="button" class="stance-pill" data-stance="comment" aria-pressed="false">
+                      <MessageCircle aria-hidden="true" className="size-3.5" /> Comment <span class="tabular">{stanceCounts.comment}</span>
+                    </button>
+                  </div>
+                  {comments.length > 1 && (
+                    <div class="comment-sort">
+                      <label for="comment-sort-select" class="sr-only">Sort contributions</label>
+                      <select id="comment-sort-select" data-comment-sort>
+                        <option value="top">Top endorsed</option>
+                        <option value="newest">Newest first</option>
+                        <option value="oldest" selected>Oldest first</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -932,98 +1011,53 @@ const initialsFor = (name: string) =>
                 </div>
               )}
 
-              <!-- Contributions Thread -->
-              <div id="comments-list" class="comments-thread">
-                {comments.length === 0 ? (
-                  <div class="empty-box">
-                    <p>No member contributions yet. Share the first perspective below.</p>
-                  </div>
-                ) : (
-                  comments.map((c) => {
-                    const isAuthor = user && c.memberId === user.memberId;
-                    const canDelete = isAuthor || user?.isStaff;
-                    const hasEndorsed = user && c.upvotes.includes(user.memberId);
-                    return (
-                      <article class="comment-card" data-stance={c.stance} data-comment-id={c.commentId}>
-                        <span class="comment-avatar" aria-hidden="true">{initialsFor(c.authorName || 'Member')}</span>
-                        <div class="comment-box">
-                          <div class="comment-card__head">
-                            <div class="comment-author__meta">
-                              <strong class="author-name">{c.authorName}</strong>
-                              <Badge variant={c.stance === 'support' ? 'success' : c.stance === 'concern' ? 'destructive' : c.stance === 'amendment' ? 'warning' : 'muted'}>
-                                {c.stance === 'amendment' ? 'Wording suggestion' : c.stance[0]!.toUpperCase() + c.stance.slice(1)}
-                              </Badge>
-                              <time class="tabular comment-date" datetime={new Date(c.createdAt).toISOString()}>
-                                {new Date(c.createdAt).toLocaleDateString('en-AU', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                })}
-                              </time>
-                            </div>
-
-                            <div class="comment-card__actions">
-                              <button
-                                type="button"
-                                class:list={['endorse-btn', { 'is-endorsed': hasEndorsed }]}
-                                data-endorse-id={c.commentId}
-                                disabled={!user?.canParticipate}
-                                title={user?.canParticipate ? 'Endorse contribution' : 'Sign in to endorse'}
-                              >
-                                <ThumbsUp aria-hidden="true" className="size-3" />
-                                <span>Endorse</span>
-                                <span class="endorse-count tabular">{c.upvotes.length}</span>
-                              </button>
-
-                              {canDelete && (
-                                <button
-                                  type="button"
-                                  class="delete-btn"
-                                  data-delete-comment={c.commentId}
-                                >
-                                  Delete
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          <div class="comment-card__body">
-                            <p>{c.body}</p>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })
-                )}
-              </div>
-
-              <!-- Contribution Input Form -->
+              <!-- Reddit-style Top Contribution Composer -->
               {user?.canParticipate ? (
-                <form id="comment-form" class="comment-form" data-proposal-id={proposal.proposalId}>
-                  <div class="comment-form__top">
-                    <span class="comment-form__label">Add your contribution</span>
-                    <div class="stance-radio-group" role="radiogroup" aria-label="Contribution stance">
-                      <label class="stance-label stance-label--support">
-                        <input type="radio" name="stance" value="support" />
-                        <span><Check aria-hidden="true" className="size-3.5" /> Support</span>
-                      </label>
-                      <label class="stance-label stance-label--concern">
-                        <input type="radio" name="stance" value="concern" />
-                        <span><AlertCircle aria-hidden="true" className="size-3.5" /> Concern</span>
-                      </label>
-                      <label class="stance-label stance-label--amendment">
-                        <input type="radio" name="stance" value="amendment" />
-                        <span><PenLine aria-hidden="true" className="size-3.5" /> Wording suggestion</span>
-                      </label>
-                      <label class="stance-label stance-label--comment">
-                        <input type="radio" name="stance" value="comment" checked />
-                        <span><MessageCircle aria-hidden="true" className="size-3.5" /> Comment</span>
-                      </label>
+                <form id="comment-form" class="comment-composer" data-proposal-id={proposal.proposalId}>
+                  <div class="comment-composer__box">
+                    <label for="comment-body-input" class="sr-only">Join the discussion</label>
+                    <textarea
+                      id="comment-body-input"
+                      name="body"
+                      required
+                      minlength={5}
+                      maxlength={4000}
+                      rows={3}
+                      placeholder="Join the conversation — share support, raise an implementation concern, or suggest wording..."
+                    ></textarea>
+
+                    <div class="comment-composer__toolbar">
+                      <div class="stance-radio-group" role="radiogroup" aria-label="Contribution stance">
+                        <label class="stance-label stance-label--comment">
+                          <input type="radio" name="stance" value="comment" checked />
+                          <span><MessageCircle aria-hidden="true" className="size-3.5" /> Comment</span>
+                        </label>
+                        <label class="stance-label stance-label--support">
+                          <input type="radio" name="stance" value="support" />
+                          <span><Check aria-hidden="true" className="size-3.5" /> Support</span>
+                        </label>
+                        <label class="stance-label stance-label--concern">
+                          <input type="radio" name="stance" value="concern" />
+                          <span><AlertCircle aria-hidden="true" className="size-3.5" /> Concern</span>
+                        </label>
+                        <label class="stance-label stance-label--amendment">
+                          <input type="radio" name="stance" value="amendment" />
+                          <span><PenLine aria-hidden="true" className="size-3.5" /> Wording</span>
+                        </label>
+                      </div>
+
+                      <div class="comment-composer__submit">
+                        <span id="comment-char-count" class="comment-char-count tabular">0 / 4000</span>
+                        <span id="comment-status-msg" class="tabular form-status" role="status" aria-live="polite"></span>
+                        <Button type="submit" size="sm" id="comment-submit-btn">
+                          Post
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
                   <div class="stance-starters" aria-label="Quick stance starters">
-                    <span class="stance-starters__hint">Quick start:</span>
+                    <span class="stance-starters__hint">Prompts:</span>
                     <button
                       type="button"
                       class="starter-chip"
@@ -1057,25 +1091,6 @@ const initialsFor = (name: string) =>
                       Clarifying question…
                     </button>
                   </div>
-
-                  <Field label="Your contribution" htmlFor="comment-body-input" className="sr-only-label">
-                    <Textarea
-                      id="comment-body-input"
-                      name="body"
-                      required
-                      minLength={5}
-                      maxLength={4000}
-                      rows={3}
-                      placeholder="Share constructive analysis, raise an implementation concern, or propose improved wording..."
-                    />
-                  </Field>
-
-                  <div class="comment-form__actions">
-                    <span id="comment-status-msg" class="tabular form-status" role="status" aria-live="polite"></span>
-                    <Button type="submit" size="sm" id="comment-submit-btn">
-                      Post contribution
-                    </Button>
-                  </div>
                 </form>
               ) : user ? (
                 <div class="participation-notice">
@@ -1103,6 +1118,156 @@ const initialsFor = (name: string) =>
                   </Button>
                 </div>
               )}
+
+              <!-- Contributions Thread -->
+              <div id="comments-list" class="comments-thread">
+                {comments.length === 0 ? (
+                  <div class="empty-box">
+                    <p>No member contributions yet. Share the first perspective below.</p>
+                  </div>
+                ) : (
+                  comments.map((c) => {
+                    const isAuthor = user && c.memberId === user.memberId;
+                    const canDelete = isAuthor || user?.isStaff;
+                    const hasEndorsed = user && c.upvotes.includes(user.memberId);
+                    return (
+                      <article
+                        class="comment-card"
+                        data-stance={c.stance}
+                        data-comment-id={c.commentId}
+                        data-upvotes={c.upvotes.length}
+                        data-created-at={new Date(c.createdAt).getTime()}
+                      >
+                        <span class="comment-avatar" aria-hidden="true">{initialsFor(c.authorName || 'Member')}</span>
+                        <div class="comment-box">
+                          <div class="comment-card__head">
+                            <div class="comment-author__meta">
+                              <strong class="author-name">{c.authorName}</strong>
+                              <Badge variant={c.stance === 'support' ? 'success' : c.stance === 'concern' ? 'destructive' : c.stance === 'amendment' ? 'warning' : 'muted'}>
+                                {c.stance === 'amendment' ? 'Wording suggestion' : c.stance[0]!.toUpperCase() + c.stance.slice(1)}
+                              </Badge>
+                              <time class="tabular comment-date" datetime={new Date(c.createdAt).toISOString()}>
+                                {new Date(c.createdAt).toLocaleDateString('en-AU', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                              </time>
+                            </div>
+
+                            <div class="comment-card__actions">
+                              <button
+                                type="button"
+                                class:list={['endorse-btn', { 'is-endorsed': hasEndorsed }]}
+                                data-endorse-id={c.commentId}
+                                disabled={!user?.canParticipate}
+                                title={user?.canParticipate ? 'Endorse contribution' : 'Sign in to endorse'}
+                              >
+                                <ThumbsUp aria-hidden="true" className="size-3" />
+                                <span>Endorse</span>
+                                <span class="endorse-count tabular">{c.upvotes.length}</span>
+                              </button>
+
+                              {user?.canParticipate && (
+                                <button
+                                  type="button"
+                                  class="reply-btn"
+                                  data-reply-author={c.authorName}
+                                >
+                                  Reply
+                                </button>
+                              )}
+
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  class="delete-btn"
+                                  data-delete-comment={c.commentId}
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div class="comment-card__body">
+                            <p>{c.body}</p>
+                          </div>
+
+                          <div class="comment-feedback-slot" data-feedback-slot={c.commentId}>
+                            {c.feedback && (
+                              <div class="comment-feedback">
+                                <Badge variant={feedbackStatusVariant(c.feedback.status)}>
+                                  {feedbackStatusLabel(c.feedback.status)}
+                                </Badge>
+                                <div class="comment-feedback__copy">
+                                  {c.feedback.note && <p>{c.feedback.note}</p>}
+                                  <small>
+                                    Response by {c.feedback.updatedByName} ·{' '}
+                                    {new Date(c.feedback.updatedAt).toLocaleDateString('en-AU', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })}
+                                  </small>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {c.feedbackHistory && (c.feedbackHistory.length > 1 || (!c.feedback && c.feedbackHistory.length > 0)) && (
+                            <details class="comment-feedback-history">
+                              <summary>Response history ({c.feedbackHistory.length})</summary>
+                              <ul>
+                                {c.feedbackHistory.map((entry) => (
+                                  <li>
+                                    <strong>{entry.action === 'cleared' ? 'Cleared' : feedbackStatusLabel(entry.action)}</strong>
+                                    {entry.note ? ` — ${entry.note}` : ''} · {entry.updatedByName} (
+                                    {new Date(entry.updatedAt).toLocaleDateString('en-AU', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })})
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
+
+                          {canRespondToFeedback && (
+                            <details class="comment-feedback-drawer">
+                              <summary>{c.feedback ? 'Update response' : 'Record response'}</summary>
+                              <form class="comment-feedback-form" data-comment-id={c.commentId}>
+                                <div class="comment-feedback-form__row">
+                                  <label for={`feedback-status-${c.commentId}`} class="sr-only">Contribution outcome</label>
+                                  <select id={`feedback-status-${c.commentId}`} name="status">
+                                    <option value="incorporated" selected={c.feedback?.status === 'incorporated'}>Incorporated</option>
+                                    <option value="considered" selected={!c.feedback || c.feedback.status === 'considered'}>Considered</option>
+                                    <option value="deferred" selected={c.feedback?.status === 'deferred'}>Deferred</option>
+                                    <option value="declined" selected={c.feedback?.status === 'declined'}>Declined</option>
+                                    {c.feedback && <option value="clear">Clear response</option>}
+                                  </select>
+                                  <label for={`feedback-note-${c.commentId}`} class="sr-only">Explanation for contributor (optional)</label>
+                                  <input
+                                    id={`feedback-note-${c.commentId}`}
+                                    type="text"
+                                    name="note"
+                                    maxlength={500}
+                                    value={c.feedback?.note ?? ''}
+                                    placeholder="Short explanation for the contributor (optional)"
+                                  />
+                                  <button type="submit" class="comment-feedback-save">Save</button>
+                                </div>
+                                <span class="comment-feedback-status" role="status" aria-live="polite"></span>
+                              </form>
+                            </details>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
             </section>
 
             <!-- Wording Revision Log & Provenance -->
@@ -1604,9 +1769,12 @@ const initialsFor = (name: string) =>
             </div>
           </div>
         `;
-        commentsList?.appendChild(article);
+        commentsList?.prepend(article);
         const textarea = document.getElementById('comment-body-input') as HTMLTextAreaElement | null;
-        if (textarea) textarea.value = '';
+        if (textarea) {
+          textarea.value = '';
+          textarea.dispatchEvent(new Event('input'));
+        }
         commentStatusMsg.textContent = 'Contribution posted!';
       } catch (err: any) {
         trackEngage('contribution_result', { action: 'deliberation', outcome: 'failed' });
@@ -1616,6 +1784,132 @@ const initialsFor = (name: string) =>
       }
     });
   }
+
+  // Reddit-style composer helpers: live character count, Cmd/Ctrl+Enter submit, Reply & Sort
+  const commentTextarea = document.getElementById('comment-body-input') as HTMLTextAreaElement | null;
+  const charCountEl = document.getElementById('comment-char-count');
+  if (commentTextarea && charCountEl) {
+    const syncCount = () => {
+      charCountEl.textContent = `${commentTextarea.value.length} / 4000`;
+    };
+    commentTextarea.addEventListener('input', syncCount);
+    commentTextarea.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        commentForm?.requestSubmit();
+      }
+    });
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('[data-reply-author]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const author = btn.dataset.replyAuthor;
+      if (!commentTextarea || !author) return;
+      const prefix = `@${author} `;
+      if (!commentTextarea.value.startsWith(prefix)) {
+        commentTextarea.value = `${prefix}${commentTextarea.value}`;
+        commentTextarea.dispatchEvent(new Event('input'));
+      }
+      commentTextarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      commentTextarea.focus();
+    });
+  });
+
+  const sortSelect = document.querySelector<HTMLSelectElement>('[data-comment-sort]');
+  sortSelect?.addEventListener('change', () => {
+    if (!commentsList) return;
+    const cards = Array.from(commentsList.querySelectorAll<HTMLElement>('.comment-card'));
+    const mode = sortSelect.value;
+    cards.sort((a, b) => {
+      if (mode === 'top') {
+        return Number(b.dataset.upvotes || 0) - Number(a.dataset.upvotes || 0);
+      }
+      if (mode === 'newest') {
+        return Number(b.dataset.createdAt || 0) - Number(a.dataset.createdAt || 0);
+      }
+      return Number(a.dataset.createdAt || 0) - Number(b.dataset.createdAt || 0);
+    });
+    for (const card of cards) commentsList.appendChild(card);
+  });
+
+  // Author / administrator contribution feedback (zero-reload)
+  document.querySelectorAll<HTMLFormElement>('.comment-feedback-form').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const commentId = form.dataset.commentId;
+      const saveBtn = form.querySelector<HTMLButtonElement>('.comment-feedback-save');
+      const statusMsg = form.querySelector<HTMLElement>('.comment-feedback-status');
+      if (!commentId || !saveBtn) return;
+      const fields = new FormData(form);
+      const status = String(fields.get('status') ?? 'considered');
+      const note = String(fields.get('note') ?? '').trim();
+      saveBtn.disabled = true;
+      if (statusMsg) statusMsg.textContent = 'Saving...';
+      try {
+        const res = await fetch('/api/comments', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ commentId, status, note }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not save response.');
+        const slot = document.querySelector<HTMLElement>(`[data-feedback-slot="${commentId}"]`);
+        const drawer = form.closest('details');
+        const selectEl = form.querySelector<HTMLSelectElement>('select[name="status"]');
+        const noteInput = form.querySelector<HTMLInputElement>('input[name="note"]');
+        const summaryEl = drawer?.querySelector<HTMLElement>('summary');
+        if (slot) {
+          if (!data.feedback) {
+            slot.innerHTML = '';
+            selectEl?.querySelector('option[value="clear"]')?.remove();
+            if (selectEl) selectEl.value = 'considered';
+            if (noteInput) noteInput.value = '';
+            if (summaryEl) summaryEl.textContent = 'Record response';
+          } else {
+            const labelMap: Record<string, string> = {
+              incorporated: 'Incorporated',
+              considered: 'Considered',
+              deferred: 'Deferred',
+              declined: 'Declined',
+            };
+            const badgeClassMap: Record<string, string> = {
+              incorporated: 'border-transparent bg-[var(--horizon-success-bg)] text-[var(--horizon-success-ink)]',
+              considered: 'border-transparent bg-[var(--horizon-voting-bg)] text-[var(--horizon-voting-ink)]',
+              deferred: 'border-transparent bg-[var(--horizon-warn-bg)] text-[var(--horizon-warn-ink)]',
+              declined: 'border-border bg-background text-foreground',
+            };
+            const statusKey = String(data.feedback.status);
+            const label = labelMap[statusKey] ?? 'Considered';
+            const variantClasses = badgeClassMap[statusKey] ?? badgeClassMap.declined;
+            const noteHtml = data.feedback.note ? `<p>${escapeHtmlClient(String(data.feedback.note))}</p>` : '';
+            slot.innerHTML = `
+              <div class="comment-feedback">
+                <span data-slot="badge" class="inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${variantClasses}">${escapeHtmlClient(label)}</span>
+                <div class="comment-feedback__copy">
+                  ${noteHtml}
+                  <small>Response by ${escapeHtmlClient(String(data.feedback.updatedByName || 'Author'))} · just now</small>
+                </div>
+              </div>
+            `;
+            if (selectEl && !selectEl.querySelector('option[value="clear"]')) {
+              const clearOpt = document.createElement('option');
+              clearOpt.value = 'clear';
+              clearOpt.textContent = 'Clear response';
+              selectEl.appendChild(clearOpt);
+            }
+            if (selectEl) selectEl.value = String(data.feedback.status);
+            if (summaryEl) summaryEl.textContent = 'Update response';
+          }
+        }
+        if (drawer) drawer.open = false;
+        if (statusMsg) statusMsg.textContent = 'Saved.';
+      } catch (err: any) {
+        if (statusMsg) statusMsg.textContent = err?.message || 'Could not save response.';
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+  });
 
   // Endorse contribution (+1)
   document.querySelectorAll<HTMLButtonElement>('[data-endorse-id]').forEach((btn) => {
@@ -3409,6 +3703,228 @@ const initialsFor = (name: string) =>
     .reading-nav__cta {
       display: none;
     }
+  }
+
+  .superseded-notice {
+    margin: 0.75rem 0 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.45rem;
+    background: var(--horizon-warn-bg);
+    color: var(--horizon-warn-ink);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .superseded-notice a {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+
+  .amendment-resolution-note {
+    margin: 0.5rem 0 0;
+    padding: 0.55rem 0.75rem;
+    border-radius: 0.4rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+    font-size: 0.85rem;
+    color: var(--horizon-muted);
+  }
+
+  .comment-feedback-slot :global(.comment-feedback) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin-top: 0.65rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: 0.45rem;
+    background: var(--horizon-lavender-soft);
+    border: 1px solid var(--horizon-line);
+  }
+
+  .comment-feedback-slot :global(.comment-feedback__copy) {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+
+  .comment-feedback-slot :global(.comment-feedback__copy p) {
+    margin: 0 0 0.2rem;
+    font-size: 0.86rem;
+    color: var(--horizon-purple-deep);
+  }
+
+  .comment-feedback-slot :global(.comment-feedback__copy small) {
+    font-size: 0.76rem;
+    color: var(--horizon-muted);
+  }
+
+  .comment-feedback-drawer {
+    margin-top: 0.5rem;
+    font-size: 0.82rem;
+  }
+
+  .comment-feedback-drawer > summary {
+    cursor: pointer;
+    color: var(--horizon-purple);
+    font-weight: 600;
+  }
+
+  .comment-feedback-form {
+    margin-top: 0.5rem;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .comment-feedback-form__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+  }
+
+  .comment-feedback-form__row select,
+  .comment-feedback-form__row input {
+    height: 2rem;
+    padding: 0 0.55rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.4rem;
+    background: var(--horizon-white);
+    font-size: 0.82rem;
+  }
+
+  .comment-feedback-form__row input {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+
+  .comment-feedback-save {
+    height: 2rem;
+    padding: 0 0.85rem;
+    border: 1px solid var(--horizon-purple);
+    border-radius: 999px;
+    background: var(--horizon-purple);
+    color: var(--horizon-white);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .comment-feedback-status {
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+
+  .comment-feedback-history {
+    margin-top: 0.45rem;
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+
+  .comment-feedback-history > summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .comment-feedback-history ul {
+    margin: 0.35rem 0 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .deliberation-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .comment-sort select {
+    height: 2rem;
+    padding: 0 0.65rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 999px;
+    background: var(--horizon-white);
+    color: var(--horizon-purple);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .comment-composer {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0.25rem 0 1.25rem;
+  }
+
+  .comment-composer__box {
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.75rem;
+    background: var(--horizon-white);
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+  }
+
+  .comment-composer__box:focus-within {
+    border-color: var(--horizon-focus);
+  }
+
+  .comment-composer__box textarea {
+    display: block;
+    width: 100%;
+    min-height: 5.25rem;
+    padding: 0.85rem 1rem 0.6rem;
+    border: 0;
+    background: transparent;
+    color: var(--horizon-purple-deep);
+    font: inherit;
+    font-size: 0.94rem;
+    line-height: 1.55;
+    resize: vertical;
+  }
+
+  .comment-composer__box textarea:focus {
+    outline: none;
+  }
+
+  .comment-composer__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.55rem 0.85rem;
+    border-top: 1px solid var(--horizon-line);
+    background: var(--horizon-lavender-soft);
+  }
+
+  .comment-composer__submit {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .comment-char-count {
+    font-size: 0.76rem;
+    color: var(--horizon-muted);
+  }
+
+  .reply-btn {
+    border: 0;
+    background: transparent;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+    cursor: pointer;
+  }
+
+  .reply-btn:hover {
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple);
   }
 </style>
 

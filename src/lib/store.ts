@@ -5,6 +5,9 @@ import { validPersonName } from "./auth.ts";
 import type {
   CommentRecord,
   CommentStance,
+  ContributionFeedback,
+  ContributionFeedbackHistoryEntry,
+  ContributionFeedbackStatus,
   MemberRecord,
   MembershipStatus,
   PendingVotePreferenceRecord,
@@ -25,6 +28,16 @@ import { createHash, randomUUID } from "node:crypto";
 import { ballotExpired } from "./ballot-deadline.ts";
 
 export const PENDING_VOTE_PREFERENCES = "pending_vote_preferences";
+
+export function isGovernanceResolution(proposal: {
+  kind?: string;
+  proposalId: string;
+}): boolean {
+  return (
+    proposal.kind === "resolution" ||
+    proposal.proposalId.toUpperCase().startsWith("GOV-")
+  );
+}
 
 export function getDefaultProvenanceLabel(
   category: string,
@@ -267,6 +280,13 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     implementationNote: raw.implementationNote
       ? String(raw.implementationNote)
       : undefined,
+    supersededByProposalId: raw.supersededByProposalId
+      ? String(raw.supersededByProposalId)
+      : undefined,
+    supersededByNote:
+      raw.supersededByProposalId && raw.supersededByNote
+        ? String(raw.supersededByNote)
+        : undefined,
     authorId: raw.authorId ? String(raw.authorId) : undefined,
     authorName: raw.authorName ? String(raw.authorName) : undefined,
     createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
@@ -767,7 +787,7 @@ export async function saveProposal(
     }
   }
 
-  // Quick stage / implementationNote update by staff
+  // Quick stage / implementationNote / supersession update by staff
   if (
     existing &&
     isGovernanceOperator &&
@@ -778,11 +798,15 @@ export async function saveProposal(
         "stage",
         "status",
         "implementationNote",
+        "supersededByProposalId",
+        "supersededByNote",
       ].includes(k),
     ) &&
     (body.stage !== undefined ||
       body.status !== undefined ||
-      body.implementationNote !== undefined)
+      body.implementationNote !== undefined ||
+      body.supersededByProposalId !== undefined ||
+      body.supersededByNote !== undefined)
   ) {
     const stage =
       body.stage !== undefined || body.status !== undefined
@@ -790,8 +814,35 @@ export async function saveProposal(
         : existing.stage;
     const implementationNote =
       typeof body.implementationNote === "string"
-        ? body.implementationNote.trim()
+        ? body.implementationNote.trim().slice(0, 1000)
         : existing.implementationNote;
+    let supersededByProposalId = existing.supersededByProposalId;
+    if (body.supersededByProposalId !== undefined) {
+      const candidate =
+        typeof body.supersededByProposalId === "string"
+          ? body.supersededByProposalId.trim()
+          : "";
+      if (!candidate) {
+        supersededByProposalId = undefined;
+      } else {
+        if (candidate === existing.proposalId) {
+          throw new Error("A proposal cannot supersede itself.");
+        }
+        const target = await col.findOne({ proposalId: candidate });
+        if (!target) {
+          throw new Error(
+            `Successor proposal '${candidate}' was not found.`,
+          );
+        }
+        supersededByProposalId = target.proposalId;
+      }
+    }
+    const supersededByNote =
+      body.supersededByNote !== undefined
+        ? typeof body.supersededByNote === "string" && body.supersededByNote.trim()
+          ? body.supersededByNote.trim().slice(0, 500)
+          : undefined
+        : existing.supersededByNote;
     let ballotRevisionId = existing.ballotRevisionId;
     if (stage === "decide" && !ballotRevisionId) {
       const latest = await db
@@ -812,10 +863,28 @@ export async function saveProposal(
       implementationNote,
       updatedAt,
     };
+    const unset: Record<string, "" | 1> = {};
+    if (supersededByProposalId) {
+      set.supersededByProposalId = supersededByProposalId;
+      if (supersededByNote) {
+        set.supersededByNote = supersededByNote;
+      } else if (body.supersededByNote !== undefined) {
+        unset.supersededByNote = "";
+      }
+    } else {
+      if (body.supersededByProposalId !== undefined) {
+        unset.supersededByProposalId = "";
+        unset.supersededByNote = "";
+      } else if (body.supersededByNote !== undefined) {
+        unset.supersededByNote = "";
+      }
+    }
     if (ballotRevisionId) set.ballotRevisionId = ballotRevisionId;
+    const updateDoc: Record<string, unknown> = { $set: set };
+    if (Object.keys(unset).length) updateDoc.$unset = unset;
     const write = await col.updateOne(
       { proposalId: existing.proposalId, updatedAt: existing.updatedAt },
-      { $set: set },
+      updateDoc,
     );
     if (write.matchedCount !== 1)
       throw new Error(
@@ -825,6 +894,8 @@ export async function saveProposal(
       ...existing,
       stage,
       implementationNote,
+      supersededByProposalId,
+      supersededByNote: supersededByProposalId ? supersededByNote : undefined,
       ballotRevisionId,
       updatedAt,
     };
@@ -1374,6 +1445,120 @@ export async function deleteComment(
     throw new Error("You can only delete your own contributions.");
   }
   await col.deleteOne({ commentId: id });
+}
+
+const VALID_FEEDBACK_STATUSES: ContributionFeedbackStatus[] = [
+  "incorporated",
+  "considered",
+  "deferred",
+  "declined",
+];
+
+export function canRespondToContribution(
+  user: SessionUser | null,
+  proposal: Pick<ProposalRecord, "authorId" | "originatingBranchId">,
+): boolean {
+  if (!user) return false;
+  if (user.isStaff || user.isAdmin) return true;
+  if (
+    user.isBranchAdmin &&
+    proposal.originatingBranchId &&
+    (user.branchAdminIds ?? []).includes(proposal.originatingBranchId)
+  ) {
+    return true;
+  }
+  return Boolean(
+    user.canParticipate &&
+      proposal.authorId &&
+      proposal.authorId === user.memberId,
+  );
+}
+
+export async function setCommentFeedback(
+  db: Db,
+  user: SessionUser,
+  body: Record<string, unknown>,
+): Promise<{
+  feedback: ContributionFeedback | null;
+  feedbackHistory: ContributionFeedbackHistoryEntry[];
+}> {
+  const commentId =
+    typeof body.commentId === "string" ? body.commentId.trim() : "";
+  if (!commentId) throw new Error("Comment ID is required.");
+
+  const rawStatus =
+    typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
+  if (
+    rawStatus !== "clear" &&
+    !VALID_FEEDBACK_STATUSES.includes(rawStatus as ContributionFeedbackStatus)
+  ) {
+    throw new Error(
+      "Choose a valid feedback outcome: incorporated, considered, deferred, declined, or clear.",
+    );
+  }
+
+  const col = db.collection<CommentRecord>("comments");
+  const existing = await col.findOne({ commentId });
+  if (!existing) throw new Error("Contribution not found.");
+
+  const rawProposal = await db
+    .collection<ProposalRecord>("proposals")
+    .findOne({ proposalId: existing.proposalId });
+  if (!rawProposal) throw new Error("Proposal not found.");
+  const proposal = normalizeProposalDoc(rawProposal);
+  if (!canViewProposal(proposal, user)) throw new Error("Proposal not found.");
+
+  if (!canRespondToContribution(user, proposal)) {
+    throw new Error(
+      "Only administrators, branch moderators for this proposal, or the proposal author can record contribution outcomes.",
+    );
+  }
+
+  const note =
+    typeof body.note === "string" ? body.note.trim().slice(0, 500) : "";
+  const updatedAt = new Date();
+  const updatedByName = user.name || "Author";
+  const priorHistory = Array.isArray(existing.feedbackHistory)
+    ? existing.feedbackHistory
+    : [];
+
+  if (rawStatus === "clear") {
+    const entry: ContributionFeedbackHistoryEntry = {
+      action: "cleared",
+      ...(note ? { note } : {}),
+      updatedBy: user.memberId,
+      updatedByName,
+      updatedAt,
+    };
+    const feedbackHistory = [...priorHistory, entry];
+    await col.updateOne(
+      { commentId },
+      { $unset: { feedback: "" }, $set: { feedbackHistory } },
+    );
+    return { feedback: null, feedbackHistory };
+  }
+
+  const feedback: ContributionFeedback = {
+    status: rawStatus as ContributionFeedbackStatus,
+    ...(note ? { note } : {}),
+    updatedBy: user.memberId,
+    updatedByName,
+    updatedAt,
+  };
+  const entry: ContributionFeedbackHistoryEntry = {
+    action: feedback.status,
+    ...(note ? { note } : {}),
+    updatedBy: user.memberId,
+    updatedByName,
+    updatedAt,
+  };
+  const feedbackHistory = [...priorHistory, entry];
+
+  await col.updateOne(
+    { commentId },
+    { $set: { feedback, feedbackHistory } },
+  );
+  return { feedback, feedbackHistory };
 }
 
 export async function castVote(

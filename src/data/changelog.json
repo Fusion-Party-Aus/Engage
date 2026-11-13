@@ -1,5 +1,141 @@
 [
   {
+    "hash": "8e513e0",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "research",
+    "summary": "Validate governance patterns with REA runtime evidence"
+  },
+  {
+    "hash": "3be9aba",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Update snapshot after main merge"
+  },
+  {
+    "hash": "60a5e47",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "governance",
+    "summary": "Address PR #20 review findings"
+  },
+  {
+    "hash": "31ddb19",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "research",
+    "summary": "Record verification and refresh changelog"
+  },
+  {
+    "hash": "b73bc7b",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "research",
+    "summary": "Compare participatory governance patterns with Engage"
+  },
+  {
+    "hash": "e25e362",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record PR #20 review fixes"
+  },
+  {
+    "hash": "dc0e7bd",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "governance",
+    "summary": "Address PR #20 CodeRabbit review comments"
+  },
+  {
+    "hash": "0b36edf",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record in-app notifications update"
+  },
+  {
+    "hash": "4d4c38e",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "notifications",
+    "summary": "Surface contribution responses and catch-up alerts in header and My Engage"
+  },
+  {
+    "hash": "a955120",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record review fixes and comment composer update"
+  },
+  {
+    "hash": "631c7cf",
+    "date": "2026-11-13",
+    "type": "fix",
+    "category": "fix",
+    "scope": "governance",
+    "summary": "Address review findings and add Reddit-style comment composer"
+  },
+  {
+    "hash": "a02e501",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record usability, governance and reporting updates"
+  },
+  {
+    "hash": "be7c90e",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add ballot progress, branch summary, and privacy-preserving CSV export"
+  },
+  {
+    "hash": "568cab8",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "governance",
+    "summary": "Add contributor feedback, proposal supersession, and resolution lifecycle support"
+  },
+  {
+    "hash": "c1b3ec9",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "policies",
+    "summary": "Link empty policy registry directly to fusionparty.org.au/policy"
+  },
+  {
+    "hash": "802aa20",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discovery",
+    "summary": "Surface Sense Box and next actions when caught up on ballots"
+  },
+  {
+    "hash": "b8af56b",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record GitHub protection defaults (#19)"
+  },
+  {
     "hash": "041c469",
     "date": "2026-11-13",
     "type": "chore",
@@ -7,6 +143,40 @@
     "scope": "repo",
     "summary": "Add CODEOWNERS for default review routing (#18)",
     "details": "Every path defaults to @finneh4249 so pull requests are routed to a single accountable reviewer. Ownership is advisory only: the main ruleset keeps a one-approval requirement for all contributors."
+  },
+  {
+    "hash": "27374e2",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record Reclaim path mapping"
+  },
+  {
+    "hash": "a00b21f",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "platform",
+    "summary": "Map Reclaim division paths to Engage proposals",
+    "details": "Old links to /reclaim-our-economy/<proposal>/ and /reclaim-our-future/<proposal>/ now land on /proposals/<proposal>/ instead of a 404 on Engage. Retired section index pages, whose names are not proposal slugs, resolve to the proposal list. Other paths and query strings are unchanged."
+  },
+  {
+    "hash": "bdf93ae",
+    "date": "2026-11-13",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record Reclaim domain redirect"
+  },
+  {
+    "hash": "831bc61",
+    "date": "2026-11-13",
+    "type": "feat",
+    "category": "feature",
+    "scope": "platform",
+    "summary": "Redirect reclaim.fusionparty.org.au to Engage",
+    "details": "The Reclaim policy site is retired. A Worker bound to the reclaim custom domain now answers every request with a 301 to the same path on engage.fusionparty.org.au, preserving query strings so Engage's existing legacy redirects (pending-vote, all-policies, reclaim-our-*) still resolve. The previous reclaim Worker is left deployed for rollback."
   },
   {
     "hash": "430bec4",
@@ -479,184 +649,5 @@
     "category": "feature",
     "scope": "proposals",
     "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
-  },
-  {
-    "hash": "e7d793a",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record Engage production cutover and verification",
-    "details": "Record the approved cutover of 4660690... to the prebuilt image, the final quiescent backup and off-host checksum, the 37-ballot/194-vote migration and preservation comparison, image and route verification, and the retained rollback state."
-  },
-  {
-    "hash": "4660690",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record member ballot refinement verification",
-    "details": "Record the approved ballot hierarchy: segmented control, single results block, zero-vote empty state, compact privacy line, full-width action and 390px browser validation. Full route matrix 109/109 and dedicated ballot checks 14/14."
-  },
-  {
-    "hash": "2b85970",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Refine member ballot hierarchy and voting control",
-    "details": "Replace the tall three-card radio composition with a single-row shadcn/Radix segmented control for Approve, Abstain and Reject. The primary action is full-width with a matching radius, uses a neutral disabled treatment and reserves the Horizon accent for an enabled vote. Move results into one compact block, show a simple empty state for zero-vote ballots, reduce the privacy disclosure to a persistent one-line notice, and move revision metadata into a small readable line. Keep selected state, keyboard navigation, existing votes and closed-ballot read-only behaviour."
-  },
-  {
-    "hash": "153e909",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Integrate Coolify cutover evidence and final verification record",
-    "details": "Merge the deployment workstream documentation with the release: storage and prebuilt-image verification, no-rebuild deployment path, quiescent backup helper, staging verification, rollback procedure and approval-gated cutover checklist. Distinguish the 2026-11-08 rehearsal image from the final release identity so the artifact cannot be mistaken for the approved cutover image. Add the production-readiness audit, application handover and final integrated verification record. Ignore the preserved research corpus."
-  },
-  {
-    "hash": "33cc170",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "legal",
-    "summary": "Integrate Privacy Policy, Terms of Use and acceptance controls",
-    "details": "Add owner-authorised legal documents at /privacy/ and /terms/ with the confirmed operator, ABN, registered party name, contact and correspondence address. The documents are explicit about identifiable ballots, national administrator access, small-ballot re-identification risk, retention limits, third-party processors and administrative ballot controls, and remain noindex while publication is pending. Add a server-side acceptance record, API and member gate, and enforce the gate on vote, comment, endorsement, proposal and amendment writes. Activation is interlocked: the gate remains inactive until both documents are published with real effective dates and LEGAL_ACCEPTANCE_ENABLED is set. Add the ballot-context privacy notice, footer and sign-in legal links, and regression tests."
-  },
-  {
-    "hash": "0dff758",
-    "date": "2026-11-08",
-    "type": "fix",
-    "category": "fix",
-    "scope": "app",
-    "summary": "Complete release-candidate remediation and Horizon UI integration",
-    "details": "- make startup seeding insert-only so restarts do not rewrite updatedAt - remove Astro experimental React children to stop double-escaped entities and SSR attribute warnings - use a trusted public origin for canonicals and public API Link headers - show human-readable revision labels to members while retaining exact IDs in audit views - make the empty policy registry an explicit, accurate state and relabel navigation and calls to action - complete the shared header, footer, feature grid and member settings workspace on the Horizon/shadcn foundation"
-  },
-  {
-    "hash": "60e0679",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "governance",
-    "summary": "Bind legacy ballots to immutable wording revisions",
-    "details": "Add a deterministic, transactional bulk migration for existing Decide-stage ballots and their votes. The migration inventories wording against the deployment baseline, fails closed on ambiguity, supports dry-run and explicit apply, records attributable binding events, and is idempotent. Reuse the shared binding path in the admin review endpoint and expose human-readable revision labels while keeping exact identifiers in audit views. Rehearsed against a restored 414-document production clone: 37 ballots and 194 votes preserved, 0 ambiguous, 0 conflicting, 37 idempotent on retry."
-  },
-  {
-    "hash": "1b973fa",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Note token revocation and private-repo poller requirement"
-  },
-  {
-    "hash": "cffc1a0",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Record end-to-end poller verification and staging access"
-  },
-  {
-    "hash": "ef8e9a8",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "deploy",
-    "summary": "Document Coolify staging, production cutover, and poller"
-  },
-  {
-    "hash": "3280da3",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Bake Mongo helpers into Coolify staging image"
-  },
-  {
-    "hash": "6e2cc5e",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Use classic builder for Coolify builds (DNS workaround)"
-  },
-  {
-    "hash": "a65c66d",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Build Coolify images on the coolify bridge network"
-  },
-  {
-    "hash": "09de77b",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Build Coolify images with host network for DNS"
-  },
-  {
-    "hash": "0ad210b",
-    "date": "2026-11-08",
-    "type": "chore",
-    "category": "ops",
-    "scope": "ops",
-    "summary": "Align CI, deployment configuration and operational documentation",
-    "details": "- run voting and authentication suites against a disposable MongoDB replica set and fail when test URIs are absent - replace removed test scripts with package-level checks in both workflows - add Coolify production and staging compose definitions with hardened container defaults - document CI prerequisites, deployment verification and vote storage migration - update local configuration notes and add a CI workflow regression test"
-  },
-  {
-    "hash": "47e5f9b",
-    "date": "2026-11-08",
-    "type": "fix",
-    "category": "fix",
-    "scope": "security",
-    "summary": "Enforce proposal visibility and ballot privacy",
-    "details": "- redact other members' ballot choices, reasons and identities from proposal reads - restrict identifiable ballots to national administrators - apply proposal visibility and branch scope filters to list and detail routes - gate local sign-in on explicit development modes in the session route - report member verification email failures without undoing account changes - add proposal access, authentication and member notification regression tests"
-  },
-  {
-    "hash": "c8f957f",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "web",
-    "summary": "Refresh member journeys, proposals and How It Works",
-    "details": "- rebuild visitor, member and branch pages around task-first navigation - add proposal composition, stage navigation and inline ballot components - refresh proposal and policy reading layouts for discussion, amendments and voting - add the How It Works participation guide - document the implemented journeys and their verification limits"
-  },
-  {
-    "hash": "5c55df2",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "registry",
-    "summary": "Add versioned policy registry and public API v1",
-    "details": "- add admin publication, ratification, withdrawal, supersession and reconciliation operations - expose published policy revisions, branches and categories through read-only API v1 with ETags and cursors - serve OpenAPI 3.1 metadata for the public catalogue - rebuild the public policy library and detail pages around publication status and exact approved wording - document governance and API contracts and add governance API regression tests"
   }
 ]

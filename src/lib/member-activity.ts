@@ -149,6 +149,32 @@ export async function listMemberActivityStream(
           ? [{ label: endorsementLabel(endorsements) }]
           : undefined,
     });
+
+    const history = Array.isArray(comment.feedbackHistory)
+      ? comment.feedbackHistory
+      : comment.feedback
+        ? [{ action: comment.feedback.status, ...comment.feedback }]
+        : [];
+    for (const entry of history) {
+      if (entry.action === "cleared" || entry.updatedBy === memberId) continue;
+      const feedbackDate = asDate(entry.updatedAt);
+      if (!feedbackDate) continue;
+      const statusText =
+        String(entry.action)[0]!.toUpperCase() + String(entry.action).slice(1);
+      events.push({
+        id: `comment-feedback-${comment.commentId}-${feedbackDate.toISOString()}`,
+        date: feedbackDate,
+        actor: String(entry.updatedByName ?? "Author"),
+        action: "responded to your contribution on",
+        target: titleFor(comment.proposalId),
+        href: hrefFor(comment.proposalId)
+          ? `${hrefFor(comment.proposalId)}#deliberation`
+          : undefined,
+        kind: "contribution",
+        badge: statusText,
+        summary: entry.note ? String(entry.note) : undefined,
+      });
+    }
   }
 
   for (const comment of endorsedComments) {
@@ -517,6 +543,37 @@ export async function buildMemberCatchUp(
       },
       String(comment.proposalId),
     );
+  }
+
+  for (const comment of ownComments) {
+    const history = Array.isArray(comment.feedbackHistory)
+      ? comment.feedbackHistory
+      : comment.feedback
+        ? [{ action: comment.feedback.status, ...comment.feedback }]
+        : [];
+    for (const entry of history) {
+      if (entry.action === "cleared" || entry.updatedBy === memberId) continue;
+      const feedbackDate = asDate(entry.updatedAt);
+      if (!feedbackDate || feedbackDate < since) continue;
+      const statusText =
+        String(entry.action)[0]!.toUpperCase() + String(entry.action).slice(1);
+      add(
+        {
+          id: `catchup-feedback-${comment.commentId}-${feedbackDate.toISOString()}`,
+          date: feedbackDate,
+          kind: "discussion",
+          actor: String(entry.updatedByName ?? "Author"),
+          action: "responded to your contribution",
+          target: "",
+          badge: statusText,
+          summary: entry.note ? excerpt(entry.note) : excerpt(comment.body),
+          href: proposalMap.get(String(comment.proposalId))?.slug
+            ? `/proposals/${proposalMap.get(String(comment.proposalId))!.slug}/#deliberation`
+            : undefined,
+        },
+        String(comment.proposalId),
+      );
+    }
   }
 
   for (const revision of revisions) {

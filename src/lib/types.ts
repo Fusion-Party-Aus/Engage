@@ -166,6 +166,8 @@ export interface ProposalRecord {
   publicationScope?: "private" | "branch" | "national";
   ballotRevisionId?: string;
   ballotClosesAt?: Date;
+  supersededByProposalId?: string;
+  supersededByNote?: string;
 
   // Backwards compatibility aliases
   policyId?: string;
@@ -188,6 +190,28 @@ export interface ProposalSummaryView extends ProposalRecord {
   votes: VoteTally;
 }
 
+export type ContributionFeedbackStatus =
+  | "incorporated"
+  | "considered"
+  | "deferred"
+  | "declined";
+
+export interface ContributionFeedback {
+  status: ContributionFeedbackStatus;
+  note?: string;
+  updatedBy: string;
+  updatedByName: string;
+  updatedAt: Date;
+}
+
+export interface ContributionFeedbackHistoryEntry {
+  action: ContributionFeedbackStatus | "cleared";
+  note?: string;
+  updatedBy: string;
+  updatedByName: string;
+  updatedAt: Date;
+}
+
 export interface CommentRecord {
   commentId: string;
   proposalId: string;
@@ -197,6 +221,8 @@ export interface CommentRecord {
   body: string;
   upvotes: string[];
   upvoteEvents?: Array<{ memberId: string; at: Date }>;
+  feedback?: ContributionFeedback;
+  feedbackHistory?: ContributionFeedbackHistoryEntry[];
   createdAt: Date;
 }
 
