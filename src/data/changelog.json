@@ -1,5 +1,40 @@
 [
   {
+    "hash": "9a2855b",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "security",
+    "summary": "Document Turnstile enforcement and rate limits",
+    "details": "Record the protected actions, configuration contract, fail-closed states, failure messages, privacy boundary, rate-limit defaults and remaining gaps (CSP and headers stay with #38). Add the new keys to the environment example."
+  },
+  {
+    "hash": "7d9bae9",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "security",
+    "summary": "Show the Turnstile widget on protected forms",
+    "details": "Render Cloudflare Turnstile on the Sense Box and magic-link sign-in forms using Horizon primitives. The widget renders nothing when no site key is configured, reports load and expiry failures inline with a retry action, and asks for a fresh token after a rejected submission because tokens are single-use."
+  },
+  {
+    "hash": "08c61ef",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "security",
+    "summary": "Verify Turnstile tokens for unauthenticated actions",
+    "details": "Add server-side Cloudflare Turnstile verification (D32) and a shared MongoDB fixed-window limiter for the abuse-prone unauthenticated routes. - protect Sense Box submission, magic-link sign-in/first registration, and email sign-up if it is enabled later - fail closed with 503 and an operational error when production requires Turnstile but the secret or site key is missing - report missing, invalid, expired, replayed and malformed tokens with plain-language errors; never log or return the secret or token - store only a keyed hash of the client address, with a TTL index, so limits are shared across instances - leave authenticated voting, deliberation and admin writes untouched - tests cover configuration states, verification outcomes, route refusal and acceptance, real-MongoDB concurrency and the voting exemption"
+  },
+  {
+    "hash": "1bd4fd1",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the Sprint 1 integration"
+  },
+  {
     "hash": "b8030d2",
     "date": "2026-11-14",
     "type": "docs",
@@ -625,37 +660,5 @@
     "category": "feature",
     "scope": "workspaces",
     "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
-  },
-  {
-    "hash": "f58e150",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
   }
 ]
