@@ -1,5 +1,29 @@
 [
   {
+    "hash": "e74e9a8",
+    "date": "2026-11-13",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "ui",
+    "summary": "Migrate custom controls to shadcn primitives"
+  },
+  {
+    "hash": "4e6d909",
+    "date": "2026-11-13",
+    "type": "docs",
+    "category": "docs",
+    "scope": "agents",
+    "summary": "Enforce shadcn primitive usage"
+  },
+  {
+    "hash": "7035cb8",
+    "date": "2026-11-13",
+    "type": "test",
+    "category": "ops",
+    "scope": "admin",
+    "summary": "Add proposal PDF tests, CSV scope fix and changelog"
+  },
+  {
     "hash": "2a36858",
     "date": "2026-11-13",
     "type": "feat",
@@ -625,29 +649,5 @@
     "category": "docs",
     "scope": "audit",
     "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
-  },
-  {
-    "hash": "3098b44",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
   }
 ]
