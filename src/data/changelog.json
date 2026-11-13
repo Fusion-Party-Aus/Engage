@@ -1,5 +1,21 @@
 [
   {
+    "hash": "1e88005",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "lifecycle",
+    "summary": "State that returning to Propose keeps the seconding clock"
+  },
+  {
+    "hash": "f71ca91",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the Phase 1 lifecycle work"
+  },
+  {
     "hash": "186baa2",
     "date": "2026-11-14",
     "type": "docs",
@@ -644,21 +660,5 @@
     "category": "feature",
     "scope": "changelog",
     "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
-  },
-  {
-    "hash": "3512e0a",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "workspaces",
-    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
   }
 ]
