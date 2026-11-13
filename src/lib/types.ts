@@ -55,6 +55,9 @@ export interface PlatformEnv {
   ENGAGE_SOCIAL_LINKS_JSON?: string;
   ENGAGE_STATE_SITES_JSON?: string;
   ENGAGE_REPO_URL?: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
 }
 
 export interface SessionUser {

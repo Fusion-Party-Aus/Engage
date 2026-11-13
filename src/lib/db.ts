@@ -109,6 +109,12 @@ export async function initializeDatabase(db: Db): Promise<void> {
     db.collection("engagement_email_outbox").createIndex({providerId:1}),
     db.collection("engagement_email_outbox").createIndex({memberId:1,createdAt:-1}),
     db.collection("engagement_email_events").createIndex({providerId:1}),
+    db.collection("engagement_reengagement_campaigns").createIndex({campaignId:1},{unique:true}),
+    db.collection("push_subscriptions").createIndex({memberId:1,endpoint:1},{unique:true}),
+    db.collection("push_subscriptions").createIndex({subscriptionId:1},{unique:true}),
+    db.collection("member_notifications").createIndex({memberId:1,createdAt:-1}),
+    db.collection("member_notifications").createIndex({notificationId:1},{unique:true}),
+    db.collection("notification_deliveries").createIndex({dedupeKey:1},{unique:true}),
   ]);
   try {
     await ensureVoteStorage(db);
