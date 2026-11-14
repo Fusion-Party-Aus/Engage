@@ -1,5 +1,14 @@
 [
   {
+    "hash": "d4b5de0",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Record Phase 1, rendering performance and Turnstile integration",
+    "details": "Update I2, I6, I10, I12 and the workstream table with measured evidence and the remaining gaps. Mark the performance and Turnstile documents as merged into the integration branch."
+  },
+  {
     "hash": "b8568a9",
     "date": "2026-11-14",
     "type": "chore",
@@ -663,13 +672,5 @@
     "category": "docs",
     "scope": "member",
     "summary": "Record lifecycle audit, consent assessment and rollout checks"
-  },
-  {
-    "hash": "52c6570",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Connect verification, participation and legacy consent journeys"
   }
 ]

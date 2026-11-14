@@ -20,13 +20,13 @@ Status values:
 | Phase | Scope | State |
 |---|---|---|
 | Integration | Combine Sprint 1 branches, reconcile with decisions, verify | **Integrated** — see [integration report](sprint1-integration-report.md) |
-| 1 | Integrity, deadlines, automatic advancement, outcome correctness | **In progress** |
-| 2 | Command layer, route policy, read models, jobs, Turnstile, notifications | Planned |
+| 1 | Integrity, deadlines, automatic advancement, outcome correctness | **Integrated** — deadlines, seconding, advancement and closure on PR #51; outcome validation next |
+| 2 | Command layer, route policy, read models, jobs, Turnstile, notifications | **In progress** — rendering-performance and Turnstile slices integrated; command layer (#53), read models (#54) and notifications (#33) pending |
 | 3 | Decision records, following, admin queues, role UX, Horizon consistency | Planned |
 | 4 | Durable jobs, identity/CRM ports, observability, audit viewer, encryption hardening | Planned |
 | 5 | Automatic ratification, collision resolution, amend/repeal, public APIs, elections | Partly blocked on O1–O8 |
 
-## Workstreams in flight
+## Programme workstreams
 
 | Workstream | Branch | Issue | State |
 |---|---|---|---|
@@ -34,10 +34,10 @@ Status values:
 | Rendering performance | `feat/rfc0001-sprint1-integration` | #52 | **Integrated** — harness, audit, projections, session reuse, query batching, deferred secondary panels, hydration changes |
 | Turnstile and abuse protection | `feat/rfc0001-sprint1-integration` | #38 (part) | **Integrated** — server verification, protected unauthenticated actions, durable rate limiting. Headers/CSRF remain. |
 | Ballot-results migration safety | — | #55 | Planned — preflight, observability, recovery |
-| Governance command layer | — | #53 | Planned — after Phase 1 |
+| Governance command layer | — | #53 | Planned — next Phase 2 slice |
 | Decision record and responsibility queue | — | #54 | Planned — depends on #53 |
 
-Sprint 1 integration is PR #51 (draft).
+Sprint 1 and the above slices are in PR #51 (draft, not merged).
 
 ## Immediate recommendations
 
