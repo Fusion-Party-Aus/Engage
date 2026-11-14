@@ -1,6 +1,6 @@
 # Turnstile and abuse protection
 
-**Status:** Implemented on `feat/turnstile-abuse-protection` · **Recorded:** 14 November 2026
+**Status:** Implemented on `feat/rfc0001-sprint1-integration` (PR #51, not deployed) · **Recorded:** 14 November 2026
 **Decision:** [D32](../governance/decision-register.md) — Cloudflare Turnstile is part of the security programme for abuse-prone unauthenticated actions. Server-side verification is mandatory. Routine challenges must not interrupt authenticated voting.
 **Related:** [Known gap 15](../status/known-gaps.md), RFC 0001 I10, issue #38.
 

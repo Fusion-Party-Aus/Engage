@@ -1,7 +1,7 @@
 # Rendering performance audit — RFC 0001 Phase 2
 
 **Status:** Current · **Measured:** 14 November 2026
-**Branch:** `perf/rendering-investigation` · **Baseline commit:** `1bd4fd1` · **Measured after commit:** `b25e385`
+**Branch:** merged into `feat/rfc0001-sprint1-integration` (PR #51) · **Baseline commit:** `1bd4fd1` · **Measured after commit:** `b25e385`
 **Harness:** [`scripts/rendering-performance.mjs`](../../scripts/rendering-performance.mjs)
 **Data:** [`rendering-performance-baseline.json`](rendering-performance-baseline.json) · [`rendering-performance-after.json`](rendering-performance-after.json)
 

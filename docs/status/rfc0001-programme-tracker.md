@@ -31,8 +31,8 @@ Status values:
 | Workstream | Branch | Issue | State |
 |---|---|---|---|
 | Phase 1 lifecycle scheduling | `feat/rfc0001-sprint1-integration` | #26, #30 | **Integrated** — seconding, 30/30 deadlines, system advancement, automatic closure, scheduler, read-only migration report |
-| Rendering performance | `perf/rendering-investigation` | #52 | In progress — measurement harness, audit, low-risk wins |
-| Turnstile and abuse protection | `feat/turnstile-abuse-protection` | #38 (part) | In progress — server verification, protected unauthenticated actions, durable rate limiting |
+| Rendering performance | `feat/rfc0001-sprint1-integration` | #52 | **Integrated** — harness, audit, projections, session reuse, query batching, deferred secondary panels, hydration changes |
+| Turnstile and abuse protection | `feat/rfc0001-sprint1-integration` | #38 (part) | **Integrated** — server verification, protected unauthenticated actions, durable rate limiting. Headers/CSRF remain. |
 | Ballot-results migration safety | — | #55 | Planned — preflight, observability, recovery |
 | Governance command layer | — | #53 | Planned — after Phase 1 |
 | Decision record and responsibility queue | — | #54 | Planned — depends on #53 |
@@ -52,9 +52,9 @@ Sprint 1 integration is PR #51 (draft).
 | I7 | Rebind re-opened ballots explicitly | #26 | **Integrated** | Returning a zero-vote ballot to Deliberate unbinds the revision and emits `ballot.unbound`; re-entry binds the current revision. Substantive edits are refused once votes exist. Tests: `governance-integrity-sprint1.test.ts`. |
 | I8 | Close the small high-risk defects | #27, #32, #35, #42 | **Partial** | Ratification authority is cross-checked against the governance authority and the recorded ballot decision. Remaining: public supersession visibility (#35), comment moderation state and audit trail (#42), moderation UX. |
 | I9 | Wire essential notifications through an outbox | #33 | **Planned** | `dispatchMemberNotification` still has no production caller. |
-| I10 | Security and operations baseline | #38, #39 | **Planned** | Headers, rate limiting, CSRF coverage, Turnstile (D32), scheduler health, metrics. |
+| I10 | Security and operations baseline | #38, #39 | **Partial** | Turnstile server verification for magic-link, sign-up (if enabled) and public priority submission; shared MongoDB fixed-window rate limiting with hashed identifiers; authenticated voting unchallenged. Remaining: CSP/HSTS/frame/content-type headers, full CSRF/Origin coverage, metrics and alerting. |
 | I11 | Documentation truth pass | #44, #46 | **Partial** | Canonical documentation set exists; RFC, decision register and this tracker added. Older dated documents remain stale. |
-| I12 | Replace full-collection proposal list reads | #52 | **In progress** | Rendering-performance workstream: pagination, projection, query-count and hydration measurement. |
+| I12 | Replace full-collection proposal list reads | #52 | **Partial** | Measured −44% document DB commands and −54% DB time across ten page/identity combinations. Session resolved once per request; list reads projected and deduplicated; secondary admin panel is a server island; unnecessary `client:load` deferred. Remaining: paginate `/admin/proposals/` (~1 MB HTML), remove per-vote decryption and full vote scans via a tally read model, drop `details` from the admin register. See `docs/status/rendering-performance-audit.md`. |
 
 ## Strategic recommendations
 
@@ -106,6 +106,8 @@ Sprint 1 integration is PR #51 (draft).
 3. **Index migration is one-way.** The `ballot_results` unique index moved from `proposalId` to `ballotId`. Rollback requires deleting later results. A preflight and dry-run migration is required before production (#55).
 4. **Real-MongoDB coverage of governance writes.** The voting suite runs on MongoDB; the governance-integrity suite uses the in-memory database. Add replica-set cases for the atomic result, deletion guard and transition events in Phase 1.
 5. **Historical records.** Existing open ballots without deadlines and historical CRM verification reviews are not migrated by this branch. No unique branch-membership index exists yet, so concurrent membership writes still rely on application upserts.
+6. **Performance evidence is local.** The rendering audit measures a production build against synthetic data on one machine. It is indicative, not field or production SLA evidence; server-island work still consumes database time after the response.
+7. **Turnstile is unexercised against Cloudflare.** Siteverify was stubbed in all tests. Production requires both keys or protected routes correctly return 503.
 
 ## Next workstream
 

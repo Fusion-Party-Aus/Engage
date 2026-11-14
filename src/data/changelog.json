@@ -1,5 +1,13 @@
 [
   {
+    "hash": "b8568a9",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh after the rendering performance merge"
+  },
+  {
     "hash": "7ebd2cd",
     "date": "2026-11-14",
     "type": "docs",
@@ -96,6 +104,49 @@
     "scope": "tooling",
     "summary": "Add rendering performance harness and DB command metrics",
     "details": "Adds an opt-in MongoDB command monitor (disabled unless ENGAGE_DB_COMMAND_MONITOR=1 and APP_MODE is not production), a development-only diagnostics route, and a repeatable Playwright/Mongo measurement harness with baseline and comparison modes. No production behaviour changes."
+  },
+  {
+    "hash": "2ef26d0",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "security",
+    "summary": "Name the rate-limit collection plainly"
+  },
+  {
+    "hash": "96399d5",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for Turnstile abuse protection"
+  },
+  {
+    "hash": "9a2855b",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "security",
+    "summary": "Document Turnstile enforcement and rate limits",
+    "details": "Record the protected actions, configuration contract, fail-closed states, failure messages, privacy boundary, rate-limit defaults and remaining gaps (CSP and headers stay with #38). Add the new keys to the environment example."
+  },
+  {
+    "hash": "7d9bae9",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "security",
+    "summary": "Show the Turnstile widget on protected forms",
+    "details": "Render Cloudflare Turnstile on the Sense Box and magic-link sign-in forms using Horizon primitives. The widget renders nothing when no site key is configured, reports load and expiry failures inline with a retry action, and asks for a fresh token after a rejected submission because tokens are single-use."
+  },
+  {
+    "hash": "08c61ef",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "security",
+    "summary": "Verify Turnstile tokens for unauthenticated actions",
+    "details": "Add server-side Cloudflare Turnstile verification (D32) and a shared MongoDB fixed-window limiter for the abuse-prone unauthenticated routes. - protect Sense Box submission, magic-link sign-in/first registration, and email sign-up if it is enabled later - fail closed with 503 and an operational error when production requires Turnstile but the secret or site key is missing - report missing, invalid, expired, replayed and malformed tokens with plain-language errors; never log or return the secret or token - store only a keyed hash of the client address, with a TTL index, so limits are shared across instances - leave authenticated voting, deliberation and admin writes untouched - tests cover configuration states, verification outcomes, route refusal and acceptance, real-MongoDB concurrency and the voting exemption"
   },
   {
     "hash": "936eee4",
@@ -620,57 +671,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Connect verification, participation and legacy consent journeys"
-  },
-  {
-    "hash": "ee47cdf",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record administrator test email delivery"
-  },
-  {
-    "hash": "eb5f365",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "email",
-    "summary": "Let administrators send themselves a sample digest",
-    "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
-  },
-  {
-    "hash": "cfbf459",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record notification preferences and digest rollout defaults"
-  },
-  {
-    "hash": "bc6409f",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Separate email preferences and explain rollout defaults",
-    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
-  },
-  {
-    "hash": "7a56a95",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "engagement",
-    "summary": "Add proposal rankings, ballot deadlines and member reminders",
-    "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
   }
 ]
