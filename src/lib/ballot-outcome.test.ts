@@ -66,19 +66,28 @@ test("an unreadable choice fails rather than being counted as a rejection", () =
 // contradicts the computed one. These stubs pin the browser contract without a
 // DOM; the server still enforces the same rule.
 function stubResultForm(value: string, computed: string) {
-  const field = { hidden: false };
-  const reason = { required: false, value: "stale text" };
+  const field = { hidden: true };
+  const reason = {
+    required: false,
+    value: "stale text",
+    focused: false,
+    focus() {
+      this.focused = true;
+    },
+  };
+  const announcement = { textContent: "" };
   const select = { value };
   const form = {
     dataset: { computedResult: computed, proposalId: "PROP-1" },
     querySelector: (selector: string) => {
       if (selector.startsWith("select")) return select;
       if (selector.startsWith("[data-override-field]")) return field;
+      if (selector.startsWith("[data-override-announcement]")) return announcement;
       if (selector.startsWith("textarea")) return reason;
       return null;
     },
   };
-  return { form: form as unknown as HTMLFormElement, field, reason };
+  return { form: form as unknown as HTMLFormElement, field, reason, announcement };
 }
 
 test("the override reason is required only for a contradicting outcome", () => {
@@ -89,14 +98,23 @@ test("the override reason is required only for a contradicting outcome", () => {
   assert.equal(matching.reason.value, "");
 
   const contradicting = stubResultForm("unsuccessful", "successful");
-  syncBallotOutcomeOverride(contradicting.form);
+  syncBallotOutcomeOverride(contradicting.form, { focus: true });
   assert.equal(contradicting.field.hidden, false);
   assert.equal(contradicting.reason.required, true);
+  assert.equal(contradicting.reason.focused, true);
+  assert.match(contradicting.announcement.textContent, /written reason is required/i);
 
   const unchosen = stubResultForm("", "successful");
   syncBallotOutcomeOverride(unchosen.form);
   assert.equal(unchosen.field.hidden, true);
   assert.equal(unchosen.reason.required, false);
+  assert.equal(unchosen.announcement.textContent, "");
+
+  // inconclusive can never equal a computed outcome, so it always asks for a reason.
+  const inconclusive = stubResultForm("inconclusive", "unsuccessful");
+  syncBallotOutcomeOverride(inconclusive.form);
+  assert.equal(inconclusive.field.hidden, false);
+  assert.equal(inconclusive.reason.required, true);
 });
 
 test("the submitted payload carries an override reason only when one is written", () => {

@@ -6,6 +6,7 @@ import {
   BALLOT_OUTCOME_RULE_BASIS,
   BallotDomainError,
   FORMAL_DECISIONS_COLLECTION,
+  readBoundBallotTallies,
   recordFormalDecision,
   upsertMatterBallot,
 } from "./ballots.ts";
@@ -90,6 +91,20 @@ async function castChoices(
   }
 }
 
+/** Close the ballot exactly as the scheduler does, so certification is allowed. */
+async function closeBallot(db: Db, proposalId: string): Promise<void> {
+  const now = new Date();
+  await db
+    .collection("proposals")
+    .updateOne({ proposalId }, { $set: { ballotClosedAt: now } });
+  await db
+    .collection("ballots")
+    .updateOne(
+      { ballotId: proposalBallotId(proposalId) },
+      { $set: { status: "closed", updatedAt: now } },
+    );
+}
+
 describe(
   "computed ballot outcome validation (real MongoDB replica set)",
   { skip: !mongoUri },
@@ -122,6 +137,7 @@ describe(
         "abstain",
         "abstain",
       ]);
+      await closeBallot(db, proposalId);
 
       const record = await recordFormalDecision(db, {
         matterId: proposalId,
@@ -171,6 +187,7 @@ describe(
       const majorityNo = "PROP-REJECTED";
       await seedBallot(db, majorityNo);
       await castChoices(db, majorityNo, ["approve", "reject", "reject", "abstain"]);
+      await closeBallot(db, majorityNo);
       const rejected = await recordFormalDecision(db, {
         matterId: majorityNo,
         revisionId: "rev-1",
@@ -183,6 +200,7 @@ describe(
       const tied = "PROP-TIED";
       await seedBallot(db, tied);
       await castChoices(db, tied, ["approve", "approve", "reject", "reject"]);
+      await closeBallot(db, tied);
       const tie = await recordFormalDecision(db, {
         matterId: tied,
         revisionId: "rev-1",
@@ -196,6 +214,7 @@ describe(
 
       const noVotes = "PROP-NO-VOTES";
       await seedBallot(db, noVotes);
+      await closeBallot(db, noVotes);
       const empty = await recordFormalDecision(db, {
         matterId: noVotes,
         revisionId: "rev-1",
@@ -216,6 +235,7 @@ describe(
       const proposalId = "PROP-CONTRADICTION";
       await seedBallot(db, proposalId);
       await castChoices(db, proposalId, ["approve", "approve", "reject"]);
+      await closeBallot(db, proposalId);
 
       await assert.rejects(
         recordFormalDecision(db, {
@@ -244,7 +264,7 @@ describe(
           error instanceof BallotDomainError &&
           error.code === "RESULT_OVERRIDE_REASON_REQUIRED",
       );
-      // Nothing was written, so the ballot is still open and uncertified.
+      // Nothing was written, so the ballot stays closed but uncertified.
       assert.equal(
         await db
           .collection(FORMAL_DECISIONS_COLLECTION)
@@ -255,7 +275,7 @@ describe(
         (await db.collection("ballots").findOne({
           ballotId: proposalBallotId(proposalId),
         }))?.status,
-        "open",
+        "closed",
       );
     });
 
@@ -263,6 +283,7 @@ describe(
       const proposalId = "PROP-OVERRIDE";
       await seedBallot(db, proposalId);
       await castChoices(db, proposalId, ["approve", "reject", "reject"]);
+      await closeBallot(db, proposalId);
 
       const record = await recordFormalDecision(db, {
         matterId: proposalId,
@@ -308,6 +329,7 @@ describe(
       const proposalId = "PROP-IDEMPOTENT";
       await seedBallot(db, proposalId);
       await castChoices(db, proposalId, ["approve", "approve", "reject"]);
+      await closeBallot(db, proposalId);
 
       const payload = {
         matterId: proposalId,
@@ -359,6 +381,7 @@ describe(
       const proposalId = "PROP-ENCRYPTED";
       await seedBallot(db, proposalId);
       await castChoices(db, proposalId, ["approve", "approve", "reject"], env);
+      await closeBallot(db, proposalId);
 
       const storedVotes = await db
         .collection(PROPOSAL_VOTES)
@@ -434,6 +457,7 @@ describe(
       const proposalId = "PROP-ROUTE";
       await seedBallot(db, proposalId);
       await castChoices(db, proposalId, ["approve", "approve", "reject"]);
+      await closeBallot(db, proposalId);
 
       const env: PlatformEnv = {
         APP_MODE: "test",
@@ -498,6 +522,287 @@ describe(
       assert.equal(override.reason, "Returning Officer direction after a recount.");
       assert.equal(override.by, "dev-admin-01");
       assert.match(override.at, /^\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it("refuses to certify an open ballot and certifies the closed tally instead", async () => {
+      const proposalId = "PROP-STILL-OPEN";
+      await seedBallot(db, proposalId);
+      await castChoices(db, proposalId, ["approve", "approve", "reject"]);
+
+      await assert.rejects(
+        recordFormalDecision(db, {
+          matterId: proposalId,
+          revisionId: "rev-1",
+          result: "successful",
+          decisionEventId: "BALLOT-STILL-OPEN",
+          recordedBy: "admin-1",
+        }),
+        (error: unknown) =>
+          error instanceof BallotDomainError &&
+          error.code === "BALLOT_NOT_CLOSED" &&
+          /still accept votes/i.test(error.message),
+      );
+      assert.equal(
+        await db
+          .collection(FORMAL_DECISIONS_COLLECTION)
+          .countDocuments({ proposalId }),
+        0,
+      );
+
+      // A vote cast after the attempted certification changes the outcome, which
+      // is exactly why an open ballot cannot be certified.
+      await castVote(db, memberUser("late-voter"), {
+        proposalId,
+        choice: "reject",
+      });
+      await closeBallot(db, proposalId);
+
+      await assert.rejects(
+        recordFormalDecision(db, {
+          matterId: proposalId,
+          revisionId: "rev-1",
+          result: "successful",
+          decisionEventId: "BALLOT-STILL-OPEN",
+          recordedBy: "admin-1",
+        }),
+        (error: unknown) =>
+          error instanceof BallotDomainError &&
+          error.code === "RESULT_OVERRIDE_REASON_REQUIRED",
+      );
+      const recorded = await recordFormalDecision(db, {
+        matterId: proposalId,
+        revisionId: "rev-1",
+        result: "unsuccessful",
+        decisionEventId: "BALLOT-STILL-OPEN",
+        recordedBy: "admin-1",
+      });
+      assert.equal(recorded.computedResult, "unsuccessful");
+      assert.deepEqual(recorded.tally, {
+        approve: 2,
+        abstain: 0,
+        reject: 2,
+        total: 4,
+      });
+    });
+
+    it("refuses a tally containing a vote bound to another revision", async () => {
+      const proposalId = "PROP-DRIFTED";
+      await seedBallot(db, proposalId);
+      await castChoices(db, proposalId, ["approve", "approve", "reject"]);
+      await closeBallot(db, proposalId);
+      const ballotId = proposalBallotId(proposalId);
+      await db.collection(PROPOSAL_VOTES).insertMany([
+        {
+          ballotId,
+          proposalId,
+          revisionId: "rev-0",
+          memberId: "drifted-revision",
+          choice: "reject",
+          updatedAt: new Date(),
+        },
+        {
+          ballotId,
+          proposalId,
+          memberId: "missing-revision",
+          choice: "reject",
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const summary = await readBoundBallotTallies(db, {
+        ballots: [{ matterId: proposalId, revisionId: "rev-1" }],
+        cryptoConfig: null,
+      });
+      assert.equal(summary.get(proposalId)?.state, "unbound");
+      assert.equal(summary.get(proposalId)?.unboundVoteCount, 2);
+      assert.equal(summary.get(proposalId)?.computedResult, undefined);
+
+      await assert.rejects(
+        recordFormalDecision(db, {
+          matterId: proposalId,
+          revisionId: "rev-1",
+          result: "successful",
+          decisionEventId: "BALLOT-DRIFTED",
+          recordedBy: "admin-1",
+        }),
+        (error: unknown) =>
+          error instanceof BallotDomainError &&
+          error.code === "BALLOT_TALLY_UNBOUND_VOTES",
+      );
+      assert.equal(
+        await db
+          .collection(FORMAL_DECISIONS_COLLECTION)
+          .countDocuments({ proposalId }),
+        0,
+      );
+    });
+
+    it("counts only the matter ballot, not amendment-ballot votes", async () => {
+      const proposalId = "PROP-AMENDMENT-BALLOT";
+      await seedBallot(db, proposalId);
+      await castChoices(db, proposalId, ["approve", "reject"]);
+      await closeBallot(db, proposalId);
+      await db.collection(PROPOSAL_VOTES).insertMany(
+        Array.from({ length: 4 }, (_, index) => ({
+          ballotId: "amendment:AMD-1",
+          proposalId,
+          amendmentId: "AMD-1",
+          revisionId: "rev-1",
+          memberId: `amend-member-${index}`,
+          choice: "approve",
+          updatedAt: new Date(),
+        })),
+      );
+
+      const record = await recordFormalDecision(db, {
+        matterId: proposalId,
+        revisionId: "rev-1",
+        result: "unsuccessful",
+        decisionEventId: "BALLOT-AMENDMENT",
+        recordedBy: "admin-1",
+      });
+      assert.deepEqual(record.tally, {
+        approve: 1,
+        abstain: 0,
+        reject: 1,
+        total: 2,
+      });
+      assert.equal(record.computedResult, "unsuccessful");
+    });
+
+    it("refuses a tally containing an unreadable encrypted vote", async () => {
+      const env: Partial<PlatformEnv> = {
+        BALLOT_ENCRYPTION_MODE: "encrypt",
+        BALLOT_ENCRYPTION_KEYS: `v1:${generateBallotKeyHex()}`,
+        BALLOT_BLIND_INDEX_KEY: `bi-v1:${generateBallotKeyHex()}`,
+      };
+      const proposalId = "PROP-UNREADABLE";
+      await seedBallot(db, proposalId);
+      await castChoices(db, proposalId, ["approve", "approve", "reject"], env);
+      await closeBallot(db, proposalId);
+
+      const [vote] = await db
+        .collection(PROPOSAL_VOTES)
+        .find({ ballotId: proposalBallotId(proposalId) })
+        .toArray();
+
+      // Missing keys are a server fault, not a ballot fault.
+      await assert.rejects(
+        recordFormalDecision(db, {
+          matterId: proposalId,
+          revisionId: "rev-1",
+          result: "successful",
+          decisionEventId: "BALLOT-UNREADABLE",
+          recordedBy: "admin-1",
+          cryptoConfig: null,
+        }),
+        (error: unknown) =>
+          error instanceof BallotDomainError &&
+          error.code === "BALLOT_DECRYPTION_UNAVAILABLE" &&
+          error.status === 503,
+      );
+
+      const raw = Buffer.from(String(vote.voteEnvelope.ct), "base64");
+      raw[0] = raw[0]! ^ 0xff;
+      await db.collection(PROPOSAL_VOTES).insertOne({
+        ballotId: proposalBallotId(proposalId),
+        proposalId,
+        revisionId: "rev-1",
+        voterBlindIndex: "tampered-blind-index",
+        voteEnvelope: {
+          ...vote.voteEnvelope,
+          ct: raw.toString("base64"),
+        },
+        updatedAt: new Date(),
+      });
+
+      await assert.rejects(
+        recordFormalDecision(db, {
+          matterId: proposalId,
+          revisionId: "rev-1",
+          result: "successful",
+          decisionEventId: "BALLOT-UNREADABLE",
+          recordedBy: "admin-1",
+          cryptoConfig: loadBallotCryptoConfig(env),
+        }),
+        (error: unknown) =>
+          error instanceof BallotDomainError &&
+          error.code === "BALLOT_TALLY_UNREADABLE",
+      );
+      const summary = await readBoundBallotTallies(db, {
+        ballots: [{ matterId: proposalId, revisionId: "rev-1" }],
+        cryptoConfig: loadBallotCryptoConfig(env),
+      });
+      assert.equal(summary.get(proposalId)?.state, "unreadable");
+    });
+
+    it("refuses an over-length override reason instead of truncating the audit record", async () => {
+      const proposalId = "PROP-LONG-REASON";
+      await seedBallot(db, proposalId);
+      await castChoices(db, proposalId, ["approve", "reject", "reject"]);
+      await closeBallot(db, proposalId);
+
+      await assert.rejects(
+        recordFormalDecision(db, {
+          matterId: proposalId,
+          revisionId: "rev-1",
+          result: "successful",
+          decisionEventId: "BALLOT-LONG-REASON",
+          recordedBy: "admin-1",
+          overrideReason: "x".repeat(1001),
+        }),
+        (error: unknown) =>
+          error instanceof BallotDomainError &&
+          error.code === "RESULT_OVERRIDE_REASON_TOO_LONG" &&
+          error.status === 400,
+      );
+      assert.equal(
+        await db
+          .collection(FORMAL_DECISIONS_COLLECTION)
+          .countDocuments({ proposalId }),
+        0,
+      );
+    });
+
+    it("refuses a retry that changes the recorded override reason", async () => {
+      const proposalId = "PROP-REASON-RETRY";
+      await seedBallot(db, proposalId);
+      await castChoices(db, proposalId, ["approve", "reject", "reject"]);
+      await closeBallot(db, proposalId);
+
+      const payload = {
+        matterId: proposalId,
+        revisionId: "rev-1",
+        result: "successful" as const,
+        decisionEventId: "BALLOT-REASON-RETRY",
+        recordedBy: "admin-1",
+        overrideReason: "Returning Officer upheld the disputed ballots.",
+      };
+      const first = await recordFormalDecision(db, payload);
+      assert.deepEqual(await recordFormalDecision(db, payload), first);
+
+      await assert.rejects(
+        recordFormalDecision(db, {
+          ...payload,
+          overrideReason: "A different reason after the fact.",
+        }),
+        (error: unknown) =>
+          error instanceof BallotDomainError &&
+          error.code === "DECISION_ALREADY_RECORDED",
+      );
+      const stored = await db
+        .collection(FORMAL_DECISIONS_COLLECTION)
+        .findOne({ proposalId });
+      assert.equal(
+        (stored?.override as { reason?: string } | undefined)?.reason,
+        "Returning Officer upheld the disputed ballots.",
+      );
+      assert.equal(
+        await db
+          .collection(GOVERNANCE_EVENTS_COLLECTION)
+          .countDocuments({ matterId: proposalId, eventType: "decision.recorded" }),
+        1,
+      );
     });
   },
 );

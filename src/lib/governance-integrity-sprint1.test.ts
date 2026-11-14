@@ -217,6 +217,29 @@ describe("Sprint 1 governance integrity", () => {
       revisionId: opened.ballotRevisionId!,
       status: "open",
     });
+    // Certification requires a closed ballot.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: opened.proposalId },
+        { $set: { ballotClosedAt: new Date() } },
+      );
+
+    // The zero-vote ballot computes unsuccessful, so a successful result is only
+    // allowed as an explicit override with a written reason.
+    await assert.rejects(
+      recordFormalDecision(db, {
+        matterId: opened.proposalId,
+        revisionId: opened.ballotRevisionId!,
+        result: "successful",
+        decisionEventId: "dec-evt-1",
+        authorityBranchId: "branch-nat",
+        recordedBy: adminUser.memberId,
+      }),
+      (error: unknown) =>
+        error instanceof BallotDomainError &&
+        error.code === "RESULT_OVERRIDE_REASON_REQUIRED",
+    );
 
     const first = await recordFormalDecision(db, {
       matterId: opened.proposalId,
@@ -380,6 +403,14 @@ test(
       );
 
       // Two distinct ballots for the same matterId can both record formal decisions
+      await db.collection("proposals").insertOne({
+        proposalId: "PROP-MULTI-1",
+        slug: "prop-multi-1",
+        title: "Multi-ballot fixture",
+        stage: "decide",
+        ballotRevisionId: "rev-1",
+        ballotClosedAt: new Date(),
+      });
       await recordFormalDecision(db, {
         ballotId: "proposal:PROP-MULTI-1",
         matterId: "PROP-MULTI-1",
