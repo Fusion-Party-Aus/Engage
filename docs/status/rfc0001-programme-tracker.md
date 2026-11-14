@@ -1,7 +1,7 @@
 # RFC 0001 implementation tracker
 
 **Status:** Living · **Updated:** 14 November 2026
-**Source documents:** [RFC 0001](../rfc/0001-participatory-governance-platform-evolution.md) · [Decision register](../governance/decision-register.md) · [Known gaps](known-gaps.md)
+**Source documents:** [RFC 0001](../rfc/0001-participatory-governance-platform-evolution.md) · [Decision register](../governance/decision-register.md) · [Known gaps](known-gaps.md) · [Orchestrator handover](orchestrator-handover.md)
 
 This is the authoritative progress record for the RFC 0001 programme. Each recommendation maps to an issue, a state, and the evidence that justifies that state. An entry is only **Done** when the behaviour is enforced by code, covered by tests that run against a real MongoDB replica set where persistence is involved, and reflected in the documentation.
 
@@ -37,7 +37,7 @@ Status values:
 | Governance command layer | — | #53 | Planned — next Phase 2 slice |
 | Decision record and responsibility queue | — | #54 | Planned — depends on #53 |
 
-Sprint 1 and the above slices are in PR #51 (draft, not merged).
+Sprint 1 and the above slices are in PR #51 (ready for review, not merged). The next orchestrator should read [the handover brief](orchestrator-handover.md) first.
 
 ## Immediate recommendations
 

@@ -1,5 +1,13 @@
 [
   {
+    "hash": "8d50cd3",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Mark integrated workstreams and the next Phase 2 slices"
+  },
+  {
     "hash": "d4b5de0",
     "date": "2026-11-14",
     "type": "docs",
@@ -664,13 +672,5 @@
     "category": "fix",
     "scope": "ci",
     "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
-  },
-  {
-    "hash": "cb39b60",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record lifecycle audit, consent assessment and rollout checks"
   }
 ]

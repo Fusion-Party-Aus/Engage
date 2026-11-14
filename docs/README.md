@@ -32,6 +32,7 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Know what is broken or undecided | [status/known-gaps.md](status/known-gaps.md) |
 | Know which governance rules the maintainer has approved | [governance/decision-register.md](governance/decision-register.md) |
 | Track RFC 0001 implementation progress | [status/rfc0001-programme-tracker.md](status/rfc0001-programme-tracker.md) |
+| Take over the RFC 0001 programme | [status/orchestrator-handover.md](status/orchestrator-handover.md) |
 | Understand a proposed direction | [rfc/README.md](rfc/README.md) |
 
 ## Documentation map
@@ -63,6 +64,7 @@ docs/
 │   ├── capability-matrix.md          # Implemented / partial / planned
 │   ├── known-gaps.md                 # Defects, risks and open decisions
 │   ├── rfc0001-programme-tracker.md  # Recommendation-by-recommendation progress
+│   ├── orchestrator-handover.md      # Operating brief for the next orchestrator
 │   └── sprint1-integration-report.md # Verification evidence for the first slice
 └── rfc/
     ├── README.md                     # RFC status, structure and rules
