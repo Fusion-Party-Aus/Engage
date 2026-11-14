@@ -1,5 +1,14 @@
 [
   {
+    "hash": "7ebd2cd",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "lifecycle",
+    "summary": "Record Phase 1 delivery and the remaining decisions",
+    "details": "Mark seconding, scheduled advancement and automatic closure as implemented, update the known-gap register, and add O9/O10 for the administrative direct-creation path and renewed seconding after material rewrites."
+  },
+  {
     "hash": "fe1ae6b",
     "date": "2026-11-14",
     "type": "feat",
@@ -16,6 +25,77 @@
     "scope": "admin",
     "summary": "Render saved values in select controls",
     "details": "Astro renders React component slot children as raw HTML, so React never sees the options inside NativeSelect and cannot apply defaultValue. Every select rendered its first option, which meant editing a proposal could silently reset its stage, clearing provenance, changing a member's status to pending, or applying the wrong filter or sort. Mark the stored option as selected at each affected call site. The admin proposal editor and register, member administration, Sense Box review, engagement period, policy filters and public proposal filters are covered."
+  },
+  {
+    "hash": "116909f",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the rendering performance slice"
+  },
+  {
+    "hash": "9a12214",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "status",
+    "summary": "Record the rendering performance audit and measurements",
+    "details": "Classifies initial, deferred and interaction-only data per audited page; records baseline and after medians, queries removed or deferred, bundle findings, limitations and the highest-value remaining work. Adds a pnpm/npm perf:render entry point."
+  },
+  {
+    "hash": "b25e385",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "client",
+    "summary": "Defer notification hydration off the critical path",
+    "details": "The header notification bell and notification preferences hydrate when the browser is idle. The bell is secondary to page content but still loads its unread count; no API or preference behaviour changes."
+  },
+  {
+    "hash": "21bacbc",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "admin",
+    "summary": "Consolidate register reads and defer participation panel",
+    "details": "The proposals register now reads the proposal collection once and batches amendment and revision lookups instead of issuing one query per row. The overview's recent-participation panel moves to a server island with a stable fallback, so its session-dependent reads no longer block the dashboard. Admin timelines hydrate when visible; migrations hydrate on idle."
+  },
+  {
+    "hash": "0089412",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "lists",
+    "summary": "Project list reads and reuse member vote queries",
+    "details": "Stops list queries returning detailHtml and, where no search depends on it, long rationale text. Home and the proposals list reuse one member-vote read for outstanding ballots; the member page loads shared activity inputs once instead of twice. Member-page islands in inactive views hydrate only when visible. Adds visibility and vote-reuse regression tests."
+  },
+  {
+    "hash": "f6ebf8f",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "auth",
+    "summary": "Resolve a session once per request render",
+    "details": "Layouts and pages each asked for the same session. Cache the in-flight resolution against the Request object so one browser request performs one session lookup while role revocation remains request-scoped. Adds a regression test for reuse."
+  },
+  {
+    "hash": "20b389d",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "proposals",
+    "summary": "Batch independent detail reads and defer ballot hydration",
+    "details": "Runs supersede, eligibility, related-branch and evidence reads with the rest of the proposal-detail batch instead of in sequence. The ballot hydrates on idle rather than blocking load; the stance selector does the same."
+  },
+  {
+    "hash": "3500116",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "tooling",
+    "summary": "Add rendering performance harness and DB command metrics",
+    "details": "Adds an opt-in MongoDB command monitor (disabled unless ENGAGE_DB_COMMAND_MONITOR=1 and APP_MODE is not production), a development-only diagnostics route, and a repeatable Playwright/Mongo measurement harness with baseline and comparison modes. No production behaviour changes."
   },
   {
     "hash": "936eee4",
@@ -592,77 +672,5 @@
     "scope": "engagement",
     "summary": "Add proposal rankings, ballot deadlines and member reminders",
     "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
-  },
-  {
-    "hash": "0b8b375",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "settings",
-    "summary": "Save the configured source repository URL"
-  },
-  {
-    "hash": "6fad513",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record granular analytics improvements"
-  },
-  {
-    "hash": "2167573",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "analytics",
-    "summary": "Measure Engage navigation and participation outcomes"
-  },
-  {
-    "hash": "e41ac7d",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "analytics",
-    "summary": "Initialize Plausible tracking on production"
-  },
-  {
-    "hash": "71a98bb",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "analytics",
-    "summary": "Install Plausible tracker package"
-  },
-  {
-    "hash": "b98af1d",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "time",
-    "summary": "Display time in user's local timezone"
-  },
-  {
-    "hash": "5de3c91",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "participation",
-    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
-  },
-  {
-    "hash": "46f1b9b",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Fix error on branch pages, and seed branches to database"
-  },
-  {
-    "hash": "c14ee07",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
   }
 ]
