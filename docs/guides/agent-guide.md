@@ -95,7 +95,11 @@ Proposal ballots close by deadline, not by an officer action. No API sets `ballo
 
 The officer supplies `successful`, `unsuccessful` or `inconclusive`, and the result must match the outcome computed from the votes bound to the ballot and revision. The only encoded rule is D9: approve greater than reject approves, a tie and zero votes do not, and abstentions never change the comparison because no abstention denominator is defined (D10/O1). No quorum or turnout applies (D8). The basis is versioned as `simple-majority-d9-v1`.
 
-A contradicting result is accepted only as an explicit override with a written reason, and the override is stored on the result and in the `decision.recorded` event. Do not add a threshold, quorum, abstention denominator or ranked-choice rule without a recorded maintainer decision — see the decision register open items O1 and O2.
+Certification requires a closed ballot (`ballotClosedAt`, a close time that has passed, or a ballot row the system closed); a live ballot is refused with `BALLOT_NOT_CLOSED`. The tally is the whole ballot's truth: unbound or mismatched-revision votes refuse with `BALLOT_TALLY_UNBOUND_VOTES`, unreadable encrypted votes with `BALLOT_TALLY_UNREADABLE`, and missing keys with `BALLOT_DECRYPTION_UNAVAILABLE`. Admin pages derive their displayed tally from the same bound set, so never add a page-level tally that counts by `ballotId` alone.
+
+A differing result — including `inconclusive`, which never equals a computed outcome — is accepted only as an explicit override with a written reason (1000 characters or fewer). The override is stored on the result and in the `decision.recorded` event, and a retry that changes the reason is refused. Amendment endorsement ballots (`close-ballot.ts`) are not covered by this check; O2/D18 are undecided.
+
+The member-facing Terms of Use §9 describes this rule. Do not change the counting rule without a recorded maintainer decision (open items O1 and O2) and a matching legal-text update.
 
 ### Permission keys are not all wired
 

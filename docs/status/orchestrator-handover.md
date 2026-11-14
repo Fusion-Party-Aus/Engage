@@ -131,7 +131,7 @@ implementation, then update the decision register or open a decision.
 
 | Area | What is missing |
 |---|---|
-| Ballot outcome rules (#28) | A computed Yes-vs-No check with an audited override is not built. Abstention denominator (O1) is undecided. The current result is officer-supplied. |
+| Ballot outcome rules (#28) | The computed Yes-vs-No check with an audited override is built on `feat/ballot-outcome-validation` (not yet merged). Certification requires a closed ballot and refuses unbound votes. Abstention denominator (O1), ranked choice (O2) and a computed check for amendment endorsement ballots remain undecided or unimplemented. |
 | Ballot-results migration (#55) | **Resolved 15 November 2026.** Startup is a no-op or a report; preflight, backup, verified apply and recovery are documented. |
 | Notifications (#33) | `dispatchMemberNotification` still has no production caller. Scheduled transitions notify nobody. |
 | Security perimeter (#38) | Turnstile and rate limiting only. CSP, HSTS, frame/content-type headers, full CSRF/Origin coverage remain. |
