@@ -244,7 +244,7 @@ describe("durable rate limits on real MongoDB", { skip: !uri }, () => {
     try {
       const [dbA, dbB] = [clients[0]!.db(dbName), clients[1]!.db(dbName)];
       const env = { BETTER_AUTH_SECRET: "rate-limit-test-secret" };
-      const now = Date.now() + 3_600_000;
+      const now = Math.ceil((Date.now() + 3_600_000) / 60_000) * 60_000;
       const input = {
         action: "auth-magic-link" as const,
         identifier: "203.0.113.44",
@@ -263,7 +263,7 @@ describe("durable rate limits on real MongoDB", { skip: !uri }, () => {
       const rows = await dbA.collection(RATE_LIMIT_COLLECTION).find({}).toArray();
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.count, 20);
-      assert.equal(new Date(rows[0]!.expiresAt).getTime(), WINDOW_START + 60_000);
+      assert.equal(new Date(rows[0]!.expiresAt).getTime(), now + 60_000);
       assert.equal(
         JSON.stringify(rows).includes(input.identifier),
         false,
@@ -279,7 +279,7 @@ describe("durable rate limits on real MongoDB", { skip: !uri }, () => {
       // The next window is independent of the exhausted one.
       const next = await consumeRateLimit(dbB, {
         ...input,
-        now: WINDOW_START + 60_000,
+        now: now + 60_000,
       });
       assert.equal(next.allowed, true);
       assert.equal(next.remaining, 4);
