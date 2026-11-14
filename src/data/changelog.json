@@ -1,5 +1,22 @@
 [
   {
+    "hash": "1c723de",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Warm the route database before asserting on it",
+    "details": "The result-API case resolved the application client only inside the route. A transient connect failure could make the development fallback serve the in-memory database, so the route could not see the fixture and the test failed with a confusing authorisation-style error. Resolve the application client in the test and assert the fixture is visible before exercising the route, so a real connectivity failure fails loudly instead of degrading silently. Refs #28."
+  },
+  {
+    "hash": "27dec58",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Regenerate the public changelog snapshot"
+  },
+  {
     "hash": "f01ce2a",
     "date": "2026-11-15",
     "type": "docs",
@@ -647,21 +664,5 @@
     "category": "improvement",
     "scope": "server",
     "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
-  },
-  {
-    "hash": "3512e0a",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "workspaces",
-    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
-  },
-  {
-    "hash": "f58e150",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
   }
 ]
