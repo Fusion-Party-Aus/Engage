@@ -77,14 +77,25 @@ docs/
 - **`AGENTS.md`** is normative for user experience, visual design, governance invariants, Git discipline and verification. It outranks this documentation where the two overlap.
 - **`PRODUCT.md`** is the product schema used by the Impeccable design workflow. It remains valid but is shorter than [product/overview.md](product/overview.md).
 - **`DESIGN.md`** defines the Horizon implementation contract: tokens, typography, components and layout.
-- **`docs/governance/`**, **`docs/architecture/`** and **`docs/integrations/`** contain earlier focused specifications. They remain useful for detail, but this set is the entry point and resolves their status.
+- **`docs/governance/`**, **`docs/architecture/`** and **`docs/integrations/`** contain earlier focused specifications. They remain useful for detail, but this set is the entry point and resolves their status. Older records such as `docs/operations.md`, `docs/coolify-deployment.md` and the dated audits carry a document status label at the top; superseded pages link to the canonical page that replaces them.
 - **`docs/research/`** is evidence and option analysis, not a commitment. Nothing in it is implemented merely because it is documented.
 - **`docs/rfc/`** contains proposed directions and decision records. An RFC is not current behaviour and is not an implementation authorisation. Where an RFC and this documentation set disagree about what is shipped, this set and the code are authoritative.
 - Dated audits, release records and migration inventories are historical. They describe the system at a point in time and must not be read as current state.
 
 ## Status vocabulary
 
-This set uses three labels consistently:
+New and corrected pages carry a **document status** label at the top. Capability claims inside the canonical pages use a separate three-value vocabulary.
+
+Document status:
+
+| Label | Meaning |
+|---|---|
+| **Current** | Maintained and expected to describe the implementation. Correct it when behaviour changes. |
+| **Historical** | A dated record. It describes the system at that date and is not maintained; do not read it as current state. |
+| **Superseded** | Replaced by a named canonical page. The page links to its replacement and is retained only for host or historical detail. |
+| **Design-only** | A proposal, decision record or policy awaiting approval. It is not current behaviour and is not an implementation authorisation. |
+
+Capability status, used inside the canonical pages:
 
 | Label | Meaning |
 |---|---|
