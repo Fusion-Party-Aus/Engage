@@ -1,6 +1,7 @@
 import type { ClientSession, Db } from "mongodb";
 import {
   loadBallotCryptoConfig,
+  loadBallotCryptoConfigForRead,
   type BallotCryptoConfig,
 } from "./ballot-crypto.ts";
 import { ballotDeadlineLabel } from "./ballot-deadline.ts";
@@ -87,18 +88,18 @@ export async function readBoundBallotTally(
   },
 ): Promise<VoteTally> {
   const scan = await scanBallotVotes(db, input);
-  if (scan.decryptionUnavailable) {
-    throw new BallotDomainError(
-      "Encrypted ballot votes are present but this server cannot decrypt them, so the outcome cannot be computed.",
-      503,
-      "BALLOT_DECRYPTION_UNAVAILABLE",
-    );
-  }
   if (scan.unboundVoteCount > 0) {
     throw new BallotDomainError(
       "Some recorded votes are not bound to this ballot's frozen wording, so the outcome cannot be computed. Review the ballot binding first.",
       409,
       "BALLOT_TALLY_UNBOUND_VOTES",
+    );
+  }
+  if (scan.decryptionUnavailable) {
+    throw new BallotDomainError(
+      "Encrypted ballot votes are present but this server cannot decrypt them, so the outcome cannot be computed.",
+      503,
+      "BALLOT_DECRYPTION_UNAVAILABLE",
     );
   }
   if (scan.unreadableVoteCount > 0) {
@@ -111,7 +112,12 @@ export async function readBoundBallotTally(
   return sumVoteTally(scan.choices);
 }
 
-export type BallotTallyState = "computed" | "no-votes" | "unbound" | "unreadable";
+export type BallotTallyState =
+  | "computed"
+  | "no-votes"
+  | "unbound"
+  | "decryption-unavailable"
+  | "unreadable";
 
 /** Display-safe tally for one ballot, computed from the same bound set. */
 export interface BoundBallotTallySummary {
@@ -119,6 +125,7 @@ export interface BoundBallotTallySummary {
   unboundVoteCount: number;
   unreadableVoteCount: number;
   state: BallotTallyState;
+  /** Present whenever the tally is computable, including a zero-vote ballot. */
   computedResult?: ComputedBallotOutcome;
 }
 
@@ -154,6 +161,18 @@ function resolveTallyCryptoConfig(
       "BALLOT_DECRYPTION_UNAVAILABLE",
     );
   }
+}
+
+/**
+ * Load ballot decryption keys for a display-only tally. A misconfigured server
+ * returns `null` so admin pages can render an operational message instead of
+ * failing the whole page; the tally then reports `decryption-unavailable` when
+ * encrypted votes are actually present.
+ */
+export function loadBallotTallyCryptoConfig(
+  env: Partial<import("./types.ts").PlatformEnv> | Record<string, string | undefined>,
+): BallotCryptoConfig | null {
+  return loadBallotCryptoConfigForRead(env);
 }
 
 async function scanBallotVotes(
@@ -226,19 +245,27 @@ function classifyBallotVotes(
 
 function summariseScan(scan: BallotVoteScan): BoundBallotTallySummary {
   const tally = sumVoteTally(scan.choices);
-  const state: BallotTallyState = scan.decryptionUnavailable || scan.unreadableVoteCount > 0
-    ? "unreadable"
-    : scan.unboundVoteCount > 0
+  // State the cause the officer can act on first. Unbound votes are a binding
+  // fault they can resolve; unavailable keys are a server configuration fault;
+  // unreadable votes are a ballot integrity fault. A zero-vote tally is still
+  // computable (D9 computes unsuccessful), so the UI can require an override.
+  const state: BallotTallyState =
+    scan.unboundVoteCount > 0
       ? "unbound"
-      : tally.total === 0
-        ? "no-votes"
-        : "computed";
+      : scan.decryptionUnavailable
+        ? "decryption-unavailable"
+        : scan.unreadableVoteCount > 0
+          ? "unreadable"
+          : tally.total === 0
+            ? "no-votes"
+            : "computed";
+  const computable = state === "computed" || state === "no-votes";
   return {
     tally,
     unboundVoteCount: scan.unboundVoteCount,
     unreadableVoteCount: scan.unreadableVoteCount,
     state,
-    ...(state === "computed" ? { computedResult: computeBallotOutcome(tally) } : {}),
+    ...(computable ? { computedResult: computeBallotOutcome(tally) } : {}),
   };
 }
 
@@ -294,8 +321,14 @@ export async function readBoundBallotTallies(
 }
 
 /**
- * Refuse certification unless the ballot is closed: a recorded closure marker,
- * a close time that has passed, or a ballot row the system has already closed.
+ * Refuse certification unless the addressed ballot is closed.
+ *
+ * The ballot's own row is authoritative first: a `closed` status or a close time
+ * that has passed allows certification, and a future close time refuses it even
+ * when another ballot for the same matter is closed. Only when the ballot row is
+ * neither closed nor carries a close time does the matter's closure
+ * (`ballotClosedAt` / `ballotClosesAt`) apply, which keeps legacy records
+ * certifiable once the matter is closed.
  *
  * A ballot with no recorded close is deliberately refused rather than assumed
  * closed. Legacy ballots without a deadline already need an operator to schedule
@@ -308,6 +341,22 @@ export async function assertBallotClosedForCertification(
   session?: ClientSession,
 ): Promise<void> {
   const sessionOpts = session ? { session } : undefined;
+  const ballot = await db.collection(BALLOTS_COLLECTION).findOne(
+    { ballotId: input.ballotId },
+    { projection: { status: 1, closesAt: 1 }, ...(sessionOpts ?? {}) },
+  );
+  if (ballot?.status === "closed") return;
+
+  const ballotClosesAt = ballot?.closesAt ? new Date(ballot.closesAt) : null;
+  if (ballotClosesAt && Number.isFinite(ballotClosesAt.getTime())) {
+    if (ballotClosesAt.getTime() <= input.now.getTime()) return;
+    throw new BallotDomainError(
+      `This ballot can still accept votes until ${ballotDeadlineLabel(ballotClosesAt)}. Record the outcome after it closes.`,
+      409,
+      "BALLOT_NOT_CLOSED",
+    );
+  }
+
   const proposal = await db.collection("proposals").findOne(
     { proposalId: input.matterId },
     {
@@ -317,23 +366,17 @@ export async function assertBallotClosedForCertification(
   );
   if (proposal?.ballotClosedAt) return;
 
-  const closesAt = proposal?.ballotClosesAt
+  const matterClosesAt = proposal?.ballotClosesAt
     ? new Date(proposal.ballotClosesAt)
     : null;
-  if (closesAt && Number.isFinite(closesAt.getTime())) {
-    if (closesAt.getTime() <= input.now.getTime()) return;
+  if (matterClosesAt && Number.isFinite(matterClosesAt.getTime())) {
+    if (matterClosesAt.getTime() <= input.now.getTime()) return;
     throw new BallotDomainError(
-      `This ballot can still accept votes until ${ballotDeadlineLabel(closesAt)}. Record the outcome after it closes.`,
+      `This ballot can still accept votes until ${ballotDeadlineLabel(matterClosesAt)}. Record the outcome after it closes.`,
       409,
       "BALLOT_NOT_CLOSED",
     );
   }
-
-  const ballot = await db.collection(BALLOTS_COLLECTION).findOne(
-    { ballotId: input.ballotId },
-    { projection: { status: 1 }, ...(sessionOpts ?? {}) },
-  );
-  if (ballot?.status === "closed") return;
 
   throw new BallotDomainError(
     "This ballot has no recorded close, so its outcome cannot be certified. Close the ballot or set a close date first.",

@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 import { getSessionUser, canManageBranchBallot } from "../../../../lib/auth.ts";
-import { loadBallotCryptoConfig } from "../../../../lib/ballot-crypto.ts";
+import { loadBallotCryptoConfigForRead } from "../../../../lib/ballot-crypto.ts";
 import {
   BallotDomainError,
   recordFormalDecision,
@@ -72,7 +72,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     result: result as "successful" | "unsuccessful" | "inconclusive",
     decisionEventId,
     overrideReason,
-    cryptoConfig: loadBallotCryptoConfig(env),
+    cryptoConfig: loadBallotCryptoConfigForRead(env),
     authorityBranchId: branchScope,
     recordedBy: user.memberId,
   });

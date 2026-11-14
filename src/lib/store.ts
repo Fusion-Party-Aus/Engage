@@ -1,5 +1,5 @@
 import { recordLifecycle, recordParticipation, notePriorParticipation } from "./member-lifecycle.ts";
-import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
+import { loadBallotCryptoConfig, loadBallotCryptoConfigForRead } from "./ballot-crypto.ts";
 import { BALLOTS_COLLECTION, FORMAL_DECISIONS_COLLECTION } from "./ballots.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEvent } from "./governance-relationships.ts";
@@ -395,7 +395,9 @@ export async function listProposals(
 
   const allProposals = rawProposals.map(normalizeProposalDoc);
 
-  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  // Read-only path: a broken key ring must not fail a list that renders no
+  // encrypted votes. Encrypted votes still fail loudly at decode time.
+  const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
   const [allComments, allVotes] = await Promise.all([
     db
       .collection<CommentRecord>("comments")
@@ -612,7 +614,9 @@ export async function getProposalDetail(
     stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
     upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
   }));
-  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  // Read-only path: tolerate a broken key ring so the page can render an
+  // operational message instead of failing before it is read.
+  const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
   const currentBallotId = proposalBallotId(proposal.proposalId);
   const myBlindIndexes =
     user && cryptoConfig
@@ -3095,7 +3099,7 @@ export async function listUserActivity(
     }
   >;
 }> {
-  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
   const [proposals, comments] = await Promise.all([
     availableProposals
       ? Promise.resolve(availableProposals)
@@ -3147,7 +3151,7 @@ export async function listOutstandingDecisions(
   memberVotes?: Awaited<ReturnType<typeof findMemberVotes>> | Promise<Awaited<ReturnType<typeof findMemberVotes>>>,
 ): Promise<ProposalSummaryView[]> {
   if (user && !user.canParticipate) return [];
-  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
   const decisions = availableProposals
     ? availableProposals.filter((proposal) => proposal.stage === "decide")
     : (await db
