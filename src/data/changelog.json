@@ -1,12 +1,39 @@
 [
   {
-    "hash": "a95f505",
+    "hash": "d60c3f5",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Record computed ballot outcome validation",
+    "details": "Describe the computed Yes-versus-No check, its `simple-majority-d9-v1` basis, the stored tally and the audited override in the lifecycle, API and agent guides. Mark known gap 10 as partly resolved and keep #28/L1 Partial because the abstention denominator (O1), quorum and ranked choice remain undecided."
+  },
+  {
+    "hash": "3f10872",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Cover computed outcomes, overrides and stored evidence",
+    "details": "Add rule-level cases for approval, rejection, a tie, zero votes and abstention-heavy ballots, plus the two admin form behaviours that reveal and require an override reason. Add real-MongoDB replica-set coverage for the parts that prove persistence and the ordered result write: the tally and rule basis stored on the result, rejection of a contradiction without a reason, an audited override, idempotent retries, refused replacement, encrypted-ballot certification through the decryption path, and a historical result that stays readable and unrewritten. The result API is exercised end to end with the dev session. Refs #28."
+  },
+  {
+    "hash": "8f2998a",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
     "scope": "ballots",
-    "summary": "Make the ballot_results index migration explicit and recoverable",
-    "details": "Startup no longer creates or drops the ballot_results indexes as a silent side effect. A legacy collection is reported and left untouched; a fresh one still receives the indexes; an already-migrated one is a no-op. `npm run ballots:results-index` adds preflight, dry-run, apply, verify and recovery commands. Apply backs up the index definitions and documents before change, proves the unique partial ballotId index before dropping the legacy unique proposalId index, verifies the final state, and records the actor and backup in data_migrations. Failures are recorded and re-raised instead of being swallowed. Duplicate results are reported for human reconciliation; nothing deletes or rewrites ballot results to make an index fit. Tests: eight replica-set cases cover a fresh install, legacy startup, duplicate blockers, dry run, full apply, partial apply, re-run, loud failure and recovery reporting. The Sprint 1 integrity test now asserts the explicit contract rather than the old startup upgrade. Also records PR #51 as merged to main and the resolved migration risk (#55). Closes #55"
+    "summary": "Validate recorded outcomes against the bound tally",
+    "details": "Record a formal ballot outcome only after comparing the officer's result with the outcome computed from the votes bound to that ballot and immutable revision (#28). The comparison is deliberately limited to what the decision register settles: Yes greater than No approves and a tie does not (D9); abstentions are recorded and excluded rather than given a denominator (D10, O1); no quorum, turnout or minimum-participation threshold applies (D8). The basis is versioned as `simple-majority-d9-v1`. A contradicting result is refused unless the officer supplies a written reason, and is then stored as an explicit override. The result keeps the tally at certification, the rule basis and the computed result; the `decision.recorded` event records the actor, reason, computed result and recorded result alongside the existing atomic result and ballot certification. Identical retries remain idempotent, conflicting replacements are refused, and historical results are returned unchanged and never rewritten. Both admin result forms now show the computed outcome and its tally before submission and require the override reason when the chosen result contradicts it, using the shared Field, Textarea and Badge primitives."
+  },
+  {
+    "hash": "15f7ac5",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Make the ballot_results index migration preflighted and recoverable (#55) (#83)",
+    "details": "* feat(ballots): make the ballot_results index migration explicit and recoverable Startup no longer creates or drops the ballot_results indexes as a silent side effect. A legacy collection is reported and left untouched; a fresh one still receives the indexes; an already-migrated one is a no-op. `npm run ballots:results-index` adds preflight, dry-run, apply, verify and recovery commands. Apply backs up the index definitions and documents before change, proves the unique partial ballotId index before dropping the legacy unique proposalId index, verifies the final state, and records the actor and backup in data_migrations. Failures are recorded and re-raised instead of being swallowed. Duplicate results are reported for human reconciliation; nothing deletes or rewrites ballot results to make an index fit. Tests: eight replica-set cases cover a fresh install, legacy startup, duplicate blockers, dry run, full apply, partial apply, re-run, loud failure and recovery reporting. The Sprint 1 integrity test now asserts the explicit contract rather than the old startup upgrade. Also records PR #51 as merged to main and the resolved migration risk (#55). Closes #55 * chore(changelog): record the ballot-results index migration * docs(security): record Turnstile as merged to main"
   },
   {
     "hash": "3b36947",
@@ -634,32 +661,5 @@
     "scope": "ui",
     "summary": "Refine member ballot hierarchy and voting control",
     "details": "Replace the tall three-card radio composition with a single-row shadcn/Radix segmented control for Approve, Abstain and Reject. The primary action is full-width with a matching radius, uses a neutral disabled treatment and reserves the Horizon accent for an enabled vote. Move results into one compact block, show a simple empty state for zero-vote ballots, reduce the privacy disclosure to a persistent one-line notice, and move revision metadata into a small readable line. Keep selected state, keyboard navigation, existing votes and closed-ballot read-only behaviour."
-  },
-  {
-    "hash": "153e909",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Integrate Coolify cutover evidence and final verification record",
-    "details": "Merge the deployment workstream documentation with the release: storage and prebuilt-image verification, no-rebuild deployment path, quiescent backup helper, staging verification, rollback procedure and approval-gated cutover checklist. Distinguish the 2026-11-08 rehearsal image from the final release identity so the artifact cannot be mistaken for the approved cutover image. Add the production-readiness audit, application handover and final integrated verification record. Ignore the preserved research corpus."
-  },
-  {
-    "hash": "33cc170",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "legal",
-    "summary": "Integrate Privacy Policy, Terms of Use and acceptance controls",
-    "details": "Add owner-authorised legal documents at /privacy/ and /terms/ with the confirmed operator, ABN, registered party name, contact and correspondence address. The documents are explicit about identifiable ballots, national administrator access, small-ballot re-identification risk, retention limits, third-party processors and administrative ballot controls, and remain noindex while publication is pending. Add a server-side acceptance record, API and member gate, and enforce the gate on vote, comment, endorsement, proposal and amendment writes. Activation is interlocked: the gate remains inactive until both documents are published with real effective dates and LEGAL_ACCEPTANCE_ENABLED is set. Add the ballot-context privacy notice, footer and sign-in legal links, and regression tests."
-  },
-  {
-    "hash": "0dff758",
-    "date": "2026-11-08",
-    "type": "fix",
-    "category": "fix",
-    "scope": "app",
-    "summary": "Complete release-candidate remediation and Horizon UI integration",
-    "details": "- make startup seeding insert-only so restarts do not rewrite updatedAt - remove Astro experimental React children to stop double-escaped entities and SSR attribute warnings - use a trusted public origin for canonicals and public API Link headers - show human-readable revision labels to members while retaining exact IDs in audit views - make the empty policy registry an explicit, accurate state and relabel navigation and calls to action - complete the shared header, footer, feature grid and member settings workspace on the Horizon/shadcn foundation"
   }
 ]
