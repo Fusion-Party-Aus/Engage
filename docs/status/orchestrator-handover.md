@@ -11,6 +11,13 @@ substitute for the repository records listed below; it tells you where the
 programme actually is, what has already gone wrong, and how to continue without
 repeating the work or weakening a governance guarantee.
 
+> **Status update — 15 November 2026.** PR #51 was merged to `main` as `3b36947`
+> on 14 November 2026, including the review fixes. The merge gate in §2 is
+> satisfied: Phase 2 work branches from `main`. Statements below that describe
+> #51 as unmerged are historical and were true when this brief was written.
+> #55 is implemented and its migration is documented in
+> [ballot-results-index-migration.md](../ballot-results-index-migration.md).
+
 ---
 
 ## 1. Read these first, in this order
@@ -125,7 +132,7 @@ implementation, then update the decision register or open a decision.
 | Area | What is missing |
 |---|---|
 | Ballot outcome rules (#28) | A computed Yes-vs-No check with an audited override is not built. Abstention denominator (O1) is undecided. The current result is officer-supplied. |
-| Ballot-results migration (#55) | Startup index migration is silent and one-way. Needs preflight, backup, verification, recovery. Blocks production. |
+| Ballot-results migration (#55) | **Resolved 15 November 2026.** Startup is a no-op or a report; preflight, backup, verified apply and recovery are documented. |
 | Notifications (#33) | `dispatchMemberNotification` still has no production caller. Scheduled transitions notify nobody. |
 | Security perimeter (#38) | Turnstile and rate limiting only. CSP, HSTS, frame/content-type headers, full CSRF/Origin coverage remain. |
 | Observability (#39) | No metrics, traces or alerting. Scheduler and Turnstile failures are visible only in logs. |

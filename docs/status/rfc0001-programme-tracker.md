@@ -1,6 +1,6 @@
 # RFC 0001 implementation tracker
 
-**Status:** Living · **Updated:** 14 November 2026
+**Status:** Living · **Updated:** 15 November 2026
 **Source documents:** [RFC 0001](../rfc/0001-participatory-governance-platform-evolution.md) · [Decision register](../governance/decision-register.md) · [Known gaps](known-gaps.md) · [Orchestrator handover](orchestrator-handover.md)
 
 This is the authoritative progress record for the RFC 0001 programme. Each recommendation maps to an issue, a state, and the evidence that justifies that state. An entry is only **Done** when the behaviour is enforced by code, covered by tests that run against a real MongoDB replica set where persistence is involved, and reflected in the documentation.
@@ -33,11 +33,11 @@ Status values:
 | Phase 1 lifecycle scheduling | `feat/rfc0001-sprint1-integration` | #26, #30 | **Integrated** — seconding, 30/30 deadlines, system advancement, automatic closure, scheduler, read-only migration report |
 | Rendering performance | `feat/rfc0001-sprint1-integration` | #52 | **Integrated** — harness, audit, projections, session reuse, query batching, deferred secondary panels, hydration changes |
 | Turnstile and abuse protection | `feat/rfc0001-sprint1-integration` | #38 (part) | **Integrated** — server verification, protected unauthenticated actions, durable rate limiting. Headers/CSRF remain. |
-| Ballot-results migration safety | — | #55 | Planned — preflight, observability, recovery |
+| Ballot-results migration safety | `fix/ballot-results-index-migration` | #55 | **Done** — read-only preflight, backup, verified apply, loud failure, recovery report, replica-set tests. See [procedure](../ballot-results-index-migration.md). |
 | Governance command layer | — | #53 | Planned — next Phase 2 slice |
 | Decision record and responsibility queue | — | #54 | Planned — depends on #53 |
 
-Sprint 1 and the above slices are in PR #51 (ready for review, not merged). The next orchestrator should read [the handover brief](orchestrator-handover.md) first.
+Sprint 1 and the slices above were merged to `main` as `3b36947` (PR #51) on 14 November 2026. The [handover brief](orchestrator-handover.md) predates that merge; Phase 2 work now branches from `main`.
 
 ## Immediate recommendations
 
@@ -103,7 +103,7 @@ Sprint 1 and the above slices are in PR #51 (ready for review, not merged). The 
 
 1. **Deadline semantics are scheduled, but not yet operated.** The code creates and enforces deadlines and ships a dry-run/apply scheduler. Production cron wiring, alerting on missed runs, and notification fan-out are still required.
 2. **Automatic advancement uses a system actor.** It does not grant `ballots.bind` to the scheduler. A late run past the 60-day ceiling is refused and reported rather than opening an unusable ballot; this needs operational monitoring.
-3. **Index migration is one-way.** The `ballot_results` unique index moved from `proposalId` to `ballotId`. Rollback requires deleting later results. A preflight and dry-run migration is required before production (#55).
+3. **Index migration is explicit and recoverable.** The `ballot_results` unique index moved from `proposalId` to `ballotId`. Startup now reports a legacy collection instead of reshaping it; `npm run ballots:results-index` performs preflight, backup, verified apply and a recovery report (#55).
 4. **Real-MongoDB coverage of governance writes.** The voting suite runs on MongoDB; the governance-integrity suite uses the in-memory database. Add replica-set cases for the atomic result, deletion guard and transition events in Phase 1.
 5. **Historical records.** Existing open ballots without deadlines and historical CRM verification reviews are not migrated by this branch. No unique branch-membership index exists yet, so concurrent membership writes still rely on application upserts.
 6. **Performance evidence is local.** The rendering audit measures a production build against synthetic data on one machine. It is indicative, not field or production SLA evidence; server-island work still consumes database time after the response.
@@ -116,5 +116,5 @@ Phase 1, in this order:
 1. ~~Proposal lifecycle scheduling~~ — integrated: seconding, deliberation and ballot deadlines, system advancement, automatic closure, idempotent scheduler.
 2. Computed outcome validation (Yes versus No, tie fails) with an audited officer override; do not decide abstentions.
 3. Real-MongoDB concurrency and crash-recovery tests for the remaining governance writes (deletion guard, transition events, result atomicity).
-4. `ballot_results` migration preflight and recovery procedure (#55).
+4. ~~`ballot_results` migration preflight and recovery procedure~~ — done (#55).
 5. Notification outbox foundation, so scheduled transitions produce durable notices.

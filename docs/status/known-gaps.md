@@ -2,13 +2,13 @@
 
 **Status:** Current · **Verified:** 13 November 2026
 
-> **RFC 0001 programme status.** Several Priority 1 items below are implemented on
-> `feat/rfc0001-sprint1-integration` and awaiting merge. Do not treat this page as
-> the merge state. The [programme tracker](rfc0001-programme-tracker.md) records
-> what is integrated, tested and still missing; the
-> [decision register](../governance/decision-register.md) records which governance
-> questions the maintainer has now answered. Where they conflict, the decision
-> register wins. This page continues to describe the defects that remain on `main`.
+> **RFC 0001 programme status.** The Sprint 1 integrity, lifecycle, rendering
+> performance and Turnstile slices were merged to `main` as `3b36947` (PR #51) on
+> 14 November 2026. Items below marked "resolved" describe behaviour on `main`.
+> The [programme tracker](rfc0001-programme-tracker.md) records what is done and
+> what is still missing; the [decision register](../governance/decision-register.md)
+> records which governance questions the maintainer has answered. Where they
+> conflict, the decision register wins.
 
 This is an honest register, not a task list with commitments. Items are grouped by risk. Each names the impact and the evidence; proposed fixes are directions, not approved governance.
 
@@ -276,6 +276,6 @@ The actionable gaps were opened as GitHub issues on 13 November 2026. This page 
 | Rendering performance and list read path | #52 |
 | Governance command layer and route policy | #53 |
 | Decision record and responsibility queue | #54 |
-| Ballot-results index migration safety | #55 |
+| Ballot-results index migration safety — resolved 15 November 2026 | #55 |
 
 Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain blocked on unresolved governance or legal decisions; implement only the parts the decision register settles.

@@ -26,6 +26,7 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Work on email, notifications or PWA | [architecture/notifications-and-jobs.md](architecture/notifications-and-jobs.md) |
 | Protect sign-in and public submissions | [security/turnstile.md](security/turnstile.md) |
 | Build, test or deploy | [architecture/build-deploy-operations.md](architecture/build-deploy-operations.md) |
+| Migrate a database index | [ballot-results-index-migration.md](ballot-results-index-migration.md) |
 | Make a change | [guides/contributing.md](guides/contributing.md) |
 | Act as an autonomous agent | [guides/agent-guide.md](guides/agent-guide.md) |
 | Know what is actually shipped | [status/capability-matrix.md](status/capability-matrix.md) |

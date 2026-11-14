@@ -193,6 +193,7 @@ External-source records cannot be edited or revoked locally.
 - one revision per `(proposalId, revisionId)`;
 - one current proposal vote per `(ballotId, memberId)` via a **partial** unique index where `memberId` is a string;
 - one encrypted vote per `(ballotId, voterBlindIndex)` via a partial unique index;
+- one formal result per `ballotId` via a partial unique index; a non-unique `proposalId` index supports lookups, so one matter may have several ballots;
 - one governance event per `eventId`; scheduled transitions use deterministic IDs (`sched:advance:<proposalId>:<deadline>`, `sched:close:<proposalId>:<deadline>`) so a replay cannot duplicate audit history;
 - one branch subscription per `(memberId, branchId)`;
 - one CRM identity link per member/application;
@@ -202,7 +203,7 @@ External-source records cannot be edited or revoked locally.
 
 A known gap: there is no unique `(branchId, memberId)` index on `branch_memberships`; correctness relies on application upserts.
 
-Index creation is idempotent but is not a migration system. Changing an index requires an explicit migration or a startup upgrade path, as `ensureProposalVoteIndex` does for the legacy vote index.
+Index creation is idempotent but is not a migration system. Changing an index requires an explicit migration or a startup upgrade path, as `ensureProposalVoteIndex` does for the legacy vote index. The `ballot_results` index change is an explicit, preflighted migration: startup reports a legacy collection and never reshapes it. See [Ballot-results index migration](../ballot-results-index-migration.md).
 
 ## Transactions
 

@@ -1,339 +1,21 @@
 [
   {
-    "hash": "1865311",
+    "hash": "a95f505",
     "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "deploy",
-    "summary": "Pass Turnstile and rate-limit env vars to app container"
-  },
-  {
-    "hash": "afa49fa",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "security,proposals",
-    "summary": "Address PR #51 review findings"
-  },
-  {
-    "hash": "fdb5818",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "rfc",
-    "summary": "Add the Phase 2 orchestrator handover brief",
-    "details": "Record the handover state, governance invariants, traps found during delivery, the recommended Phase 2 sequence, parallelisation rules, verification commands, open decisions and the first ten actions for the next orchestrator."
-  },
-  {
-    "hash": "8d50cd3",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "rfc",
-    "summary": "Mark integrated workstreams and the next Phase 2 slices"
-  },
-  {
-    "hash": "d4b5de0",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "rfc",
-    "summary": "Record Phase 1, rendering performance and Turnstile integration",
-    "details": "Update I2, I6, I10, I12 and the workstream table with measured evidence and the remaining gaps. Mark the performance and Turnstile documents as merged into the integration branch."
-  },
-  {
-    "hash": "b8568a9",
-    "date": "2026-11-14",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh after the rendering performance merge"
-  },
-  {
-    "hash": "7ebd2cd",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "lifecycle",
-    "summary": "Record Phase 1 delivery and the remaining decisions",
-    "details": "Mark seconding, scheduled advancement and automatic closure as implemented, update the known-gap register, and add O9/O10 for the administrative direct-creation path and renewed seconding after material rewrites."
-  },
-  {
-    "hash": "fe1ae6b",
-    "date": "2026-11-14",
     "type": "feat",
     "category": "feature",
-    "scope": "proposals",
-    "summary": "Make seconding the act that opens deliberation",
-    "details": "D3 requires a seconder before Deliberate and D4 anchors the clock to seconding. The initial Phase 1 implementation recorded the seconding but left Propose -> Deliberate to an officer, which could stall a proposal indefinitely and run the clock in the wrong stage. Seconding now performs the transition and records both the seconding and the stage transition. Officer and API transitions into Deliberate are refused without a recorded seconder. A member-facing control appears on the proposal page for eligible, non-author members, with inline feedback and no raw controls. Update the unrelated stage-transition fixtures to record a seconder explicitly. Extend the browser verification to cover seconding, the 30-day default when no ballot date is given, a rejected past date, and the editor showing the proposal's real stage."
-  },
-  {
-    "hash": "963a345",
-    "date": "2026-11-14",
-    "type": "fix",
-    "category": "fix",
-    "scope": "admin",
-    "summary": "Render saved values in select controls",
-    "details": "Astro renders React component slot children as raw HTML, so React never sees the options inside NativeSelect and cannot apply defaultValue. Every select rendered its first option, which meant editing a proposal could silently reset its stage, clearing provenance, changing a member's status to pending, or applying the wrong filter or sort. Mark the stored option as selected at each affected call site. The admin proposal editor and register, member administration, Sense Box review, engagement period, policy filters and public proposal filters are covered."
-  },
-  {
-    "hash": "116909f",
-    "date": "2026-11-14",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh snapshot for the rendering performance slice"
-  },
-  {
-    "hash": "9a12214",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "status",
-    "summary": "Record the rendering performance audit and measurements",
-    "details": "Classifies initial, deferred and interaction-only data per audited page; records baseline and after medians, queries removed or deferred, bundle findings, limitations and the highest-value remaining work. Adds a pnpm/npm perf:render entry point."
-  },
-  {
-    "hash": "b25e385",
-    "date": "2026-11-14",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "client",
-    "summary": "Defer notification hydration off the critical path",
-    "details": "The header notification bell and notification preferences hydrate when the browser is idle. The bell is secondary to page content but still loads its unread count; no API or preference behaviour changes."
-  },
-  {
-    "hash": "21bacbc",
-    "date": "2026-11-14",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "admin",
-    "summary": "Consolidate register reads and defer participation panel",
-    "details": "The proposals register now reads the proposal collection once and batches amendment and revision lookups instead of issuing one query per row. The overview's recent-participation panel moves to a server island with a stable fallback, so its session-dependent reads no longer block the dashboard. Admin timelines hydrate when visible; migrations hydrate on idle."
-  },
-  {
-    "hash": "0089412",
-    "date": "2026-11-14",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "lists",
-    "summary": "Project list reads and reuse member vote queries",
-    "details": "Stops list queries returning detailHtml and, where no search depends on it, long rationale text. Home and the proposals list reuse one member-vote read for outstanding ballots; the member page loads shared activity inputs once instead of twice. Member-page islands in inactive views hydrate only when visible. Adds visibility and vote-reuse regression tests."
-  },
-  {
-    "hash": "f6ebf8f",
-    "date": "2026-11-14",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "auth",
-    "summary": "Resolve a session once per request render",
-    "details": "Layouts and pages each asked for the same session. Cache the in-flight resolution against the Request object so one browser request performs one session lookup while role revocation remains request-scoped. Adds a regression test for reuse."
-  },
-  {
-    "hash": "20b389d",
-    "date": "2026-11-14",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "proposals",
-    "summary": "Batch independent detail reads and defer ballot hydration",
-    "details": "Runs supersede, eligibility, related-branch and evidence reads with the rest of the proposal-detail batch instead of in sequence. The ballot hydrates on idle rather than blocking load; the stance selector does the same."
-  },
-  {
-    "hash": "3500116",
-    "date": "2026-11-14",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "tooling",
-    "summary": "Add rendering performance harness and DB command metrics",
-    "details": "Adds an opt-in MongoDB command monitor (disabled unless ENGAGE_DB_COMMAND_MONITOR=1 and APP_MODE is not production), a development-only diagnostics route, and a repeatable Playwright/Mongo measurement harness with baseline and comparison modes. No production behaviour changes."
-  },
-  {
-    "hash": "2ef26d0",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "security",
-    "summary": "Name the rate-limit collection plainly"
-  },
-  {
-    "hash": "96399d5",
-    "date": "2026-11-14",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh snapshot for Turnstile abuse protection"
-  },
-  {
-    "hash": "9a2855b",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "security",
-    "summary": "Document Turnstile enforcement and rate limits",
-    "details": "Record the protected actions, configuration contract, fail-closed states, failure messages, privacy boundary, rate-limit defaults and remaining gaps (CSP and headers stay with #38). Add the new keys to the environment example."
-  },
-  {
-    "hash": "7d9bae9",
-    "date": "2026-11-14",
-    "type": "feat",
-    "category": "feature",
-    "scope": "security",
-    "summary": "Show the Turnstile widget on protected forms",
-    "details": "Render Cloudflare Turnstile on the Sense Box and magic-link sign-in forms using Horizon primitives. The widget renders nothing when no site key is configured, reports load and expiry failures inline with a retry action, and asks for a fresh token after a rejected submission because tokens are single-use."
-  },
-  {
-    "hash": "08c61ef",
-    "date": "2026-11-14",
-    "type": "feat",
-    "category": "feature",
-    "scope": "security",
-    "summary": "Verify Turnstile tokens for unauthenticated actions",
-    "details": "Add server-side Cloudflare Turnstile verification (D32) and a shared MongoDB fixed-window limiter for the abuse-prone unauthenticated routes. - protect Sense Box submission, magic-link sign-in/first registration, and email sign-up if it is enabled later - fail closed with 503 and an operational error when production requires Turnstile but the secret or site key is missing - report missing, invalid, expired, replayed and malformed tokens with plain-language errors; never log or return the secret or token - store only a keyed hash of the client address, with a TTL index, so limits are shared across instances - leave authenticated voting, deliberation and admin writes untouched - tests cover configuration states, verification outcomes, route refusal and acceptance, real-MongoDB concurrency and the voting exemption"
-  },
-  {
-    "hash": "936eee4",
-    "date": "2026-11-14",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Include the lifecycle documentation commits"
-  },
-  {
-    "hash": "1e88005",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "lifecycle",
-    "summary": "State that returning to Propose keeps the seconding clock"
-  },
-  {
-    "hash": "f71ca91",
-    "date": "2026-11-14",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh snapshot for the Phase 1 lifecycle work"
-  },
-  {
-    "hash": "186baa2",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "lifecycle",
-    "summary": "Document seconding, scheduled transitions and closure",
-    "details": "Records the implemented behaviour and the assumptions visible for review: - one seconder who is not the author; seconding records the clock but does not change the stage or gate Propose -> Deliberate; - automatic proposal advancement at the deliberation deadline by a system actor, without `ballots.bind`; - the conservative blocking-amendment set, reason codes and failure behaviour; - automatic closure at the ballot deadline without a stage change or result; - the 30-day default for officer-opened ballots; - new proposal fields (`secondedBy`, `secondedAt`, `deliberationEndsAt`, `ballotClosedAt`), deterministic event IDs and scheduler transaction rules; - the read-only migration report and its manual recovery options."
-  },
-  {
-    "hash": "e0b2dfb",
-    "date": "2026-11-14",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ops",
-    "summary": "Add governance scheduler and deadline migration report commands",
-    "details": "- `npm run governance:scheduler` runs the lifecycle scheduler as a dry run by default and writes only with `--apply`. It prints a JSON report with advanced, skipped, closed, blockers and errors, and exits non-zero on errors. - `npm run governance:migration-report` prints the read-only legacy report. - Both require MONGODB_URI and fail loudly without it; neither adds a daemon nor requires production credentials."
-  },
-  {
-    "hash": "b6cc5a1",
-    "date": "2026-11-14",
-    "type": "feat",
-    "category": "feature",
-    "scope": "lifecycle",
-    "summary": "Second proposals and schedule advancement and ballot closure",
-    "details": "Implements the approved lifecycle schedule from the decision register (D3-D7, RFC 0001 Phase 1, refs #26 and #30). - A verified member who is not the author may second a proposal while it is in Propose. The act records `secondedBy`, `secondedAt` and `deliberationEndsAt` (30 days) and writes `proposal.seconded`. It does not change the stage or grant ballot authority. - `src/lib/lifecycle-schedule.ts` is the single source of truth for the 30-day deliberation period, 30-day ballot period and 60-day ceiling. - A system actor (`system:lifecycle-scheduler`) advances due deliberations to Decide, binding the latest immutable revision and setting `ballotClosesAt = secondedAt + 60 days`. It requires no `ballots.bind`; the human early-advancement gate is unchanged. - Advancement fails closed on unresolved amendments (`rejected`, `withdrawn`, `applied`, `not-endorsed` and `inconclusive` are the only non-blocking statuses), on votes bound to other wording, on a missing seconding anchor, and on a ceiling already in the past. - Ballots close automatically at their deadline: `ballot.closed` is recorded once, the stage and result are untouched, and voting is refused after the boundary (D12 is not implemented). - Conditional filters, deterministic event IDs and transactional writes make both operations idempotent and safe under concurrent runs. - An officer opening a ballot without a date now receives the 30-day default; explicit dates remain authoritative. - Adds a read-only report for legacy ballots without deadlines and matters in Deliberate without a deliberation clock."
-  },
-  {
-    "hash": "7d05e7f",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "rfc",
-    "summary": "Correct membership workstream status",
-    "details": "The CRM branch did not add the unique branch-membership index or the duplicate-resolving migration required by #32, so I3 remains partial."
-  },
-  {
-    "hash": "5c5af39",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "rfc",
-    "summary": "Track active workstreams and new implementation issues",
-    "details": "Record the Phase 1, rendering-performance and Turnstile workstreams, link the new issues for performance (#52), the command layer (#53), the decision record and responsibility queue (#54), and ballot-results migration safety (#55). Clarify that #36 is deferred rather than blocked inside this programme."
-  },
-  {
-    "hash": "1bd4fd1",
-    "date": "2026-11-14",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh snapshot for the Sprint 1 integration"
-  },
-  {
-    "hash": "b8030d2",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "rfc",
-    "summary": "Integrate Sprint 1 and record maintainer decisions",
-    "details": "Add the canonical governance decision register, the RFC 0001 programme tracker and the Sprint 1 integration report. Update the documentation index and replace the open-question list with the decisions now supplied, while keeping genuinely unresolved questions explicit. Add a browser verification script for the deadline, voting and vote-change journeys and record its evidence."
-  },
-  {
-    "hash": "8fc83dd",
-    "date": "2026-11-14",
-    "type": "test",
-    "category": "ops",
-    "scope": "rbac",
-    "summary": "Reconcile Sprint 1 authority expectations after integration",
-    "details": "The governance branch made ballots.bind and a future closing date mandatory when entering Decide, and refuses deletion of matters with governance history. The RBAC branch assumed neither. Align the fixtures with real session permissions, supply a ballot deadline, and delete a draft with no history. Ignore branch grants for permissions the catalogue reserves to National scope, allow branch-scoped comment moderation, and prove that a branch proposals.delete grant does not confer destructive authority."
-  },
-  {
-    "hash": "c910a72",
-    "date": "2026-11-14",
-    "type": "fix",
-    "category": "fix",
     "scope": "ballots",
-    "summary": "Keep the deadline banner hydration-stable",
-    "details": "The ballot deadline rendered a server date and a post-mount relative time in the same text nodes. React 19 reported a text hydration mismatch on every ballot with a deadline, forcing an unnecessary client re-render. Mark the two intentionally time-dependent nodes as hydration-stable and make the date helper's timezone explicit so server and client markup match before the viewer-local deadline replaces it."
+    "summary": "Make the ballot_results index migration explicit and recoverable",
+    "details": "Startup no longer creates or drops the ballot_results indexes as a silent side effect. A legacy collection is reported and left untouched; a fresh one still receives the indexes; an already-migrated one is a no-op. `npm run ballots:results-index` adds preflight, dry-run, apply, verify and recovery commands. Apply backs up the index definitions and documents before change, proves the unique partial ballotId index before dropping the legacy unique proposalId index, verifies the final state, and records the actor and backup in data_migrations. Failures are recorded and re-raised instead of being swallowed. Duplicate results are reported for human reconciliation; nothing deletes or rewrites ballot results to make an index fit. Tests: eight replica-set cases cover a fresh install, legacy startup, duplicate blockers, dry run, full apply, partial apply, re-run, loud failure and recovery reporting. The Sprint 1 integrity test now asserts the explicit contract rather than the old startup upgrade. Also records PR #51 as merged to main and the resolved migration risk (#55). Closes #55"
   },
   {
-    "hash": "0624e49",
-    "date": "2026-11-14",
-    "type": "fix",
-    "category": "fix",
-    "scope": "proposals",
-    "summary": "Clear provenance without a conflicting stage update",
-    "details": "Staff editing a proposal through the admin form always submits provenance: null for the default 'clear provenance' option. saveProposal placed provenance in both $set and $unset, which MongoDB rejects with a path conflict, so every staff edit failed against a real database. Make the clear and set branches mutually exclusive and cover the case against the real MongoDB voting suite."
-  },
-  {
-    "hash": "4ed96bc",
-    "date": "2026-11-14",
-    "type": "fix",
-    "category": "fix",
-    "scope": "rbac",
-    "summary": "Consolidate permission enforcement, ballot binding gate, and ratification authority checks (#27, #31)"
-  },
-  {
-    "hash": "af890d0",
-    "date": "2026-11-14",
-    "type": "fix",
-    "category": "fix",
-    "scope": "membership",
-    "summary": "Guard CRM-sourced memberships, exempt national row from conflict, and record manual provenance (#32)"
-  },
-  {
-    "hash": "919e7a5",
-    "date": "2026-11-14",
-    "type": "fix",
-    "category": "fix",
-    "scope": "governance",
-    "summary": "Enforce ballot deadlines, rebinding, atomic decisions, and deletion guards (#26, #50)"
-  },
-  {
-    "hash": "a132b13",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "rfc",
-    "summary": "Propose platform evolution and integrity programme"
+    "hash": "3b36947",
+    "date": "2026-11-15",
+    "type": "update",
+    "category": "ops",
+    "scope": "platform",
+    "summary": "RFC 0001: Sprint 1 integration, Phase 1 lifecycle, rendering performance and Turnstile (#51)",
+    "details": "* docs(rfc): propose platform evolution and integrity programme * fix(governance): enforce ballot deadlines, rebinding, atomic decisions, and deletion guards (#26, #50) * fix(membership): guard CRM-sourced memberships, exempt national row from conflict, and record manual provenance (#32) * fix(rbac): consolidate permission enforcement, ballot binding gate, and ratification authority checks (#27, #31) * fix(proposals): clear provenance without a conflicting stage update Staff editing a proposal through the admin form always submits provenance: null for the default 'clear provenance' option. saveProposal placed provenance in both $set and $unset, which MongoDB rejects with a path conflict, so every staff edit failed against a real database. Make the clear and set branches mutually exclusive and cover the case against the real MongoDB voting suite. * fix(ballots): keep the deadline banner hydration-stable The ballot deadline rendered a server date and a post-mount relative time in the same text nodes. React 19 reported a text hydration mismatch on every ballot with a deadline, forcing an unnecessary client re-render. Mark the two intentionally time-dependent nodes as hydration-stable and make the date helper's timezone explicit so server and client markup match before the viewer-local deadline replaces it. * test(rbac): reconcile Sprint 1 authority expectations after integration The governance branch made ballots.bind and a future closing date mandatory when entering Decide, and refuses deletion of matters with governance history. The RBAC branch assumed neither. Align the fixtures with real session permissions, supply a ballot deadline, and delete a draft with no history. Ignore branch grants for permissions the catalogue reserves to National scope, allow branch-scoped comment moderation, and prove that a branch proposals.delete grant does not confer destructive authority. * docs(rfc): integrate Sprint 1 and record maintainer decisions Add the canonical governance decision register, the RFC 0001 programme tracker and the Sprint 1 integration report. Update the documentation index and replace the open-question list with the decisions now supplied, while keeping genuinely unresolved questions explicit. Add a browser verification script for the deadline, voting and vote-change journeys and record its evidence. * chore(changelog): refresh snapshot for the Sprint 1 integration * docs(rfc): track active workstreams and new implementation issues Record the Phase 1, rendering-performance and Turnstile workstreams, link the new issues for performance (#52), the command layer (#53), the decision record and responsibility queue (#54), and ballot-results migration safety (#55). Clarify that #36 is deferred rather than blocked inside this programme. * docs(rfc): correct membership workstream status The CRM branch did not add the unique branch-membership index or the duplicate-resolving migration required by #32, so I3 remains partial. * feat(lifecycle): second proposals and schedule advancement and ballot closure Implements the approved lifecycle schedule from the decision register (D3-D7, RFC 0001 Phase 1, refs #26 and #30). - A verified member who is not the author may second a proposal while it is in Propose. The act records `secondedBy`, `secondedAt` and `deliberationEndsAt` (30 days) and writes `proposal.seconded`. It does not change the stage or grant ballot authority. - `src/lib/lifecycle-schedule.ts` is the single source of truth for the 30-day deliberation period, 30-day ballot period and 60-day ceiling. - A system actor (`system:lifecycle-scheduler`) advances due deliberations to Decide, binding the latest immutable revision and setting `ballotClosesAt = secondedAt + 60 days`. It requires no `ballots.bind`; the human early-advancement gate is unchanged. - Advancement fails closed on unresolved amendments (`rejected`, `withdrawn`, `applied`, `not-endorsed` and `inconclusive` are the only non-blocking statuses), on votes bound to other wording, on a missing seconding anchor, and on a ceiling already in the past. - Ballots close automatically at their deadline: `ballot.closed` is recorded once, the stage and result are untouched, and voting is refused after the boundary (D12 is not implemented). - Conditional filters, deterministic event IDs and transactional writes make both operations idempotent and safe under concurrent runs. - An officer opening a ballot without a date now receives the 30-day default; explicit dates remain authoritative. - Adds a read-only report for legacy ballots without deadlines and matters in Deliberate without a deliberation clock. * feat(ops): add governance scheduler and deadline migration report commands - `npm run governance:scheduler` runs the lifecycle scheduler as a dry run by default and writes only with `--apply`. It prints a JSON report with advanced, skipped, closed, blockers and errors, and exits non-zero on errors. - `npm run governance:migration-report` prints the read-only legacy report. - Both require MONGODB_URI and fail loudly without it; neither adds a daemon nor requires production credentials. * docs(lifecycle): document seconding, scheduled transitions and closure Records the implemented behaviour and the assumptions visible for review: - one seconder who is not the author; seconding records the clock but does not change the stage or gate Propose -> Deliberate; - automatic proposal advancement at the deliberation deadline by a system actor, without `ballots.bind`; - the conservative blocking-amendment set, reason codes and failure behaviour; - automatic closure at the ballot deadline without a stage change or result; - the 30-day default for officer-opened ballots; - new proposal fields (`secondedBy`, `secondedAt`, `deliberationEndsAt`, `ballotClosedAt`), deterministic event IDs and scheduler transaction rules; - the read-only migration report and its manual recovery options. * chore(changelog): refresh snapshot for the Phase 1 lifecycle work * docs(lifecycle): state that returning to Propose keeps the seconding clock * chore(changelog): include the lifecycle documentation commits * feat(security): verify Turnstile tokens for unauthenticated actions Add server-side Cloudflare Turnstile verification (D32) and a shared MongoDB fixed-window limiter for the abuse-prone unauthenticated routes. - protect Sense Box submission, magic-link sign-in/first registration, and email sign-up if it is enabled later - fail closed with 503 and an operational error when production requires Turnstile but the secret or site key is missing - report missing, invalid, expired, replayed and malformed tokens with plain-language errors; never log or return the secret or token - store only a keyed hash of the client address, with a TTL index, so limits are shared across instances - leave authenticated voting, deliberation and admin writes untouched - tests cover configuration states, verification outcomes, route refusal and acceptance, real-MongoDB concurrency and the voting exemption * feat(security): show the Turnstile widget on protected forms Render Cloudflare Turnstile on the Sense Box and magic-link sign-in forms using Horizon primitives. The widget renders nothing when no site key is configured, reports load and expiry failures inline with a retry action, and asks for a fresh token after a rejected submission because tokens are single-use. * docs(security): document Turnstile enforcement and rate limits Record the protected actions, configuration contract, fail-closed states, failure messages, privacy boundary, rate-limit defaults and remaining gaps (CSP and headers stay with #38). Add the new keys to the environment example. * chore(changelog): refresh snapshot for Turnstile abuse protection * docs(security): name the rate-limit collection plainly * perf(tooling): add rendering performance harness and DB command metrics Adds an opt-in MongoDB command monitor (disabled unless ENGAGE_DB_COMMAND_MONITOR=1 and APP_MODE is not production), a development-only diagnostics route, and a repeatable Playwright/Mongo measurement harness with baseline and comparison modes. No production behaviour changes. * perf(proposals): batch independent detail reads and defer ballot hydration Runs supersede, eligibility, related-branch and evidence reads with the rest of the proposal-detail batch instead of in sequence. The ballot hydrates on idle rather than blocking load; the stance selector does the same. * perf(auth): resolve a session once per request render Layouts and pages each asked for the same session. Cache the in-flight resolution against the Request object so one browser request performs one session lookup while role revocation remains request-scoped. Adds a regression test for reuse. * perf(lists): project list reads and reuse member vote queries Stops list queries returning detailHtml and, where no search depends on it, long rationale text. Home and the proposals list reuse one member-vote read for outstanding ballots; the member page loads shared activity inputs once instead of twice. Member-page islands in inactive views hydrate only when visible. Adds visibility and vote-reuse regression tests. * perf(admin): consolidate register reads and defer participation panel The proposals register now reads the proposal collection once and batches amendment and revision lookups instead of issuing one query per row. The overview's recent-participation panel moves to a server island with a stable fallback, so its session-dependent reads no longer block the dashboard. Admin timelines hydrate when visible; migrations hydrate on idle. * perf(client): defer notification hydration off the critical path The header notification bell and notification preferences hydrate when the browser is idle. The bell is secondary to page content but still loads its unread count; no API or preference behaviour changes. * docs(status): record the rendering performance audit and measurements Classifies initial, deferred and interaction-only data per audited page; records baseline and after medians, queries removed or deferred, bundle findings, limitations and the highest-value remaining work. Adds a pnpm/npm perf:render entry point. * chore(changelog): refresh snapshot for the rendering performance slice * fix(admin): render saved values in select controls Astro renders React component slot children as raw HTML, so React never sees the options inside NativeSelect and cannot apply defaultValue. Every select rendered its first option, which meant editing a proposal could silently reset its stage, clearing provenance, changing a member's status to pending, or applying the wrong filter or sort. Mark the stored option as selected at each affected call site. The admin proposal editor and register, member administration, Sense Box review, engagement period, policy filters and public proposal filters are covered. * feat(proposals): make seconding the act that opens deliberation D3 requires a seconder before Deliberate and D4 anchors the clock to seconding. The initial Phase 1 implementation recorded the seconding but left Propose -> Deliberate to an officer, which could stall a proposal indefinitely and run the clock in the wrong stage. Seconding now performs the transition and records both the seconding and the stage transition. Officer and API transitions into Deliberate are refused without a recorded seconder. A member-facing control appears on the proposal page for eligible, non-author members, with inline feedback and no raw controls. Update the unrelated stage-transition fixtures to record a seconder explicitly. Extend the browser verification to cover seconding, the 30-day default when no ballot date is given, a rejected past date, and the editor showing the proposal's real stage. * docs(lifecycle): record Phase 1 delivery and the remaining decisions Mark seconding, scheduled advancement and automatic closure as implemented, update the known-gap register, and add O9/O10 for the administrative direct-creation path and renewed seconding after material rewrites. * chore(changelog): refresh after the rendering performance merge * docs(rfc): record Phase 1, rendering performance and Turnstile integration Update I2, I6, I10, I12 and the workstream table with measured evidence and the remaining gaps. Mark the performance and Turnstile documents as merged into the integration branch. * docs(rfc): mark integrated workstreams and the next Phase 2 slices * docs(rfc): add the Phase 2 orchestrator handover brief Record the handover state, governance invariants, traps found during delivery, the recommended Phase 2 sequence, parallelisation rules, verification commands, open decisions and the first ten actions for the next orchestrator. * fix(security,proposals): address PR #51 review findings * chore(deploy): pass Turnstile and rate-limit env vars to app container * fix(governance,security,ui): address CodeRabbit review findings on PR #51 * test(rate-limit): align future window assertions in real MongoDB test"
   },
   {
     "hash": "37aa2f0",
@@ -673,5 +355,311 @@
     "category": "fix",
     "scope": "email",
     "summary": "Keep verification notices within narrow mobile screens"
+  },
+  {
+    "hash": "300966c",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Let administrators inspect the proposed re-engagement audience"
+  },
+  {
+    "hash": "9e72e64",
+    "date": "2026-11-09",
+    "type": "test",
+    "category": "ops",
+    "scope": "member",
+    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
+  },
+  {
+    "hash": "71a61de",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ci",
+    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
+  },
+  {
+    "hash": "cb39b60",
+    "date": "2026-11-09",
+    "type": "docs",
+    "category": "docs",
+    "scope": "member",
+    "summary": "Record lifecycle audit, consent assessment and rollout checks"
+  },
+  {
+    "hash": "52c6570",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Connect verification, participation and legacy consent journeys"
+  },
+  {
+    "hash": "ee47cdf",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record administrator test email delivery"
+  },
+  {
+    "hash": "eb5f365",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "email",
+    "summary": "Let administrators send themselves a sample digest",
+    "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
+  },
+  {
+    "hash": "cfbf459",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record notification preferences and digest rollout defaults"
+  },
+  {
+    "hash": "bc6409f",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "notifications",
+    "summary": "Separate email preferences and explain rollout defaults",
+    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
+  },
+  {
+    "hash": "79d916a",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "engagement",
+    "summary": "Reconcile delivery backlogs before sending reminders",
+    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
+  },
+  {
+    "hash": "7a56a95",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "engagement",
+    "summary": "Add proposal rankings, ballot deadlines and member reminders",
+    "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
+  },
+  {
+    "hash": "0b8b375",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "settings",
+    "summary": "Save the configured source repository URL"
+  },
+  {
+    "hash": "6fad513",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record granular analytics improvements"
+  },
+  {
+    "hash": "2167573",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "analytics",
+    "summary": "Measure Engage navigation and participation outcomes"
+  },
+  {
+    "hash": "e41ac7d",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "analytics",
+    "summary": "Initialize Plausible tracking on production"
+  },
+  {
+    "hash": "71a98bb",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "analytics",
+    "summary": "Install Plausible tracker package"
+  },
+  {
+    "hash": "b98af1d",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "time",
+    "summary": "Display time in user's local timezone"
+  },
+  {
+    "hash": "5de3c91",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "participation",
+    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
+  },
+  {
+    "hash": "46f1b9b",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "branches",
+    "summary": "Fix error on branch pages, and seed branches to database"
+  },
+  {
+    "hash": "c14ee07",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
+  },
+  {
+    "hash": "31e34df",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
+  },
+  {
+    "hash": "ac9bb41",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "deploy",
+    "summary": "Automate production deployment gated on staging health"
+  },
+  {
+    "hash": "c6edce0",
+    "date": "2026-11-09",
+    "type": "docs",
+    "category": "docs",
+    "scope": "audit",
+    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
+  },
+  {
+    "hash": "3098b44",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ui",
+    "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
+  },
+  {
+    "hash": "99f0153",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "changelog",
+    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
+  },
+  {
+    "hash": "71a6351",
+    "date": "2026-11-09",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "server",
+    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
+  },
+  {
+    "hash": "3512e0a",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "workspaces",
+    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
+  },
+  {
+    "hash": "f58e150",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
+  },
+  {
+    "hash": "ff1f0a8",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "walkthrough",
+    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
+  },
+  {
+    "hash": "0a291c4",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "editor",
+    "summary": "Support inline markdown images and Add Image helper in proposal composers"
+  },
+  {
+    "hash": "d6f09b0",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "settings",
+    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
+  },
+  {
+    "hash": "e7d793a",
+    "date": "2026-11-08",
+    "type": "docs",
+    "category": "docs",
+    "scope": "release",
+    "summary": "Record Engage production cutover and verification",
+    "details": "Record the approved cutover of 4660690... to the prebuilt image, the final quiescent backup and off-host checksum, the 37-ballot/194-vote migration and preservation comparison, image and route verification, and the retained rollback state."
+  },
+  {
+    "hash": "4660690",
+    "date": "2026-11-08",
+    "type": "docs",
+    "category": "docs",
+    "scope": "release",
+    "summary": "Record member ballot refinement verification",
+    "details": "Record the approved ballot hierarchy: segmented control, single results block, zero-vote empty state, compact privacy line, full-width action and 390px browser validation. Full route matrix 109/109 and dedicated ballot checks 14/14."
+  },
+  {
+    "hash": "2b85970",
+    "date": "2026-11-08",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ui",
+    "summary": "Refine member ballot hierarchy and voting control",
+    "details": "Replace the tall three-card radio composition with a single-row shadcn/Radix segmented control for Approve, Abstain and Reject. The primary action is full-width with a matching radius, uses a neutral disabled treatment and reserves the Horizon accent for an enabled vote. Move results into one compact block, show a simple empty state for zero-vote ballots, reduce the privacy disclosure to a persistent one-line notice, and move revision metadata into a small readable line. Keep selected state, keyboard navigation, existing votes and closed-ballot read-only behaviour."
+  },
+  {
+    "hash": "153e909",
+    "date": "2026-11-08",
+    "type": "docs",
+    "category": "docs",
+    "scope": "release",
+    "summary": "Integrate Coolify cutover evidence and final verification record",
+    "details": "Merge the deployment workstream documentation with the release: storage and prebuilt-image verification, no-rebuild deployment path, quiescent backup helper, staging verification, rollback procedure and approval-gated cutover checklist. Distinguish the 2026-11-08 rehearsal image from the final release identity so the artifact cannot be mistaken for the approved cutover image. Add the production-readiness audit, application handover and final integrated verification record. Ignore the preserved research corpus."
+  },
+  {
+    "hash": "33cc170",
+    "date": "2026-11-08",
+    "type": "feat",
+    "category": "feature",
+    "scope": "legal",
+    "summary": "Integrate Privacy Policy, Terms of Use and acceptance controls",
+    "details": "Add owner-authorised legal documents at /privacy/ and /terms/ with the confirmed operator, ABN, registered party name, contact and correspondence address. The documents are explicit about identifiable ballots, national administrator access, small-ballot re-identification risk, retention limits, third-party processors and administrative ballot controls, and remain noindex while publication is pending. Add a server-side acceptance record, API and member gate, and enforce the gate on vote, comment, endorsement, proposal and amendment writes. Activation is interlocked: the gate remains inactive until both documents are published with real effective dates and LEGAL_ACCEPTANCE_ENABLED is set. Add the ballot-context privacy notice, footer and sign-in legal links, and regression tests."
+  },
+  {
+    "hash": "0dff758",
+    "date": "2026-11-08",
+    "type": "fix",
+    "category": "fix",
+    "scope": "app",
+    "summary": "Complete release-candidate remediation and Horizon UI integration",
+    "details": "- make startup seeding insert-only so restarts do not rewrite updatedAt - remove Astro experimental React children to stop double-escaped entities and SSR attribute warnings - use a trusted public origin for canonicals and public API Link headers - show human-readable revision labels to members while retaining exact IDs in audit views - make the empty policy registry an explicit, accurate state and relabel navigation and calls to action - complete the shared header, footer, feature grid and member settings workspace on the Horizon/shadcn foundation"
   }
 ]
