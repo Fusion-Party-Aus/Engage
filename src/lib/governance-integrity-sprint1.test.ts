@@ -8,6 +8,7 @@ import {
   upsertMatterBallot,
 } from "./ballots.ts";
 import { GOVERNANCE_EVENTS_COLLECTION } from "./governance-relationships.ts";
+import { applyBallotResultsIndexMigration } from "./ballot-results-index-migration.ts";
 import { resolveLegacyPermissions } from "./rbac.ts";
 import {
   ProposalDeletionConflictError,
@@ -334,13 +335,37 @@ test(
       `engage_sprint1_test_${crypto.randomUUID().replaceAll("-", "")}`,
     );
     try {
-      // Simulate legacy unique proposalId_1 index before initializeDatabase upgrades it
+      // A legacy database is reported, never reshaped at startup (#55).
       await db
         .collection("ballot_results")
         .createIndex({ proposalId: 1 }, { unique: true });
-      await initializeDatabase(db);
+      const originalError = console.error;
+      console.error = () => {};
+      try {
+        await initializeDatabase(db);
+      } finally {
+        console.error = originalError;
+      }
 
-      const indexes = await db.collection("ballot_results").indexes();
+      let indexes = await db.collection("ballot_results").indexes();
+      assert.ok(
+        indexes.some((i) => i.name === "proposalId_1" && i.unique === true),
+        "startup must not drop the legacy unique index",
+      );
+      assert.ok(
+        !indexes.some((i) => i.name === "ballot_results_ballot_unique"),
+        "startup must not install the replacement index silently",
+      );
+
+      // The migration is explicit, backed up and verified.
+      const migration = await applyBallotResultsIndexMigration(db, {
+        actorId: "test-operator",
+        apply: true,
+      });
+      assert.equal(migration.applied, true);
+      assert.equal(migration.after.migrated, true);
+
+      indexes = await db.collection("ballot_results").indexes();
       assert.ok(
         indexes.some(
           (i) => i.name === "ballot_results_ballot_unique" && i.unique === true,

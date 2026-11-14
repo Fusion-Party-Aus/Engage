@@ -82,15 +82,15 @@ Screenshots and a machine-readable result are written to `docs/screenshots/rfc00
 
 ### `ballot_results` index change
 
-Startup previously created a unique index on `{ proposalId: 1 }`. The integration replaces it with a unique partial index on `{ ballotId: 1 }` and a non-unique `proposalId` index.
+Startup previously created a unique index on `{ proposalId: 1 }`. The integration replaced it with a unique partial index on `{ ballotId: 1 }` and a non-unique `proposalId` index, initially as a startup side effect.
 
-Risks that must be handled before production:
+**Resolved (#55, 15 November 2026).** Startup no longer reshapes a legacy collection. It creates the indexes on a fresh database, is a no-op when already migrated, and reports a legacy or blocked database without changing it. `npm run ballots:results-index` provides a read-only preflight (counts, duplicates, missing `ballotId`, index state), a backup of the index definitions and documents, a verified apply that drops the legacy index only after the replacement exists, a loud recorded failure, and a recovery report. Results are never deleted to fit an index; duplicates are reported for reconciliation. See [the procedure](../ballot-results-index-migration.md).
 
-1. **Silent failure.** `createIndex(...).catch(() => {})` hides duplicate-key failures. A failed index leaves the system enforcing the wrong cardinality with no operational signal.
-2. **One-way change.** Recreating the unique `proposalId` index after multiple results exist for one proposal will fail. Rollback requires deleting later results, which destroys governance records.
-3. **Legacy documents without `ballotId`.** The partial filter excludes them from uniqueness. They remain protected only by application logic.
+The original risks and their current handling:
 
-Required before deploying: a dry-run migration that reports duplicates, records counts, backs up the collection, drops the legacy index explicitly, creates the new index, verifies it, and records a schema-migration entry. Do not rely on startup side effects.
+1. **Silent failure.** Removed. Failures are recorded in `data_migrations` as `failed` and re-raised; index creation is verified.
+2. **One-way change.** Rollback is not automatic and remains destructive once a matter has multiple results; the recovery report states this rather than performing it.
+3. **Legacy documents without `ballotId`.** Still excluded by the partial filter and reported by the preflight. Application logic remains the protection.
 
 ### Existing ballots without deadlines
 
