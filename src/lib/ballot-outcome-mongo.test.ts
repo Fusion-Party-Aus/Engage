@@ -11,7 +11,7 @@ import {
   upsertMatterBallot,
 } from "./ballots.ts";
 import { GOVERNANCE_EVENTS_COLLECTION } from "./governance-relationships.ts";
-import { closeDatabase } from "./db.ts";
+import { closeDatabase, getDatabase } from "./db.ts";
 import { castVote } from "./store.ts";
 import type { PlatformEnv, SessionUser, VoteChoice } from "./types.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
@@ -464,6 +464,14 @@ describe(
         MONGODB_URI: mongoUri,
         MONGODB_DB_NAME: db.databaseName,
       };
+      // Warm the application client that the route resolves. Without this, a
+      // transient connect failure makes the development fallback serve the
+      // in-memory database and the route cannot see this fixture.
+      const appDb = await getDatabase(env);
+      assert.ok(
+        await appDb.collection("proposals").findOne({ proposalId }),
+        "the route must read the real replica-set database, not the in-memory fallback",
+      );
       const call = (body: Record<string, unknown>, cookie: string) =>
         recordResultRoute({
           request: new Request("http://localhost/api/admin/ballots/result", {
