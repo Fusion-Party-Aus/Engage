@@ -1,5 +1,49 @@
 [
   {
+    "hash": "078aa3e",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Correct the legal pointer and merge wording",
+    "details": "The privacy review said the Privacy Policy describes the computed rule; the Privacy Policy is deliberately unchanged and the correction is in the Terms of Use. Correct that sentence, rename the lifecycle row so it describes the zero-vote case rather than implying every untallied result needs an override, qualify the display-versus-enforcement claim, and state per-ballot closure. Align the tracker and handover on \"integrated, branch only; not merged\". Refs #28, #40."
+  },
+  {
+    "hash": "1d653f7",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Cover per-ballot closure, zero-vote overrides and the status line",
+    "details": "Prove an open second ballot on a closed matter is refused while its closed sibling certifies, and that a zero-vote ballot records successful only with a written reason. Pin the tally-state precedence (unbound before unreadable), distinguish missing keys from unreadable votes, and assert display key loading degrades to null instead of throwing. Guard the UI regression: the announcement is not a `[role=\"status\"]`, both pages use `formStatusRegion`, and that helper returns the visible line when the hidden node comes first in the form. Refs #28."
+  },
+  {
+    "hash": "2f57cdd",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Keep the visible result status and render every tally state",
+    "details": "The hidden override announcement was the first `[role=\"status\"]` in the result form, so `querySelector('[role=\"status\"]')` returned it and every success or refusal was written to an invisible node. The announcement now uses `aria-live=\"polite\"` without `role=\"status\"`, and both submit handlers target the visible line through `formStatusRegion`, so feedback remains sighted-visible and still announced. Show the computed outcome for a zero-vote ballot instead of claiming it is not computable, which also restores the override field for `Successful` and `Inconclusive`. Add explicit states for unavailable decryption keys and separate unreadable votes, and withhold the form while the tally is defective rather than offering an action the server will refuse. Refs #28."
+  },
+  {
+    "hash": "6b15c26",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Judge each ballot's own close time and keep zero-vote outcomes computable",
+    "details": "Read the addressed ballot's row before the matter so a second, still-open ballot on a closed matter is refused instead of inheriting the matter's closure. The matter fields remain the fallback for legacy ballots with no ballot row. Return the computed outcome for every computable tally, including a zero-vote ballot (still \"unsuccessful\" under D9), so the UI can require an override instead of silently withholding the reason field. Separate a missing key ring from unreadable votes: the display summary now reports `decryption-unavailable` on its own, with unbound votes stated first because that is the cause an officer can act on. Add a tolerant key loader for read-only paths so a broken key ring no longer fails a page that renders no encrypted votes; signed-in list and detail reads use it, while casting and certification stay strict. The result route now reports a clean BALLOT_DECRYPTION_UNAVAILABLE (503) instead of leaking key-configuration detail. Refs #28."
+  },
+  {
+    "hash": "dc9e48a",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the review fixes in the public snapshot"
+  },
+  {
     "hash": "1c723de",
     "date": "2026-11-15",
     "type": "test",
@@ -624,45 +668,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
-  },
-  {
-    "hash": "ac9bb41",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "deploy",
-    "summary": "Automate production deployment gated on staging health"
-  },
-  {
-    "hash": "c6edce0",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "audit",
-    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
-  },
-  {
-    "hash": "3098b44",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
   }
 ]
