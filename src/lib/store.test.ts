@@ -112,6 +112,15 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
     assert.equal(memberProposal.authorId, memberUser.memberId);
     assert.ok(memberProposal.proposalId.startsWith("PROP-"));
 
+    // D3 fixture: this test is about member submission and provenance, not
+    // seconding. Record a seconder directly, as the seconding act would.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: memberProposal.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
+
     // Staff can advance it to Deliberate or Decide, and add provenance
     const advanced = await saveProposal(db, adminUser, {
       proposalId: memberProposal.proposalId,
@@ -747,6 +756,15 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       /must undergo member deliberation before entering Decide or Implement/,
     );
 
+    // D3 fixture: record a seconder before the officer transition. This test is
+    // about stage validity, not seconding.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: proposal.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
+
     // Advance to deliberate
     await saveProposal(db, adminUser, {
       proposalId: proposal.proposalId,
@@ -1017,6 +1035,13 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       ),
       true,
     );
+    // D3 fixture: second the proposal before the branch officer transition.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: proposal.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
     await saveProposal(db, branchAdmin, {
       proposalId: proposal.proposalId,
       stage: "deliberate",

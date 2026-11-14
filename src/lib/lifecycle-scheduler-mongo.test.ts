@@ -205,7 +205,7 @@ test(
         .toArray();
       assert.equal(events.length, 1);
       assert.equal(stored?.secondedBy, events[0]?.actorId);
-      assert.equal(stored?.stage, "propose");
+      assert.equal(stored?.stage, "deliberate");
       assert.ok(stored?.deliberationEndsAt instanceof Date);
     });
   },

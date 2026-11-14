@@ -3,6 +3,7 @@ import { recordLifecycle } from '../../lib/member-lifecycle.ts';
 import { ballotExpired } from '../../lib/ballot-deadline.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
+import SecondProposalButton from '../../components/ui/SecondProposalButton';
 import StanceSelector from '../../components/ui/stance-selector';
 import PortableText from '../../components/PortableText.astro';
 import { AlertCircle, FileText, MessageCircle, PenLine, ThumbsUp } from 'lucide-react';
@@ -150,6 +151,11 @@ const eligibility: ParticipationEligibility | null = proposal
   ? await getProposalEligibility(db, proposal, user)
   : null;
 const canVoteOnProposal = Boolean(proposal && !ballotExpired(proposal) && eligibility?.eligible);
+// D3: in Propose, the next required act is a seconder, which opens deliberation.
+const awaitingSeconder = Boolean(proposal && proposal.stage === 'propose' && !proposal.secondedAt);
+const canSecondProposal = Boolean(
+  awaitingSeconder && user?.canParticipate && user.memberId !== proposal?.authorId,
+);
 if (user && canVoteOnProposal && proposal?.stage === 'decide' && proposal.ballotRevisionId) await recordLifecycle(db,user.memberId,'first_eligible_ballot_viewed');
 for (const amendment of amendmentRows) {
   const history = allAmendmentRevisions.filter((row: any) => row.amendmentId === amendment.amendmentId);
@@ -388,11 +394,11 @@ const initialsFor = (name: string) =>
                 data-current-stage={proposal.stage}
                 data-vote-count={votes.total}
               >
-                <option value="propose">Stage 1 · Idea</option>
-                <option value="deliberate">Stage 2 · Discussion</option>
-                <option value="decide">Stage 3 · Voting</option>
-                <option value="implement">Stage 4 · Implementation</option>
-                <option value="archived">Archived</option>
+                <option value="propose" selected={proposal.stage === 'propose'}>Stage 1 · Idea</option>
+                <option value="deliberate" selected={proposal.stage === 'deliberate'}>Stage 2 · Discussion</option>
+                <option value="decide" selected={proposal.stage === 'decide'}>Stage 3 · Voting</option>
+                <option value="implement" selected={proposal.stage === 'implement'}>Stage 4 · Implementation</option>
+                <option value="archived" selected={proposal.stage === 'archived'}>Archived</option>
               </NativeSelect>
               <Button href={`/admin/proposals/${proposal.slug}/`} variant="outline" size="sm">
                 Admin workspace
@@ -481,7 +487,9 @@ const initialsFor = (name: string) =>
                               ? 'Branch ballot · Verified members only'
                               : 'Save your ballot · Takes ~30 seconds'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
-                    ? 'Your immediate action · Takes ~1 minute'
+                    ? awaitingSeconder
+                      ? 'One more member is needed to open deliberation.'
+                      : 'Your immediate action · Takes ~1 minute'
                     : 'Stage 4 · Implementation'}
               </span>
               <strong class="next-action-bar__title">
@@ -502,9 +510,17 @@ const initialsFor = (name: string) =>
                               ? eligibility.reason
                               : 'Verify your membership or branch eligibility to vote in this ballot.'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
-                    ? user?.canParticipate
-                      ? 'Join the discussion or suggest a wording change.'
-                      : 'Sign in as a verified member to post a discussion stance or propose a wording amendment.'
+                    ? awaitingSeconder
+                      ? !user
+                        ? 'Sign in to second this proposal and open deliberation.'
+                        : canSecondProposal
+                          ? 'Second this proposal to open 30 days of deliberation.'
+                          : user.memberId === proposal?.authorId
+                            ? 'Awaiting another member to second this proposal.'
+                            : 'Verify your membership to second this proposal.'
+                      : user?.canParticipate
+                        ? 'Join the discussion or suggest a wording change.'
+                        : 'Sign in as a verified member to post a discussion stance or propose a wording amendment.'
                     : policyRecord
                       ? `Adopted into the Policy Registry (${String(policyRecord.policyId)}). Inspect the official policy record.`
                       : 'Ballot has closed. Review the recorded vote breakdown and ratification status.'}
@@ -537,9 +553,42 @@ const initialsFor = (name: string) =>
                 )
               ) : proposal.stage === 'deliberate' || proposal.stage === 'propose' ? (
                 <>
-                  <a href={user?.canParticipate ? '#comment-form' : '#deliberation'} class="next-action-btn is-primary">
-                    {user?.canParticipate ? 'Add your stance →' : `Read discussion (${comments.length}) →`}
-                  </a>
+                  {awaitingSeconder ? (
+                    canSecondProposal ? (
+                      <SecondProposalButton
+                        client:visible
+                        proposalId={proposal.proposalId}
+                      />
+                    ) : !user ? (
+                      <Button
+                        href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/`)}&intent=second&title=${encodeURIComponent(proposal.title)}`}
+                        size="sm"
+                      >
+                        Sign in to second
+                      </Button>
+                    ) : (
+                      <Button href="/member/" size="sm" variant="outline">
+                        {user.memberId === proposal.authorId
+                          ? 'Awaiting a seconder'
+                          : 'Verify to second'}
+                      </Button>
+                    )
+                  ) : (
+                    <a
+                      href={user?.canParticipate ? '#comment-form' : '#deliberation'}
+                      class="next-action-btn is-primary"
+                    >
+                      {user?.canParticipate ? 'Add your stance →' : `Read discussion (${comments.length}) →`}
+                    </a>
+                  )}
+                  {awaitingSeconder && canSecondProposal && (
+                    <a
+                      href="#comment-form"
+                      class="next-action-btn is-secondary"
+                    >
+                      Discuss instead →
+                    </a>
+                  )}
                   {!user && (
                     <a
                       href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#deliberation`)}&intent=deliberate&title=${encodeURIComponent(proposal.title)}`}
@@ -1024,7 +1073,7 @@ const initialsFor = (name: string) =>
                       <NativeSelect id="comment-sort-select" data-comment-sort defaultValue="oldest" size="sm" wrapperClassName="w-auto" className="rounded-full" aria-label="Sort contributions">
                         <option value="top">Top endorsed</option>
                         <option value="newest">Newest first</option>
-                        <option value="oldest">Oldest first</option>
+                        <option value="oldest" selected>Oldest first</option>
                       </NativeSelect>
                     </div>
                   )}
@@ -1323,10 +1372,10 @@ const initialsFor = (name: string) =>
                                     size="sm"
                                     wrapperClassName="w-auto"
                                   >
-                                    <option value="incorporated">Incorporated</option>
-                                    <option value="considered">Considered</option>
-                                    <option value="deferred">Deferred</option>
-                                    <option value="declined">Declined</option>
+                                    <option value="incorporated" selected={(c.feedback?.status ?? 'considered') === 'incorporated'}>Incorporated</option>
+                                    <option value="considered" selected={(c.feedback?.status ?? 'considered') === 'considered'}>Considered</option>
+                                    <option value="deferred" selected={c.feedback?.status === 'deferred'}>Deferred</option>
+                                    <option value="declined" selected={c.feedback?.status === 'declined'}>Declined</option>
                                     {c.feedback && <option value="clear">Clear response</option>}
                                   </NativeSelect>
                                   <label for={`feedback-note-${c.commentId}`} class="sr-only">Explanation for contributor (optional)</label>
@@ -1351,7 +1400,7 @@ const initialsFor = (name: string) =>
                                     >
                                       <option value="">Supporting evidence (optional) — None</option>
                                       {evidenceOptions.map((opt) => (
-                                        <option value={opt.value}>{opt.group}: {opt.label}</option>
+                                        <option value={opt.value} selected={c.feedback?.evidence ? `${c.feedback.evidence.kind}:${c.feedback.evidence.recordId}` === opt.value : false}>{opt.group}: {opt.label}</option>
                                       ))}
                                     </NativeSelect>
                                   </div>

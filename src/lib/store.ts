@@ -799,6 +799,18 @@ export async function saveProposal(
       }
       const targetStage = normalizeStage(rawStageInput, existing.stage);
       validateStageTransition(existing.stage, targetStage, existing.kind);
+      // D3: a proposal requires a seconder before it enters Deliberate. The
+      // member-driven seconding act performs this transition itself; this gate
+      // covers officer and API paths so no route can skip it.
+      if (
+        targetStage === "deliberate" &&
+        existing.stage === "propose" &&
+        !existing.secondedAt
+      ) {
+        throw new Error(
+          "A proposal needs a seconder before it can enter Deliberate.",
+        );
+      }
       if (targetStage === "decide" && existing.stage !== "decide") {
         if (
           !hasPermission(
@@ -1804,6 +1816,7 @@ export async function secondProposal(
       },
       {
         $set: {
+          stage: "deliberate",
           secondedBy: user.memberId,
           secondedAt: now,
           deliberationEndsAt,
@@ -1833,10 +1846,29 @@ export async function secondProposal(
       },
       session,
     );
+    // Seconding is the member-driven act that satisfies D3, so it performs the
+    // Propose -> Deliberate transition and is audited like any other transition.
+    await recordGovernanceEvent(
+      db,
+      {
+        eventType: "proposal.stage_transition",
+        matterId: id,
+        actorId: user.memberId,
+        authorityBranchId: proposal.governanceAuthorityBranchId,
+        metadata: {
+          fromStage: "propose",
+          toStage: "deliberate",
+          trigger: "seconded",
+        },
+        createdAt: now,
+      },
+      session,
+    );
   });
 
   return {
     ...proposal,
+    stage: "deliberate",
     secondedBy: user.memberId,
     secondedAt: now,
     deliberationEndsAt,

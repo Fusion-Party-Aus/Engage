@@ -78,24 +78,26 @@ try {
   const memberCookie = "engage_dev_user=member";
   const results = [];
 
-  // Create a national policy proposal in Deliberate through the real API.
+  // Create a national policy proposal in Propose through the real API as the
+  // member who will later vote. Seconding is a different member's act.
   const createdResponse = await fetch(`${origin}/api/proposals`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      cookie: adminCookie,
+      cookie: memberCookie,
     },
     body: JSON.stringify({
       title: "Deadline and vote change verification",
       space: "Governance",
       summary: "Synthetic proposal created by the RFC 0001 browser check.",
-      stage: "deliberate",
+      stage: "propose",
     }),
   });
   assert.equal(createdResponse.status, 201);
   const created = await createdResponse.json();
   const proposalId = created.proposal.proposalId;
   const slug = created.proposal.slug;
+  assert.equal(created.proposal.stage, "propose");
 
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
@@ -111,25 +113,68 @@ try {
     }
   });
 
+  // Seconding: a member who is not the author opens deliberation for 30 days.
+  await page.goto(`${origin}/proposals/${slug}/`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Second this proposal" }).click();
+  await page
+    .getByText("Seconded. Deliberation is now open for 30 days.")
+    .waitFor();
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const current = await db.collection("proposals").findOne({ proposalId });
+    if (current?.stage === "deliberate") break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const seconded = await db.collection("proposals").findOne({ proposalId });
+  assert.equal(seconded.stage, "deliberate");
+  assert.ok(seconded.deliberationEndsAt instanceof Date);
+  assert.ok(seconded.secondedBy);
+  const secondEvent = await db.collection("governance_events").findOne({
+    matterId: proposalId,
+    eventType: "proposal.seconded",
+  });
+  assert.ok(secondEvent, "Seconding must record a governance event");
+  const transitionEvent = await db.collection("governance_events").findOne({
+    matterId: proposalId,
+    eventType: "proposal.stage_transition",
+    "metadata.trigger": "seconded",
+  });
+  assert.ok(transitionEvent, "Seconding must record the stage transition");
+  await page.screenshot({
+    path: path.join(output, "admin-seconds-proposal.png"),
+    fullPage: true,
+  });
+  results.push({
+    journey: "member seconds proposal and opens deliberation",
+    stage: seconded.stage,
+    deliberationEndsAt: seconded.deliberationEndsAt.toISOString(),
+    eventId: secondEvent.eventId,
+  });
+
   await page.goto(
     `${origin}/admin/proposals/?edit=${encodeURIComponent(proposalId)}`,
     { waitUntil: "networkidle" },
   );
+  // A previous Astro/React slot bug made every stage select render the first
+  // option. Editing a proposal could silently reset its stage.
+  assert.equal(
+    await page.inputValue("#editor-stage"),
+    "deliberate",
+    "The editor must show the proposal's current stage",
+  );
   await page.selectOption("#editor-stage", "decide");
-  await page.locator("#proposal-editor-form button[type=submit]").click();
   const status = page.locator("#editor-status");
-  await status.filter({ hasText: /closing date is required/i }).waitFor();
 
-  const closeAt = new Date(Date.now() + 30 * 86400_000);
-  const local = new Date(closeAt.getTime() - closeAt.getTimezoneOffset() * 60000)
+  // An explicit past deadline is still refused.
+  const past = new Date(Date.now() - 3_600_000);
+  const pastLocal = new Date(past.getTime() - past.getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 16);
-  await page.fill("#editor-ballot-closes-at", local);
-  page.on("response", async (response) => {
-    if (response.url().includes(`/api/proposals/${proposalId}`) && !response.ok()) {
-      console.error("PATCH failed", response.status(), await response.text());
-    }
-  });
+  await page.fill("#editor-ballot-closes-at", pastLocal);
+  await page.locator("#proposal-editor-form button[type=submit]").click();
+  await status.filter({ hasText: /must be in the future/i }).waitFor();
+
+  // With no explicit date, the approved 30-day default applies (D6).
+  await page.fill("#editor-ballot-closes-at", "");
   await page.locator("#proposal-editor-form button[type=submit]").click();
   try {
     await page.waitForURL(/\/proposals\/.+\//, { timeout: 20000 });
@@ -142,6 +187,11 @@ try {
   assert.equal(opened.stage, "decide");
   assert.ok(opened.ballotRevisionId, "Opening Decide must bind a wording revision");
   assert.ok(opened.ballotClosesAt instanceof Date, "Ballot must have a closing date");
+  const defaultWindow = opened.ballotClosesAt.getTime() - Date.now();
+  assert.ok(
+    defaultWindow > 29 * 86400_000 && defaultWindow < 31 * 86400_000,
+    `Expected the 30-day default deadline, got ${opened.ballotClosesAt.toISOString()}`,
+  );
   const transition = await db.collection("governance_events").findOne({
     matterId: proposalId,
     eventType: "proposal.stage_transition",

@@ -128,17 +128,17 @@ The author may edit while in `propose`. Every substantive save appends a revisio
 
 Deliberation ordinarily lasts **30 days from seconding** (D4). The clock starts when a member seconds the proposal, not when an officer moves it to the Deliberate stage.
 
-**Seconding (D3).** A proposal in Propose may be seconded once by a verified member who is not its author. `POST /api/proposals/[proposalId]/second` records `secondedBy`, `secondedAt` and `deliberationEndsAt` (30 days later) and writes a `proposal.seconded` governance event. It refuses:
+**Seconding (D3).** A proposal in Propose may be seconded once by a verified member who is not its author. `POST /api/proposals/[proposalId]/second` records `secondedBy`, `secondedAt` and `deliberationEndsAt` (30 days later), moves the matter to `deliberate`, and writes both a `proposal.seconded` event and a `proposal.stage_transition` event with `trigger: "seconded"`. It refuses:
 
 - the author seconding their own proposal;
 - a proposal that already has a seconder;
 - a member whose membership is not verified;
 - a proposal that is not in Propose.
 
-The implemented reading of D3 is deliberately minimal and visible for review:
+An officer or API attempt to move a proposal from Propose to Deliberate without a recorded seconder is refused. The implemented reading of D3 is deliberately minimal and visible for review:
 
 - **one seconder, and never the author.** D3 requires "a seconder" and the audit record says the author cannot second their own motion; it does not authorise multiple or competing seconders.
-- **seconding does not change the stage.** The register says a seconder is required "before it enters Deliberate" but does not say whether seconding is itself the transition or a hard pre-condition on an officer's transition. This branch records the act and starts the clock, and leaves Propose → Deliberate as the existing workflow transition. Enforcing seconding as a gate on that transition, and what happens when seconded wording changes materially, remain open questions.
+- **seconding is the transition.** D4 anchors deliberation to seconding, so leaving the matter in Propose until an officer acts would allow it to stall indefinitely and would run the clock in the wrong stage. Seconding therefore performs Propose → Deliberate; an officer cannot perform that transition without a seconder.
 - **seconding applies to every matter type.** D3 names policy proposals; the recorded mechanism is not type-specific and no type-specific rule was invented.
 - **seconding is participation, not a ballot.** It requires a verified membership and read access, and uses no ballot permission. It is not a formal vote and confers no approval.
 
@@ -146,7 +146,7 @@ A proposal created directly in Deliberate by an officer has no seconder and no d
 
 Returning a seconded proposal to Propose does not clear the seconder or the clock: the schedule is anchored to the original seconding. Whether a materially rewritten proposal needs renewed seconding is an open question and is not implemented.
 
-An officer advances the matter to `deliberate`. Comments, endorsements and amendments become the substantive input. Deliberation can continue in `decide` and `implement` as discussion, but it can no longer change the ballot wording.
+Seconding advances the matter to `deliberate`. Comments, endorsements and amendments become the substantive input. Deliberation can continue in `decide` and `implement` as discussion, but it can no longer change the ballot wording.
 
 ### 4. Contributions and amendments
 

@@ -571,6 +571,13 @@ describe("branch participation: migration and new proposal defaults", () => {
     assert.equal(branchProposal.governanceAuthorityBranchId, "vic");
     assert.equal(branchProposal.jurisdictionBranchId, "vic");
     assert.equal(branchProposal.publicationScope, "branch");
+    // D3 fixture: this test is about branch scope, not seconding.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: branchProposal.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
     await saveProposal(db, branch, {
       proposalId: branchProposal.proposalId,
       stage: "deliberate",

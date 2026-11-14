@@ -218,7 +218,7 @@ describe("seconding a proposal (D3)", () => {
 
     const seconded = await secondProposal(db, memberA, proposalId);
     assert.equal(seconded.secondedBy, memberA.memberId);
-    assert.equal(seconded.stage, "propose");
+    assert.equal(seconded.stage, "deliberate");
     assert.ok(seconded.secondedAt instanceof Date);
     assert.ok(seconded.deliberationEndsAt instanceof Date);
     assert.equal(
@@ -243,6 +243,33 @@ describe("seconding a proposal (D3)", () => {
       events[0]?.metadata?.deliberationEndsAt,
       seconded.deliberationEndsAt!.toISOString(),
     );
+    const transitions = await db
+      .collection(GOVERNANCE_EVENTS_COLLECTION)
+      .find({ matterId: proposalId, eventType: "proposal.stage_transition" })
+      .toArray();
+    assert.equal(transitions.length, 1);
+    assert.equal(transitions[0]?.metadata?.fromStage, "propose");
+    assert.equal(transitions[0]?.metadata?.toStage, "deliberate");
+    assert.equal(transitions[0]?.metadata?.trigger, "seconded");
+  });
+
+  it("refuses an officer transition into Deliberate without a seconder", async () => {
+    const db = createMemoryDb();
+    const proposalId = await insertMatter(db, {
+      stage: "propose",
+      authorId: author.memberId,
+    });
+
+    await assert.rejects(
+      saveProposal(db, admin, { proposalId, stage: "deliberate" }),
+      /needs a seconder/i,
+    );
+    const unchanged = await db.collection("proposals").findOne({ proposalId });
+    assert.equal(unchanged?.stage, "propose");
+
+    await secondProposal(db, memberA, proposalId);
+    const advanced = await db.collection("proposals").findOne({ proposalId });
+    assert.equal(advanced?.stage, "deliberate");
   });
 
   it("refuses self-seconding, a second seconder, an ineligible member and a non-propose stage", async () => {
