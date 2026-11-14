@@ -301,7 +301,45 @@ export function canViewIdentifiableBallots(
   return Boolean(user && (user.isAdmin || hasPermission(user, "ballots.view_identifiable")));
 }
 
+/**
+ * Session resolution is intentionally refreshed on every HTTP request so role
+ * revocation is immediate. Within a single rendered request, however, the page
+ * and one or more layouts ask for the same session independently. Cache the
+ * in-flight/resolved promise against the Request object so a page render pays
+ * for one resolution, not three.
+ */
+const sessionCache = new WeakMap<
+  Request,
+  Map<string, Promise<SessionUser | null>>
+>();
+
+function sessionCacheKey(env: PlatformEnv): string {
+  return `${env.APP_MODE ?? ""}|${env.MONGODB_URI ?? ""}|${env.MONGODB_DB_NAME ?? ""}`;
+}
+
 export async function getSessionUser(
+  request: Request,
+  env: PlatformEnv,
+): Promise<SessionUser | null> {
+  const key = sessionCacheKey(env);
+  let byEnvironment = sessionCache.get(request);
+  if (!byEnvironment) {
+    byEnvironment = new Map();
+    sessionCache.set(request, byEnvironment);
+  }
+  const cached = byEnvironment.get(key);
+  if (cached) return cached;
+  const pending = resolveSessionUser(request, env);
+  byEnvironment.set(key, pending);
+  try {
+    return await pending;
+  } catch (error) {
+    byEnvironment.delete(key);
+    throw error;
+  }
+}
+
+async function resolveSessionUser(
   request: Request,
   env: PlatformEnv,
 ): Promise<SessionUser | null> {

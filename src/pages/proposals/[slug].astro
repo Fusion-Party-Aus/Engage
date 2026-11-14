@@ -18,7 +18,7 @@ import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astr
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { canRespondToContribution, canViewProposal, getProposalDetail, isGovernanceResolution, listOutstandingDecisions, normalizeProposalDoc, resolveContributionEvidenceMap } from '../../lib/store.ts';
-import { getProposalEligibility, type ParticipationEligibility } from '../../lib/branch-participation.ts';
+import { getProposalEligibility } from '../../lib/branch-participation.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import type { ProposalStage } from '../../lib/types.ts';
 
@@ -35,9 +35,44 @@ const detail = await getProposalDetail(db, Astro.params.slug ?? '', user);
 if (!detail) {
   Astro.response.status = 404;
 }
-const supersededByDetail = detail?.proposal?.supersededByProposalId
-  ? await getProposalDetail(db, detail.proposal.supersededByProposalId, user)
-  : null;
+const proposal = detail?.proposal;
+const [
+  supersededByDetail,
+  revisions,
+  rawPolicyRecord,
+  ballotResult,
+  relatedProposals,
+  amendmentRows,
+  outstandingDecisions,
+  eligibility,
+  relatedBranches,
+  evidenceMap,
+] = proposal
+  ? await Promise.all([
+      proposal.supersededByProposalId
+        ? getProposalDetail(db, proposal.supersededByProposalId, user)
+        : Promise.resolve(null),
+      db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray(),
+      db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
+      db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
+      db.collection('proposals')
+        .find({ space: proposal.space, proposalId: { $ne: proposal.proposalId }, stage: { $ne: 'archived' } })
+        .sort({ updatedAt: -1 })
+        .limit(12)
+        .toArray()
+        .then((rows) => rows.filter((row: any) => canViewProposal(normalizeProposalDoc(row), user)).slice(0, 4)),
+      db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray(),
+      user?.canParticipate && proposal.stage === 'decide'
+        ? listOutstandingDecisions(db, user.memberId, user)
+        : Promise.resolve([]),
+      getProposalEligibility(db, proposal, user),
+      [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)).length
+        ? db.collection('branches').find({ branchId: { $in: [...new Set([proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)))] } }).toArray()
+        : Promise.resolve([]),
+      resolveContributionEvidenceMap(db, proposal, detail.comments, user),
+    ])
+  : [null, [], null, null, [], [], [], null, [], new Map()];
+
 const supersededByProposal = supersededByDetail?.proposal ?? null;
 const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
 const feedbackStatusLabel = (status: string) =>
@@ -57,32 +92,6 @@ const feedbackStatusVariant = (status: string) =>
         ? ('warning' as const)
         : ('outline' as const);
 
-const proposal = detail?.proposal;
-const [
-  revisions,
-  rawPolicyRecord,
-  ballotResult,
-  relatedProposals,
-  amendmentRows,
-  outstandingDecisions,
-] = proposal
-  ? await Promise.all([
-      db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray(),
-      db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
-      db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
-      db.collection('proposals')
-        .find({ space: proposal.space, proposalId: { $ne: proposal.proposalId }, stage: { $ne: 'archived' } })
-        .sort({ updatedAt: -1 })
-        .limit(12)
-        .toArray()
-        .then((rows) => rows.filter((row: any) => canViewProposal(normalizeProposalDoc(row), user)).slice(0, 4)),
-      db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray(),
-      user?.canParticipate && proposal.stage === 'decide'
-        ? listOutstandingDecisions(db, user.memberId, user)
-        : Promise.resolve([]),
-    ])
-  : [[], null, null, [], [], []];
-
 const isResolution = proposal ? isGovernanceResolution(proposal) : false;
 const policyRecord = !isResolution ? rawPolicyRecord : null;
 
@@ -96,23 +105,13 @@ const ballotRevisionLabel = proposal?.ballotRevisionId
     })
   : 'Draft wording (not yet bound)';
 
-const relatedBranchIds = proposal
-  ? [...new Set([proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)))]
+const allAmendmentRevisions = amendmentRows.length
+  ? await db
+      .collection('amendment_revisions')
+      .find({ amendmentId: { $in: amendmentRows.map((a: any) => a.amendmentId) } })
+      .sort({ createdAt: 1 })
+      .toArray()
   : [];
-const [relatedBranches, allAmendmentRevisions, evidenceMap] = await Promise.all([
-  relatedBranchIds.length
-    ? db.collection('branches').find({ branchId: { $in: relatedBranchIds } }).toArray()
-    : Promise.resolve([]),
-  amendmentRows.length
-    ? db.collection('amendment_revisions')
-        .find({ amendmentId: { $in: amendmentRows.map((a: any) => a.amendmentId) } })
-        .sort({ createdAt: 1 })
-        .toArray()
-    : Promise.resolve([]),
-  proposal && detail
-    ? resolveContributionEvidenceMap(db, proposal, detail.comments, user)
-    : Promise.resolve(new Map()),
-]);
 
 const evidencePolicyPublic = Boolean(
   policyRecord && ['published', 'withdrawn', 'superseded'].includes(String(policyRecord.publicationStatus ?? '')),
@@ -147,9 +146,6 @@ const evidenceOptions = proposal
   : [];
 const branchNameFor = (branchId?: string) =>
   branchId ? String(relatedBranches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
-const eligibility: ParticipationEligibility | null = proposal
-  ? await getProposalEligibility(db, proposal, user)
-  : null;
 const canVoteOnProposal = Boolean(proposal && !ballotExpired(proposal) && eligibility?.eligible);
 // D3: in Propose, the next required act is a seconder, which opens deliberation.
 const awaitingSeconder = Boolean(proposal && proposal.stage === 'propose' && !proposal.secondedAt);
@@ -876,7 +872,7 @@ const initialsFor = (name: string) =>
               {proposal.stage === 'decide' || votes.total > 0 ? (
                 <div class="rail-ballot__widget">
                   <ProposalBallot
-                    client:load
+                    client:idle
                     proposalId={proposal.proposalId}
                     proposalSlug={proposal.slug}
                     proposalTitle={proposal.title}
@@ -1124,7 +1120,7 @@ const initialsFor = (name: string) =>
                     />
 
                     <div class="comment-composer__toolbar">
-                      <StanceSelector client:load />
+                      <StanceSelector client:idle />
 
                       <div class="comment-composer__submit">
                         <span id="comment-char-count" class="comment-char-count tabular">0 / 4000</span>

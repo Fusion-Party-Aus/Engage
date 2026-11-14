@@ -1,0 +1,184 @@
+---
+import Card from './Card.astro';
+import CardAction from './CardAction.astro';
+import CardContent from './CardContent.astro';
+import CardDescription from './CardDescription.astro';
+import CardHeader from './CardHeader.astro';
+import CardTitle from './CardTitle.astro';
+import { Button } from '../ui/button';
+import ActivityTimeline from '../blocks/timeline-3';
+import { canViewIdentifiableBallots, getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { groupParticipationFeed, type ParticipationActivity } from '../../lib/participation-feed.ts';
+import { PROPOSAL_VOTES } from '../../lib/vote-storage.ts';
+import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
+
+interface ProposalSummary {
+  proposalId: string;
+  slug: string;
+  title: string;
+  authorId?: string;
+  authorName?: string;
+  createdAt: string;
+}
+
+interface Props {
+  proposals: ProposalSummary[];
+}
+
+const { proposals } = Astro.props;
+const env = runtimeEnv(Astro.locals);
+const [user, db] = await Promise.all([
+  getSessionUser(Astro.request, env),
+  getDatabase(env),
+]);
+if (!user || (!user.isStaff && !user.isBranchAdmin)) {
+  return;
+}
+
+const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
+const showIdentifiableBallots = canViewIdentifiableBallots(user);
+const activityWindowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+const proposalScope = { proposalId: { $in: proposals.map((proposal) => proposal.proposalId) } };
+
+const [recentVotes, recentComments] = await Promise.all([
+  showIdentifiableBallots
+    ? db.collection(PROPOSAL_VOTES).find({ ...proposalScope, ballotId: /^proposal:/, updatedAt: { $gte: activityWindowStart } }).sort({ updatedAt: -1 }).toArray()
+    : Promise.resolve([]),
+  db.collection('comments').find({ ...proposalScope, createdAt: { $gte: activityWindowStart } }).sort({ createdAt: -1 }).toArray(),
+]);
+
+const voteActivities: ParticipationActivity[] = recentVotes.flatMap((entry: any) => {
+  const proposal = proposalMap.get(entry.proposalId);
+  return proposal
+    ? [{ id: String(entry._id), actorId: entry.memberId, actorName: entry.authorName || 'Member', kind: 'vote' as const, date: new Date(entry.updatedAt), proposalTitle: proposal.title, proposalSlug: proposal.slug }]
+    : [];
+});
+const commentActivities: ParticipationActivity[] = recentComments.flatMap((entry: any) => {
+  const proposal = proposalMap.get(entry.proposalId);
+  return proposal
+    ? [{ id: entry.commentId, actorId: entry.memberId, actorName: entry.authorName || 'Member', kind: 'contribution' as const, date: new Date(entry.createdAt), proposalTitle: proposal.title, proposalSlug: proposal.slug }]
+    : [];
+});
+const proposalActivities: ParticipationActivity[] = proposals
+  .filter((proposal) => proposal.authorId && new Date(proposal.createdAt).getTime() >= activityWindowStart.getTime())
+  .map((proposal) => ({
+    id: proposal.proposalId,
+    actorId: proposal.authorId,
+    actorName: proposal.authorName || 'Member',
+    kind: 'proposal',
+    date: new Date(proposal.createdAt),
+    proposalTitle: proposal.title,
+    proposalSlug: proposal.slug,
+  }));
+
+const recentEvents = [...voteActivities, ...commentActivities, ...proposalActivities];
+const activeMemberIds = [...new Set(recentEvents.map((entry) => entry.actorId).filter((id): id is string => Boolean(id)))];
+const priorActivity = activeMemberIds.length
+  ? await Promise.all([
+      showIdentifiableBallots
+        ? db.collection(PROPOSAL_VOTES).find({ memberId: { $in: activeMemberIds }, ballotId: /^proposal:/, updatedAt: { $lt: activityWindowStart } }).toArray()
+        : Promise.resolve([]),
+      db.collection('comments').find({ memberId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }).toArray(),
+      db.collection('proposals').find({ authorId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }).toArray(),
+    ])
+  : [[], [], []];
+
+const priorParticipants = new Set<string>();
+for (const entry of priorActivity[0] as any[]) if (entry.memberId) priorParticipants.add(entry.memberId);
+for (const entry of priorActivity[1] as any[]) if (entry.memberId) priorParticipants.add(entry.memberId);
+for (const entry of priorActivity[2] as any[]) if (entry.authorId) priorParticipants.add(entry.authorId);
+const firstParticipants = new Set(activeMemberIds.filter((id) => !priorParticipants.has(id)));
+const recentActivity = groupParticipationFeed(recentEvents, firstParticipants);
+
+const adminTimelineEvents: ActivityTimelineEvent[] = recentActivity.slice(0, 30).map((entry) => {
+  if (entry.kind === 'votes') {
+    const first = entry.proposals[0];
+    return {
+      id: `votes-${entry.actorId}-${entry.lastDate.toISOString()}`,
+      date: entry.lastDate,
+      actor: entry.actorName,
+      action: 'voted on',
+      target: `${entry.count} proposal${entry.count === 1 ? '' : 's'}`,
+      href: first ? `/proposals/${first.slug}/` : undefined,
+      kind: 'vote' as const,
+      badge: entry.firstParticipation ? 'First participation' : undefined,
+      details: [
+        ...entry.proposals.slice(0, 3).map((proposal) => ({
+          label: proposal.title,
+          href: `/proposals/${proposal.slug}/`,
+        })),
+        ...(entry.proposals.length > 3 ? [{ label: `and ${entry.proposals.length - 3} more` }] : []),
+      ],
+    };
+  }
+  if (entry.kind === 'contribution')
+    return {
+      id: `contribution-${entry.id}`,
+      date: entry.date,
+      actor: entry.actorName,
+      action: 'contributed to',
+      target: entry.proposalTitle,
+      href: `/proposals/${entry.proposalSlug}/`,
+      kind: 'contribution' as const,
+      badge: entry.firstParticipation ? 'First participation' : undefined,
+    };
+  return {
+    id: `proposal-${entry.id}`,
+    date: entry.date,
+    actor: entry.actorName,
+    action: 'submitted',
+    target: entry.proposalTitle,
+    href: `/proposals/${entry.proposalSlug}/`,
+    kind: 'proposal' as const,
+    badge: entry.firstParticipation ? 'First participation' : undefined,
+  };
+});
+const adminTimeline = buildActivityTimeline(adminTimelineEvents);
+---
+
+<Card class="gap-0">
+  <CardHeader class="border-b pb-4">
+    <CardTitle class="text-base">Recent member participation</CardTitle>
+    <CardDescription>Verified votes, deliberation stances, and new proposals over the last 7 days.</CardDescription>
+    <CardAction>
+      <Button href="/admin/proposals/" variant="outline" size="sm">Proposals &amp; motions</Button>
+    </CardAction>
+  </CardHeader>
+  <CardContent class="grid gap-4 p-5">
+    <div class="participation-strip">
+      <div>
+        <strong class="tabular">{voteActivities.length}</strong>
+        <span>Recent votes</span>
+      </div>
+      <div>
+        <strong class="tabular">{commentActivities.length}</strong>
+        <span>Deliberation stances</span>
+      </div>
+      <div>
+        <strong class="tabular">{firstParticipants.size}</strong>
+        <span>First-time participants</span>
+      </div>
+    </div>
+
+    {adminTimeline.length > 0 ? (
+      <ActivityTimeline
+        client:visible
+        groups={adminTimeline}
+        filters={[
+          { id: 'all', label: 'All' },
+          { id: 'vote', label: 'Votes' },
+          { id: 'contribution', label: 'Contributions' },
+          { id: 'proposal', label: 'Proposals' },
+        ]}
+        searchable
+        emptyMessage="No member activity in the last seven days."
+      />
+    ) : (
+      <div class="rounded-lg border bg-muted/30 p-4 text-sm">
+        <strong class="block text-foreground">No member activity in the last seven days</strong>
+        <p class="mt-1 mb-0 text-muted-foreground">New votes, comments, and proposals will appear here as members participate.</p>
+      </div>
+    )}
+  </CardContent>
+</Card>

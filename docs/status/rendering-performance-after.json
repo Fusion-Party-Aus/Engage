@@ -1,0 +1,635 @@
+{
+  "generatedAt": "2026-11-13T15:13:27.620Z",
+  "git": {
+    "commit": "b25e385",
+    "branch": "perf/rendering-investigation"
+  },
+  "environment": {
+    "node": "v24.22.1",
+    "platform": "darwin",
+    "runs": 3,
+    "port": 4399,
+    "syntheticData": {
+      "votes": 1200,
+      "comments": 600,
+      "ballots": 10
+    },
+    "note": "Local synthetic measurements. Indicative only; not production SLA evidence."
+  },
+  "pages": [
+    {
+      "id": "home",
+      "label": "/ (public home)",
+      "path": "/",
+      "identity": "anonymous",
+      "document": {
+        "status": 200,
+        "durationMs": 24.7,
+        "htmlBytes": 51924,
+        "dbCommands": 7,
+        "dbDurationMs": 20.767,
+        "dbByCommand": {
+          "find": {
+            "count": 3,
+            "durationMs": 10.076
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 6.523
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 4.168
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 22.2,
+        "navigationMs": 84.6,
+        "lcpMs": 100,
+        "cls": 0.002,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": 79,
+        "maxEventDurationMs": null,
+        "jsBytes": 15728,
+        "cssBytes": 113573,
+        "fontBytes": 102764,
+        "imageBytes": 129419,
+        "scriptCount": 4,
+        "requestCount": 16,
+        "failedRequests": [],
+        "dbCommands": 7,
+        "dbDurationMs": 18.545,
+        "dbByCommand": {
+          "find": {
+            "count": 3,
+            "durationMs": 6.829
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 4.432
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 2.381
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "home",
+      "label": "/ (public home)",
+      "path": "/",
+      "identity": "member",
+      "document": {
+        "status": 200,
+        "durationMs": 29.6,
+        "htmlBytes": 66417,
+        "dbCommands": 14,
+        "dbDurationMs": 25.686,
+        "dbByCommand": {
+          "find": {
+            "count": 9,
+            "durationMs": 12.52
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 9.801
+          },
+          "update": {
+            "count": 1,
+            "durationMs": 1.302
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 2.064
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 24.1,
+        "navigationMs": 76.4,
+        "lcpMs": 92,
+        "cls": 0.002,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": null,
+        "jsBytes": 344862,
+        "cssBytes": 113573,
+        "fontBytes": 79636,
+        "imageBytes": 3667,
+        "scriptCount": 20,
+        "requestCount": 30,
+        "failedRequests": [],
+        "dbCommands": 21,
+        "dbDurationMs": 25.421,
+        "dbByCommand": {
+          "find": {
+            "count": 15,
+            "durationMs": 13.322
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 5.193
+          },
+          "update": {
+            "count": 2,
+            "durationMs": 1.703
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 1.076
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "proposals",
+      "label": "/proposals/",
+      "path": "/proposals/",
+      "identity": "anonymous",
+      "document": {
+        "status": 200,
+        "durationMs": 35.2,
+        "htmlBytes": 91557,
+        "dbCommands": 7,
+        "dbDurationMs": 21.455,
+        "dbByCommand": {
+          "find": {
+            "count": 4,
+            "durationMs": 15.662
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 5.793
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 30,
+        "navigationMs": 104.9,
+        "lcpMs": 92,
+        "cls": 0.002,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": 50,
+        "maxEventDurationMs": null,
+        "jsBytes": 15728,
+        "cssBytes": 109693,
+        "fontBytes": 79636,
+        "imageBytes": 3667,
+        "scriptCount": 4,
+        "requestCount": 14,
+        "failedRequests": [],
+        "dbCommands": 7,
+        "dbDurationMs": 16.966,
+        "dbByCommand": {
+          "find": {
+            "count": 4,
+            "durationMs": 14.348
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 5.909
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "proposals",
+      "label": "/proposals/",
+      "path": "/proposals/",
+      "identity": "member",
+      "document": {
+        "status": 200,
+        "durationMs": 39.8,
+        "htmlBytes": 102338,
+        "dbCommands": 15,
+        "dbDurationMs": 28.448,
+        "dbByCommand": {
+          "find": {
+            "count": 11,
+            "durationMs": 17.844
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 6.712
+          },
+          "update": {
+            "count": 1,
+            "durationMs": 1.125
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 33.6,
+        "navigationMs": 116,
+        "lcpMs": 64,
+        "cls": 0.003,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": null,
+        "jsBytes": 344862,
+        "cssBytes": 109693,
+        "fontBytes": 79636,
+        "imageBytes": 3667,
+        "scriptCount": 20,
+        "requestCount": 30,
+        "failedRequests": [],
+        "dbCommands": 22,
+        "dbDurationMs": 28.667,
+        "dbByCommand": {
+          "find": {
+            "count": 17,
+            "durationMs": 19.162
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 3.828
+          },
+          "update": {
+            "count": 2,
+            "durationMs": 1.951
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "proposal-detail",
+      "label": "/proposals/[slug]/",
+      "path": "/proposals/ease-the-squeeze-on-small-business/",
+      "identity": "anonymous",
+      "document": {
+        "status": 200,
+        "durationMs": 19.7,
+        "htmlBytes": 99128,
+        "dbCommands": 8,
+        "dbDurationMs": 18.366,
+        "dbByCommand": {
+          "find": {
+            "count": 8,
+            "durationMs": 17.261
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 18.8,
+        "navigationMs": 113.3,
+        "lcpMs": 96,
+        "cls": 0.002,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": 56,
+        "jsBytes": 329843,
+        "cssBytes": 139652,
+        "fontBytes": 102764,
+        "imageBytes": 3667,
+        "scriptCount": 26,
+        "requestCount": 37,
+        "failedRequests": [],
+        "dbCommands": 8,
+        "dbDurationMs": 17.513,
+        "dbByCommand": {
+          "find": {
+            "count": 8,
+            "durationMs": 17.513
+          }
+        },
+        "interaction": {
+          "clickToNextPaintMs": 147
+        },
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "proposal-detail",
+      "label": "/proposals/[slug]/",
+      "path": "/proposals/ease-the-squeeze-on-small-business/",
+      "identity": "member",
+      "document": {
+        "status": 200,
+        "durationMs": 34.6,
+        "htmlBytes": 122116,
+        "dbCommands": 16,
+        "dbDurationMs": 35.826,
+        "dbByCommand": {
+          "find": {
+            "count": 15,
+            "durationMs": 45.504
+          },
+          "update": {
+            "count": 1,
+            "durationMs": 1.299
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 31.9,
+        "navigationMs": 115.2,
+        "lcpMs": 112,
+        "cls": 0.003,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": 40,
+        "jsBytes": 396142,
+        "cssBytes": 139652,
+        "fontBytes": 102764,
+        "imageBytes": 3667,
+        "scriptCount": 33,
+        "requestCount": 44,
+        "failedRequests": [],
+        "dbCommands": 23,
+        "dbDurationMs": 37.994,
+        "dbByCommand": {
+          "find": {
+            "count": 21,
+            "durationMs": 33.209
+          },
+          "update": {
+            "count": 2,
+            "durationMs": 1.819
+          }
+        },
+        "interaction": {
+          "clickToNextPaintMs": 97.1
+        },
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "policies",
+      "label": "/policies/",
+      "path": "/policies/",
+      "identity": "anonymous",
+      "document": {
+        "status": 200,
+        "durationMs": 8.3,
+        "htmlBytes": 39720,
+        "dbCommands": 3,
+        "dbDurationMs": 7.127,
+        "dbByCommand": {
+          "find": {
+            "count": 3,
+            "durationMs": 5.699
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 6.7,
+        "navigationMs": 61.7,
+        "lcpMs": 68,
+        "cls": 0.001,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": null,
+        "jsBytes": 15728,
+        "cssBytes": 100939,
+        "fontBytes": 79636,
+        "imageBytes": 3667,
+        "scriptCount": 4,
+        "requestCount": 13,
+        "failedRequests": [],
+        "dbCommands": 3,
+        "dbDurationMs": 5.35,
+        "dbByCommand": {
+          "find": {
+            "count": 3,
+            "durationMs": 4.953
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "member",
+      "label": "/member/",
+      "path": "/member/",
+      "identity": "member",
+      "document": {
+        "status": 200,
+        "durationMs": 52,
+        "htmlBytes": 159024,
+        "dbCommands": 34,
+        "dbDurationMs": 68.789,
+        "dbByCommand": {
+          "find": {
+            "count": 28,
+            "durationMs": 44.062
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 6.505
+          },
+          "update": {
+            "count": 2,
+            "durationMs": 2.147
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 1.592
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 48.7,
+        "navigationMs": 152.9,
+        "lcpMs": 128,
+        "cls": 0.006,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": null,
+        "jsBytes": 461846,
+        "cssBytes": 132502,
+        "fontBytes": 79636,
+        "imageBytes": 3667,
+        "scriptCount": 41,
+        "requestCount": 51,
+        "failedRequests": [
+          "503 fetch http://127.0.0.1:4399/api/auth/passkey/list-user-passkeys"
+        ],
+        "dbCommands": 47,
+        "dbDurationMs": 82.302,
+        "dbByCommand": {
+          "find": {
+            "count": 39,
+            "durationMs": 69.873
+          },
+          "update": {
+            "count": 4,
+            "durationMs": 6.235
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 4.59
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 0.755
+          }
+        },
+        "interaction": null,
+        "consoleErrors": [
+          "console: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+        ]
+      }
+    },
+    {
+      "id": "admin",
+      "label": "/admin/",
+      "path": "/admin/",
+      "identity": "administrator",
+      "document": {
+        "status": 200,
+        "durationMs": 38.2,
+        "htmlBytes": 89539,
+        "dbCommands": 19,
+        "dbDurationMs": 33.317,
+        "dbByCommand": {
+          "find": {
+            "count": 12,
+            "durationMs": 18.871
+          },
+          "getMore": {
+            "count": 4,
+            "durationMs": 8.763
+          },
+          "aggregate": {
+            "count": 2,
+            "durationMs": 3.788
+          },
+          "update": {
+            "count": 1,
+            "durationMs": 1.895
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 30.3,
+        "navigationMs": 82,
+        "lcpMs": 76,
+        "cls": 0.048,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": null,
+        "jsBytes": 355410,
+        "cssBytes": 129507,
+        "fontBytes": 146136,
+        "imageBytes": 3667,
+        "scriptCount": 27,
+        "requestCount": 38,
+        "failedRequests": [],
+        "dbCommands": 40,
+        "dbDurationMs": 139.824,
+        "dbByCommand": {
+          "find": {
+            "count": 28,
+            "durationMs": 105.021
+          },
+          "getMore": {
+            "count": 7,
+            "durationMs": 23.529
+          },
+          "update": {
+            "count": 3,
+            "durationMs": 8.292
+          },
+          "aggregate": {
+            "count": 2,
+            "durationMs": 2.983
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "admin-proposals",
+      "label": "/admin/proposals/",
+      "path": "/admin/proposals/",
+      "identity": "administrator",
+      "document": {
+        "status": 200,
+        "durationMs": 164.2,
+        "htmlBytes": 1073525,
+        "dbCommands": 15,
+        "dbDurationMs": 27.267,
+        "dbByCommand": {
+          "find": {
+            "count": 11,
+            "durationMs": 20.382
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 5.468
+          },
+          "update": {
+            "count": 1,
+            "durationMs": 1.417
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 95.1,
+        "navigationMs": 209,
+        "lcpMs": 164,
+        "cls": 0.001,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": null,
+        "jsBytes": 353328,
+        "cssBytes": 129507,
+        "fontBytes": 146136,
+        "imageBytes": 3667,
+        "scriptCount": 21,
+        "requestCount": 32,
+        "failedRequests": [],
+        "dbCommands": 22,
+        "dbDurationMs": 38.054,
+        "dbByCommand": {
+          "find": {
+            "count": 17,
+            "durationMs": 31.972
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 4.148
+          },
+          "update": {
+            "count": 2,
+            "durationMs": 1.933
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    }
+  ]
+}

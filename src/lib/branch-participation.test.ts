@@ -18,7 +18,8 @@ import {
   verifyBranchMember,
 } from "./branch-participation.ts";
 import { castVote, listOutstandingDecisions, listProposals, saveProposal } from "./store.ts";
-import { PROPOSAL_VOTES } from "./vote-storage.ts";
+import { PROPOSAL_VOTES, findMemberVotes, proposalBallotId } from "./vote-storage.ts";
+import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
 import type { SessionUser } from "./types.ts";
 
 const national: SessionUser = {
@@ -260,6 +261,25 @@ describe("branch participation: following and verified membership", () => {
     );
     const reused = await listOutstandingDecisions(db, user.memberId, user, await listProposals(db, { user }));
     assert.deepEqual(reused.map((item) => item.proposalId), outstanding.map((item) => item.proposalId), 'reusing discovery data preserves electorate filtering');
+    const discovery = await listProposals(db, { user });
+    const prefetchedVotes = await findMemberVotes(
+      db,
+      user.memberId,
+      discovery.map((item) => proposalBallotId(item.proposalId)),
+      loadBallotCryptoConfig(process.env),
+    );
+    const reusedVotes = await listOutstandingDecisions(
+      db,
+      user.memberId,
+      user,
+      discovery,
+      prefetchedVotes,
+    );
+    assert.deepEqual(
+      reusedVotes.map((item) => item.proposalId),
+      outstanding.map((item) => item.proposalId),
+      'reusing an in-flight member vote read preserves the outstanding set',
+    );
     assert.equal(
       outstanding.some((item) => item.proposalId === "national-ballot"),
       true,

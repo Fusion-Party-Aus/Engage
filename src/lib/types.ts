@@ -55,6 +55,11 @@ export interface PlatformEnv {
   ENGAGE_SOCIAL_LINKS_JSON?: string;
   ENGAGE_STATE_SITES_JSON?: string;
   ENGAGE_REPO_URL?: string;
+  /**
+   * Opt-in MongoDB driver command monitoring for the local rendering
+   * performance harness. Ignored in production.
+   */
+  ENGAGE_DB_COMMAND_MONITOR?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;

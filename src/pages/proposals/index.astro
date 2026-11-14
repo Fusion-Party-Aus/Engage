@@ -55,17 +55,19 @@ const [allAvailableProposals, joinedComments] = await Promise.all([
   user ? db.collection('comments').find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray() : Promise.resolve([]),
 ]);
 
+const memberVotesPromise = user
+  ? findMemberVotes(
+      db,
+      user.memberId,
+      allAvailableProposals.map((p) => proposalBallotId(p.proposalId)),
+      loadBallotCryptoConfig(env),
+    )
+  : Promise.resolve([]);
+
 const [myVotesRaw, myOutstandingVotes] = await Promise.all([
-  user
-    ? findMemberVotes(
-        db,
-        user.memberId,
-        allAvailableProposals.map((p) => proposalBallotId(p.proposalId)),
-        loadBallotCryptoConfig(env),
-      )
-    : Promise.resolve([]),
+  memberVotesPromise,
   user?.canParticipate
-    ? listOutstandingDecisions(db, user.memberId, user, allAvailableProposals)
+    ? listOutstandingDecisions(db, user.memberId, user, allAvailableProposals, memberVotesPromise)
     : Promise.resolve([]),
 ]);
 

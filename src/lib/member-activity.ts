@@ -61,15 +61,23 @@ const resultLabel = (result: string) =>
 const endorsementLabel = (count: number) =>
   `${count} endorsement${count === 1 ? "" : "s"}`;
 
+export interface MemberActivityInputs {
+  votes: Awaited<ReturnType<typeof findAllMemberVotes>>;
+  ownComments: Record<string, any>[];
+  endorsedComments: Record<string, any>[];
+  amendments: Record<string, any>[];
+  authoredProposals: Record<string, any>[];
+}
+
 /**
- * Build the member-facing activity stream from participation records and
- * governance outcomes. Administrative audit collections are deliberately not
- * included; only events that concern the member's own contributions.
+ * Load the five participation sources shared by the activity stream and the
+ * catch-up digest. A member page needs both, so it loads once and passes the
+ * result to each view rather than issuing the same reads twice.
  */
-export async function listMemberActivityStream(
+export async function loadMemberActivityInputs(
   db: Db,
   memberId: string,
-): Promise<ActivityTimelineEvent[]> {
+): Promise<MemberActivityInputs> {
   const [votes, ownComments, endorsedComments, amendments, authoredProposals] =
     await Promise.all([
       findAllMemberVotes(db, memberId),
@@ -81,6 +89,38 @@ export async function listMemberActivityStream(
       db.collection("amendments").find({ authorId: memberId }).toArray(),
       db.collection("proposals").find({ authorId: memberId }).toArray(),
     ]);
+  return { votes, ownComments, endorsedComments, amendments, authoredProposals };
+}
+
+/**
+ * Build the member-facing activity stream from participation records and
+ * governance outcomes. Administrative audit collections are deliberately not
+ * included; only events that concern the member's own contributions.
+ */
+export async function listMemberActivityStream(
+  db: Db,
+  memberId: string,
+  inputs?: MemberActivityInputs,
+): Promise<ActivityTimelineEvent[]> {
+  const [votes, ownComments, endorsedComments, amendments, authoredProposals] =
+    inputs
+      ? [
+          inputs.votes,
+          inputs.ownComments,
+          inputs.endorsedComments,
+          inputs.amendments,
+          inputs.authoredProposals,
+        ]
+      : await Promise.all([
+          findAllMemberVotes(db, memberId),
+          db.collection("comments").find({ memberId }).toArray(),
+          db
+            .collection("comments")
+            .find({ "upvoteEvents.memberId": memberId, memberId: { $ne: memberId } })
+            .toArray(),
+          db.collection("amendments").find({ authorId: memberId }).toArray(),
+          db.collection("proposals").find({ authorId: memberId }).toArray(),
+        ]);
 
   const proposalIds = new Set<string>();
   for (const vote of votes) proposalIds.add(String(vote.proposalId));
@@ -457,18 +497,27 @@ export async function buildMemberCatchUp(
   memberId: string,
   since: Date,
   user: SessionUser | null = null,
+  inputs?: MemberActivityInputs,
 ): Promise<MemberCatchUpGroup[]> {
   const [votes, ownComments, endorsedComments, amendments, authoredProposals] =
-    await Promise.all([
-      findAllMemberVotes(db, memberId),
-      db.collection("comments").find({ memberId }).toArray(),
-      db
-        .collection("comments")
-        .find({ "upvoteEvents.memberId": memberId, memberId: { $ne: memberId } })
-        .toArray(),
-      db.collection("amendments").find({ authorId: memberId }).toArray(),
-      db.collection("proposals").find({ authorId: memberId }).toArray(),
-    ]);
+    inputs
+      ? [
+          inputs.votes,
+          inputs.ownComments,
+          inputs.endorsedComments,
+          inputs.amendments,
+          inputs.authoredProposals,
+        ]
+      : await Promise.all([
+          findAllMemberVotes(db, memberId),
+          db.collection("comments").find({ memberId }).toArray(),
+          db
+            .collection("comments")
+            .find({ "upvoteEvents.memberId": memberId, memberId: { $ne: memberId } })
+            .toArray(),
+          db.collection("amendments").find({ authorId: memberId }).toArray(),
+          db.collection("proposals").find({ authorId: memberId }).toArray(),
+        ]);
 
   const proposalIds = new Set<string>();
   for (const vote of votes) proposalIds.add(String(vote.proposalId));
