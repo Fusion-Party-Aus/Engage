@@ -1,12 +1,109 @@
 import type { ClientSession, Db } from "mongodb";
+import {
+  loadBallotCryptoConfig,
+  type BallotCryptoConfig,
+} from "./ballot-crypto.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEvent } from "./governance-relationships.ts";
 import { normalizeMatterType, type MatterTypeId } from "./matters.ts";
-import { proposalBallotId } from "./vote-storage.ts";
+import type { VoteChoice, VoteTally } from "./types.ts";
+import {
+  PROPOSAL_VOTES,
+  decodeStoredVote,
+  proposalBallotId,
+} from "./vote-storage.ts";
 
 export const BALLOT_SCHEMA_VERSION = 1;
 export const BALLOTS_COLLECTION = "ballots";
 export const FORMAL_DECISIONS_COLLECTION = "ballot_results";
+
+/**
+ * Versioned basis for a computed ballot outcome.
+ *
+ * - D9: an ordinary Yes/No ballot is approved only when approve is greater than
+ *   reject. A tie does not approve.
+ * - D10 / O1: abstentions may be recorded, but their effect on a denominator is
+ *   undefined. Abstentions are therefore recorded and excluded from the
+ *   comparison instead of being added to, or removed from, any denominator.
+ * - D8: no quorum, turnout or minimum-participation threshold is applied.
+ *
+ * Changing the comparison requires a new basis identifier; recorded results keep
+ * the identifier they were certified under.
+ */
+export const BALLOT_OUTCOME_RULE_BASIS = "simple-majority-d9-v1";
+
+export type ComputedBallotOutcome = "successful" | "unsuccessful";
+
+/**
+ * Compare Yes against No only (D9, D10/O1, D8). Zero votes and ties are not
+ * successful.
+ */
+export function computeBallotOutcome(tally: {
+  approve: number;
+  reject: number;
+}): ComputedBallotOutcome {
+  return tally.approve > tally.reject ? "successful" : "unsuccessful";
+}
+
+/** Sum recorded choices into the three recognised outcomes. */
+export function sumVoteTally(choices: Iterable<VoteChoice>): VoteTally {
+  const tally: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
+  for (const choice of choices) {
+    if (choice === "approve") tally.approve += 1;
+    else if (choice === "abstain") tally.abstain += 1;
+    else if (choice === "reject") tally.reject += 1;
+    else
+      throw new BallotDomainError(
+        "A recorded vote could not be read, so the ballot outcome cannot be computed.",
+        409,
+        "BALLOT_TALLY_MALFORMED",
+      );
+    tally.total += 1;
+  }
+  return tally;
+}
+
+/**
+ * Tally the votes bound to one ballot and immutable revision. Decryption uses
+ * the same storage path as every other vote read, so encrypted ballots certify
+ * from their real choices; eligibility was already decided when each vote was
+ * cast (D2) and is never snapshotted here.
+ */
+export async function readBoundBallotTally(
+  db: Db,
+  input: {
+    ballotId: string;
+    revisionId: string;
+    cryptoConfig?: BallotCryptoConfig | null;
+    session?: ClientSession;
+  },
+): Promise<VoteTally> {
+  const cryptoConfig =
+    input.cryptoConfig === undefined
+      ? loadBallotCryptoConfig(process.env)
+      : input.cryptoConfig;
+  const rows = await db
+    .collection(PROPOSAL_VOTES)
+    .find(
+      { ballotId: input.ballotId, revisionId: input.revisionId },
+      input.session ? { session: input.session } : undefined,
+    )
+    .toArray();
+  let choices: VoteChoice[];
+  try {
+    choices = rows.map(
+      (row) =>
+        decodeStoredVote(row as Record<string, any>, cryptoConfig).choice,
+    );
+  } catch {
+    throw new BallotDomainError(
+      "The ballot's recorded votes could not be read, so its outcome cannot be computed.",
+      409,
+      "BALLOT_TALLY_UNREADABLE",
+    );
+  }
+  return sumVoteTally(choices);
+}
 
 export interface BallotElectorate {
   scope: "national" | "branch";
@@ -31,6 +128,12 @@ export interface BallotRecord {
   updatedAt: Date;
 }
 
+export interface FormalDecisionOverride {
+  reason: string;
+  by: string;
+  at: Date;
+}
+
 export interface FormalDecisionRecord {
   decisionEventId: string;
   ballotId: string;
@@ -38,6 +141,13 @@ export interface FormalDecisionRecord {
   matterId: string;
   revisionId: string;
   result: "successful" | "unsuccessful" | "inconclusive";
+  /** Votes bound to the ballot and revision at the moment of certification. */
+  tally?: VoteTally;
+  /** Versioned rule the computed outcome was derived from. */
+  ruleBasis?: string;
+  computedResult?: ComputedBallotOutcome;
+  /** Present only when the recorded result contradicts the computed outcome. */
+  override?: FormalDecisionOverride;
   authorityBranchId?: string;
   recordedBy: string;
   recordedAt: Date;
@@ -298,6 +408,12 @@ export async function listMatterBallots(
  * Record an immutable formal decision for a specific ballot and wording revision.
  * Runs atomically with ballot certification and the `decision.recorded` governance event,
  * and is idempotent when retried with the same `decisionEventId` and payload.
+ *
+ * The result is checked against the outcome computed from the votes bound to the
+ * ballot and revision (D8, D9; abstentions excluded per D10/O1). A contradicting
+ * result is accepted only as an explicit override with a written reason, and the
+ * override is recorded on the result and in the audit event. Existing results are
+ * returned unchanged and are never rewritten.
  */
 export async function recordFormalDecision(
   db: Db,
@@ -309,11 +425,14 @@ export async function recordFormalDecision(
     decisionEventId: string;
     authorityBranchId?: string;
     recordedBy: string;
+    overrideReason?: string;
+    cryptoConfig?: BallotCryptoConfig | null;
     now?: Date;
   },
 ): Promise<FormalDecisionRecord> {
   const ballotId = (input.ballotId ?? proposalBallotId(input.matterId)).trim();
   const now = input.now ?? new Date();
+  const overrideReason = (input.overrideReason ?? "").trim().slice(0, 1000);
   const matchesPayload = (existing: Record<string, any>) =>
     existing.decisionEventId === input.decisionEventId &&
     (existing.ballotId ?? proposalBallotId(input.matterId)) === ballotId &&
@@ -337,6 +456,8 @@ export async function recordFormalDecision(
       );
 
       if (existing) {
+        // Identical retries return the recorded evidence as it stands, including
+        // historical results recorded before outcomes were computed.
         if (matchesPayload(existing)) {
           return existing as unknown as FormalDecisionRecord;
         }
@@ -347,6 +468,22 @@ export async function recordFormalDecision(
         );
       }
 
+      const tally = await readBoundBallotTally(db, {
+        ballotId,
+        revisionId: input.revisionId,
+        cryptoConfig: input.cryptoConfig,
+        session,
+      });
+      const computedResult = computeBallotOutcome(tally);
+      const isOverride = input.result !== computedResult;
+      if (isOverride && !overrideReason) {
+        throw new BallotDomainError(
+          `The ballot's votes compute a ${computedResult} outcome (${tally.approve} approve, ${tally.reject} reject). Choose that outcome, or add a written reason to override it.`,
+          409,
+          "RESULT_OVERRIDE_REASON_REQUIRED",
+        );
+      }
+
       const record: FormalDecisionRecord = {
         decisionEventId: input.decisionEventId,
         ballotId,
@@ -354,6 +491,18 @@ export async function recordFormalDecision(
         matterId: input.matterId,
         revisionId: input.revisionId,
         result: input.result,
+        tally,
+        ruleBasis: BALLOT_OUTCOME_RULE_BASIS,
+        computedResult,
+        ...(isOverride
+          ? {
+              override: {
+                reason: overrideReason,
+                by: input.recordedBy,
+                at: now,
+              },
+            }
+          : {}),
         ...(input.authorityBranchId
           ? { authorityBranchId: input.authorityBranchId }
           : {}),
@@ -381,7 +530,16 @@ export async function recordFormalDecision(
           decisionEventId: input.decisionEventId,
           actorId: input.recordedBy,
           authorityBranchId: input.authorityBranchId,
-          metadata: { result: input.result },
+          ...(isOverride ? { reason: overrideReason } : {}),
+          metadata: {
+            result: input.result,
+            computedResult,
+            tally,
+            ruleBasis: BALLOT_OUTCOME_RULE_BASIS,
+            ...(isOverride
+              ? { override: { by: input.recordedBy, reason: overrideReason } }
+              : {}),
+          },
           createdAt: now,
         },
         session,

@@ -23,6 +23,7 @@ import {
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
+import { computeBallotOutcome } from '../../../lib/ballots.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
 import PortableText from '../../../components/PortableText.astro';
@@ -146,6 +147,25 @@ const ballotState = proposal?.stage === 'decide'
   : (proposal?.votes.total ?? 0) > 0
     ? 'Voting closed'
     : 'Not yet open';
+
+// D9: approve greater than reject approves; a tie does not. D8 adds no quorum or
+// turnout threshold, and D10/O1 leaves the abstention denominator undefined, so
+// abstentions are shown but never change this comparison.
+const computedOutcome = proposal?.ballotRevisionId ? computeBallotOutcome(proposal.votes) : null;
+const outcomeLabel = (value: string | null | undefined) =>
+  value === 'successful' ? 'Successful' : value === 'unsuccessful' ? 'Unsuccessful' : value === 'inconclusive' ? 'Inconclusive' : 'Not recorded';
+const recordedOutcomeEvidence = (() => {
+  if (!ballotResult) return null;
+  const tally = ballotResult.tally as { approve?: number; abstain?: number; reject?: number } | undefined;
+  const override = ballotResult.override as { reason?: string } | undefined;
+  return {
+    computed: ballotResult.computedResult ? outcomeLabel(String(ballotResult.computedResult)) : null,
+    tally: tally
+      ? `${Number(tally.approve ?? 0)} approve · ${Number(tally.abstain ?? 0)} abstain · ${Number(tally.reject ?? 0)} reject`
+      : null,
+    overrideReason: typeof override?.reason === 'string' ? override.reason : null,
+  };
+})();
 
 const policyState = policy
   ? `${String(policy.status ?? 'adopted')} · ${String(policy.publicationStatus ?? 'unpublished')}`
@@ -647,10 +667,20 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 
               <dl class="admin-property-grid">
                 <div><dt>Bound ballot wording</dt><dd>{proposal.ballotRevisionId ? ballotRevisionLabel : 'Needs binding before outcome'}</dd></div>
-                <div><dt>Recorded outcome</dt><dd>{ballotResult ? `${ballotResult.result} · ${formatDate(ballotResult.recordedAt)}` : 'Not recorded'}</dd></div>
+                <div><dt>Recorded outcome</dt><dd>{ballotResult ? `${outcomeLabel(String(ballotResult.result))} · ${formatDate(ballotResult.recordedAt)}` : 'Not recorded'}</dd></div>
                 <div><dt>Decision event ref</dt><dd>{ballotResult?.decisionEventId ?? 'Not recorded'}</dd></div>
                 <div><dt>Policy registry state</dt><dd>{policyState}</dd></div>
               </dl>
+
+              {recordedOutcomeEvidence && (
+                <p class="admin-inline-note">
+                  {recordedOutcomeEvidence.computed
+                    ? `Computed from the votes at certification: ${recordedOutcomeEvidence.computed}`
+                    : 'Result recorded before outcomes were computed from the votes'}
+                  {recordedOutcomeEvidence.tally ? ` · ${recordedOutcomeEvidence.tally}` : ''}
+                  {recordedOutcomeEvidence.overrideReason ? ` · Override reason: ${recordedOutcomeEvidence.overrideReason}` : ''}
+                </p>
+              )}
 
               <!-- Inline Ballot Wording Binding Form -->
               {canManageBallot && proposal.stage === 'decide' && !proposal.ballotRevisionId && (
@@ -702,9 +732,22 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                       <strong>Record formal ballot outcome</strong>
                     </div>
                     <p class="admin-inline-note">
-                      Apply the organisation&apos;s constitutional rules to record the ballot result against frozen revision <code>{String(proposal.ballotRevisionId).slice(0, 12)}</code>.
+                      Record the outcome of the votes on frozen revision <code>{String(proposal.ballotRevisionId).slice(0, 12)}</code>.
                     </p>
-                    <form class="ballot-result-form grid gap-3" data-proposal-id={proposal.proposalId}>
+                    {computedOutcome && (
+                      <div class="flex flex-wrap items-center gap-2 text-sm">
+                        <span class="admin-inline-note">Computed from the votes:</span>
+                        <Badge variant={computedOutcome === 'successful' ? 'success' : 'warning'}>{outcomeLabel(computedOutcome)}</Badge>
+                        <span class="admin-inline-note tabular">
+                          {proposal.votes.approve} approve · {proposal.votes.abstain} abstain · {proposal.votes.reject} reject · simple majority
+                        </span>
+                      </div>
+                    )}
+                    <form
+                      class="ballot-result-form grid gap-3"
+                      data-proposal-id={proposal.proposalId}
+                      data-computed-result={computedOutcome ?? ''}
+                    >
                       <div class="admin-form-grid">
                         <Field label="Outcome" htmlFor={`ballot-result-${proposal.proposalId}`}>
                           <NativeSelect defaultValue={ballotResult?.result ?? ''} id={`ballot-result-${proposal.proposalId}`} name="result" required>
@@ -716,6 +759,19 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </Field>
                         <Field label="Decision event reference" htmlFor={`ballot-event-${proposal.proposalId}`}>
                           <Input id={`ballot-event-${proposal.proposalId}`} name="decisionEventId" defaultValue={ballotResult?.decisionEventId ?? ''} required maxLength={200} placeholder="e.g. BALLOT-2026-11" />
+                        </Field>
+                      </div>
+                      <div data-override-field hidden={!ballotResult || ballotResult.result === computedOutcome}>
+                        <Field label="Reason for overriding the computed outcome" htmlFor={`ballot-override-${proposal.proposalId}`}>
+                          <Textarea
+                            id={`ballot-override-${proposal.proposalId}`}
+                            name="overrideReason"
+                            rows={2}
+                            maxLength={1000}
+                            required={Boolean(ballotResult && ballotResult.result !== computedOutcome)}
+                            defaultValue={String(ballotResult?.override?.reason ?? '')}
+                            placeholder="Why does the recorded outcome differ from the votes?"
+                          />
                         </Field>
                       </div>
                       <div class="admin-actions">
@@ -1207,6 +1263,8 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 </AdminLayout>
 
 <script>
+  import { ballotResultPayload, wireBallotOutcomeForm } from '../../../lib/ballot-outcome-form.ts';
+
   // Tab navigation for the 4 operational views
   const sectionNav = document.querySelector<HTMLElement>('.admin-section-nav');
   if (sectionNav) {
@@ -1340,7 +1398,8 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
   });
 
   // Inline ballot result form
-  document.querySelectorAll<HTMLFormElement>('.ballot-result-form').forEach((form) =>
+  document.querySelectorAll<HTMLFormElement>('.ballot-result-form').forEach((form) => {
+    wireBallotOutcomeForm(form);
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
@@ -1348,17 +1407,11 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
       const status = form.querySelector<HTMLElement>('[role="status"]');
       if (button) button.disabled = true;
       try {
-        const fields = new FormData(form);
-        const body = {
-          proposalId: form.dataset.proposalId,
-          result: fields.get('result'),
-          decisionEventId: fields.get('decisionEventId'),
-        };
         const response = await fetch('/api/admin/ballots/result', {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify(ballotResultPayload(form)),
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || 'Could not record ballot result.');
@@ -1368,8 +1421,8 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
         if (status) status.textContent = error instanceof Error ? error.message : 'Could not record ballot result.';
         if (button) button.disabled = false;
       }
-    }),
-  );
+    });
+  });
 
   // Inline contribution feedback forms
   document.querySelectorAll<HTMLFormElement>('.comment-feedback-form').forEach((form) => {

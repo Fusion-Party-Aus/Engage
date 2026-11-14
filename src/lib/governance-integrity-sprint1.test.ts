@@ -225,6 +225,9 @@ describe("Sprint 1 governance integrity", () => {
       decisionEventId: "dec-evt-1",
       authorityBranchId: "branch-nat",
       recordedBy: adminUser.memberId,
+      // No votes exist, so the computed outcome is unsuccessful (D9). This test
+      // exercises certification mechanics, so it records an explicit override.
+      overrideReason: "Procedure test: certification mechanics with no cast votes.",
     });
     assert.equal(first.result, "successful");
 
@@ -236,6 +239,7 @@ describe("Sprint 1 governance integrity", () => {
       decisionEventId: "dec-evt-1",
       authorityBranchId: "branch-nat",
       recordedBy: adminUser.memberId,
+      overrideReason: "Procedure test: certification mechanics with no cast votes.",
     });
     assert.equal(retry.decisionEventId, "dec-evt-1");
 
@@ -383,6 +387,8 @@ test(
         result: "successful",
         decisionEventId: "dec-multi-1",
         recordedBy: adminUser.memberId,
+        // No votes exist, so the computed outcome is unsuccessful (D9).
+        overrideReason: "Procedure test: certification mechanics with no cast votes.",
       });
       await recordFormalDecision(db, {
         ballotId: "amendment:AMD-MULTI-1",

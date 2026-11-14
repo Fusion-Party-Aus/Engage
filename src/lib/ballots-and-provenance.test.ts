@@ -78,6 +78,8 @@ describe("decoupled ballots, formal decisions, and governance provenance", () =>
       decisionEventId: "dec-multi-1",
       recordedBy: "admin-1",
       now,
+      // No votes exist, so the computed outcome is unsuccessful (D9).
+      overrideReason: "Procedure test: certification mechanics with no cast votes.",
     });
     assert.equal(decision.result, "successful");
 

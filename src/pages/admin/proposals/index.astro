@@ -7,6 +7,7 @@ import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, Shiel
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { listProposals, normalizeStage } from '../../../lib/store.ts';
+import { computeBallotOutcome } from '../../../lib/ballots.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import type { ProposalStage } from '../../../lib/types.ts';
 import { Button } from '../../../components/ui/button';
@@ -194,6 +195,9 @@ const stageOptions: Array<[ProposalStage, string]> = [
 const stageTone = (stage: string) => stage === 'decide' ? 'warning' : stage === 'implement' ? 'success' : stage === 'deliberate' ? 'info' : stage === 'archived' ? 'outline' : 'muted';
 const stageLabel = (stage: string) => stage === 'decide' ? 'Open vote' : stage === 'deliberate' ? 'In discussion' : stage === 'implement' ? 'Implement' : stage === 'archived' ? 'Archived' : 'New idea';
 const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && item.governanceAuthorityBranchId === item.jurisdictionBranchId && branchAdminIds.includes(item.governanceAuthorityBranchId ?? ''));
+// D9: approve greater than reject approves; a tie does not. D8 adds no quorum or
+// turnout threshold, and abstentions never change the comparison (D10/O1).
+const outcomeLabel = (value: string) => value === 'successful' ? 'Successful' : 'Unsuccessful';
 ---
 
 <AdminLayout
@@ -650,9 +654,22 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                       <details class="admin-disclosure admin-disclosure--muted">
                         <summary><Gavel className="size-4" aria-hidden="true" />Record ballot outcome</summary>
                         <div class="admin-disclosure__body">
-                          <p class="admin-inline-note">Apply the organisation&apos;s authorised rules. Engage does not calculate a passing threshold. A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
+                          <div class="flex flex-wrap items-center gap-2 text-sm">
+                            <span class="admin-inline-note">Computed from the votes:</span>
+                            <Badge variant={computeBallotOutcome(item.votes) === 'successful' ? 'success' : 'warning'}>
+                              {outcomeLabel(computeBallotOutcome(item.votes))}
+                            </Badge>
+                            <span class="admin-inline-note tabular">
+                              {item.votes.approve} approve · {item.votes.abstain} abstain · {item.votes.reject} reject · simple majority
+                            </span>
+                          </div>
+                          <p class="admin-inline-note">A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
                           <p class="m-0 text-sm"><strong>Frozen revision:</strong> {item.ballotRevisionId ? <code>{item.ballotRevisionId}</code> : 'Needs administrator review'}</p>
-                          <form class="ballot-result-form grid gap-3" data-proposal-id={item.proposalId}>
+                          <form
+                            class="ballot-result-form grid gap-3"
+                            data-proposal-id={item.proposalId}
+                            data-computed-result={computeBallotOutcome(item.votes)}
+                          >
                             <div class="admin-form-grid">
                               <Field label="Outcome" htmlFor={`ballot-result-${item.proposalId}`}>
                                 <NativeSelect defaultValue="" id={`ballot-result-${item.proposalId}`} name="result" required>
@@ -664,6 +681,11 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                               </Field>
                               <Field label="Decision event reference" htmlFor={`ballot-event-${item.proposalId}`}>
                                 <Input id={`ballot-event-${item.proposalId}`} name="decisionEventId" required maxLength={200} />
+                              </Field>
+                            </div>
+                            <div data-override-field hidden>
+                              <Field label="Reason for overriding the computed outcome" htmlFor={`ballot-override-${item.proposalId}`}>
+                                <Textarea id={`ballot-override-${item.proposalId}`} name="overrideReason" rows={2} maxLength={1000} placeholder="Why does the recorded outcome differ from the votes?" />
                               </Field>
                             </div>
                             <div class="admin-actions">
@@ -783,6 +805,8 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 </AdminLayout>
 
 <script>
+  import { ballotResultPayload, wireBallotOutcomeForm } from '../../../lib/ballot-outcome-form.ts';
+
   const ballotCloseField = document.getElementById('editor-ballot-closes-at') as HTMLInputElement | null;
   if (ballotCloseField) {
     const iso = ballotCloseField.dataset.isoValue?.trim();
@@ -928,17 +952,19 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
     }
   });
 
-  document.querySelectorAll<HTMLFormElement>('.ballot-result-form').forEach((form) => form.addEventListener('submit', async (event) => {
-    event.preventDefault(); if (!form.reportValidity()) return;
-    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); const status = form.querySelector<HTMLElement>('[role="status"]');
-    if (button) button.disabled = true;
-    try {
-      const fields = new FormData(form); const body = { proposalId: form.dataset.proposalId, result: fields.get('result'), decisionEventId: fields.get('decisionEventId') };
-      const response = await fetch('/api/admin/ballots/result', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || 'Could not record ballot result.');
-      if (status) status.textContent = 'Outcome recorded.'; location.reload();
-    } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not record ballot result.'; if (button) button.disabled = false; }
-  }));
+  document.querySelectorAll<HTMLFormElement>('.ballot-result-form').forEach((form) => {
+    wireBallotOutcomeForm(form);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault(); if (!form.reportValidity()) return;
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); const status = form.querySelector<HTMLElement>('[role="status"]');
+      if (button) button.disabled = true;
+      try {
+        const response = await fetch('/api/admin/ballots/result', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ballotResultPayload(form)) });
+        const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || 'Could not record ballot result.');
+        if (status) status.textContent = 'Outcome recorded.'; location.reload();
+      } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not record ballot result.'; if (button) button.disabled = false; }
+    });
+  });
 
   document.querySelectorAll<HTMLFormElement>('.ballot-bind-form').forEach((form) => form.addEventListener('submit', async (event) => {
     event.preventDefault(); if (!form.reportValidity()) return;
