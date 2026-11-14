@@ -548,7 +548,7 @@ export const termsOfUse: LegalDocument = {
   shortTitle: "Terms of Use",
   description:
     "The rules for browsing and taking part in Engage, Fusion Party Australia's member participation and governance platform.",
-  version: "1.0 (owner-authorised; publication pending)",
+  version: "1.1 (ballot outcome validation; publication pending)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -558,7 +558,7 @@ export const termsOfUse: LegalDocument = {
   registeredPartyAbbreviation: "votefusion.org",
   address: "254 McLeod Lane, Mansfield VIC 3722",
   contact: "contact@fusionparty.org.au",
-  lastUpdated: "8 November 2026",
+  lastUpdated: "15 November 2026",
   sections: [
     {
       id: "operator",
@@ -784,7 +784,7 @@ export const termsOfUse: LegalDocument = {
       blocks: [
         {
           type: "paragraph",
-          text: `Engage records votes and aggregate tallies. It does not calculate or apply a passing threshold. An authorised administrator records the result using Fusion's rules. Aggregate tallies are public and, in a very small ballot, may effectively reveal how a small number of voters voted.`,
+          text: `Engage counts the votes bound to each ballot and computes the outcome under the published simple-majority rule (rule version simple-majority-d9-v1): Yes greater than No approves the question, while a tie or a ballot with no votes does not. Abstentions are recorded but do not change that comparison, and no quorum or minimum turnout applies. An authorised administrator records the formal result. If the recorded result differs from the computed outcome, it may be recorded only as an explicit override with a written reason, which is kept with the result and in the audit record. Aggregate tallies are public and, in a very small ballot, may effectively reveal how a small number of voters voted.`,
         },
         {
           type: "paragraph",

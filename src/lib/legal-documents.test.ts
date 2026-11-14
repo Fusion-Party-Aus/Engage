@@ -178,6 +178,18 @@ test("terms cover participation, content, voting, records and disputes", () => {
   assert.match(text, /votefusion.org for big ideas/i);
 });
 
+test("terms describe the computed ballot outcome rule and its override", () => {
+  const text = textOf(termsOfUse);
+
+  assert.match(text, /simple-majority-d9-v1/);
+  assert.match(text, /Yes greater than No approves/i);
+  assert.match(text, /a tie or a ballot with no votes does not/i);
+  assert.match(text, /abstentions are recorded but do not change that comparison/i);
+  assert.match(text, /no quorum or minimum turnout/i);
+  assert.match(text, /explicit override with a written reason/i);
+  assert.match(text, /audit record/i);
+});
+
 test("terms distinguish legitimate public access from abusive automation", () => {
   const text = textOf(termsOfUse);
 

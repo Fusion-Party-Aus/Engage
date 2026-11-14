@@ -7,6 +7,8 @@
 
 This record is internal working material. It is not legal advice. It distinguishes implemented behaviour from proposed or deferred functionality, and it records the matters that require an authorised Fusion decision before the public pages are published as final documents.
 
+> **Update — 15 November 2026 (computed ballot outcomes, #28/#40).** Engage now computes an ordinary Yes/No outcome from the votes bound to the ballot and exact revision under the versioned `simple-majority-d9-v1` rule: Yes greater than No approves, a tie and zero votes do not approve, abstentions do not change the comparison, and no quorum or turnout applies. An authorised officer can record a differing outcome only as an explicit override with a written reason, which is stored on the result and in the audit event. The incorrect "does not calculate or apply a passing threshold" sentence was in **Terms of Use §9** ("Results, ratification and adopted policy"), not the Privacy Policy; it has been corrected and the Terms version rolled forward to 1.1. The Privacy Policy is unchanged (version 1.1) because it made no claim about thresholds. Owner authorisation and the inactive acceptance gate are unchanged. Publication, the effective date and any formal publication approval remain outstanding and are tracked by issue #40.
+
 ---
 
 ## 1. Implementation evidence inspected
@@ -120,7 +122,7 @@ Membership verification is manual. No external membership register, party databa
 | Proposal vote | One current vote per member per proposal ballot (`ballotId = proposal:<proposalId>`), with memberId, authorName, choice (approve, abstain, reject), optional reason up to 500 characters, proposalId, revisionId and updatedAt. The unique index prevents duplicate current votes. | Public sees only aggregate tallies. The member sees their own vote and reason. National administrators receive identifiable records. |
 | Amendment vote | Separate ballot (`ballotId = amendment:<amendmentId>`) bound to the frozen proposal revision and the amendment wording revision. Same member identity, choice, reason and timestamps. | Same boundary as proposal votes. |
 | Ballot binding | `ballot_binding_events` records the actor, reviewed revision, decision event reference, reason and before/after state when an ambiguous legacy ballot is bound. | Administrators and audit readers. |
-| Ballot result | `ballot_results` records proposalId, revisionId, result (successful, unsuccessful, inconclusive), decisionEventId, recordedBy and recordedAt. Results are immutable and one per proposal. Engage does not calculate a passing threshold. | Administrators; public policy records may expose the decision event and revision but not the recording member identifier. |
+| Ballot result | `ballot_results` records proposalId, revisionId, result (successful, unsuccessful, inconclusive), decisionEventId, recordedBy, recordedAt, the tally at certification, the rule basis (`simple-majority-d9-v1`), the computed result and, when used, an override with reason, actor and time. Results are immutable and one per proposal ballot. A differing officer result is refused unless it is an explicit, reasoned override. | Administrators; public policy records may expose the decision event and revision but not the recording member identifier. |
 | Ratification | `policy_registry` ratification object with authority branch, decision event, ballot revision, ratified revision, adopted amendment IDs, ratifiedBy and ratifiedAt. | Public policy page shows authority branch, decision event, revisions and dates; `publicPolicy` omits `ratifiedBy`. |
 | Publication | `publication_events` with event ID, idempotency key, policy ID, revision, status, provenance, publishedBy and timestamps. Withdrawal and supersession are separate events. | Public policy registry shows publication state, dates and provenance; actor identifiers are not in the public projection. |
 
@@ -220,7 +222,7 @@ No payment processor, advertising network, data broker, email marketing platform
 - A formal moderation appeal workflow.
 - An adopted ballot contingency policy. Technical controls can close a ballot or change its stage; the grounds, safeguards, notice and escalation rules are not yet adopted.
 - Automated membership verification against an external register.
-- Automated calculation of ballot thresholds.
+- Ranked-choice counting, quorum, minimum-turnout thresholds or an abstention denominator. An ordinary Yes/No outcome is computed under the single published rule `simple-majority-d9-v1`; no other counting method is implemented.
 - Analytics, advertising, tracking cookies or cookie-consent UI.
 - Search indexing of the legal pages; `noindex, nofollow` is retained.
 
@@ -272,7 +274,7 @@ The statutory tort commenced on 10 June 2025 and is broader than the APPs: the O
 
 ### 6.6 Automated decision-making transparency
 
-From 10 December 2026, APP 1.7–1.9 require APP entities to describe certain computer programs that make, or do things substantially and directly related to making, decisions that could significantly affect an individual's rights or interests. Engage's eligibility checks are rule-based and depend on manual membership verification; the application does not calculate ballot thresholds or make disciplinary decisions. The drafts state that Engage does not calculate or apply a passing threshold. If future automation is introduced, the privacy policy must be updated before it operates.
+From 10 December 2026, APP 1.7–1.9 require APP entities to describe certain computer programs that make, or do things substantially and directly related to making, decisions that could significantly affect an individual's rights or interests. Engage's eligibility checks are rule-based and depend on manual membership verification. Engage also computes the outcome of an ordinary Yes/No ballot from the bound votes under one published rule, `simple-majority-d9-v1`, and records the tally, rule basis and computed result on the result; an officer can depart from it only through an explicit, reasoned and audited override. The Privacy Policy describes that rule. Quorum, turnout, ranked-choice counting, confirmation ballots and an abstention denominator are not implemented; if any of those are introduced, the policy must be updated before they operate. Engage makes no disciplinary decisions.
 
 ### 6.7 Other laws
 
