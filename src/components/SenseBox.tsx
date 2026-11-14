@@ -5,9 +5,10 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { NativeSelect } from './ui/native-select';
 import { Textarea } from './ui/textarea';
+import { Turnstile } from './ui/turnstile';
 import { SENSE_TOPICS } from '../lib/sense-box-options';
 
-export default function SenseBox({ branches, initialBranch }: { branches: { branchId: string; name: string; label?: string; code?: string }[]; initialBranch: string }) {
+export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '' }: { branches: { branchId: string; name: string; label?: string; code?: string }[]; initialBranch: string; turnstileSiteKey?: string }) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -34,7 +35,13 @@ export default function SenseBox({ branches, initialBranch }: { branches: { bran
         body: JSON.stringify({ ...data, consent: data.consent === 'on', requestId: id.current }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error);
+      if (!response.ok) {
+        if (typeof result?.code === 'string' && result.code.startsWith('TURNSTILE_')) {
+          // The token is single-use; ask the widget for a fresh one.
+          window.dispatchEvent(new Event('engage:turnstile-reset'));
+        }
+        throw new Error(result.error);
+      }
       setSaved(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Couldn't send your priority. Try again.");
@@ -118,6 +125,8 @@ export default function SenseBox({ branches, initialBranch }: { branches: { bran
             I agree to Fusion using my input to understand community priorities and develop ideas. It will be visible to authorised organisers for my branch and national administrators. Summaries may inform public proposals. <a href="/privacy/">Privacy policy</a>
           </span>
         </label>
+
+        <Turnstile siteKey={turnstileSiteKey} action="sense-box" />
 
         <Button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Share my priority'}</Button>
       </fieldset>

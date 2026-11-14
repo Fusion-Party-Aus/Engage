@@ -24,6 +24,7 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Work on persistence, revisions or votes | [architecture/data-and-persistence.md](architecture/data-and-persistence.md) |
 | Add or change an API route | [architecture/api-and-authorisation.md](architecture/api-and-authorisation.md) |
 | Work on email, notifications or PWA | [architecture/notifications-and-jobs.md](architecture/notifications-and-jobs.md) |
+| Protect sign-in and public submissions | [security/turnstile.md](security/turnstile.md) |
 | Build, test or deploy | [architecture/build-deploy-operations.md](architecture/build-deploy-operations.md) |
 | Make a change | [guides/contributing.md](guides/contributing.md) |
 | Act as an autonomous agent | [guides/agent-guide.md](guides/agent-guide.md) |
@@ -56,6 +57,8 @@ docs/
 │   └── agent-guide.md                # Orientation, invariants, traps, recipes
 ├── governance/
 │   └── decision-register.md          # Maintainer-approved governance rules
+├── security/
+│   └── turnstile.md                  # Turnstile, abuse protection, rate limits
 ├── status/
 │   ├── capability-matrix.md          # Implemented / partial / planned
 │   ├── known-gaps.md                 # Defects, risks and open decisions

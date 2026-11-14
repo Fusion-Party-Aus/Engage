@@ -130,6 +130,8 @@ Comments can be deleted by staff, but there is no moderation state, reason or au
 
 No CSP, HSTS, `X-Frame-Options` or `X-Content-Type-Options`; no general API rate limiting; CSRF/Origin checks are partial. Cookies rely on `SameSite=Lax` for many routes.
 
+Cloudflare Turnstile and a shared MongoDB fixed-window limiter now protect the abuse-prone unauthenticated actions (Sense Box submission and magic-link sign-in) — see [security/turnstile.md](../security/turnstile.md). Authenticated voting is deliberately not challenged. General API rate limiting, the security headers and complete CSRF coverage remain.
+
 **Direction:** Add headers at the reverse proxy or app boundary, then extend origin checks to every state-changing route. Document residual risk.
 
 ### 16. The legal acceptance gate is inactive

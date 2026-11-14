@@ -39,6 +39,16 @@ export interface PlatformEnv {
   BETTER_AUTH_URL?: string;
   PUBLIC_ORIGIN?: string;
   BETTER_AUTH_SECRET?: string;
+  /** Optional dedicated key for hashing rate-limit subjects. */
+  RATE_LIMIT_SECRET?: string;
+  /** Server-side Cloudflare Turnstile secret. Never expose to the client. */
+  TURNSTILE_SECRET_KEY?: string;
+  /** Public Turnstile site key rendered by the widget. */
+  PUBLIC_TURNSTILE_SITE_KEY?: string;
+  /** "on" forces enforcement, "off" disables it. Production enforces by default. */
+  TURNSTILE_ENFORCEMENT?: string;
+  /** Optional expected siteverify hostname, e.g. engage.fusionparty.org.au */
+  TURNSTILE_EXPECTED_HOSTNAME?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   RESEND_API_KEY?: string;

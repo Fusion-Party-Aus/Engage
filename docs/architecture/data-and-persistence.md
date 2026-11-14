@@ -77,7 +77,7 @@
 | `member_notifications` | In-app inbox items |
 | `notification_deliveries` | Dedupe and delivery state |
 | `sense_submissions` | Public Sense Box concerns |
-| `sense_limits` | TTL-based submission rate limits |
+| `rate_limits` | Shared fixed-window counters for unauthenticated abuse protection (hashed subject, TTL) |
 | `site_settings`, `site_settings_events` | Public configuration and its audit |
 | `operational_audit` | Operational actions |
 | `data_migrations`, `schema_migrations` | Migration state and one-off markers |
@@ -198,7 +198,7 @@ External-source records cannot be edited or revoked locally.
 - one CRM identity link per member/application;
 - one notification delivery per dedupe ID;
 - unique role assignments and RBAC role IDs where applicable;
-- TTL index for Sense Box rate limits.
+- TTL index on `rate_limits.expiresAt` for abuse-protection windows.
 
 A known gap: there is no unique `(branchId, memberId)` index on `branch_memberships`; correctness relies on application upserts.
 
