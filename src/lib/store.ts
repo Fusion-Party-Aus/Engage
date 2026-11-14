@@ -1776,9 +1776,8 @@ export class ProposalSecondingError extends Error {
  * - seconding is a participation act, so the seconder must be a verified member
  *   who can view the matter. It is not a formal ballot and uses no ballot
  *   permission;
- * - the act does not change the stage. Advancing Propose → Deliberate remains
- *   the existing workflow transition; whether seconding should itself be that
- *   transition (or a hard gate on it) is not specified by the register.
+ * - seconding performs the Propose → Deliberate transition and records both
+ *   `proposal.seconded` and `proposal.stage_transition` events atomically.
  */
 export async function secondProposal(
   db: Db,

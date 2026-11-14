@@ -1,5 +1,14 @@
 [
   {
+    "hash": "fdb5818",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Add the Phase 2 orchestrator handover brief",
+    "details": "Record the handover state, governance invariants, traps found during delivery, the recommended Phase 2 sequence, parallelisation rules, verification commands, open decisions and the first ten actions for the next orchestrator."
+  },
+  {
     "hash": "8d50cd3",
     "date": "2026-11-14",
     "type": "docs",
@@ -664,13 +673,5 @@
     "category": "ops",
     "scope": "member",
     "summary": "Capture desktop and mobile lifecycle states in isolated CI"
-  },
-  {
-    "hash": "71a61de",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ci",
-    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
   }
 ]

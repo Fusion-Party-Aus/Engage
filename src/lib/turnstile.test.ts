@@ -255,6 +255,29 @@ describe("Turnstile verification", () => {
     assert.equal(wrongHost.ok, false);
     if (!wrongHost.ok) assert.equal(wrongHost.code, "TURNSTILE_INVALID");
 
+    const missingAction = await verifyTurnstile({
+      token: "token-value",
+      env: configured,
+      expectedAction: "signin",
+      transport: responding({
+        success: true,
+        hostname: "engage.example",
+      }),
+    });
+    assert.equal(missingAction.ok, false);
+    if (!missingAction.ok) assert.equal(missingAction.code, "TURNSTILE_INVALID");
+
+    const missingHost = await verifyTurnstile({
+      token: "token-value",
+      env: { ...configured, TURNSTILE_EXPECTED_HOSTNAME: "engage.example" },
+      transport: responding({
+        success: true,
+        action: "signin",
+      }),
+    });
+    assert.equal(missingHost.ok, false);
+    if (!missingHost.ok) assert.equal(missingHost.code, "TURNSTILE_INVALID");
+
     const matching = await verifyTurnstile({
       token: "token-value",
       env: { ...configured, TURNSTILE_EXPECTED_HOSTNAME: "engage.example" },

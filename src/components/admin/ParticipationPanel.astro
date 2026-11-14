@@ -77,10 +77,10 @@ const activeMemberIds = [...new Set(recentEvents.map((entry) => entry.actorId).f
 const priorActivity = activeMemberIds.length
   ? await Promise.all([
       showIdentifiableBallots
-        ? db.collection(PROPOSAL_VOTES).find({ memberId: { $in: activeMemberIds }, ballotId: /^proposal:/, updatedAt: { $lt: activityWindowStart } }).toArray()
+        ? db.collection(PROPOSAL_VOTES).find({ memberId: { $in: activeMemberIds }, ballotId: /^proposal:/, updatedAt: { $lt: activityWindowStart } }, { projection: { memberId: 1, _id: 0 } }).toArray()
         : Promise.resolve([]),
-      db.collection('comments').find({ memberId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }).toArray(),
-      db.collection('proposals').find({ authorId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }).toArray(),
+      db.collection('comments').find({ memberId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }, { projection: { memberId: 1, _id: 0 } }).toArray(),
+      db.collection('proposals').find({ authorId: { $in: activeMemberIds }, createdAt: { $lt: activityWindowStart } }, { projection: { authorId: 1, _id: 0 } }).toArray(),
     ])
   : [[], [], []];
 

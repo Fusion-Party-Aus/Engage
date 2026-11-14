@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { DELIBERATION_PERIOD_DAYS } from '../../lib/lifecycle-schedule';
 
 /**
  * The member-driven seconding act (D3). Seconding performs the Propose →
@@ -35,7 +36,7 @@ export default function SecondProposalButton({
       if (!response.ok) {
         throw new Error(payload.error || 'Could not second this proposal.');
       }
-      setMessage('Seconded. Deliberation is now open for 30 days.');
+      setMessage(`Seconded. Deliberation is now open for ${DELIBERATION_PERIOD_DAYS} days.`);
       window.setTimeout(() => window.location.reload(), 900);
     } catch (cause) {
       setError(

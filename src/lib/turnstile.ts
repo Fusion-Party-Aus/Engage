@@ -284,8 +284,8 @@ export async function verifyTurnstile(
 
   const expectedAction = input.expectedAction?.trim();
   const returnedAction =
-    typeof payload.action === "string" ? payload.action : undefined;
-  if (expectedAction && returnedAction && returnedAction !== expectedAction) {
+    typeof payload.action === "string" ? payload.action.trim() : "";
+  if (expectedAction && returnedAction !== expectedAction) {
     logFailure("turnstile_verification_refused", {
       reason: "action_mismatch",
       expectedAction,
@@ -294,13 +294,11 @@ export async function verifyTurnstile(
   }
 
   const expectedHostname =
-    input.expectedHostname ??
+    input.expectedHostname?.trim() ??
     String(input.env.TURNSTILE_EXPECTED_HOSTNAME ?? "").trim();
-  if (
-    expectedHostname &&
-    typeof payload.hostname === "string" &&
-    payload.hostname !== expectedHostname
-  ) {
+  const returnedHostname =
+    typeof payload.hostname === "string" ? payload.hostname.trim() : "";
+  if (expectedHostname && returnedHostname !== expectedHostname) {
     logFailure("turnstile_verification_refused", {
       reason: "hostname_mismatch",
     });

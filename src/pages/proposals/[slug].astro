@@ -562,11 +562,11 @@ const initialsFor = (name: string) =>
                       >
                         Sign in to second
                       </Button>
+                    ) : user.memberId === proposal.authorId ? (
+                      <Badge variant="outline">Awaiting a seconder</Badge>
                     ) : (
                       <Button href="/member/" size="sm" variant="outline">
-                        {user.memberId === proposal.authorId
-                          ? 'Awaiting a seconder'
-                          : 'Verify to second'}
+                        Verify to second
                       </Button>
                     )
                   ) : (

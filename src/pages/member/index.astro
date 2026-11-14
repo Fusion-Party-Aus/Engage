@@ -40,6 +40,7 @@ import {
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import EmailPreferences from '../../components/member/EmailPreferences.astro';
 import { Turnstile } from '../../components/ui/turnstile';
+import { turnstileEnforced } from '../../lib/turnstile.ts';
 import { ballotExpired, ballotDeadlineLabel, closesWithinSevenDays } from '../../lib/ballot-deadline.ts';
 import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
 import { outstandingBallots, type DigestBallot } from '../../lib/engagement-email.ts';
@@ -54,9 +55,11 @@ export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
 
 const env = runtimeEnv(Astro.locals);
-// The widget renders nothing when no site key is configured; the server decides
-// whether a challenge is required. See docs/security/turnstile.md.
-const turnstileSiteKey = String(env.PUBLIC_TURNSTILE_SITE_KEY ?? '').trim();
+// The widget renders nothing when Turnstile is disabled or unconfigured;
+// the server decides whether a challenge is required. See docs/security/turnstile.md.
+const turnstileSiteKey = turnstileEnforced(env)
+  ? String(env.PUBLIC_TURNSTILE_SITE_KEY ?? '').trim()
+  : '';
 const [db, user] = await Promise.all([
   getDatabase(env),
   getSessionUser(Astro.request, env),

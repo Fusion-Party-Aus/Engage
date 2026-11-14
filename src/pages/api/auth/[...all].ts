@@ -9,7 +9,7 @@ import { readTurnstileToken } from "../../../lib/turnstile.ts";
 
 export const prerender = false;
 
-export const ALL: APIRoute = async ({ request, locals }) => {
+export const ALL: APIRoute = async ({ request, locals, clientAddress }) => {
   const env = runtimeEnv(locals);
   if (!loginConfigured(env)) {
     return Response.json(
@@ -29,6 +29,7 @@ export const ALL: APIRoute = async ({ request, locals }) => {
         db: await getDatabase(env),
         action,
         token: await readTurnstileToken(request),
+        adapterAddress: clientAddress,
       });
       if (refusal) return refusal;
     }
