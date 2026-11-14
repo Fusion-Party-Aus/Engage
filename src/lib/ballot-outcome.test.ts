@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import {
   BALLOT_OUTCOME_RULE_BASIS,
   computeBallotOutcome,
+  loadBallotTallyCryptoConfig,
   sumVoteTally,
 } from "./ballots.ts";
+import { generateBallotKeyHex } from "./ballot-crypto.ts";
 import {
   ballotResultPayload,
+  formStatusRegion,
   syncBallotOutcomeOverride,
 } from "./ballot-outcome-form.ts";
 
@@ -141,4 +145,56 @@ test("the submitted payload carries an override reason only when one is written"
     result: "unsuccessful",
     decisionEventId: "BALLOT-1",
   });
+});
+
+test("the submit handler targets the visible status line, not the hidden announcement", () => {
+  const visible = { id: "visible" };
+  const hidden = { id: "hidden" };
+  const form = {
+    querySelector: (selector: string) => {
+      // The hidden announcement is the first [role="status"] node in the form.
+      if (selector === '[role="status"]') return hidden;
+      if (selector === ".admin-status[role='status']") return visible;
+      return null;
+    },
+  } as unknown as HTMLFormElement;
+
+  assert.equal(formStatusRegion(form), visible);
+  assert.notEqual(formStatusRegion(form), hidden);
+});
+
+test("both admin result forms keep the announcement out of the status lookup", () => {
+  const pages = [
+    readFileSync(
+      new URL("../pages/admin/proposals/[slug].astro", import.meta.url),
+      "utf8",
+    ),
+    readFileSync(
+      new URL("../pages/admin/proposals/index.astro", import.meta.url),
+      "utf8",
+    ),
+  ];
+
+  for (const source of pages) {
+    assert.match(source, /data-override-announcement aria-live="polite"/);
+    assert.doesNotMatch(source, /data-override-announcement role="status"/);
+    assert.match(source, /const status = formStatusRegion\(form\);/);
+  }
+});
+
+test("display key loading degrades to null instead of throwing", () => {
+  // Missing keys with encryption enabled make the strict loader throw.
+  assert.equal(
+    loadBallotTallyCryptoConfig({ BALLOT_ENCRYPTION_MODE: "encrypt" }),
+    null,
+  );
+  assert.equal(loadBallotTallyCryptoConfig({}), null);
+
+  const config = loadBallotTallyCryptoConfig({
+    BALLOT_ENCRYPTION_MODE: "encrypt",
+    BALLOT_ENCRYPTION_KEYS: `v1:${generateBallotKeyHex()}`,
+    BALLOT_BLIND_INDEX_KEY: `bi-v1:${generateBallotKeyHex()}`,
+  });
+  assert.ok(config);
+  assert.equal(config?.mode, "encrypt");
 });

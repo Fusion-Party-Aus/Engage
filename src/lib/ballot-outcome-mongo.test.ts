@@ -229,6 +229,41 @@ describe(
         reject: 0,
         total: 0,
       });
+      const emptySummary = await readBoundBallotTallies(db, {
+        ballots: [{ matterId: noVotes, revisionId: "rev-1" }],
+        cryptoConfig: null,
+      });
+      assert.equal(emptySummary.get(noVotes)?.state, "no-votes");
+      assert.equal(emptySummary.get(noVotes)?.computedResult, "unsuccessful");
+
+      // A zero-vote ballot can still record "successful", but only as an
+      // explicit override with a written reason.
+      const emptyOverride = "PROP-NO-VOTES-OVERRIDE";
+      await seedBallot(db, emptyOverride);
+      await closeBallot(db, emptyOverride);
+      await assert.rejects(
+        recordFormalDecision(db, {
+          matterId: emptyOverride,
+          revisionId: "rev-1",
+          result: "successful",
+          decisionEventId: "BALLOT-NO-VOTES-OVERRIDE",
+          recordedBy: "admin-1",
+        }),
+        (error: unknown) =>
+          error instanceof BallotDomainError &&
+          error.code === "RESULT_OVERRIDE_REASON_REQUIRED",
+      );
+      const overridden = await recordFormalDecision(db, {
+        matterId: emptyOverride,
+        revisionId: "rev-1",
+        result: "successful",
+        decisionEventId: "BALLOT-NO-VOTES-OVERRIDE",
+        recordedBy: "admin-1",
+        overrideReason: "The Returning Officer accepted a late written submission.",
+      });
+      assert.equal(overridden.computedResult, "unsuccessful");
+      assert.equal(overridden.tally?.total, 0);
+      assert.equal(overridden.override?.by, "admin-1");
     });
 
     it("refuses a contradicting result without a written reason", async () => {
@@ -615,14 +650,25 @@ describe(
           choice: "reject",
           updatedAt: new Date(),
         },
+        {
+          ballotId,
+          proposalId,
+          revisionId: "rev-1",
+          memberId: "unreadable-choice",
+          choice: "maybe",
+          updatedAt: new Date(),
+        },
       ]);
 
       const summary = await readBoundBallotTallies(db, {
         ballots: [{ matterId: proposalId, revisionId: "rev-1" }],
         cryptoConfig: null,
       });
+      // Unbound votes are the cause the officer can act on, so they win over an
+      // unreadable vote in the same ballot.
       assert.equal(summary.get(proposalId)?.state, "unbound");
       assert.equal(summary.get(proposalId)?.unboundVoteCount, 2);
+      assert.equal(summary.get(proposalId)?.unreadableVoteCount, 1);
       assert.equal(summary.get(proposalId)?.computedResult, undefined);
 
       await assert.rejects(
@@ -742,6 +788,68 @@ describe(
         cryptoConfig: loadBallotCryptoConfig(env),
       });
       assert.equal(summary.get(proposalId)?.state, "unreadable");
+
+      // A missing key ring is reported separately from a genuinely unreadable
+      // vote, so the page can say "check the keys" rather than blaming the votes.
+      const missingKeys = await readBoundBallotTallies(db, {
+        ballots: [{ matterId: proposalId, revisionId: "rev-1" }],
+        cryptoConfig: null,
+      });
+      assert.equal(missingKeys.get(proposalId)?.state, "decryption-unavailable");
+    });
+
+    it("judges each ballot's own close time, not the matter's closure", async () => {
+      const proposalId = "PROP-TWO-BALLOTS";
+      await seedBallot(db, proposalId);
+      // Close the matter and its primary ballot, then add a live sibling ballot.
+      await closeBallot(db, proposalId);
+      const secondBallotId = `proposal:${proposalId}:second`;
+      await upsertMatterBallot(db, {
+        ballotId: secondBallotId,
+        matterId: proposalId,
+        revisionId: "rev-1",
+        status: "open",
+        closesAt: new Date(Date.now() + 3 * 86400000),
+      });
+
+      await assert.rejects(
+        recordFormalDecision(db, {
+          ballotId: secondBallotId,
+          matterId: proposalId,
+          revisionId: "rev-1",
+          result: "unsuccessful",
+          decisionEventId: "BALLOT-SECOND",
+          recordedBy: "admin-1",
+        }),
+        (error: unknown) =>
+          error instanceof BallotDomainError &&
+          error.code === "BALLOT_NOT_CLOSED" &&
+          /still accept votes/i.test(error.message),
+      );
+
+      // The closed sibling on the same matter is still certifiable.
+      const primary = await recordFormalDecision(db, {
+        matterId: proposalId,
+        revisionId: "rev-1",
+        result: "unsuccessful",
+        decisionEventId: "BALLOT-PRIMARY",
+        recordedBy: "admin-1",
+      });
+      assert.equal(primary.computedResult, "unsuccessful");
+
+      // Closing the second ballot itself makes it certifiable.
+      await db
+        .collection("ballots")
+        .updateOne({ ballotId: secondBallotId }, { $set: { status: "closed" } });
+      const second = await recordFormalDecision(db, {
+        ballotId: secondBallotId,
+        matterId: proposalId,
+        revisionId: "rev-1",
+        result: "unsuccessful",
+        decisionEventId: "BALLOT-SECOND",
+        recordedBy: "admin-1",
+      });
+      assert.equal(second.result, "unsuccessful");
     });
 
     it("refuses an over-length override reason instead of truncating the audit record", async () => {
