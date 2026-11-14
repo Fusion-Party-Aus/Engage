@@ -23,8 +23,8 @@ import {
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
-import { readBoundBallotTallies } from '../../../lib/ballots.ts';
-import { loadBallotCryptoConfig } from '../../../lib/ballot-crypto.ts';
+import { loadBallotTallyCryptoConfig, readBoundBallotTallies } from '../../../lib/ballots.ts';
+
 import { ballotDeadlineLabel } from '../../../lib/ballot-deadline.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
@@ -158,10 +158,13 @@ const ballotState = proposal?.stage === 'decide'
 const boundTally = canManageBallot && proposal?.ballotRevisionId
   ? (await readBoundBallotTallies(db, {
       ballots: [{ matterId: proposal.proposalId, revisionId: proposal.ballotRevisionId }],
-      cryptoConfig: loadBallotCryptoConfig(env),
+      cryptoConfig: loadBallotTallyCryptoConfig(env),
     })).get(proposal.proposalId) ?? null
   : null;
 const computedOutcome = boundTally?.computedResult ?? null;
+const tallyBlocked = Boolean(
+  boundTally && ['unbound', 'decryption-unavailable', 'unreadable'].includes(boundTally.state),
+);
 const closeTime = proposal?.ballotClosedAt
   ? new Date(proposal.ballotClosedAt)
   : proposal?.ballotClosesAt
@@ -770,6 +773,15 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                           : 'This ballot has no recorded close. Set a closing date or close the ballot before recording the outcome.'}
                       </p>
                     </div>
+                  ) : tallyBlocked ? (
+                    <div id="record-outcome" class="admin-action-box">
+                      <div class="admin-action-box__head">
+                        <Gavel className="size-4" aria-hidden="true" />
+                        <strong>Record formal ballot outcome</strong>
+                      </div>
+                      <BallotOutcomeBasis summary={boundTally} />
+                      <p class="admin-inline-note">Resolve the ballot tally problem above before recording the outcome.</p>
+                    </div>
                   ) : (
                   <div id="record-outcome" class="admin-action-box">
                     <div class="admin-action-box__head">
@@ -809,7 +821,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                           />
                         </Field>
                       </div>
-                      <p class="sr-only" data-override-announcement role="status"></p>
+                      <p class="sr-only" data-override-announcement aria-live="polite"></p>
                       <div class="admin-actions">
                         <Button size="sm" type="submit">Record ballot outcome</Button>
                         <span class="admin-status" role="status" aria-live="polite"></span>
@@ -1300,7 +1312,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 </AdminLayout>
 
 <script>
-  import { ballotResultPayload, wireBallotOutcomeForm } from '../../../lib/ballot-outcome-form.ts';
+  import { ballotResultPayload, formStatusRegion, wireBallotOutcomeForm } from '../../../lib/ballot-outcome-form.ts';
 
   // Tab navigation for the 4 operational views
   const sectionNav = document.querySelector<HTMLElement>('.admin-section-nav');
@@ -1441,7 +1453,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
       event.preventDefault();
       if (!form.reportValidity()) return;
       const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-      const status = form.querySelector<HTMLElement>('[role="status"]');
+      const status = formStatusRegion(form);
       if (button) button.disabled = true;
       try {
         const response = await fetch('/api/admin/ballots/result', {

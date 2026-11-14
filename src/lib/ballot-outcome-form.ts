@@ -54,6 +54,15 @@ export function wireBallotOutcomeForm(form: HTMLFormElement): void {
   syncBallotOutcomeOverride(form);
 }
 
+/**
+ * The visible per-form status line. The hidden override announcement is also a
+ * live region inside this form, so callers must not use a broad
+ * `[role="status"]` lookup that could return the hidden node first.
+ */
+export function formStatusRegion(form: HTMLFormElement): HTMLElement | null {
+  return form.querySelector<HTMLElement>(".admin-status[role='status']");
+}
+
 export function ballotResultPayload(
   form: HTMLFormElement,
   fields: Pick<FormData, "get"> = new FormData(form),

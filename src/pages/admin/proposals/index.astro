@@ -7,8 +7,8 @@ import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, Shiel
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { listProposals, normalizeStage } from '../../../lib/store.ts';
-import { readBoundBallotTallies } from '../../../lib/ballots.ts';
-import { loadBallotCryptoConfig } from '../../../lib/ballot-crypto.ts';
+import { loadBallotTallyCryptoConfig, readBoundBallotTallies } from '../../../lib/ballots.ts';
+
 import { ballotDeadlineLabel } from '../../../lib/ballot-deadline.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import type { ProposalStage } from '../../../lib/types.ts';
@@ -112,7 +112,7 @@ const [decideBallotResults, boundBallotTallies] = await Promise.all([
     ballots: decisionProposals
       .filter((proposal) => proposal.ballotRevisionId)
       .map((proposal) => ({ matterId: proposal.proposalId, revisionId: String(proposal.ballotRevisionId) })),
-    cryptoConfig: loadBallotCryptoConfig(env),
+    cryptoConfig: loadBallotTallyCryptoConfig(env),
   }),
 ]);
 const decideResultsByProposal = new Map(decideBallotResults.map((row: any) => [String(row.proposalId), row]));
@@ -722,9 +722,18 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                                 </div>
                               );
                             }
+                            const tally = boundBallotTallies.get(item.proposalId);
+                            if (tally && ['unbound', 'decryption-unavailable', 'unreadable'].includes(tally.state)) {
+                              return (
+                                <div class="grid gap-2">
+                                  <BallotOutcomeBasis summary={tally} />
+                                  <p class="admin-inline-note">Resolve the ballot tally problem above before recording the outcome.</p>
+                                </div>
+                              );
+                            }
                             return (
                               <div class="grid gap-3">
-                                <BallotOutcomeBasis summary={boundBallotTallies.get(item.proposalId) ?? null} />
+                                <BallotOutcomeBasis summary={tally ?? null} />
                                 <p class="admin-inline-note">A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
                                 <form
                                   class="ballot-result-form grid gap-3"
@@ -749,7 +758,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                                       <Textarea id={`ballot-override-${item.proposalId}`} name="overrideReason" rows={2} maxLength={1000} placeholder="Why does the recorded outcome differ from the votes?" />
                                     </Field>
                                   </div>
-                                  <p class="sr-only" data-override-announcement role="status"></p>
+                                  <p class="sr-only" data-override-announcement aria-live="polite"></p>
                                   <div class="admin-actions">
                                     <Button variant="outline" size="sm" type="submit">Record result</Button>
                                     <span class="admin-status" role="status" aria-live="polite"></span>
@@ -870,7 +879,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 </AdminLayout>
 
 <script>
-  import { ballotResultPayload, wireBallotOutcomeForm } from '../../../lib/ballot-outcome-form.ts';
+  import { ballotResultPayload, formStatusRegion, wireBallotOutcomeForm } from '../../../lib/ballot-outcome-form.ts';
 
   const ballotCloseField = document.getElementById('editor-ballot-closes-at') as HTMLInputElement | null;
   if (ballotCloseField) {
@@ -1021,7 +1030,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
     wireBallotOutcomeForm(form);
     form.addEventListener('submit', async (event) => {
       event.preventDefault(); if (!form.reportValidity()) return;
-      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); const status = form.querySelector<HTMLElement>('[role="status"]');
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); const status = formStatusRegion(form);
       if (button) button.disabled = true;
       try {
         const response = await fetch('/api/admin/ballots/result', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ballotResultPayload(form)) });
