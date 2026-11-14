@@ -208,7 +208,21 @@ const formatDate = (value: unknown) =>
                             Bind wording<ArrowRight />
                           </Button>
                         ) : result ? (
-                          <Badge variant="success">Recorded: {String(result.result)}</Badge>
+                          <div class="grid gap-1">
+                            <Badge variant={result.override ? 'warning' : result.result === 'successful' ? 'success' : 'warning'}>
+                              Recorded: {String(result.result) === 'successful' ? 'Successful' : String(result.result) === 'inconclusive' ? 'Inconclusive' : 'Unsuccessful'}
+                              {result.override ? ' · overridden' : ''}
+                            </Badge>
+                            {result.override?.reason && (
+                              <details class="text-xs text-muted-foreground">
+                                <summary class="cursor-pointer">Override reason</summary>
+                                <p class="m-0 mt-1 whitespace-normal">
+                                  {result.computedResult ? `Votes computed ${String(result.computedResult)}. ` : ''}
+                                  {String(result.override.reason)}
+                                </p>
+                              </details>
+                            )}
+                          </div>
                         ) : (
                           <Button href={`/admin/proposals/${row.slug}/#record-outcome`} size="sm" variant="outline">
                             Record outcome<ArrowRight />

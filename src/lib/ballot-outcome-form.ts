@@ -14,25 +14,43 @@ export interface BallotResultPayload {
   overrideReason?: string;
 }
 
-export function syncBallotOutcomeOverride(form: HTMLFormElement): void {
+export function syncBallotOutcomeOverride(
+  form: HTMLFormElement,
+  options: { focus?: boolean } = {},
+): void {
   const computedResult = form.dataset.computedResult ?? "";
   const select = form.querySelector<HTMLSelectElement>('select[name="result"]');
   const field = form.querySelector<HTMLElement>("[data-override-field]");
   const reason = form.querySelector<HTMLTextAreaElement>(
     'textarea[name="overrideReason"]',
   );
+  const announcement = form.querySelector<HTMLElement>(
+    "[data-override-announcement]",
+  );
   if (!select || !field || !reason || !computedResult) return;
 
   const contradicts =
     Boolean(select.value) && select.value !== computedResult;
+  const wasHidden = field.hidden;
   field.hidden = !contradicts;
   reason.required = contradicts;
-  if (!contradicts) reason.value = "";
+  if (contradicts) {
+    if (announcement && wasHidden) {
+      announcement.textContent =
+        "The selected outcome differs from the votes. A written reason is required.";
+    }
+    if (options.focus && wasHidden) reason.focus();
+  } else {
+    reason.value = "";
+    if (announcement) announcement.textContent = "";
+  }
 }
 
 export function wireBallotOutcomeForm(form: HTMLFormElement): void {
   const select = form.querySelector<HTMLSelectElement>('select[name="result"]');
-  select?.addEventListener("change", () => syncBallotOutcomeOverride(form));
+  select?.addEventListener("change", () =>
+    syncBallotOutcomeOverride(form, { focus: true }),
+  );
   syncBallotOutcomeOverride(form);
 }
 

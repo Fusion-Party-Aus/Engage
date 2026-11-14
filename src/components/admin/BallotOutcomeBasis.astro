@@ -1,0 +1,41 @@
+---
+import { Badge } from '../ui/badge';
+import type { BoundBallotTallySummary } from '../../lib/ballots.ts';
+
+interface Props {
+  summary: BoundBallotTallySummary | null;
+}
+
+const { summary } = Astro.props;
+const outcomeLabel = (value: string) =>
+  value === 'successful' ? 'Successful' : 'Unsuccessful';
+---
+
+{summary && summary.state === 'computed' ? (
+  <div class="flex flex-wrap items-center gap-2 text-sm">
+    <span class="admin-inline-note">Computed from the votes:</span>
+    <Badge variant={summary.computedResult === 'successful' ? 'success' : 'warning'}>
+      {outcomeLabel(String(summary.computedResult))}
+    </Badge>
+    <span class="admin-inline-note tabular">
+      {summary.tally.approve} approve · {summary.tally.abstain} abstain · {summary.tally.reject} reject · simple majority
+    </span>
+  </div>
+) : summary && summary.state === 'no-votes' ? (
+  <div class="flex flex-wrap items-center gap-2 text-sm">
+    <Badge variant="muted">No votes</Badge>
+    <span class="admin-inline-note">No votes yet — outcome not yet computable.</span>
+  </div>
+) : summary && summary.state === 'unbound' ? (
+  <div class="flex flex-wrap items-center gap-2 text-sm">
+    <Badge variant="warning">Binding needs review</Badge>
+    <span class="admin-inline-note">
+      {summary.unboundVoteCount} recorded vote{summary.unboundVoteCount === 1 ? ' is' : 's are'} not bound to the frozen wording, so the outcome cannot be computed.
+    </span>
+  </div>
+) : summary && summary.state === 'unreadable' ? (
+  <div class="flex flex-wrap items-center gap-2 text-sm">
+    <Badge variant="warning">Votes unreadable</Badge>
+    <span class="admin-inline-note">Some recorded votes could not be read, so the outcome cannot be computed.</span>
+  </div>
+) : null}

@@ -23,7 +23,9 @@ import {
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
-import { computeBallotOutcome } from '../../../lib/ballots.ts';
+import { readBoundBallotTallies } from '../../../lib/ballots.ts';
+import { loadBallotCryptoConfig } from '../../../lib/ballot-crypto.ts';
+import { ballotDeadlineLabel } from '../../../lib/ballot-deadline.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
 import PortableText from '../../../components/PortableText.astro';
@@ -34,6 +36,7 @@ import { Input } from '../../../components/ui/input';
 import { NativeSelect } from '../../../components/ui/native-select';
 import { Textarea } from '../../../components/ui/textarea';
 import Field from '../../../components/admin/Field.astro';
+import BallotOutcomeBasis from '../../../components/admin/BallotOutcomeBasis.astro';
 import Alert from '../../../components/admin/Alert.astro';
 import AlertTitle from '../../../components/admin/AlertTitle.astro';
 import AlertDescription from '../../../components/admin/AlertDescription.astro';
@@ -150,22 +153,37 @@ const ballotState = proposal?.stage === 'decide'
 
 // D9: approve greater than reject approves; a tie does not. D8 adds no quorum or
 // turnout threshold, and D10/O1 leaves the abstention denominator undefined, so
-// abstentions are shown but never change this comparison.
-const computedOutcome = proposal?.ballotRevisionId ? computeBallotOutcome(proposal.votes) : null;
+// abstentions are shown but never change this comparison. The tally is read from
+// the same bound set that certification enforces.
+const boundTally = canManageBallot && proposal?.ballotRevisionId
+  ? (await readBoundBallotTallies(db, {
+      ballots: [{ matterId: proposal.proposalId, revisionId: proposal.ballotRevisionId }],
+      cryptoConfig: loadBallotCryptoConfig(env),
+    })).get(proposal.proposalId) ?? null
+  : null;
+const computedOutcome = boundTally?.computedResult ?? null;
+const closeTime = proposal?.ballotClosedAt
+  ? new Date(proposal.ballotClosedAt)
+  : proposal?.ballotClosesAt
+    ? new Date(proposal.ballotClosesAt)
+    : null;
+const closeTimeIsReadable = Boolean(closeTime && Number.isFinite(closeTime.getTime()));
+const ballotIsClosed = Boolean(proposal?.ballotClosedAt) || Boolean(closeTimeIsReadable && closeTime!.getTime() <= Date.now());
 const outcomeLabel = (value: string | null | undefined) =>
   value === 'successful' ? 'Successful' : value === 'unsuccessful' ? 'Unsuccessful' : value === 'inconclusive' ? 'Inconclusive' : 'Not recorded';
-const recordedOutcomeEvidence = (() => {
-  if (!ballotResult) return null;
-  const tally = ballotResult.tally as { approve?: number; abstain?: number; reject?: number } | undefined;
-  const override = ballotResult.override as { reason?: string } | undefined;
-  return {
-    computed: ballotResult.computedResult ? outcomeLabel(String(ballotResult.computedResult)) : null,
-    tally: tally
-      ? `${Number(tally.approve ?? 0)} approve · ${Number(tally.abstain ?? 0)} abstain · ${Number(tally.reject ?? 0)} reject`
-      : null,
-    overrideReason: typeof override?.reason === 'string' ? override.reason : null,
-  };
-})();
+const recordedOutcome = ballotResult
+  ? {
+      result: outcomeLabel(String(ballotResult.result)),
+      rawResult: String(ballotResult.result),
+      recordedAt: ballotResult.recordedAt ? new Date(ballotResult.recordedAt) : null,
+      computed: ballotResult.computedResult ? outcomeLabel(String(ballotResult.computedResult)) : null,
+      tally: ballotResult.tally
+        ? `${Number((ballotResult.tally as any).approve ?? 0)} approve · ${Number((ballotResult.tally as any).abstain ?? 0)} abstain · ${Number((ballotResult.tally as any).reject ?? 0)} reject`
+        : null,
+      overrideReason: typeof ballotResult.override?.reason === 'string' ? String(ballotResult.override.reason) : null,
+      decisionEventId: ballotResult.decisionEventId ? String(ballotResult.decisionEventId) : null,
+    }
+  : null;
 
 const policyState = policy
   ? `${String(policy.status ?? 'adopted')} · ${String(policy.publicationStatus ?? 'unpublished')}`
@@ -195,11 +213,13 @@ const nextAction = (() => {
   }
   if (proposal.stage === 'decide' && proposal.ballotRevisionId && !ballotResult) {
     return {
-      variant: 'info' as const,
-      title: 'Ballot open for member voting',
-      description: isResolution
-        ? 'Once voting closes, record the formal ballot outcome below.'
-        : 'Once voting closes, record the formal ballot outcome below. A successful policy vote still requires separate ratification.',
+      variant: (ballotIsClosed ? 'warning' : 'info') as 'warning' | 'info',
+      title: ballotIsClosed ? 'Next step: Record the ballot outcome' : 'Ballot open for member voting',
+      description: ballotIsClosed
+        ? 'Voting has closed. Record the formal ballot outcome below.'
+        : isResolution
+          ? 'Once voting closes, record the formal ballot outcome below.'
+          : 'Once voting closes, record the formal ballot outcome below. A successful policy vote still requires separate ratification.',
       href: canManageBallot ? '#record-outcome' : undefined,
       cta: 'Record outcome',
     };
@@ -672,16 +692,6 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                 <div><dt>Policy registry state</dt><dd>{policyState}</dd></div>
               </dl>
 
-              {recordedOutcomeEvidence && (
-                <p class="admin-inline-note">
-                  {recordedOutcomeEvidence.computed
-                    ? `Computed from the votes at certification: ${recordedOutcomeEvidence.computed}`
-                    : 'Result recorded before outcomes were computed from the votes'}
-                  {recordedOutcomeEvidence.tally ? ` · ${recordedOutcomeEvidence.tally}` : ''}
-                  {recordedOutcomeEvidence.overrideReason ? ` · Override reason: ${recordedOutcomeEvidence.overrideReason}` : ''}
-                </p>
-              )}
-
               <!-- Inline Ballot Wording Binding Form -->
               {canManageBallot && proposal.stage === 'decide' && !proposal.ballotRevisionId && (
                 <div id="bind-ballot" class="admin-action-box">
@@ -723,9 +733,44 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                 </div>
               )}
 
-              <!-- Inline Ballot Outcome Form -->
+              <!-- Inline Ballot Outcome -->
               {canManageBallot && proposal.stage === 'decide' && (
                 proposal.ballotRevisionId ? (
+                  recordedOutcome ? (
+                    <div id="record-outcome" class="admin-action-box">
+                      <div class="admin-action-box__head">
+                        <Gavel className="size-4" aria-hidden="true" />
+                        <strong>Recorded ballot outcome</strong>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2 text-sm">
+                        <Badge variant={recordedOutcome.rawResult === 'successful' ? 'success' : 'warning'}>{recordedOutcome.result}</Badge>
+                        {recordedOutcome.overrideReason && <Badge variant="warning">Overridden</Badge>}
+                        <span class="admin-inline-note">
+                          {recordedOutcome.computed ? `Votes computed ${recordedOutcome.computed}` : 'Recorded before outcomes were computed'}
+                          {recordedOutcome.tally ? ` · ${recordedOutcome.tally}` : ''}
+                        </span>
+                      </div>
+                      {recordedOutcome.overrideReason && (
+                        <p class="admin-inline-note">Override reason: {recordedOutcome.overrideReason}</p>
+                      )}
+                      <p class="admin-inline-note">
+                        {recordedOutcome.decisionEventId ? `Decision event ${recordedOutcome.decisionEventId} · ` : ''}Recorded {formatDate(recordedOutcome.recordedAt)}. Recorded results are immutable.
+                      </p>
+                    </div>
+                  ) : !ballotIsClosed ? (
+                    <div id="record-outcome" class="admin-action-box">
+                      <div class="admin-action-box__head">
+                        <Gavel className="size-4" aria-hidden="true" />
+                        <strong>Record formal ballot outcome</strong>
+                      </div>
+                      <BallotOutcomeBasis summary={boundTally} />
+                      <p class="admin-inline-note">
+                        {closeTimeIsReadable
+                          ? `Voting is open until ${ballotDeadlineLabel(closeTime!)}. The outcome can be recorded after the ballot closes.`
+                          : 'This ballot has no recorded close. Set a closing date or close the ballot before recording the outcome.'}
+                      </p>
+                    </div>
+                  ) : (
                   <div id="record-outcome" class="admin-action-box">
                     <div class="admin-action-box__head">
                       <Gavel className="size-4" aria-hidden="true" />
@@ -734,15 +779,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                     <p class="admin-inline-note">
                       Record the outcome of the votes on frozen revision <code>{String(proposal.ballotRevisionId).slice(0, 12)}</code>.
                     </p>
-                    {computedOutcome && (
-                      <div class="flex flex-wrap items-center gap-2 text-sm">
-                        <span class="admin-inline-note">Computed from the votes:</span>
-                        <Badge variant={computedOutcome === 'successful' ? 'success' : 'warning'}>{outcomeLabel(computedOutcome)}</Badge>
-                        <span class="admin-inline-note tabular">
-                          {proposal.votes.approve} approve · {proposal.votes.abstain} abstain · {proposal.votes.reject} reject · simple majority
-                        </span>
-                      </div>
-                    )}
+                    <BallotOutcomeBasis summary={boundTally} />
                     <form
                       class="ballot-result-form grid gap-3"
                       data-proposal-id={proposal.proposalId}
@@ -750,36 +787,36 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                     >
                       <div class="admin-form-grid">
                         <Field label="Outcome" htmlFor={`ballot-result-${proposal.proposalId}`}>
-                          <NativeSelect defaultValue={ballotResult?.result ?? ''} id={`ballot-result-${proposal.proposalId}`} name="result" required>
-                            <option value="" selected={!ballotResult?.result}>Choose outcome</option>
-                            <option value="successful" selected={ballotResult?.result === 'successful'}>Successful</option>
-                            <option value="unsuccessful" selected={ballotResult?.result === 'unsuccessful'}>Unsuccessful</option>
-                            <option value="inconclusive" selected={ballotResult?.result === 'inconclusive'}>Inconclusive</option>
+                          <NativeSelect defaultValue="" id={`ballot-result-${proposal.proposalId}`} name="result" required>
+                            <option value="">Choose outcome</option>
+                            <option value="successful">Successful</option>
+                            <option value="unsuccessful">Unsuccessful</option>
+                            <option value="inconclusive">Inconclusive</option>
                           </NativeSelect>
                         </Field>
                         <Field label="Decision event reference" htmlFor={`ballot-event-${proposal.proposalId}`}>
-                          <Input id={`ballot-event-${proposal.proposalId}`} name="decisionEventId" defaultValue={ballotResult?.decisionEventId ?? ''} required maxLength={200} placeholder="e.g. BALLOT-2026-11" />
+                          <Input id={`ballot-event-${proposal.proposalId}`} name="decisionEventId" required maxLength={200} placeholder="e.g. BALLOT-2026-11" />
                         </Field>
                       </div>
-                      <div data-override-field hidden={!ballotResult || ballotResult.result === computedOutcome}>
+                      <div data-override-field hidden>
                         <Field label="Reason for overriding the computed outcome" htmlFor={`ballot-override-${proposal.proposalId}`}>
                           <Textarea
                             id={`ballot-override-${proposal.proposalId}`}
                             name="overrideReason"
                             rows={2}
                             maxLength={1000}
-                            required={Boolean(ballotResult && ballotResult.result !== computedOutcome)}
-                            defaultValue={String(ballotResult?.override?.reason ?? '')}
                             placeholder="Why does the recorded outcome differ from the votes?"
                           />
                         </Field>
                       </div>
+                      <p class="sr-only" data-override-announcement role="status"></p>
                       <div class="admin-actions">
                         <Button size="sm" type="submit">Record ballot outcome</Button>
                         <span class="admin-status" role="status" aria-live="polite"></span>
                       </div>
                     </form>
                   </div>
+                  )
                 ) : (
                   <details id="record-outcome" class="admin-subform-disclosure">
                     <summary>Record formal ballot outcome (requires bound wording first)</summary>

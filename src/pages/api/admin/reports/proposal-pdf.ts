@@ -80,6 +80,16 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
           recordedAt: ballotResult.recordedAt
             ? new Date(String(ballotResult.recordedAt))
             : undefined,
+          computedResult: ballotResult.computedResult
+            ? String(ballotResult.computedResult)
+            : undefined,
+          overrideReason:
+            typeof ballotResult.override?.reason === "string"
+              ? ballotResult.override.reason
+              : undefined,
+          ruleBasis: ballotResult.ruleBasis
+            ? String(ballotResult.ruleBasis)
+            : undefined,
         }
       : null,
     policyRecord: policyRecord

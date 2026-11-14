@@ -7,12 +7,15 @@ import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, Shiel
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { listProposals, normalizeStage } from '../../../lib/store.ts';
-import { computeBallotOutcome } from '../../../lib/ballots.ts';
+import { readBoundBallotTallies } from '../../../lib/ballots.ts';
+import { loadBallotCryptoConfig } from '../../../lib/ballot-crypto.ts';
+import { ballotDeadlineLabel } from '../../../lib/ballot-deadline.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import type { ProposalStage } from '../../../lib/types.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import Field from '../../../components/admin/Field.astro';
+import BallotOutcomeBasis from '../../../components/admin/BallotOutcomeBasis.astro';
 import Alert from '../../../components/admin/Alert.astro';
 import AlertTitle from '../../../components/admin/AlertTitle.astro';
 import AlertDescription from '../../../components/admin/AlertDescription.astro';
@@ -93,6 +96,38 @@ if (unboundProposalIds.length) {
   }
 }
 const proposalIds = allProposals.map((proposal) => proposal.proposalId);
+// A result can only be recorded once the ballot is closed, and the tally shown
+// to the officer must be the bound tally certification enforces.
+const decisionProposals = user.isAdmin || user.isBranchAdmin
+  ? allProposals.filter((proposal) => proposal.stage === 'decide')
+  : [];
+const [decideBallotResults, boundBallotTallies] = await Promise.all([
+  decisionProposals.length
+    ? db
+        .collection('ballot_results')
+        .find({ proposalId: { $in: decisionProposals.map((proposal) => proposal.proposalId) } })
+        .toArray()
+    : Promise.resolve([]),
+  readBoundBallotTallies(db, {
+    ballots: decisionProposals
+      .filter((proposal) => proposal.ballotRevisionId)
+      .map((proposal) => ({ matterId: proposal.proposalId, revisionId: String(proposal.ballotRevisionId) })),
+    cryptoConfig: loadBallotCryptoConfig(env),
+  }),
+]);
+const decideResultsByProposal = new Map(decideBallotResults.map((row: any) => [String(row.proposalId), row]));
+const isBallotClosed = (item: any) => {
+  if (item.ballotClosedAt) return true;
+  if (!item.ballotClosesAt) return false;
+  const closesAt = new Date(item.ballotClosesAt).getTime();
+  return Number.isFinite(closesAt) && closesAt <= Date.now();
+};
+const closingLabel = (item: any) => {
+  const value = item.ballotClosedAt ?? item.ballotClosesAt;
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? ballotDeadlineLabel(parsed) : null;
+};
 const amendmentRows = proposalIds.length ? await db.collection('amendments').find({ proposalId: { $in: proposalIds }, status: { $nin: ['withdrawn', 'rejected', 'applied', 'not-endorsed', 'inconclusive'] } }).sort({ createdAt: 1 }).toArray() : [];
 const amendmentRevisionsByAmendment = new Map<string, any[]>();
 if (amendmentRows.length) {
@@ -195,9 +230,6 @@ const stageOptions: Array<[ProposalStage, string]> = [
 const stageTone = (stage: string) => stage === 'decide' ? 'warning' : stage === 'implement' ? 'success' : stage === 'deliberate' ? 'info' : stage === 'archived' ? 'outline' : 'muted';
 const stageLabel = (stage: string) => stage === 'decide' ? 'Open vote' : stage === 'deliberate' ? 'In discussion' : stage === 'implement' ? 'Implement' : stage === 'archived' ? 'Archived' : 'New idea';
 const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && item.governanceAuthorityBranchId === item.jurisdictionBranchId && branchAdminIds.includes(item.governanceAuthorityBranchId ?? ''));
-// D9: approve greater than reject approves; a tie does not. D8 adds no quorum or
-// turnout threshold, and abstentions never change the comparison (D10/O1).
-const outcomeLabel = (value: string) => value === 'successful' ? 'Successful' : 'Unsuccessful';
 ---
 
 <AdminLayout
@@ -654,45 +686,78 @@ const outcomeLabel = (value: string) => value === 'successful' ? 'Successful' : 
                       <details class="admin-disclosure admin-disclosure--muted">
                         <summary><Gavel className="size-4" aria-hidden="true" />Record ballot outcome</summary>
                         <div class="admin-disclosure__body">
-                          <div class="flex flex-wrap items-center gap-2 text-sm">
-                            <span class="admin-inline-note">Computed from the votes:</span>
-                            <Badge variant={computeBallotOutcome(item.votes) === 'successful' ? 'success' : 'warning'}>
-                              {outcomeLabel(computeBallotOutcome(item.votes))}
-                            </Badge>
-                            <span class="admin-inline-note tabular">
-                              {item.votes.approve} approve · {item.votes.abstain} abstain · {item.votes.reject} reject · simple majority
-                            </span>
-                          </div>
-                          <p class="admin-inline-note">A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
-                          <p class="m-0 text-sm"><strong>Frozen revision:</strong> {item.ballotRevisionId ? <code>{item.ballotRevisionId}</code> : 'Needs administrator review'}</p>
-                          <form
-                            class="ballot-result-form grid gap-3"
-                            data-proposal-id={item.proposalId}
-                            data-computed-result={computeBallotOutcome(item.votes)}
-                          >
-                            <div class="admin-form-grid">
-                              <Field label="Outcome" htmlFor={`ballot-result-${item.proposalId}`}>
-                                <NativeSelect defaultValue="" id={`ballot-result-${item.proposalId}`} name="result" required>
-                                  <option value="">Choose outcome</option>
-                                  <option value="successful">Successful</option>
-                                  <option value="unsuccessful">Unsuccessful</option>
-                                  <option value="inconclusive">Inconclusive</option>
-                                </NativeSelect>
-                              </Field>
-                              <Field label="Decision event reference" htmlFor={`ballot-event-${item.proposalId}`}>
-                                <Input id={`ballot-event-${item.proposalId}`} name="decisionEventId" required maxLength={200} />
-                              </Field>
-                            </div>
-                            <div data-override-field hidden>
-                              <Field label="Reason for overriding the computed outcome" htmlFor={`ballot-override-${item.proposalId}`}>
-                                <Textarea id={`ballot-override-${item.proposalId}`} name="overrideReason" rows={2} maxLength={1000} placeholder="Why does the recorded outcome differ from the votes?" />
-                              </Field>
-                            </div>
-                            <div class="admin-actions">
-                              <Button variant="outline" size="sm" type="submit" disabled={!item.ballotRevisionId}>Record result</Button>
-                              <span class="admin-status" role="status" aria-live="polite"></span>
-                            </div>
-                          </form>
+                          {(() => {
+                            const recorded = decideResultsByProposal.get(item.proposalId);
+                            if (recorded) {
+                              const overrideReason = typeof recorded.override?.reason === 'string' ? recorded.override.reason : null;
+                              return (
+                                <div class="grid gap-2">
+                                  <div class="flex flex-wrap items-center gap-2 text-sm">
+                                    <Badge variant={recorded.result === 'successful' ? 'success' : 'warning'}>{String(recorded.result) === 'successful' ? 'Successful' : String(recorded.result) === 'inconclusive' ? 'Inconclusive' : 'Unsuccessful'}</Badge>
+                                    {overrideReason && <Badge variant="warning">Overridden</Badge>}
+                                    <span class="admin-inline-note">
+                                      {recorded.computedResult ? `Votes computed ${String(recorded.computedResult)}` : 'Recorded before outcomes were computed'}
+                                    </span>
+                                  </div>
+                                  {overrideReason && (
+                                    <p class="admin-inline-note">Override reason: {overrideReason}</p>
+                                  )}
+                                  <p class="admin-inline-note">Recorded results are immutable. Open the workspace for the decision event and full evidence.</p>
+                                </div>
+                              );
+                            }
+                            if (!item.ballotRevisionId) {
+                              return <p class="admin-inline-note">Bind a reviewed wording revision before recording the outcome.</p>;
+                            }
+                            if (!isBallotClosed(item)) {
+                              const closesAt = closingLabel(item);
+                              return (
+                                <div class="grid gap-2">
+                                  <BallotOutcomeBasis summary={boundBallotTallies.get(item.proposalId) ?? null} />
+                                  <p class="admin-inline-note">
+                                    {closesAt
+                                      ? `Voting is open until ${closesAt}. The outcome can be recorded after the ballot closes.`
+                                      : 'This ballot has no recorded close. Set a closing date or close the ballot before recording the outcome.'}
+                                  </p>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div class="grid gap-3">
+                                <BallotOutcomeBasis summary={boundBallotTallies.get(item.proposalId) ?? null} />
+                                <p class="admin-inline-note">A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
+                                <form
+                                  class="ballot-result-form grid gap-3"
+                                  data-proposal-id={item.proposalId}
+                                  data-computed-result={boundBallotTallies.get(item.proposalId)?.computedResult ?? ''}
+                                >
+                                  <div class="admin-form-grid">
+                                    <Field label="Outcome" htmlFor={`ballot-result-${item.proposalId}`}>
+                                      <NativeSelect defaultValue="" id={`ballot-result-${item.proposalId}`} name="result" required>
+                                        <option value="">Choose outcome</option>
+                                        <option value="successful">Successful</option>
+                                        <option value="unsuccessful">Unsuccessful</option>
+                                        <option value="inconclusive">Inconclusive</option>
+                                      </NativeSelect>
+                                    </Field>
+                                    <Field label="Decision event reference" htmlFor={`ballot-event-${item.proposalId}`}>
+                                      <Input id={`ballot-event-${item.proposalId}`} name="decisionEventId" required maxLength={200} />
+                                    </Field>
+                                  </div>
+                                  <div data-override-field hidden>
+                                    <Field label="Reason for overriding the computed outcome" htmlFor={`ballot-override-${item.proposalId}`}>
+                                      <Textarea id={`ballot-override-${item.proposalId}`} name="overrideReason" rows={2} maxLength={1000} placeholder="Why does the recorded outcome differ from the votes?" />
+                                    </Field>
+                                  </div>
+                                  <p class="sr-only" data-override-announcement role="status"></p>
+                                  <div class="admin-actions">
+                                    <Button variant="outline" size="sm" type="submit">Record result</Button>
+                                    <span class="admin-status" role="status" aria-live="polite"></span>
+                                  </div>
+                                </form>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </details>
                     )}
