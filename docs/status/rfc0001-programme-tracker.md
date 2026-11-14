@@ -34,7 +34,7 @@ Status values:
 | Rendering performance | `feat/rfc0001-sprint1-integration` | #52 | **Integrated** — harness, audit, projections, session reuse, query batching, deferred secondary panels, hydration changes |
 | Turnstile and abuse protection | `feat/rfc0001-sprint1-integration` | #38 (part) | **Integrated** — server verification, protected unauthenticated actions, durable rate limiting. Headers/CSRF remain. |
 | Ballot-results migration safety | `fix/ballot-results-index-migration` | #55 | **Done** — read-only preflight, backup, verified apply, loud failure, recovery report, replica-set tests. See [procedure](../ballot-results-index-migration.md). |
-| Computed ballot outcome validation | `feat/ballot-outcome-validation` | #28 | **Integrated** — Yes-versus-No comparison (D9), no quorum or turnout (D8), abstentions excluded without a denominator (D10/O1), versioned rule basis, stored tally, closed-ballot requirement, bound-set refusal, audited override and legal-text update. Replica-set tests. Abstention denominator, ranked choice and a computed check for amendment endorsement ballots remain open. |
+| Computed ballot outcome validation | `feat/ballot-outcome-validation` | #28 | **Integrated** (branch only; not merged) — Yes-versus-No comparison (D9), no quorum or turnout (D8), abstentions excluded without a denominator (D10/O1), versioned rule basis, stored tally, closed-ballot requirement, bound-set refusal, audited override and legal-text update. Replica-set tests. Abstention denominator, ranked choice and a computed check for amendment endorsement ballots remain open. |
 | Governance command layer | — | #53 | Planned — next Phase 2 slice |
 | Decision record and responsibility queue | — | #54 | Planned — depends on #53 |
 

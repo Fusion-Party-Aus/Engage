@@ -206,7 +206,7 @@ An officer records a result through `POST /api/admin/ballots/result`. Requiremen
 
 - matter in `decide`;
 - a bound revision;
-- **a closed ballot** — `ballotClosedAt` is set, the close time has passed, or the system has already closed the ballot; a live ballot is refused with `BALLOT_NOT_CLOSED`, because later votes could contradict the recorded outcome;
+- **a closed ballot** — the addressed ballot's own close time has passed or its row is already closed; otherwise the matter's `ballotClosedAt` or past `ballotClosesAt` applies as a fallback. A live ballot is refused with `BALLOT_NOT_CLOSED`, because later votes could contradict the recorded outcome. A second ballot on the same matter is judged on its own close time, not the matter's closure;
 - `ballots.record_result` at the authority branch;
 - matching governance authority and jurisdiction;
 - result `successful`, `unsuccessful` or `inconclusive`;
@@ -220,7 +220,7 @@ The officer-supplied result is checked against the outcome computed from the vot
 - **Abstentions never change the comparison** (D10/O1). They are counted and stored but excluded from the Yes-versus-No test; no denominator is used, because the maintainer has not defined one.
 - **No quorum, turnout or minimum-participation threshold applies** (D8).
 
-The tally is the whole ballot's truth. A vote on the ballot that is missing a revision reference or names another revision is refused with `BALLOT_TALLY_UNBOUND_VOTES` rather than silently dropped; unreadable encrypted votes are refused with `BALLOT_TALLY_UNREADABLE`, and missing or invalid decryption keys return `BALLOT_DECRYPTION_UNAVAILABLE` (503). Admin pages compute the tally they display from the same bound set, so the displayed and enforced tallies cannot disagree.
+The tally is the whole ballot's truth. A vote on the ballot that is missing a revision reference or names another revision is refused with `BALLOT_TALLY_UNBOUND_VOTES` rather than silently dropped; unreadable encrypted votes are refused with `BALLOT_TALLY_UNREADABLE`, and missing or invalid decryption keys return `BALLOT_DECRYPTION_UNAVAILABLE` (503). Admin pages compute the tally they display from the same bound set that certification enforces and withhold the outcome when that set is defective, but they are a guide only: certification always recomputes and refuses.
 
 Amendment endorsement ballots are **not** covered by this check. `POST /api/admin/amendments/close-ballot` still records `endorsed`, `not-endorsed` or `inconclusive` as an officer judgement, because the amendment-resolution method and ranked-choice handling are undecided (D18, O2).
 
@@ -408,7 +408,7 @@ A workflow state can be reversed. A protected act cannot: later corrections are 
 | Deliberation deadline passes with unresolved amendments | The scheduler refuses to advance and reports the amendment IDs |
 | Scheduler runs late, past the 60-day ceiling | Advancement refused and reported; an officer must re-open with an explicit date |
 | Proposal in Deliberate without a seconder | Never advances automatically; the migration report lists it |
-| Result recorded without a tally | A zero-vote ballot is recorded as unsuccessful without an override; recording `successful` or `inconclusive` on it needs a written reason. The tally at certification is stored on the result |
+| Zero-vote ballot recorded as unsuccessful | No override is needed; recording `successful` or `inconclusive` on it needs a written reason. The zero tally is stored on the result |
 | Result recorded while the ballot is open | Refused with `BALLOT_NOT_CLOSED`; record the outcome after the ballot closes |
 | Recorded votes are not bound to the frozen wording | Refused with `BALLOT_TALLY_UNBOUND_VOTES`; the binding must be reviewed first |
 | Matter returned to Deliberate after a ballot, wording edited, then returned to Decide | Existing `ballotRevisionId` is retained; a zero-vote ballot is rebound to the new revision on re-entry, a voted ballot is refused rather than silently rebound |
