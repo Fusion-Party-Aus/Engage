@@ -1,5 +1,25 @@
 # Engage Privacy Policy and Terms of Use — review record
 
+> **Document status: Historical.** This is a dated review record (8 November
+> 2026). It is not current legal advice, and parts of it have been overtaken by
+> shipped work:
+>
+> - Plausible analytics is implemented and enabled only on the production host
+>   (`src/lib/analytics.ts`, `src/layouts/SiteLayout.astro`).
+> - Underground CRM membership verification is implemented, gated by
+>   `ENGAGE_CRM_VERIFICATION_ENABLED` and disabled by default.
+> - Seconding, scheduled advancement and automatic ballot closure are
+>   implemented.
+> - The participation-API legal-acceptance enforcement and ballot privacy notice
+>   described in sections 10.3 and 10.4 are applied. The gate remains inactive
+>   because the documents are still `owner-authorised`.
+> - Cloudflare Turnstile and shared rate limiting were added.
+>
+> These change the "not implemented" list in section 5. Current capability status
+> is in [status/capability-matrix.md](status/capability-matrix.md); current
+> authorisation is in
+> [architecture/api-and-authorisation.md](architecture/api-and-authorisation.md).
+
 **Date:** 8 November 2026 (Australia/Melbourne)  
 **Scope:** `/privacy/`, `/terms/`, supporting legal content and rendering, related tests  
 **Status:** Owner authorised for publication preparation. Formal publication approval, effective date and qualified legal review remain outstanding. The documents are not yet operative terms.  
@@ -124,7 +144,7 @@ Membership verification is manual. No external membership register, party databa
 | Ratification | `policy_registry` ratification object with authority branch, decision event, ballot revision, ratified revision, adopted amendment IDs, ratifiedBy and ratifiedAt. | Public policy page shows authority branch, decision event, revisions and dates; `publicPolicy` omits `ratifiedBy`. |
 | Publication | `publication_events` with event ID, idempotency key, policy ID, revision, status, provenance, publishedBy and timestamps. Withdrawal and supersession are separate events. | Public policy registry shows publication state, dates and provenance; actor identifiers are not in the public projection. |
 
-**The critical privacy fact:** `canViewIdentifiableBallots` returns true only for `user.isAdmin`. `ballotRecordsForViewer` returns all records only to that role; every other viewer receives only their own vote with `memberId` and `authorName` removed, and anonymous viewers receive an empty list. The national admin activity feed also includes identifiable vote participation only when `canViewIdentifiableBallots` is true. Moderators and branch administrators who are not also national administrators do not receive identifiable ballot records through the application.
+**The critical privacy fact:** `canViewIdentifiableBallots` returns true for a national administrator (`user.isAdmin`) or a holder of the national-scope `ballots.view_identifiable` permission. `ballotRecordsForViewer` returns all records only to that boundary; every other viewer receives only their own vote with `memberId` and `authorName` removed, and anonymous viewers receive an empty list. The national admin activity feed also includes identifiable vote participation only when `canViewIdentifiableBallots` is true. Moderators and branch administrators who hold neither the administrator role nor that national permission do not receive identifiable ballot records through the application.
 
 **Small-ballot disclosure:** the public proposal page displays approve, abstain, reject and total counts. In a ballot with one voter, or a very small number of voters, the aggregate tally can effectively reveal how those voters voted even though individual names are not shown. The privacy policy and terms now state this explicitly. This is an inherent limitation of publishing aggregate results, not a code defect, but it matters for small branch electorates and should be considered in governance design.
 
@@ -149,10 +169,10 @@ Membership verification is manual. No external membership register, party databa
 
 ### 2.7 Analytics, cookies and indexing
 
-- No Plausible, Google Analytics, advertising pixel, tag manager or other analytics script is present in the Engage application.
-- No analytics event tracking or tracking cookies are implemented.
-- The only production cookie described by the application is the Better Auth session cookie. Development sign-in uses a separate cookie only in non-production modes.
-- The legal pages are rendered with `noIndex` while they are drafts. Existing public pages retain their existing indexing behaviour. Search indexing and analytics are explicitly outside this release.
+- No Google Analytics, advertising pixel or tag manager is present. Fusion-hosted Plausible analytics is implemented (`src/lib/analytics.ts`) and enabled only on the production host; it is cookieless and receives no names, email addresses, member identifiers, ballot choices or search text (`src/data/legal-documents.ts`).
+- No analytics or advertising cookies are implemented.
+- The application's own production cookie is the Better Auth session cookie. Development sign-in uses a separate cookie only in non-production modes.
+- The legal pages are rendered with `noIndex` while they are drafts. Existing public pages retain their existing indexing behaviour. Search indexing remains outside this release; analytics is limited to the production-host Plausible implementation above.
 
 ---
 
@@ -173,7 +193,7 @@ Membership verification is manual. No external membership register, party databa
 | Ballot results and ratification records | Aggregate/public policy fields only | Aggregate/public policy fields only | Relevant ballot outcome controls | Staff view | Yes |
 | Audit events | No | No | Relevant branch events | Staff view | Yes |
 
-This matrix is based on the code paths inspected. It is not a claim that every administrator will use access appropriately; access should be governed by organisational policy, confidentiality obligations and least-privilege practice.
+This matrix is based on the code paths inspected. The national-administrator column includes a holder of the national `ballots.view_identifiable` permission. It is not a claim that every administrator will use access appropriately; access should be governed by organisational policy, confidentiality obligations and least-privilege practice.
 
 ---
 
@@ -183,6 +203,7 @@ This matrix is based on the code paths inspected. It is not a claim that every a
 | --- | --- | --- | --- |
 | Google identity provider | `src/lib/auth.ts` configures Google only when both client credentials exist; Better Auth handles the OAuth flow | Google account identifier, name, email, email-verification state, profile image, provider tokens/account-linkage data | Conditional feature; confirm data processing terms and overseas locations |
 | Resend | `src/lib/auth.ts` posts magic-link emails to `https://api.resend.com/emails`; `src/pages/api/admin/members.ts` posts verification notices | Recipient email address, name in verification notice, single-use sign-in URL, delivery metadata | Conditional on `RESEND_API_KEY` and `AUTH_EMAIL_FROM`; confirm data processing terms and overseas locations |
+| Plausible analytics | `src/lib/analytics.ts`, `src/layouts/SiteLayout.astro`; sends to Fusion's own `analytics.fusionparty.org.au` | Aggregate page, navigation, search/filter and outcome events; no member identifiers, ballot choices, search terms or contribution text | Implemented after this review; production host only, cookieless |
 | MongoDB | `src/lib/db.ts`, deployment docs | All application records | Self-hosted on Fusion-operated infrastructure; confirm host location and backup arrangements |
 | Reverse proxy / host / Coolify | `docs/operations.md`, `docs/coolify-deployment.md` | Technical request data and deployment logs | Confirm which production components process request data and their retention |
 
@@ -202,35 +223,32 @@ No payment processor, advertising network, data broker, email marketing platform
 - Separate proposal and amendment ballots bound to exact revisions.
 - Ballot results, ratification, publication, withdrawal and supersession records.
 - Branch administration, referrals and audit events.
-- National-administrator-only identifiable ballot access.
+- Identifiable ballot access limited to national administrators or a holder of the national `ballots.view_identifiable` permission.
 - Owner-authorised legal pages at `/privacy/` and `/terms/` with confirmed entity, ABN, registered party name, contact and correspondence address.
 - A server-side legal acceptance mechanism, API and member-page gate. It records the accepted Terms version and hash, Privacy Policy version and hash, member identifier and acceptance time. It is **inactive until publication**.
 - Public legal links in the current concurrent `SiteFooter` implementation.
 
 ### Not implemented or not yet active (must not be described as available)
 
-- The legal acceptance gate is not active. The documents remain owner-authorised, not published, and the participation API enforcement patch has not been applied to the shared RC endpoints.
-- Seconding formal motions.
+- The legal acceptance gate is not active because the documents remain owner-authorised, not because enforcement is missing. The participation-API enforcement patch and the ballot privacy notice are applied (sections 10.3 and 10.4).
 - Automatic ratification.
-- Timed ballots or automated ballot closure.
 - A separate Election Officer role.
 - Self-service account deletion.
 - Self-service email address change.
 - Self-service data export.
 - A formal moderation appeal workflow.
 - An adopted ballot contingency policy. Technical controls can close a ballot or change its stage; the grounds, safeguards, notice and escalation rules are not yet adopted.
-- Automated membership verification against an external register.
 - Automated calculation of ballot thresholds.
-- Analytics, advertising, tracking cookies or cookie-consent UI.
+- Advertising, tracking cookies or a cookie-consent UI.
 - Search indexing of the legal pages; `noindex, nofollow` is retained.
 
 ### Deferred
 
-- Plausible analytics and any broader analytics programme.
+- A broader analytics programme beyond the Plausible implementation described above.
 - SEO work beyond the existing public metadata.
 - Policy corpus import and ballot migration.
 
-`FORMAL_BALLOTS_ENABLED` appears in deployment configuration but is not read by the application. It should not be described as a working feature flag.
+`FORMAL_BALLOTS_ENABLED` appeared in deployment configuration at the time of this review and is not read by the application. It is not present in `.env.example` today. It should not be described as a working feature flag.
 
 ---
 
@@ -444,62 +462,22 @@ No further footer change is required, and the file was not edited by this work.
 
 The gate calls `GET /api/legal/acceptance` and remains hidden while the documents are unpublished or the member has already accepted the current versions. Existing accounts, sessions and votes are unaffected. It does not delete or invalidate a session.
 
-### 10.3 Participation API enforcement — not applied
+### 10.3 Participation API enforcement — applied
 
-**Do not enable `LEGAL_ACCEPTANCE_ENABLED` until this patch is applied and verified.** The acceptance API records acceptance, but direct calls to the existing participation endpoints remain possible until those endpoints call the enforcement helper.
+The enforcement patch described in the original review has since been applied. `requireLegalAcceptance` (`src/lib/legal-acceptance.ts`) runs after authentication and before the write in:
 
-Add the import to each endpoint:
+- `src/pages/api/votes.ts` — `POST`;
+- `src/pages/api/comments.ts` — `POST`, `PATCH` and `DELETE`;
+- `src/pages/api/proposals/index.ts` — `POST`;
+- `src/pages/api/proposals/[proposalId].ts` — `PATCH`;
+- `src/pages/api/amendments.ts` — `POST`;
+- `src/pages/api/proposals/[proposalId]/second.ts` — `POST`.
 
-```ts
-import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
-```
+Public page routes, `GET` reads, `/api/session`, `/api/legal/acceptance` and the legal pages are not gated. Proposal deletion is not gated. The gate remains disabled while either document is `owner-authorised`, regardless of `LEGAL_ACCEPTANCE_ENABLED`; that interlock is verified by `buildLegalAcceptanceManifest`. The activation sequence in 10.5 still applies.
 
-Use `../../../lib/legal-acceptance.ts` for routes under `src/pages/api/proposals/` and `src/pages/api/admin/` as appropriate.
+### 10.4 Ballot privacy notice — applied
 
-After the existing `const db = await getDatabase(env);` line in each write handler, add:
-
-```ts
-const gate = await requireLegalAcceptance(db, user, env);
-if (gate) return gate;
-```
-
-Apply to:
-
-- `src/pages/api/votes.ts` — `POST` before `castVote`.
-- `src/pages/api/comments.ts` — `POST` before `addComment`; `PATCH` before `toggleUpvoteComment`.
-- `src/pages/api/proposals/index.ts` — `POST` before `saveProposal`.
-- `src/pages/api/proposals/[proposalId].ts` — `PATCH` before `saveProposal`.
-- `src/pages/api/amendments.ts` — `POST` before `createAmendmentRevision`.
-
-Do not gate:
-
-- public page routes;
-- `GET` proposal, comment, amendment or policy reads;
-- `/api/session`;
-- `/api/legal/acceptance`;
-- the legal pages.
-
-Deletion endpoints are not included in this patch. They do not create a new vote, comment, proposal or amendment; if the release owner wants acceptance before deletion as well, add the same helper after authentication.
-
-### 10.4 Ballot privacy notice — component created, insertion pending
-
-`src/components/legal/BallotPrivacyNotice.astro` is created. It states that a vote is identifiable to national administrators, that aggregate totals are public and may reveal choices in a very small ballot, and links to the Privacy Policy.
-
-The proposal page is concurrently owned, so this insertion was not applied. In `src/pages/proposals/[slug].astro`:
-
-1. Add the import near the other component imports:
-
-```astro
-import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
-```
-
-2. Inside `<section id="proposal-vote" class="sidebar-box decision-sidebar-card ...">`, after the closing `</div>` of the `.tally-box` block and before the `<!-- Voting buttons -->` comment, add:
-
-```astro
-<BallotPrivacyNotice />
-```
-
-This is a context link only. It does not change voting behaviour or tally logic.
+`src/components/legal/BallotPrivacyNotice.astro` is created and rendered on the proposal page (`src/pages/proposals/[slug].astro`) beside the ballot. It states that a vote is identifiable to the national administrator or delegated national permission boundary, that aggregate totals are public and may reveal choices in a very small ballot, and links to the Privacy Policy. It is a context link only and does not change voting behaviour or tally logic.
 
 ### 10.5 Activation sequence
 
@@ -508,10 +486,8 @@ Do not activate the gate until all of the following are complete:
 1. Formal publication approval has been recorded, if Fusion's rules require a separate approval.
 2. The effective date has been set.
 3. Both documents have `publicationStatus: "published"` and real effective dates in `src/data/legal-documents.ts`.
-4. The participation API enforcement patch in 10.3 has been applied and verified.
-5. The ballot privacy notice insertion in 10.4 has been applied by the proposal-page owner.
-6. `LEGAL_ACCEPTANCE_ENABLED=true` is set in the runtime environment.
-7. The release owner has verified direct API enforcement, member-page acceptance, existing-session compatibility and preservation of existing votes.
+4. `LEGAL_ACCEPTANCE_ENABLED=true` is set in the runtime environment.
+5. The release owner has verified direct API enforcement, member-page acceptance, existing-session compatibility and preservation of existing votes.
 
 Setting `LEGAL_ACCEPTANCE_ENABLED=true` while either document remains `owner-authorised` intentionally leaves the gate disabled. This is a safety interlock, not an oversight.
 

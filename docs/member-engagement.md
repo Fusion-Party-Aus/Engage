@@ -1,5 +1,9 @@
 # Proposal metrics, deadlines and member engagement
 
+> **Document status: Current** for the engagement behaviour and email
+> configuration below. The verification notes near the end record the state of the
+> change that introduced them, not a current test run.
+
 ## Member experience
 
 - Proposal highlights on the member homepage and proposal browser, plus sort options. These reuse already-visible summaries and never export identifiable ballot records.
@@ -10,22 +14,22 @@
 - Existing accounts default to reminders on; new accounts default off until they opt in. At first startup, a durable `engagement_email_rollouts` record snapshots the existing account IDs. Repeated startups never expand this cohort. Explicit preferences and unsubscribe records always override the default, and bounce/complaint suppression blocks delivery. Existing users do not need to return or complete onboarding to receive reminders. Onboarding explains the applicable default, timing, unsubscribe and delivery reporting, with a direct reminder preference form. Verification/sign-in emails are separate.
 - Inline HTML email uses Horizon violet, cyan, lavender and Newsreader/Georgia + Outfit/Arial fallbacks; includes plain text and a visible unsubscribe link. No choices or vote reasons appear in email or provider tracking metadata.
 
-## Apply the requested current-ballot deadline
+## Ballot deadlines
 
-Nine November 2026 + 45 calendar days is Thursday **24 December 2026**. Voting runs through 11:59 pm Australia/Melbourne. The stored exclusive cutoff is `2026-12-24T13:00:00.000Z` (25 December 00:00 AEDT).
+Decision register D6 sets the ordinary ballot period at **30 days**. An officer who opens a ballot without a date receives 30 days from opening; an explicit future date from an authorised operator wins. The lifecycle scheduler closes the ballot at `ballotClosesAt`, and the boundary is exclusive. See [governance lifecycle](domain/governance-lifecycle.md).
 
-Run inside the production application environment with its existing `MONGODB_URI` and `MONGODB_DB_NAME`:
+The older one-off instruction (nine November 2026 ballots closing 24 December 2026) is superseded. The one-off migration still in the repository targets Thursday **14 January 2027** at 11:59 pm AEDT; the stored exclusive cutoff is `2027-01-14T13:00:00.000Z` (`OPEN_BALLOT_EXPIRY_DEADLINE` in `src/lib/ballot-deadline.ts`). Run inside the production application environment with its existing `MONGODB_URI` and `MONGODB_DB_NAME`:
 
 ```sh
 pnpm ballots:schedule
 pnpm ballots:schedule --apply
 ```
 
-The first command previews IDs and previous deadlines; it does not write. `--apply` sets deadlines on currently open proposal (`stage: decide`) and amendment (`status: voting`) ballots, excludes already-expired ballots, and saves before/after audit data in a transaction. A replica set is required. Concurrent stage/deadline edits abort the transaction. The script refuses to run after the fixed deadline and never falls back to the development database. New ballots opened later are outside this one-time update. Amendments subsequently opened against a scheduled proposal inherit its deadline.
+The first command previews eligible and conflicting ballots; it does not write. `--apply` sets deadlines on currently open proposal (`stage: decide`) and amendment (`status: voting`) ballots where `ballotClosesAt` is missing, preserving any configured deadline. It requires `MONGODB_URI`, refuses to run once the target date has passed, never falls back to the in-memory database, and records the actor and counts in `ballot_schedule_events`. Concurrent stage or deadline edits are skipped and reported, not overwritten. New ballots opened later are outside this one-time update and use the 30-day default.
 
-Deadline enforcement blocks new/changed formal votes, saved pending preferences, and promotion after verification; expired ballots leave the outstanding queue. It does **not** invent a result, ratify policy, or change stage. Returning officers continue to record decisions explicitly.
+Deadline enforcement blocks new/changed formal votes, saved pending preferences and promotion after verification; expired ballots leave the outstanding queue. It does **not** invent a result, ratify policy or change stage. Returning officers continue to record decisions explicitly.
 
-This script has not been applied to production by this change. Production credentials are not available in the implementation workspace.
+Whether this one-off migration has been applied to production is not recorded in the repository. `pnpm governance:migration-report` lists ballots that still have no deadline.
 
 ## Configure email delivery
 

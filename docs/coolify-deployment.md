@@ -1,34 +1,45 @@
 # Coolify deployment for Engage
 
-Status as of 2026-11-08 (cutover-readiness verification):
+> **Document status: Historical.** This is a dated record of the 2026-11-08
+> Coolify deployment and cutover rehearsal. The current deployment description is
+> [architecture/build-deploy-operations.md](architecture/build-deploy-operations.md),
+> and the repository README records that production runs on Coolify. Host
+> procedures below may still be useful, but verify them and the live cutover
+> state before relying on them.
 
-- **Staging is deployed by Coolify and verified healthy.**
+Status at 2026-11-08 (cutover-readiness verification; not current state):
+
+- **Staging was deployed by Coolify and verified healthy.**
 - **The full trigger was exercised end to end:** a push to `main` was detected
   by the poller, Coolify queued deployment `ukwx3w1uoucblvt0orve5lpf`, and the
   replacement staging containers became healthy.
-- **Production is configured in Coolify but intentionally not started.** The
-  existing production stack is still running untouched. Cutover requires the
-  explicit approval described in [the cutover checklist](coolify-cutover-checklist.md).
-- **Cutover readiness has been verified without touching production.** A
+- **At this date production was configured in Coolify but intentionally not
+  started.** The existing production stack was still running untouched, and
+  cutover required the explicit approval described in [the cutover
+  checklist](coolify-cutover-checklist.md). That state is historical: the
+  canonical deployment page and README now describe production as the
+  Coolify-managed app. The cutover date, current poller target and rollback
+  window are not recorded in this repository.
+- **Cutover readiness had been verified without touching production.** A
   production image was prebuilt from `main` at `1b973faf...`, smoke-tested on a
   spare port, and protected from Coolify's image prune. That image is a
   **deployment rehearsal artifact**; it is not the final release and must not be
   deployed unless it independently matches the final approved Git commit. The
   no-rebuild deployment path and the last-moment custom start command were
   exercised on staging. The pre-cutover backup was restored into a disposable
-  MongoDB and verified. Production still runs `engage-app-1`; the cutover
-  remains approval-gated.
+  MongoDB and verified.
 - **GitHub push triggers deployment through a poller on `nexus-debian`.**
   Coolify has no public HTTPS endpoint, so GitHub cannot deliver an inbound
   webhook. The poller calls Coolify's own deploy API when `main` moves.
 
 > **Source of truth:** Coolify deploys `main`. The rehearsal commit
-> `1b973fafbedb763e15bc868e5fdcad0e13486ae4` is **not** the final release
-> identity. Before cutover, set `RELEASE_SHA` to the final integrated commit on
-> `main`, rebuild and relabel the image from that exact commit, and record its
-> image ID. Build production only from the approved `main` commit, not from a
-> feature branch. See the release identity block in
-> [the cutover checklist](coolify-cutover-checklist.md).
+> `1b973fafbedb763e15bc868e5fdcad0e13486ae4` is **not** a final release identity.
+> The cutover procedure required `RELEASE_SHA` to be set to the final integrated
+> commit on `main`, the image rebuilt and relabelled from that exact commit, and
+> its image ID recorded. Build production only from an approved `main` commit,
+> never a feature branch. See the release identity block in
+> [the cutover checklist](coolify-cutover-checklist.md), and confirm what was
+> actually deployed on the host.
 
 ## 1. Topology
 
@@ -716,15 +727,19 @@ Host notes:
 
 ## 13. Known limitations and follow-ups
 
-- **Production is not cut over.** This is deliberate. See the checklist.
+- **Production was not cut over at the time of this record.** The cutover was
+  deliberate and approval-gated; check the canonical deployment page and the host
+  for the current state.
 - **No native GitHub webhook.** The poller adds up to ~2 minutes of latency.
   Replace it with a webhook once Coolify has a public HTTPS endpoint.
-- **No CI.** GitHub Actions remains unavailable and out of scope. The poller
-  deploys whatever is on `main`; it does not run tests.
-- **Existing GitHub Actions workflows are untouched.** In particular,
+- **CI was out of scope at the time of this record; it now exists.** At
+  2026-11-08 no GitHub Actions workflow had been added or enabled, and the
+  poller deployed whatever was on `main` without running tests. Repository CI is
+  now `.github/workflows/ci.yml`; the poller still does not run tests.
+- **Existing GitHub Actions workflows were untouched.** In particular,
   `.github/workflows/nuc-cicd.yml` still describes a self-hosted-runner deploy.
-  Disable or reconcile it before GitHub Actions is re-enabled, or it could
-  compete with Coolify for the NUC.
+  Disable or reconcile it before re-enabling that path, or it could compete with
+  Coolify for the NUC.
 - **Coolify UI exposure.** Bind/restrict port `8000` before treating this as a
   production control plane.
 - **Token rotation.** Rotate the setup and poller tokens after handover and
