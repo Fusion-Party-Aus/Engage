@@ -1,5 +1,58 @@
 [
   {
+    "hash": "f01ce2a",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Record closed-ballot certification and the bound tally",
+    "details": "Document that certification requires a closed ballot, that unbound votes and unreadable votes are refused, that inconclusive is always an explicit override, and that amendment endorsement ballots remain officer-supplied because O2/D18 are undecided. Correct the failure table so a zero-vote unsuccessful result needs no override, refresh the tracker, known gaps and handover status, and point the agent guide at the corrected Terms section. Refs #28."
+  },
+  {
+    "hash": "59f297a",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "legal",
+    "summary": "Correct the terms to describe computed ballot outcomes",
+    "details": "Terms of Use §9 claimed Engage \"does not calculate or apply a passing threshold\", which is no longer true. Describe the versioned simple-majority-d9-v1 rule, the tie and zero-vote result, the treatment of abstentions, the absence of quorum or turnout, and the explicit, reasoned and audited override. The acceptance gate stays inactive: the document remains owner-authorised with no effective date. The incorrect sentence was in the Terms of Use, not the Privacy Policy, so the Privacy Policy and its version are unchanged. Roll the Terms to version 1.1 and record the correction and the #40 follow-up in the privacy review. Refs #28, #40."
+  },
+  {
+    "hash": "634395c",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Cover closure, the bound set and override integrity",
+    "details": "Close fixtures exactly as the scheduler does before certifying, and pin the override rule in the two pre-existing suites by asserting the refusal when the reason is removed rather than only supplying one. Add replica-set cases for a live ballot that cannot be certified and the changed closed tally that is then certified, a vote on another revision or with no revision, amendment-ballot votes excluded from the matter tally, an unreadable encrypted vote, missing decryption keys, an over-length override reason and a retry that rewrites the recorded reason. Cover the form focus/announcement behaviour and the PDF computed/override rows. Refs #28."
+  },
+  {
+    "hash": "28a034e",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Show the enforced tally and recorded outcomes",
+    "details": "Derive the admin outcome basis from the same bound tally that certification enforces, so a page can no longer show a tally the server will not count. A zero-vote ballot reads \"No votes yet — outcome not yet computable\" instead of \"Unsuccessful\", and an unbound or unreadable tally is named instead of guessed. An open ballot shows when voting closes instead of an unusable result form; once a result exists both admin surfaces render the recorded outcome, computed result, tally and override reason instead of a re-submittable form. Revealing the override field moves focus to it and announces the requirement to assistive technology. Show overridden outcomes in Ballots & decisions with the reason available, and add the computed result, rule basis and override to the proposal PDF report. Refs #28."
+  },
+  {
+    "hash": "ca7611f",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballots",
+    "summary": "Certify only a closed ballot from a consistent bound tally",
+    "details": "Refuse certification while a ballot can still accept votes. A result is accepted when the ballot has a closure marker, its close time has passed, or the system has already closed it; a live ballot returns BALLOT_NOT_CLOSED and a ballot with no recorded close is refused rather than assumed closed, because a later vote could contradict an early certification. Tally only votes bound to the ballot and exact revision, and treat the rest as a ballot defect instead of ignoring them: unbound or mismatched-revision votes now return BALLOT_TALLY_UNBOUND_VOTES, unreadable encrypted votes return BALLOT_TALLY_UNREADABLE, and missing or invalid decryption keys return BALLOT_DECRYPTION_UNAVAILABLE (503). The tally query reads only the fields the check needs. Reject an override reason longer than 1000 characters instead of truncating audit evidence, and treat a retry that changes the recorded override reason as a conflict rather than an idempotent success. The refusal message now names the computed outcome and says that any other result, including inconclusive, requires a written reason. Refs #28."
+  },
+  {
+    "hash": "3c5f2d1",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Regenerate the public changelog snapshot"
+  },
+  {
     "hash": "d60c3f5",
     "date": "2026-11-15",
     "type": "docs",
@@ -610,56 +663,5 @@
     "category": "feature",
     "scope": "proposals",
     "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
-  },
-  {
-    "hash": "e7d793a",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record Engage production cutover and verification",
-    "details": "Record the approved cutover of 4660690... to the prebuilt image, the final quiescent backup and off-host checksum, the 37-ballot/194-vote migration and preservation comparison, image and route verification, and the retained rollback state."
-  },
-  {
-    "hash": "4660690",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record member ballot refinement verification",
-    "details": "Record the approved ballot hierarchy: segmented control, single results block, zero-vote empty state, compact privacy line, full-width action and 390px browser validation. Full route matrix 109/109 and dedicated ballot checks 14/14."
-  },
-  {
-    "hash": "2b85970",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Refine member ballot hierarchy and voting control",
-    "details": "Replace the tall three-card radio composition with a single-row shadcn/Radix segmented control for Approve, Abstain and Reject. The primary action is full-width with a matching radius, uses a neutral disabled treatment and reserves the Horizon accent for an enabled vote. Move results into one compact block, show a simple empty state for zero-vote ballots, reduce the privacy disclosure to a persistent one-line notice, and move revision metadata into a small readable line. Keep selected state, keyboard navigation, existing votes and closed-ballot read-only behaviour."
   }
 ]
