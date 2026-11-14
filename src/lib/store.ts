@@ -736,6 +736,7 @@ export async function saveProposal(
   db: Db,
   user: SessionUser,
   body: Record<string, unknown>,
+  options: { allowAmendmentApply?: boolean } = {},
 ): Promise<ProposalRecord> {
   const col = db.collection<ProposalRecord>("proposals");
   const existingId =
@@ -763,7 +764,9 @@ export async function saveProposal(
     (user.isStaff ||
       (existing.originatingBranchId &&
         branchAdminIds.includes(existing.originatingBranchId)) ||
-      hasPermission(user, "proposals.edit", existing.originatingBranchId)),
+      hasPermission(user, "proposals.edit", existing.originatingBranchId) ||
+      (options.allowAmendmentApply &&
+        hasPermission(user, "amendments.apply", existing.originatingBranchId))),
   );
   if (!user.isAdmin) {
     if (
@@ -1560,13 +1563,24 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
         updateSet.ballotRevisionBoundBy = user.memberId;
       }
     } else if (existing.ballotRevisionId && (closingBallot || appendRevision)) {
-      // Editable path only runs when zero votes exist; clear any prior binding so
-      // a returned/edited proposal cannot carry stale wording back into Decide.
-      delete updated.ballotRevisionId;
-      unsetFields.ballotRevisionId = 1;
-      unsetFields.ballotRevisionBoundAt = 1;
-      unsetFields.ballotRevisionBoundBy = 1;
-      ballotUnbound = true;
+      const currentBallotId = proposalBallotId(existing.proposalId);
+      const ballotVoteCount = await db
+        .collection<VoteRecord>(PROPOSAL_VOTES)
+        .countDocuments({
+          $or: [
+            { proposalId: existing.proposalId },
+            { ballotId: currentBallotId },
+          ],
+        });
+      if (ballotVoteCount === 0) {
+        // Clear any prior binding only when zero votes exist so a returned or
+        // edited proposal cannot carry stale wording back into Decide.
+        delete updated.ballotRevisionId;
+        unsetFields.ballotRevisionId = 1;
+        unsetFields.ballotRevisionBoundAt = 1;
+        unsetFields.ballotRevisionBoundBy = 1;
+        ballotUnbound = true;
+      }
     }
 
     await runInTransaction(db, async (session) => {
@@ -1921,38 +1935,46 @@ export async function deleteProposal(
     );
   }
 
-  const [revisionCount, voteCount, ballotCount, resultCount, registryCount] =
-    await Promise.all([
-      db.collection("proposal_revisions").countDocuments({ proposalId: id }),
-      db.collection(PROPOSAL_VOTES).countDocuments({
-        $or: [{ proposalId: id }, { ballotId: proposalBallotId(id) }],
-      }),
-      db.collection(BALLOTS_COLLECTION).countDocuments({ matterId: id }),
-      db.collection(FORMAL_DECISIONS_COLLECTION).countDocuments({
-        $or: [{ matterId: id }, { proposalId: id }],
-      }),
-      db.collection("policy_registry").countDocuments({
-        $or: [{ policyId: id }, { proposalId: id }, { matterId: id }],
-      }),
-    ]);
-
-  if (
-    revisionCount > 1 ||
-    voteCount > 0 ||
-    ballotCount > 0 ||
-    resultCount > 0 ||
-    registryCount > 0 ||
-    Boolean(existing.ballotRevisionId) ||
-    ["decide", "implement", "archived"].includes(existing.stage)
-  ) {
-    throw new ProposalDeletionConflictError(
-      "Matters with governance history (revisions beyond initial draft, ballots, votes, results, or registry records) cannot be deleted. Archive the matter instead.",
-    );
-  }
-
   await runInTransaction(db, async (session) => {
     const sessionOpts = session ? { session } : undefined;
-    await col.deleteOne({ proposalId: id }, sessionOpts);
+    const [revisionCount, voteCount, ballotCount, resultCount, registryCount] =
+      await Promise.all([
+        db.collection("proposal_revisions").countDocuments({ proposalId: id }, sessionOpts),
+        db.collection(PROPOSAL_VOTES).countDocuments({
+          $or: [{ proposalId: id }, { ballotId: proposalBallotId(id) }],
+        }, sessionOpts),
+        db.collection(BALLOTS_COLLECTION).countDocuments({ matterId: id }, sessionOpts),
+        db.collection(FORMAL_DECISIONS_COLLECTION).countDocuments({
+          $or: [{ matterId: id }, { proposalId: id }],
+        }, sessionOpts),
+        db.collection("policy_registry").countDocuments({
+          $or: [{ policyId: id }, { proposalId: id }, { matterId: id }],
+        }, sessionOpts),
+      ]);
+
+    if (
+      revisionCount > 1 ||
+      voteCount > 0 ||
+      ballotCount > 0 ||
+      resultCount > 0 ||
+      registryCount > 0 ||
+      Boolean(existing.ballotRevisionId) ||
+      ["decide", "implement", "archived"].includes(existing.stage)
+    ) {
+      throw new ProposalDeletionConflictError(
+        "Matters with governance history (revisions beyond initial draft, ballots, votes, results, or registry records) cannot be deleted. Archive the matter instead.",
+      );
+    }
+
+    const deleted = await col.deleteOne(
+      { proposalId: id, updatedAt: existing.updatedAt },
+      sessionOpts,
+    );
+    if (deleted.deletedCount !== 1) {
+      throw new ProposalDeletionConflictError(
+        "Proposal changed while deleting. Reload the latest state and try again.",
+      );
+    }
     await db
       .collection("proposal_revisions")
       .deleteMany({ proposalId: id }, sessionOpts);

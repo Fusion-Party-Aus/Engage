@@ -79,7 +79,11 @@ function describeDeadline(value: unknown): {
   if (value === undefined || value === null || value === "") {
     return { state: "missing" };
   }
-  if (asDate(value)) return { state: "ok" };
+  // MongoDB `$lte: now` queries only match BSON Date values; string dates would
+  // be silently skipped by the scheduler and require manual recovery.
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return { state: "ok" };
+  }
   return { state: "malformed", raw: String(value) };
 }
 

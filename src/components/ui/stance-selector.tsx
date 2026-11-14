@@ -13,6 +13,12 @@ export default function StanceSelector({ defaultValue = 'comment' }: { defaultVa
   const [stance, setStance] = React.useState(defaultValue);
 
   React.useEffect(() => {
+    const input = document.querySelector<HTMLInputElement>('[data-stance-input]');
+    const pending = input?.dataset.pendingStance;
+    if (pending) {
+      setStance(pending);
+      delete input.dataset.pendingStance;
+    }
     const selectStance = (event: Event) => {
       const next = (event as CustomEvent<string>).detail;
       if (next) setStance(next);

@@ -2,14 +2,14 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { saveProposal } from "../../../../lib/store.ts";
-import { hasPermission } from "../../../../lib/rbac.ts";
+import { hasPermission, hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin && !hasPermission(user, "amendments.apply"))
+  if (!user.isAdmin && !user.isBranchAdmin && !hasPermissionAnywhere(user, "amendments.apply"))
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -92,10 +92,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "Amendment outcomes must be a list of text." },
         { status: 400 },
       );
-    const updated = await saveProposal(db, user, {
-      proposalId: amendment.proposalId,
-      ...changes,
-    });
+    const updated = await saveProposal(
+      db,
+      user,
+      {
+        proposalId: amendment.proposalId,
+        ...changes,
+      },
+      { allowAmendmentApply: true },
+    );
     const latest = await db
       .collection("proposal_revisions")
       .find({ proposalId: amendment.proposalId })

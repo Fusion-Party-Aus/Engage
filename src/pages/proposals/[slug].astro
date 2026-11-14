@@ -1822,6 +1822,11 @@ const initialsFor = (name: string) =>
       const targetStance = chip.dataset.starterStance;
       const placeholder = chip.dataset.starterPlaceholder;
       if (targetStance) {
+        const stanceInput = document.querySelector<HTMLInputElement>('[data-stance-input]');
+        if (stanceInput) {
+          stanceInput.value = targetStance;
+          stanceInput.dataset.pendingStance = targetStance;
+        }
         window.dispatchEvent(new CustomEvent('engage:stance', { detail: targetStance }));
       }
       if (commentBodyInput) {

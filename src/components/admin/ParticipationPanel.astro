@@ -9,6 +9,8 @@ import { Button } from '../ui/button';
 import ActivityTimeline from '../blocks/timeline-3';
 import { canViewIdentifiableBallots, getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { canIncludeProposalInAdminReport } from '../../lib/admin-reporting.ts';
+import { listProposals } from '../../lib/store.ts';
 import { groupParticipationFeed, type ParticipationActivity } from '../../lib/participation-feed.ts';
 import { PROPOSAL_VOTES } from '../../lib/vote-storage.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
@@ -26,7 +28,6 @@ interface Props {
   proposals: ProposalSummary[];
 }
 
-const { proposals } = Astro.props;
 const env = runtimeEnv(Astro.locals);
 const [user, db] = await Promise.all([
   getSessionUser(Astro.request, env),
@@ -36,17 +37,45 @@ if (!user || (!user.isStaff && !user.isBranchAdmin)) {
   return;
 }
 
-const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
+const authorizedProposals = (
+  await listProposals(db, { includeArchived: true, user, includeDetails: false })
+).filter((proposal) => canIncludeProposalInAdminReport(user, proposal));
+
+const proposalMap = new Map(
+  authorizedProposals.map((proposal) => [
+    proposal.proposalId,
+    {
+      proposalId: proposal.proposalId,
+      slug: proposal.slug,
+      title: proposal.title,
+      authorId: proposal.authorId,
+      authorName: proposal.authorName,
+      createdAt:
+        proposal.createdAt instanceof Date
+          ? proposal.createdAt.toISOString()
+          : String(proposal.createdAt),
+    },
+  ]),
+);
+const allowedProposalIds = [...proposalMap.keys()];
 const showIdentifiableBallots = canViewIdentifiableBallots(user);
 const activityWindowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-const proposalScope = { proposalId: { $in: proposals.map((proposal) => proposal.proposalId) } };
+const proposalScope = { proposalId: { $in: allowedProposalIds } };
 
-const [recentVotes, recentComments] = await Promise.all([
-  showIdentifiableBallots
-    ? db.collection(PROPOSAL_VOTES).find({ ...proposalScope, ballotId: /^proposal:/, updatedAt: { $gte: activityWindowStart } }).sort({ updatedAt: -1 }).toArray()
-    : Promise.resolve([]),
-  db.collection('comments').find({ ...proposalScope, createdAt: { $gte: activityWindowStart } }).sort({ createdAt: -1 }).toArray(),
-]);
+const [recentVotes, recentComments] = allowedProposalIds.length
+  ? await Promise.all([
+      showIdentifiableBallots
+        ? db.collection(PROPOSAL_VOTES).find(
+            { ...proposalScope, ballotId: /^proposal:/, updatedAt: { $gte: activityWindowStart } },
+            { projection: { _id: 1, proposalId: 1, memberId: 1, authorName: 1, updatedAt: 1 } },
+          ).sort({ updatedAt: -1 }).toArray()
+        : Promise.resolve([]),
+      db.collection('comments').find(
+        { ...proposalScope, createdAt: { $gte: activityWindowStart } },
+        { projection: { commentId: 1, proposalId: 1, memberId: 1, authorName: 1, createdAt: 1, _id: 0 } },
+      ).sort({ createdAt: -1 }).toArray(),
+    ])
+  : [[], []];
 
 const voteActivities: ParticipationActivity[] = recentVotes.flatMap((entry: any) => {
   const proposal = proposalMap.get(entry.proposalId);
@@ -60,7 +89,7 @@ const commentActivities: ParticipationActivity[] = recentComments.flatMap((entry
     ? [{ id: entry.commentId, actorId: entry.memberId, actorName: entry.authorName || 'Member', kind: 'contribution' as const, date: new Date(entry.createdAt), proposalTitle: proposal.title, proposalSlug: proposal.slug }]
     : [];
 });
-const proposalActivities: ParticipationActivity[] = proposals
+const proposalActivities: ParticipationActivity[] = [...proposalMap.values()]
   .filter((proposal) => proposal.authorId && new Date(proposal.createdAt).getTime() >= activityWindowStart.getTime())
   .map((proposal) => ({
     id: proposal.proposalId,

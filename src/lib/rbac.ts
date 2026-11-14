@@ -482,6 +482,18 @@ export function hasPermission(
   return false;
 }
 
+export function hasPermissionAnywhere(
+  user: SessionUser | null | undefined,
+  permission: PermissionKey,
+): boolean {
+  if (!user) return false;
+  const snap = getEffectivePermissionsSnapshot(user);
+  if (snap.national.includes(permission)) return true;
+  const definition = PERMISSION_MAP.get(permission);
+  if (!definition?.allowedScopes.includes("branch")) return false;
+  return Object.values(snap.branches).some((list) => list.includes(permission));
+}
+
 /**
  * Reusable API authorisation guard. Returns a 401 or 403 Response when the
  * caller lacks `permission` (nationally or for `branchId`), or `null` when

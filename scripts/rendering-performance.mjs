@@ -240,7 +240,19 @@ async function seedSyntheticData(args, dbName) {
         updatedAt: new Date(now - i * 60_000),
       });
     }
-    await db.collection("proposal_votes").insertMany(voteDocs, { ordered: false }).catch(() => {});
+    async function insertIgnoreDuplicates(collectionName, docs) {
+      try {
+        const res = await db.collection(collectionName).insertMany(docs, { ordered: false });
+        return res.insertedCount ?? docs.length;
+      } catch (error) {
+        if (error?.code === 11000 || error?.writeErrors?.every((e) => e.code === 11000)) {
+          return error?.result?.nInserted ?? error?.result?.insertedCount ?? 0;
+        }
+        throw error;
+      }
+    }
+
+    const votes = await insertIgnoreDuplicates("proposal_votes", voteDocs);
 
     const commentDocs = [];
     for (let i = 0; i < SYNTHETIC_COMMENTS; i += 1) {
@@ -256,20 +268,17 @@ async function seedSyntheticData(args, dbName) {
         createdAt: new Date(now - i * 120_000),
       });
     }
-    await db.collection("comments").insertMany(commentDocs, { ordered: false }).catch(() => {});
+    const comments = await insertIgnoreDuplicates("comments", commentDocs);
 
     // A small recognised branch directory keeps branch filters and admin
     // navigation representative without importing real branch data.
-    await db.collection("branches").insertMany(
-      [
-        { branchId: "national", name: "National", kind: "national", recognised: true },
-        { branchId: "nsw", name: "New South Wales", kind: "state", recognised: true },
-        { branchId: "vic", name: "Victoria", kind: "state", recognised: true },
-      ],
-      { ordered: false },
-    ).catch(() => {});
+    await insertIgnoreDuplicates("branches", [
+      { branchId: "national", name: "National", kind: "national", recognised: true },
+      { branchId: "nsw", name: "New South Wales", kind: "state", recognised: true },
+      { branchId: "vic", name: "Victoria", kind: "state", recognised: true },
+    ]);
 
-    return { votes: voteDocs.length, comments: commentDocs.length, ballots };
+    return { votes, comments, ballots };
   } finally {
     await client.close();
   }

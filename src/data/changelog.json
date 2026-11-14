@@ -1,5 +1,21 @@
 [
   {
+    "hash": "1865311",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "deploy",
+    "summary": "Pass Turnstile and rate-limit env vars to app container"
+  },
+  {
+    "hash": "afa49fa",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security,proposals",
+    "summary": "Address PR #51 review findings"
+  },
+  {
     "hash": "fdb5818",
     "date": "2026-11-14",
     "type": "docs",
@@ -657,21 +673,5 @@
     "category": "fix",
     "scope": "email",
     "summary": "Keep verification notices within narrow mobile screens"
-  },
-  {
-    "hash": "300966c",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Let administrators inspect the proposed re-engagement audience"
-  },
-  {
-    "hash": "9e72e64",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "member",
-    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
   }
 ]

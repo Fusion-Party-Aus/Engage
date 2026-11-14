@@ -36,14 +36,12 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
       });
       const result = await response.json();
       if (!response.ok) {
-        if (typeof result?.code === 'string' && result.code.startsWith('TURNSTILE_')) {
-          // The token is single-use; ask the widget for a fresh one.
-          window.dispatchEvent(new Event('engage:turnstile-reset'));
-        }
         throw new Error(result.error);
       }
       setSaved(true);
     } catch (caught) {
+      // Any failed or uncertain POST may have consumed the single-use Turnstile token.
+      window.dispatchEvent(new Event('engage:turnstile-reset'));
       setError(caught instanceof Error ? caught.message : "Couldn't send your priority. Try again.");
     } finally {
       setBusy(false);

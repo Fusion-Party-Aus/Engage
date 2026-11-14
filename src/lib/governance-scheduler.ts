@@ -306,12 +306,36 @@ export async function advanceDueDeliberations(
 
       const applied = await runInTransaction(db, async (session) => {
         const sessionOpts = session ? { session } : undefined;
+        const txAmendments = await db
+          .collection("amendments")
+          .find({ proposalId: plan.proposalId }, sessionOpts)
+          .toArray();
+        if (
+          txAmendments.some((amendment) =>
+            amendmentBlocksScheduledAdvancement(amendment.status),
+          )
+        ) {
+          return null;
+        }
+        const txLatest = await db
+          .collection("proposal_revisions")
+          .find({ proposalId: plan.proposalId }, sessionOpts)
+          .sort({ createdAt: -1, _id: -1 })
+          .limit(1)
+          .toArray();
+        if (stringField(txLatest[0]?.revisionId) !== plan.revisionId) {
+          return null;
+        }
+        const filter: Record<string, unknown> = {
+          proposalId: plan.proposalId,
+          stage: "deliberate",
+          deliberationEndsAt: { $lte: now },
+        };
+        if (raw.updatedAt !== undefined) {
+          filter.updatedAt = raw.updatedAt;
+        }
         const write = await db.collection<ProposalRecord>("proposals").updateOne(
-          {
-            proposalId: plan.proposalId,
-            stage: "deliberate",
-            deliberationEndsAt: { $lte: now },
-          },
+          filter,
           {
             $set: {
               stage: "decide",

@@ -325,22 +325,20 @@ export async function initializeDatabase(db: Db): Promise<void> {
           typeof col.indexes === "function"
             ? await col.indexes().catch(() => [])
             : [];
+        await col.createIndex(
+          { ballotId: 1 },
+          {
+            unique: true,
+            name: "ballot_results_ballot_unique",
+            partialFilterExpression: { ballotId: { $type: "string" } },
+          },
+        );
         const legacyIdx = existing.find(
           (idx) => idx.name === "proposalId_1" && idx.unique === true,
         );
         if (legacyIdx) {
           await col.dropIndex("proposalId_1").catch(() => {});
         }
-        await col
-          .createIndex(
-            { ballotId: 1 },
-            {
-              unique: true,
-              name: "ballot_results_ballot_unique",
-              partialFilterExpression: { ballotId: { $type: "string" } },
-            },
-          )
-          .catch(() => {});
         await col.createIndex({ proposalId: 1 }).catch(() => {});
       })(),
       db

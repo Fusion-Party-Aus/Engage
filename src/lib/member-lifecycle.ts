@@ -9,10 +9,8 @@ export async function recordLifecycle(db: Db, memberId: string, event: string, a
 }
 export async function notePriorParticipation(db:Db, memberId:string, session?: ClientSession) {
   const sessionOpts = session ? { session } : undefined;
-  const [first, prior] = await Promise.all([
-    db.collection('engagement_lifecycle_events').findOne({memberId,event:'first_vote_submitted'}, sessionOpts),
-    db.collection('proposal_votes').findOne({memberId}, sessionOpts),
-  ]);
+  const first = await db.collection('engagement_lifecycle_events').findOne({memberId,event:'first_vote_submitted'}, sessionOpts);
+  const prior = await db.collection('proposal_votes').findOne({memberId}, sessionOpts);
   if (!first && prior) await recordLifecycle(db,memberId,'historical_participant', new Date(), 'once', session);
 }
 export async function recordParticipation(db: Db, memberId: string, at = new Date(), session?: ClientSession) {

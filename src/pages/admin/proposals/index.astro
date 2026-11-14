@@ -61,7 +61,6 @@ const queryLower = query.toLowerCase();
 // and stage filtering keep the same semantics as listProposals.
 const allProposals = scopedProposals.filter((proposal) => {
   if (
-    !user.isStaff &&
     branchFilter &&
     branchFilter !== 'all' &&
     ![proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branchFilter)
@@ -278,7 +277,8 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                     id="editor-ballot-closes-at"
                     name="ballotClosesAt"
                     type="datetime-local"
-                    defaultValue={editingProposal?.ballotClosesAt ? new Date(new Date(editingProposal.ballotClosesAt).getTime() - new Date(editingProposal.ballotClosesAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}
+                    data-iso-value={editingProposal?.ballotClosesAt ? new Date(editingProposal.ballotClosesAt).toISOString() : ''}
+                    data-initial-stage={editingProposal?.stage ?? ''}
                   />
                 </Field>
 
@@ -783,6 +783,22 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 </AdminLayout>
 
 <script>
+  const ballotCloseField = document.getElementById('editor-ballot-closes-at') as HTMLInputElement | null;
+  if (ballotCloseField) {
+    const iso = ballotCloseField.dataset.isoValue?.trim();
+    if (iso) {
+      const parsed = new Date(iso);
+      if (Number.isFinite(parsed.getTime())) {
+        const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000)
+          .toISOString()
+          .slice(0, 16);
+        ballotCloseField.value = local;
+        ballotCloseField.dataset.initialLocalValue = local;
+      }
+    } else {
+      ballotCloseField.dataset.initialLocalValue = '';
+    }
+  }
   // A record workspace can link directly to one register row's management
   // controls. Open the disclosure so the linked action is visible.
   if (location.hash.startsWith('#proposal-')) {
@@ -861,8 +877,17 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         provenance = null;
       }
 
+      const ballotClosesAtInput = document.getElementById('editor-ballot-closes-at') as HTMLInputElement | null;
       const rawBallotClosesAt = String(formData.get('ballotClosesAt') || '').trim();
-      const ballotClosesAt = rawBallotClosesAt ? new Date(rawBallotClosesAt).toISOString() : undefined;
+      const initialBallotLocal = ballotClosesAtInput?.dataset.initialLocalValue ?? '';
+      const initialStage = ballotClosesAtInput?.dataset.initialStage ?? '';
+      const targetStage = String(formData.get('stage') || '');
+      const openingBallot = targetStage === 'decide' && initialStage !== 'decide';
+      const ballotClosesAtChanged = rawBallotClosesAt !== initialBallotLocal;
+      const ballotClosesAt =
+        rawBallotClosesAt && (ballotClosesAtChanged || openingBallot)
+          ? new Date(rawBallotClosesAt).toISOString()
+          : undefined;
 
       const data = {
         proposalId: editingId || undefined,

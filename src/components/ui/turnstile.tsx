@@ -61,6 +61,7 @@ function loadTurnstileApi(): Promise<TurnstileApi> {
       waitForApi();
     }, { once: true });
     script.addEventListener('error', () => {
+      script.remove();
       reject(new Error('Turnstile could not load.'));
     }, { once: true });
 

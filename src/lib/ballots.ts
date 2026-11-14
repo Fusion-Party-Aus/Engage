@@ -314,29 +314,92 @@ export async function recordFormalDecision(
 ): Promise<FormalDecisionRecord> {
   const ballotId = (input.ballotId ?? proposalBallotId(input.matterId)).trim();
   const now = input.now ?? new Date();
+  const matchesPayload = (existing: Record<string, any>) =>
+    existing.decisionEventId === input.decisionEventId &&
+    (existing.ballotId ?? proposalBallotId(input.matterId)) === ballotId &&
+    existing.revisionId === input.revisionId &&
+    existing.result === input.result &&
+    (existing.authorityBranchId ?? undefined) ===
+      (input.authorityBranchId ?? undefined);
 
-  return runInTransaction(db, async (session) => {
-    const sessionOpts = session ? { session } : undefined;
-    const existing = await db.collection(FORMAL_DECISIONS_COLLECTION).findOne(
-      {
-        $or: [
-          { decisionEventId: input.decisionEventId },
+  try {
+    return await runInTransaction(db, async (session) => {
+      const sessionOpts = session ? { session } : undefined;
+      const existing = await db.collection(FORMAL_DECISIONS_COLLECTION).findOne(
+        {
+          $or: [
+            { decisionEventId: input.decisionEventId },
+            { ballotId },
+            { proposalId: input.matterId, ballotId: { $exists: false } },
+          ],
+        },
+        sessionOpts,
+      );
+
+      if (existing) {
+        if (matchesPayload(existing)) {
+          return existing as unknown as FormalDecisionRecord;
+        }
+        throw new BallotDomainError(
+          "Ballot result is already recorded and cannot be replaced.",
+          409,
+          "DECISION_ALREADY_RECORDED",
+        );
+      }
+
+      const record: FormalDecisionRecord = {
+        decisionEventId: input.decisionEventId,
+        ballotId,
+        proposalId: input.matterId,
+        matterId: input.matterId,
+        revisionId: input.revisionId,
+        result: input.result,
+        ...(input.authorityBranchId
+          ? { authorityBranchId: input.authorityBranchId }
+          : {}),
+        recordedBy: input.recordedBy,
+        recordedAt: now,
+      };
+
+      await db
+        .collection(FORMAL_DECISIONS_COLLECTION)
+        .insertOne(record, sessionOpts);
+      await db
+        .collection(BALLOTS_COLLECTION)
+        .updateOne(
           { ballotId },
-          { proposalId: input.matterId, ballotId: { $exists: false } },
-        ],
-      },
-      sessionOpts,
-    );
+          { $set: { status: "certified", updatedAt: now } },
+          sessionOpts,
+        );
+      await recordGovernanceEvent(
+        db,
+        {
+          eventType: "decision.recorded",
+          matterId: input.matterId,
+          ballotId,
+          revisionId: input.revisionId,
+          decisionEventId: input.decisionEventId,
+          actorId: input.recordedBy,
+          authorityBranchId: input.authorityBranchId,
+          metadata: { result: input.result },
+          createdAt: now,
+        },
+        session,
+      );
 
-    if (existing) {
-      const samePayload =
-        existing.decisionEventId === input.decisionEventId &&
-        (existing.ballotId ?? proposalBallotId(input.matterId)) === ballotId &&
-        existing.revisionId === input.revisionId &&
-        existing.result === input.result &&
-        (existing.authorityBranchId ?? undefined) ===
-          (input.authorityBranchId ?? undefined);
-      if (samePayload) {
+      return record;
+    });
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) {
+      const existing = await db
+        .collection(FORMAL_DECISIONS_COLLECTION)
+        .findOne({
+          $or: [
+            { decisionEventId: input.decisionEventId },
+            { ballotId },
+          ],
+        });
+      if (existing && matchesPayload(existing)) {
         return existing as unknown as FormalDecisionRecord;
       }
       throw new BallotDomainError(
@@ -345,47 +408,6 @@ export async function recordFormalDecision(
         "DECISION_ALREADY_RECORDED",
       );
     }
-
-    const record: FormalDecisionRecord = {
-      decisionEventId: input.decisionEventId,
-      ballotId,
-      proposalId: input.matterId,
-      matterId: input.matterId,
-      revisionId: input.revisionId,
-      result: input.result,
-      ...(input.authorityBranchId
-        ? { authorityBranchId: input.authorityBranchId }
-        : {}),
-      recordedBy: input.recordedBy,
-      recordedAt: now,
-    };
-
-    await db
-      .collection(FORMAL_DECISIONS_COLLECTION)
-      .insertOne(record, sessionOpts);
-    await db
-      .collection(BALLOTS_COLLECTION)
-      .updateOne(
-        { ballotId },
-        { $set: { status: "certified", updatedAt: now } },
-        sessionOpts,
-      );
-    await recordGovernanceEvent(
-      db,
-      {
-        eventType: "decision.recorded",
-        matterId: input.matterId,
-        ballotId,
-        revisionId: input.revisionId,
-        decisionEventId: input.decisionEventId,
-        actorId: input.recordedBy,
-        authorityBranchId: input.authorityBranchId,
-        metadata: { result: input.result },
-        createdAt: now,
-      },
-      session,
-    );
-
-    return record;
-  });
+    throw error;
+  }
 }

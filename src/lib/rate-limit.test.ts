@@ -244,7 +244,7 @@ describe("durable rate limits on real MongoDB", { skip: !uri }, () => {
     try {
       const [dbA, dbB] = [clients[0]!.db(dbName), clients[1]!.db(dbName)];
       const env = { BETTER_AUTH_SECRET: "rate-limit-test-secret" };
-      const now = WINDOW_START;
+      const now = Date.now() + 3_600_000;
       const input = {
         action: "auth-magic-link" as const,
         identifier: "203.0.113.44",

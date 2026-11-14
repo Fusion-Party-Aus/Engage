@@ -69,11 +69,11 @@ const [db, user] = await Promise.all([
 // scope silently. This is a following preference, never a verified membership.
 if (user) await ensureNationalBranchAssignment(db, user.memberId);
 
-const [memberActivityInputs, branchProfile, visibleProposals, userPasskeyCount] = user
+const [memberActivityInputs, branchProfile, allVisibleProposals, userPasskeyCount] = user
   ? await Promise.all([
       loadMemberActivityInputs(db, user.memberId),
       getMemberBranchProfile(db, user.memberId),
-      listProposals(db, { user, includeDetails: false }),
+      listProposals(db, { includeArchived: true, user, includeDetails: false }),
       db
         .collection('passkey')
         .countDocuments({ userId: user.memberId })
@@ -81,9 +81,11 @@ const [memberActivityInputs, branchProfile, visibleProposals, userPasskeyCount] 
     ])
   : [null, null as MemberBranchProfile | null, [] as any[], 0];
 
+const visibleProposals = allVisibleProposals.filter((proposal) => proposal.stage !== 'archived');
+
 const [activity, memberTimelineEvents, allCatchUpGroups] = user
   ? await Promise.all([
-      listUserActivity(db, user.memberId, visibleProposals),
+      listUserActivity(db, user.memberId, allVisibleProposals),
       listMemberActivityStream(db, user.memberId, memberActivityInputs ?? undefined),
       buildMemberCatchUp(db, user.memberId, new Date(0), user, memberActivityInputs ?? undefined),
     ])
@@ -579,7 +581,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           />
           {followableBranchCount === 0 && verifiedBranchCount === 0 && (
             <BranchChooser
-              client:visible
+              client:load
               mode="invite"
               memberKey={user.memberId}
               branches={branchChoices}

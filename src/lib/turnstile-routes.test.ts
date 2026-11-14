@@ -285,10 +285,10 @@ describe("abuse protection for authentication requests", () => {
     if (failure) {
       // The in-memory preview cannot run Better Auth's own database rate
       // limiter (it needs `aggregate`). Reaching that point proves the gate
-      // allowed the request; record the limitation instead of pretending.
-      assert.doesNotMatch(
+      // allowed the request; rethrow any other unexpected failure.
+      assert.match(
         String((failure as Error).message),
-        /TURNSTILE_|RATE_LIMITED/,
+        /aggregate/i,
       );
       return;
     }
