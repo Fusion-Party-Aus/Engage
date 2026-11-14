@@ -30,7 +30,7 @@ Status values:
 
 | Workstream | Branch | Issue | State |
 |---|---|---|---|
-| Phase 1 lifecycle scheduling | `feat/phase1-lifecycle` | #26, #30 | In progress — seconding, 30/30 deadlines, system advancement, automatic closure, scheduler |
+| Phase 1 lifecycle scheduling | `feat/rfc0001-sprint1-integration` | #26, #30 | **Integrated** — seconding, 30/30 deadlines, system advancement, automatic closure, scheduler, read-only migration report |
 | Rendering performance | `perf/rendering-investigation` | #52 | In progress — measurement harness, audit, low-risk wins |
 | Turnstile and abuse protection | `feat/turnstile-abuse-protection` | #38 (part) | In progress — server verification, protected unauthenticated actions, durable rate limiting |
 | Ballot-results migration safety | — | #55 | Planned — preflight, observability, recovery |
@@ -44,11 +44,11 @@ Sprint 1 integration is PR #51 (draft).
 | ID | Recommendation | Issue | State | Evidence / remaining work |
 |---|---|---|---|---|
 | I1 | Remove hard deletion of governance records | #50 | **Integrated** | `deleteProposal` refuses matters with revisions beyond the initial draft, votes, ballots, decisions, registry records, or a consequential stage. Branch-scoped `proposals.delete` cannot confer authority (national-only in the catalogue). Tests: `governance-integrity-sprint1.test.ts`, `rbac-authority-sprint1.test.ts`. |
-| I2 | Make ballot deadlines mandatory and audited | #26 | **Partial** | Entering Decide now requires a future `ballotClosesAt`, recorded with a stage-transition event. Missing: 30-day default (D6), automatic closure, automatic advancement at the deliberation deadline (D4), idempotent scheduler, deadline migration for existing open ballots. |
+| I2 | Make ballot deadlines mandatory and audited | #26 | **Integrated** | Seconding starts a 30-day deliberation clock and performs Propose → Deliberate. The scheduler advances at the deadline as `system:lifecycle-scheduler`, binds the latest revision and sets a 60-day-from-seconding ballot close. Officer-opened ballots default to 30 days; an explicit future date wins. Due ballots are closed once with a `ballot.closed` event. Idempotent events, dry-run/apply CLI, and a read-only legacy deadline report. Tests: `lifecycle-scheduler.test.ts`, `lifecycle-scheduler-mongo.test.ts`. Remaining: production cron wiring and notification fan-out. |
 | I3 | Stop writes during session resolution; fix CRM national-row conflict | #32 | **Partial** | CRM-sourced memberships cannot be overwritten by self-service; the national row is exempt from the geographic conflict check; manual verification records source and verifier. Tests: `membership-crm-sprint1.test.ts`. Missing: unique `(branchId, memberId)` index + duplicate-resolving migration, and branch-model documentation. |
 | I4 | Enforce the permission catalogue | #31 | **Partial** | `ballots.bind`, `proposals.delete`, `proposals.manage_supersession`, `proposals.view_archived`, `comments.moderate`, `amendments.*`, `branches.manage`, `branches.refer_proposals`, `sense_box.review` are enforced in the domain or route. Branch grants for national-only permissions are ignored (defence in depth). Remaining: role administration UX (#41), any dead keys found by the catalogue audit. |
 | I5 | Make result recording atomic, idempotent and audited | #26, #50 | **Integrated** | `recordFormalDecision` writes result, ballot certification and governance event in one transaction; repeated identical payloads are idempotent; conflicting payloads are refused. Tests use the real-MongoDB replica set for the voting suite; the governance-integrity suite still needs a real-MongoDB atomicity case. |
-| I6 | Record every lifecycle and ballot act | #50 | **Integrated** | Stage transitions, ballot bind/unbind, decision recording and amendment open/close/accept writes emit governance events. Remaining: notification fan-out (#33), audit viewer (S8), scheduler-origin events (Phase 1). |
+| I6 | Record every lifecycle and ballot act | #50 | **Integrated** | Stage transitions (including seconding and scheduled advancement), ballot bind/unbind, decision recording, ballot closure and amendment open/close/accept write governance events. Remaining: notification fan-out (#33), audit viewer (S8). |
 | I7 | Rebind re-opened ballots explicitly | #26 | **Integrated** | Returning a zero-vote ballot to Deliberate unbinds the revision and emits `ballot.unbound`; re-entry binds the current revision. Substantive edits are refused once votes exist. Tests: `governance-integrity-sprint1.test.ts`. |
 | I8 | Close the small high-risk defects | #27, #32, #35, #42 | **Partial** | Ratification authority is cross-checked against the governance authority and the recorded ballot decision. Remaining: public supersession visibility (#35), comment moderation state and audit trail (#42), moderation UX. |
 | I9 | Wire essential notifications through an outbox | #33 | **Planned** | `dispatchMemberNotification` still has no production caller. |
@@ -62,7 +62,7 @@ Sprint 1 integration is PR #51 (draft).
 |---|---|---|---|---|
 | S1 | Governance command layer and central route policy | #53 | **Planned** | Issue opened. Coordinate read queries with #52. |
 | S2 | Decision record and lineage read model | #54 | **Planned** | Depends on I12/S1. |
-| S3 | Ballot lifecycle: open, close, certify | #26 | **Partial** | Open and certify exist; scheduled close and automated certification do not. See D4–D7. |
+| S3 | Ballot lifecycle: open, close, certify | #26 | **Partial** | Open, revision binding and scheduled close exist; certification remains an explicit officer act. Automated certification/ratification is Phase 5. |
 | S4 | Read models and tally projections | — | **Planned** | Depends on I12/S1. |
 | S5 | Durable outbox and job runner | #33, #39 | **Planned** | Notification and scheduler infrastructure. |
 | S6 | Identity and membership ports | #32 | **Partial** | CRM membership port exists in `membership-verification.ts`; identity port is deferred (D31). |
@@ -101,8 +101,8 @@ Sprint 1 integration is PR #51 (draft).
 
 ## Cross-slice risks carried by the integration
 
-1. **Deadline semantics without scheduling.** The system now refuses a Decide entry without a deadline but does not create one. This is deliberately incomplete until Phase 1; it must not be treated as a finished ballot lifecycle.
-2. **Automatic advancement vs human authority.** D4 introduces a system transition path. It must not be implemented by granting `ballots.bind` to a scheduler identity.
+1. **Deadline semantics are scheduled, but not yet operated.** The code creates and enforces deadlines and ships a dry-run/apply scheduler. Production cron wiring, alerting on missed runs, and notification fan-out are still required.
+2. **Automatic advancement uses a system actor.** It does not grant `ballots.bind` to the scheduler. A late run past the 60-day ceiling is refused and reported rather than opening an unusable ballot; this needs operational monitoring.
 3. **Index migration is one-way.** The `ballot_results` unique index moved from `proposalId` to `ballotId`. Rollback requires deleting later results. A preflight and dry-run migration is required before production (#55).
 4. **Real-MongoDB coverage of governance writes.** The voting suite runs on MongoDB; the governance-integrity suite uses the in-memory database. Add replica-set cases for the atomic result, deletion guard and transition events in Phase 1.
 5. **Historical records.** Existing open ballots without deadlines and historical CRM verification reviews are not migrated by this branch. No unique branch-membership index exists yet, so concurrent membership writes still rely on application upserts.
@@ -111,8 +111,8 @@ Sprint 1 integration is PR #51 (draft).
 
 Phase 1, in this order:
 
-1. Proposal lifecycle scheduling: seconding, deliberation deadline, automatic advancement, ballot default deadline, automatic closure, idempotent job runner.
+1. ~~Proposal lifecycle scheduling~~ — integrated: seconding, deliberation and ballot deadlines, system advancement, automatic closure, idempotent scheduler.
 2. Computed outcome validation (Yes versus No, tie fails) with an audited officer override; do not decide abstentions.
-3. Real-MongoDB concurrency and crash-recovery tests for governance writes.
+3. Real-MongoDB concurrency and crash-recovery tests for the remaining governance writes (deletion guard, transition events, result atomicity).
 4. `ballot_results` migration preflight and recovery procedure (#55).
 5. Notification outbox foundation, so scheduled transitions produce durable notices.

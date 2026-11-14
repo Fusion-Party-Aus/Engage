@@ -1,5 +1,31 @@
 [
   {
+    "hash": "fe1ae6b",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Make seconding the act that opens deliberation",
+    "details": "D3 requires a seconder before Deliberate and D4 anchors the clock to seconding. The initial Phase 1 implementation recorded the seconding but left Propose -> Deliberate to an officer, which could stall a proposal indefinitely and run the clock in the wrong stage. Seconding now performs the transition and records both the seconding and the stage transition. Officer and API transitions into Deliberate are refused without a recorded seconder. A member-facing control appears on the proposal page for eligible, non-author members, with inline feedback and no raw controls. Update the unrelated stage-transition fixtures to record a seconder explicitly. Extend the browser verification to cover seconding, the 30-day default when no ballot date is given, a rejected past date, and the editor showing the proposal's real stage."
+  },
+  {
+    "hash": "963a345",
+    "date": "2026-11-14",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Render saved values in select controls",
+    "details": "Astro renders React component slot children as raw HTML, so React never sees the options inside NativeSelect and cannot apply defaultValue. Every select rendered its first option, which meant editing a proposal could silently reset its stage, clearing provenance, changing a member's status to pending, or applying the wrong filter or sort. Mark the stored option as selected at each affected call site. The admin proposal editor and register, member administration, Sense Box review, engagement period, policy filters and public proposal filters are covered."
+  },
+  {
+    "hash": "936eee4",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Include the lifecycle documentation commits"
+  },
+  {
     "hash": "1e88005",
     "date": "2026-11-14",
     "type": "docs",
@@ -41,6 +67,24 @@
     "scope": "lifecycle",
     "summary": "Second proposals and schedule advancement and ballot closure",
     "details": "Implements the approved lifecycle schedule from the decision register (D3-D7, RFC 0001 Phase 1, refs #26 and #30). - A verified member who is not the author may second a proposal while it is in Propose. The act records `secondedBy`, `secondedAt` and `deliberationEndsAt` (30 days) and writes `proposal.seconded`. It does not change the stage or grant ballot authority. - `src/lib/lifecycle-schedule.ts` is the single source of truth for the 30-day deliberation period, 30-day ballot period and 60-day ceiling. - A system actor (`system:lifecycle-scheduler`) advances due deliberations to Decide, binding the latest immutable revision and setting `ballotClosesAt = secondedAt + 60 days`. It requires no `ballots.bind`; the human early-advancement gate is unchanged. - Advancement fails closed on unresolved amendments (`rejected`, `withdrawn`, `applied`, `not-endorsed` and `inconclusive` are the only non-blocking statuses), on votes bound to other wording, on a missing seconding anchor, and on a ceiling already in the past. - Ballots close automatically at their deadline: `ballot.closed` is recorded once, the stage and result are untouched, and voting is refused after the boundary (D12 is not implemented). - Conditional filters, deterministic event IDs and transactional writes make both operations idempotent and safe under concurrent runs. - An officer opening a ballot without a date now receives the 30-day default; explicit dates remain authoritative. - Adds a read-only report for legacy ballots without deadlines and matters in Deliberate without a deliberation clock."
+  },
+  {
+    "hash": "7d05e7f",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Correct membership workstream status",
+    "details": "The CRM branch did not add the unique branch-membership index or the duplicate-resolving migration required by #32, so I3 remains partial."
+  },
+  {
+    "hash": "5c5af39",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Track active workstreams and new implementation issues",
+    "details": "Record the Phase 1, rendering-performance and Turnstile workstreams, link the new issues for performance (#52), the command layer (#53), the decision record and responsibility queue (#54), and ballot-results migration safety (#55). Clarify that #36 is deferred rather than blocked inside this programme."
   },
   {
     "hash": "1bd4fd1",
@@ -620,45 +664,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
-  },
-  {
-    "hash": "31e34df",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
-  },
-  {
-    "hash": "ac9bb41",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "deploy",
-    "summary": "Automate production deployment gated on staging health"
-  },
-  {
-    "hash": "c6edce0",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "audit",
-    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
-  },
-  {
-    "hash": "3098b44",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
   }
 ]

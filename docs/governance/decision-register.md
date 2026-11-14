@@ -13,11 +13,11 @@ Do not change a decision by editing code. Record the new maintainer decision her
 |---|---|---|---|
 | D1 | Fusion has previously stalled because deliberation, voting and administration bled into one indeterminate process. Engage must impose a bounded, legible decision path and must not allow a matter to remain open indefinitely. | Approved | RFC §2.1, I2, I6, S3; #26, #30 |
 | D2 | Voting eligibility is evaluated **when a member casts a vote**. No electorate snapshot is taken. A member who becomes eligible before the ballot closes may vote; a member who ceases to be eligible may not. | Approved | RFC G11, I2; #26 |
-| D3 | A policy proposal requires a **seconder** before it enters Deliberate. | Approved (mechanism needs modelling) | #30 |
-| D4 | Deliberation ordinarily lasts **30 days** from seconding. At the deadline the system advances the proposal to Decide automatically. | Approved | #30 |
+| D3 | A policy proposal requires a **seconder** before it enters Deliberate. | Approved — implemented (one seconder, never the author; seconding performs the transition) | #30 |
+| D4 | Deliberation ordinarily lasts **30 days** from seconding. At the deadline the system advances the proposal to Decide automatically. | Approved — implemented (scheduler system actor) | #30 |
 | D5 | A **ballot officer, or a holder of the explicitly authorised permission**, may advance a proposal to Decide before the deliberation deadline. Ordinary moderators do not acquire this authority by being moderators. | Approved | RFC G6, I4; #27, #31 |
-| D6 | The ordinary ballot period is **30 days**. Ballots close automatically at their deadline. | Approved | RFC I2, S3; #26 |
-| D7 | The maximum scheduled time from seconding to ballot closure is therefore **60 days**. This is a ceiling on the scheduled process, not a guarantee that every downstream administrative act finishes within it. | Approved | #26, #30 |
+| D6 | The ordinary ballot period is **30 days**. Ballots close automatically at their deadline. | Approved — implemented | RFC I2, S3; #26 |
+| D7 | The maximum scheduled time from seconding to ballot closure is therefore **60 days**. This is a ceiling on the scheduled process, not a guarantee that every downstream administrative act finishes within it. | Approved — implemented (late runs refused and reported) | #26, #30 |
 | D8 | No additional quorum, minimum turnout or participation threshold is authorised. Decisions are made by the eligible members who participate. | Approved | RFC L1, #28 |
 | D9 | Ordinary Yes/No proposals use **simple majority**: Yes greater than No means approval; a tie does **not** approve. | Approved | RFC L1, #28 |
 | D10 | Abstentions may be recorded, but their effect on the denominator is **not defined**. No binding calculation may depend on an abstention rule until the maintainer supplies one. A simple Yes-versus-No comparison satisfies D9 without deciding D10. | Direction agreed — specification required | #28 |
@@ -100,3 +100,5 @@ No code, migration, seed or documentation may claim that legacy Neon policies we
 | O6 | A correct model for irreversible-outcome early closure | #26 |
 | O7 | Legal document approval and acceptance-gate activation | #40 |
 | O8 | Steward role model and who may be designated | D25 |
+| O9 | Whether staff may create a matter directly in Deliberate or Decide without a seconder. The current system allows this administrative path; it bypasses D3 and should be decided explicitly. | #30 |
+| O10 | Whether materially rewritten wording requires a renewed seconder and a fresh 30-day clock. The current system keeps the original seconding. | #30 |

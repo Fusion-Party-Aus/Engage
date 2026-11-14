@@ -20,6 +20,8 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 **Impact:** A proposal can return to Deliberate after a ballot, have its wording edited (when no votes exist), then return to Decide while retaining the previous `ballotRevisionId`. The ballot remains frozen on superseded wording.
 
+**Resolved on `feat/rfc0001-sprint1-integration`:** a zero-vote return clears the binding and emits `ballot.unbound`; re-entry binds the current revision; edits are refused once votes exist.
+
 **Evidence:** `saveProposal` binds only when `ballotRevisionId` is unset (`src/lib/store.ts`). The field is never cleared.
 
 **Direction:** On re-entry to Decide with zero votes, either rebind explicitly and record an event, or refuse the transition until an officer chooses. Never rebind silently when votes exist. This needs a governance decision about re-opening.
@@ -28,6 +30,8 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 **Impact:** Only migrated ballots have a `ballotClosesAt`. No API writes a deadline for a newly opened ballot, so a new ballot remains open indefinitely. Closing-soon notifications and the attention queue cannot work correctly.
 
+**Resolved on `feat/rfc0001-sprint1-integration`:** opening a ballot writes a future deadline (explicit or the approved 30-day default) and the scheduler closes it. Legacy ballots without deadlines are reported, not rewritten.
+
 **Evidence:** `ballotClosesAt` is read and copied by binding/amendment opening, but no create/update path sets it. The only deadline constant is the one-off `2027-01-14T13:00:00Z` migration.
 
 **Direction:** Add an explicit ballot scheduling act with a required close time, audit event and permission. The permitted duration is a governance decision.
@@ -35,6 +39,8 @@ This is an honest register, not a task list with commitments. Items are grouped 
 ### 3. A moderator can open or reopen the Decide stage
 
 **Impact:** Moderators cannot bind a ballot or record a result, but they can move a matter into Decide through the ordinary stage transition. That blurs the operational/governance boundary described in the product.
+
+**Resolved on `feat/rfc0001-sprint1-integration`:** entering Decide requires `ballots.bind`.
 
 **Evidence:** `saveProposal` gates on `isStaff` (moderator or administrator). Only binding and result recording have separate ballot permissions.
 
@@ -59,6 +65,8 @@ This is an honest register, not a task list with commitments. Items are grouped 
 ### 6. Self-service branch switching can revoke a CRM-sourced membership
 
 **Impact:** A member switching branches could revoke an externally authoritative membership, which the admin paths explicitly forbid.
+
+**Resolved on `feat/rfc0001-sprint1-integration`:** the self-service path applies the same source guard.
 
 **Evidence:** `chooseBranchMembership` does not call `assertLocalMembershipMutation`, unlike admin mutation paths.
 
@@ -174,9 +182,11 @@ A member can draft a new proposal, but there is no `targetPolicyId` or change ty
 
 **Direction:** Add an explicit amend/repeal relationship with lineage and a ballot path.
 
-### 24. No notice, seconding, confirmation or eligibility snapshot
+### 24. Notice periods and confirmation ballots remain undefined
 
-These are recorded as open decisions. The current implementation has no stage clocks, `opensAt`, seconder model, confirmation ballot or electorate snapshot.
+**Resolved on `feat/rfc0001-sprint1-integration`:** policy proposals require a seconder; seconding opens a 30-day deliberation clock; the scheduler advances and closes ballots automatically. Eligibility is evaluated at vote time by decision, so there is no electorate snapshot.
+
+Still open: notice periods, scheduled opening, confirmation ballots, and whether staff may create directly in a later stage. See decision register O3, O9 and O10.
 
 ### 25. Documentation drift remains in older files
 
