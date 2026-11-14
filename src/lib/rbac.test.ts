@@ -280,6 +280,7 @@ describe("RBAC audit & configurable roles", () => {
       governanceAuthorityBranchId: "vic",
       publicationScope: "branch",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     const officerSession: SessionUser = {
       memberId: targetId,

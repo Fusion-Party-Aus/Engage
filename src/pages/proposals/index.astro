@@ -55,17 +55,19 @@ const [allAvailableProposals, joinedComments] = await Promise.all([
   user ? db.collection('comments').find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray() : Promise.resolve([]),
 ]);
 
+const memberVotesPromise = user
+  ? findMemberVotes(
+      db,
+      user.memberId,
+      allAvailableProposals.map((p) => proposalBallotId(p.proposalId)),
+      loadBallotCryptoConfig(env),
+    )
+  : Promise.resolve([]);
+
 const [myVotesRaw, myOutstandingVotes] = await Promise.all([
-  user
-    ? findMemberVotes(
-        db,
-        user.memberId,
-        allAvailableProposals.map((p) => proposalBallotId(p.proposalId)),
-        loadBallotCryptoConfig(env),
-      )
-    : Promise.resolve([]),
+  memberVotesPromise,
   user?.canParticipate
-    ? listOutstandingDecisions(db, user.memberId, user, allAvailableProposals)
+    ? listOutstandingDecisions(db, user.memberId, user, allAvailableProposals, memberVotesPromise)
     : Promise.resolve([]),
 ]);
 
@@ -307,9 +309,9 @@ const hasActiveFilters =
                 defaultValue={initialSpace}
                 data-auto-submit
               >
-                <option value="all">All spaces ({spaces.length})</option>
+                <option value="all" selected={!initialSpace || initialSpace === 'all'}>All spaces ({spaces.length})</option>
                 {spaces.map((sp) => (
-                  <option value={sp}>{sp}</option>
+                  <option value={sp} selected={initialSpace === sp}>{sp}</option>
                 ))}
               </NativeSelect>
             </div>
@@ -322,9 +324,9 @@ const hasActiveFilters =
                 defaultValue={initialBranch}
                 data-auto-submit
               >
-                <option value="all">All branches</option>
+                <option value="all" selected={!initialBranch || initialBranch === 'all'}>All branches</option>
                 {branches.map((branch) => (
-                  <option value={branch.branchId}>{branch.name}</option>
+                  <option value={branch.branchId} selected={initialBranch === branch.branchId}>{branch.name}</option>
                 ))}
               </NativeSelect>
             </div>
@@ -350,13 +352,13 @@ const hasActiveFilters =
                 defaultValue={effectiveSort}
                 data-auto-submit
               >
-                <option value="priority">Sort: Stage priority</option>
-                <option value="recent">Sort: Recently updated</option>
-                <option value="divisive">Sort: Most divisive (5+ votes)</option>
-                <option value="approved">Sort: Most approved (5+ votes)</option>
-                <option value="active">Sort: Most active</option>
-                <option value="ballots">Sort: Ballots cast</option>
-                <option value="contributions">Sort: Contributions</option>
+                <option value="priority" selected={effectiveSort === 'priority'}>Sort: Stage priority</option>
+                <option value="recent" selected={effectiveSort === 'recent'}>Sort: Recently updated</option>
+                <option value="divisive" selected={effectiveSort === 'divisive'}>Sort: Most divisive (5+ votes)</option>
+                <option value="approved" selected={effectiveSort === 'approved'}>Sort: Most approved (5+ votes)</option>
+                <option value="active" selected={effectiveSort === 'active'}>Sort: Most active</option>
+                <option value="ballots" selected={effectiveSort === 'ballots'}>Sort: Ballots cast</option>
+                <option value="contributions" selected={effectiveSort === 'contributions'}>Sort: Contributions</option>
               </NativeSelect>
             </div>
 

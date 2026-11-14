@@ -476,6 +476,7 @@ describe("proposal scope: server validation and permissions", () => {
       title: "NSW ballot eligibility test",
       scope: "nsw",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     assert.equal(ballot.jurisdictionBranchId, "branch-nsw");
     await assert.rejects(

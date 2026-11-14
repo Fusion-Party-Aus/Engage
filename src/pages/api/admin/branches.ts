@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { getSessionUser } from "../../../lib/auth.ts";
 import { privateJson, toBranchDto } from "../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
+import { requireApiPermission } from "../../../lib/rbac.ts";
 const kinds = ["national", "state", "territory", "constituent"];
 const parentKinds: Record<string, string[]> = {
   state: ["national"],
@@ -19,13 +20,10 @@ export const prerender = false;
 export const GET: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin)
-    return Response.json(
-      { error: "Administrator access required." },
-      { status: 403 },
-    );
+  const denied = requireApiPermission(user, "branches.manage", {
+    message: "Administrator access required.",
+  });
+  if (denied || !user) return denied ?? Response.json({ error: "Sign in required." }, { status: 401 });
   const rows = await (
     await getDatabase(env)
   )
@@ -38,13 +36,10 @@ export const GET: APIRoute = async ({ request, locals }) => {
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin)
-    return Response.json(
-      { error: "Administrator access required." },
-      { status: 403 },
-    );
+  const denied = requireApiPermission(user, "branches.manage", {
+    message: "Administrator access required.",
+  });
+  if (denied || !user) return denied ?? Response.json({ error: "Sign in required." }, { status: 401 });
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const branchId =
@@ -121,13 +116,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
 export const PATCH: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
-  if (!user)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin)
-    return Response.json(
-      { error: "Administrator access required." },
-      { status: 403 },
-    );
+  const denied = requireApiPermission(user, "branches.manage", {
+    message: "Administrator access required.",
+  });
+  if (denied || !user) return denied ?? Response.json({ error: "Sign in required." }, { status: 401 });
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const branchId =

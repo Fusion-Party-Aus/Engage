@@ -3,6 +3,7 @@ import { recordLifecycle } from '../../lib/member-lifecycle.ts';
 import { ballotExpired } from '../../lib/ballot-deadline.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
+import SecondProposalButton from '../../components/ui/SecondProposalButton';
 import StanceSelector from '../../components/ui/stance-selector';
 import PortableText from '../../components/PortableText.astro';
 import { AlertCircle, FileText, MessageCircle, PenLine, ThumbsUp } from 'lucide-react';
@@ -17,7 +18,7 @@ import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astr
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { canRespondToContribution, canViewProposal, getProposalDetail, isGovernanceResolution, listOutstandingDecisions, normalizeProposalDoc, resolveContributionEvidenceMap } from '../../lib/store.ts';
-import { getProposalEligibility, type ParticipationEligibility } from '../../lib/branch-participation.ts';
+import { getProposalEligibility } from '../../lib/branch-participation.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import type { ProposalStage } from '../../lib/types.ts';
 
@@ -34,9 +35,44 @@ const detail = await getProposalDetail(db, Astro.params.slug ?? '', user);
 if (!detail) {
   Astro.response.status = 404;
 }
-const supersededByDetail = detail?.proposal?.supersededByProposalId
-  ? await getProposalDetail(db, detail.proposal.supersededByProposalId, user)
-  : null;
+const proposal = detail?.proposal;
+const [
+  supersededByDetail,
+  revisions,
+  rawPolicyRecord,
+  ballotResult,
+  relatedProposals,
+  amendmentRows,
+  outstandingDecisions,
+  eligibility,
+  relatedBranches,
+  evidenceMap,
+] = proposal
+  ? await Promise.all([
+      proposal.supersededByProposalId
+        ? getProposalDetail(db, proposal.supersededByProposalId, user)
+        : Promise.resolve(null),
+      db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray(),
+      db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
+      db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
+      db.collection('proposals')
+        .find({ space: proposal.space, proposalId: { $ne: proposal.proposalId }, stage: { $ne: 'archived' } })
+        .sort({ updatedAt: -1 })
+        .limit(12)
+        .toArray()
+        .then((rows) => rows.filter((row: any) => canViewProposal(normalizeProposalDoc(row), user)).slice(0, 4)),
+      db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray(),
+      user?.canParticipate && proposal.stage === 'decide'
+        ? listOutstandingDecisions(db, user.memberId, user)
+        : Promise.resolve([]),
+      getProposalEligibility(db, proposal, user),
+      [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)).length
+        ? db.collection('branches').find({ branchId: { $in: [...new Set([proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)))] } }).toArray()
+        : Promise.resolve([]),
+      resolveContributionEvidenceMap(db, proposal, detail.comments, user),
+    ])
+  : [null, [], null, null, [], [], [], null, [], new Map()];
+
 const supersededByProposal = supersededByDetail?.proposal ?? null;
 const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
 const feedbackStatusLabel = (status: string) =>
@@ -56,32 +92,6 @@ const feedbackStatusVariant = (status: string) =>
         ? ('warning' as const)
         : ('outline' as const);
 
-const proposal = detail?.proposal;
-const [
-  revisions,
-  rawPolicyRecord,
-  ballotResult,
-  relatedProposals,
-  amendmentRows,
-  outstandingDecisions,
-] = proposal
-  ? await Promise.all([
-      db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray(),
-      db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
-      db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
-      db.collection('proposals')
-        .find({ space: proposal.space, proposalId: { $ne: proposal.proposalId }, stage: { $ne: 'archived' } })
-        .sort({ updatedAt: -1 })
-        .limit(12)
-        .toArray()
-        .then((rows) => rows.filter((row: any) => canViewProposal(normalizeProposalDoc(row), user)).slice(0, 4)),
-      db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray(),
-      user?.canParticipate && proposal.stage === 'decide'
-        ? listOutstandingDecisions(db, user.memberId, user)
-        : Promise.resolve([]),
-    ])
-  : [[], null, null, [], [], []];
-
 const isResolution = proposal ? isGovernanceResolution(proposal) : false;
 const policyRecord = !isResolution ? rawPolicyRecord : null;
 
@@ -95,23 +105,13 @@ const ballotRevisionLabel = proposal?.ballotRevisionId
     })
   : 'Draft wording (not yet bound)';
 
-const relatedBranchIds = proposal
-  ? [...new Set([proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)))]
+const allAmendmentRevisions = amendmentRows.length
+  ? await db
+      .collection('amendment_revisions')
+      .find({ amendmentId: { $in: amendmentRows.map((a: any) => a.amendmentId) } })
+      .sort({ createdAt: 1 })
+      .toArray()
   : [];
-const [relatedBranches, allAmendmentRevisions, evidenceMap] = await Promise.all([
-  relatedBranchIds.length
-    ? db.collection('branches').find({ branchId: { $in: relatedBranchIds } }).toArray()
-    : Promise.resolve([]),
-  amendmentRows.length
-    ? db.collection('amendment_revisions')
-        .find({ amendmentId: { $in: amendmentRows.map((a: any) => a.amendmentId) } })
-        .sort({ createdAt: 1 })
-        .toArray()
-    : Promise.resolve([]),
-  proposal && detail
-    ? resolveContributionEvidenceMap(db, proposal, detail.comments, user)
-    : Promise.resolve(new Map()),
-]);
 
 const evidencePolicyPublic = Boolean(
   policyRecord && ['published', 'withdrawn', 'superseded'].includes(String(policyRecord.publicationStatus ?? '')),
@@ -146,10 +146,12 @@ const evidenceOptions = proposal
   : [];
 const branchNameFor = (branchId?: string) =>
   branchId ? String(relatedBranches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
-const eligibility: ParticipationEligibility | null = proposal
-  ? await getProposalEligibility(db, proposal, user)
-  : null;
 const canVoteOnProposal = Boolean(proposal && !ballotExpired(proposal) && eligibility?.eligible);
+// D3: in Propose, the next required act is a seconder, which opens deliberation.
+const awaitingSeconder = Boolean(proposal && proposal.stage === 'propose' && !proposal.secondedAt);
+const canSecondProposal = Boolean(
+  awaitingSeconder && user?.canParticipate && user.memberId !== proposal?.authorId,
+);
 if (user && canVoteOnProposal && proposal?.stage === 'decide' && proposal.ballotRevisionId) await recordLifecycle(db,user.memberId,'first_eligible_ballot_viewed');
 for (const amendment of amendmentRows) {
   const history = allAmendmentRevisions.filter((row: any) => row.amendmentId === amendment.amendmentId);
@@ -388,11 +390,11 @@ const initialsFor = (name: string) =>
                 data-current-stage={proposal.stage}
                 data-vote-count={votes.total}
               >
-                <option value="propose">Stage 1 · Idea</option>
-                <option value="deliberate">Stage 2 · Discussion</option>
-                <option value="decide">Stage 3 · Voting</option>
-                <option value="implement">Stage 4 · Implementation</option>
-                <option value="archived">Archived</option>
+                <option value="propose" selected={proposal.stage === 'propose'}>Stage 1 · Idea</option>
+                <option value="deliberate" selected={proposal.stage === 'deliberate'}>Stage 2 · Discussion</option>
+                <option value="decide" selected={proposal.stage === 'decide'}>Stage 3 · Voting</option>
+                <option value="implement" selected={proposal.stage === 'implement'}>Stage 4 · Implementation</option>
+                <option value="archived" selected={proposal.stage === 'archived'}>Archived</option>
               </NativeSelect>
               <Button href={`/admin/proposals/${proposal.slug}/`} variant="outline" size="sm">
                 Admin workspace
@@ -481,7 +483,9 @@ const initialsFor = (name: string) =>
                               ? 'Branch ballot · Verified members only'
                               : 'Save your ballot · Takes ~30 seconds'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
-                    ? 'Your immediate action · Takes ~1 minute'
+                    ? awaitingSeconder
+                      ? 'One more member is needed to open deliberation.'
+                      : 'Your immediate action · Takes ~1 minute'
                     : 'Stage 4 · Implementation'}
               </span>
               <strong class="next-action-bar__title">
@@ -502,9 +506,17 @@ const initialsFor = (name: string) =>
                               ? eligibility.reason
                               : 'Verify your membership or branch eligibility to vote in this ballot.'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
-                    ? user?.canParticipate
-                      ? 'Join the discussion or suggest a wording change.'
-                      : 'Sign in as a verified member to post a discussion stance or propose a wording amendment.'
+                    ? awaitingSeconder
+                      ? !user
+                        ? 'Sign in to second this proposal and open deliberation.'
+                        : canSecondProposal
+                          ? 'Second this proposal to open 30 days of deliberation.'
+                          : user.memberId === proposal?.authorId
+                            ? 'Awaiting another member to second this proposal.'
+                            : 'Verify your membership to second this proposal.'
+                      : user?.canParticipate
+                        ? 'Join the discussion or suggest a wording change.'
+                        : 'Sign in as a verified member to post a discussion stance or propose a wording amendment.'
                     : policyRecord
                       ? `Adopted into the Policy Registry (${String(policyRecord.policyId)}). Inspect the official policy record.`
                       : 'Ballot has closed. Review the recorded vote breakdown and ratification status.'}
@@ -537,9 +549,42 @@ const initialsFor = (name: string) =>
                 )
               ) : proposal.stage === 'deliberate' || proposal.stage === 'propose' ? (
                 <>
-                  <a href={user?.canParticipate ? '#comment-form' : '#deliberation'} class="next-action-btn is-primary">
-                    {user?.canParticipate ? 'Add your stance →' : `Read discussion (${comments.length}) →`}
-                  </a>
+                  {awaitingSeconder ? (
+                    canSecondProposal ? (
+                      <SecondProposalButton
+                        client:visible
+                        proposalId={proposal.proposalId}
+                      />
+                    ) : !user ? (
+                      <Button
+                        href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/`)}&intent=second&title=${encodeURIComponent(proposal.title)}`}
+                        size="sm"
+                      >
+                        Sign in to second
+                      </Button>
+                    ) : user.memberId === proposal.authorId ? (
+                      <Badge variant="outline">Awaiting a seconder</Badge>
+                    ) : (
+                      <Button href="/member/" size="sm" variant="outline">
+                        Verify to second
+                      </Button>
+                    )
+                  ) : (
+                    <a
+                      href={user?.canParticipate ? '#comment-form' : '#deliberation'}
+                      class="next-action-btn is-primary"
+                    >
+                      {user?.canParticipate ? 'Add your stance →' : `Read discussion (${comments.length}) →`}
+                    </a>
+                  )}
+                  {awaitingSeconder && canSecondProposal && (
+                    <a
+                      href="#comment-form"
+                      class="next-action-btn is-secondary"
+                    >
+                      Discuss instead →
+                    </a>
+                  )}
                   {!user && (
                     <a
                       href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#deliberation`)}&intent=deliberate&title=${encodeURIComponent(proposal.title)}`}
@@ -827,7 +872,7 @@ const initialsFor = (name: string) =>
               {proposal.stage === 'decide' || votes.total > 0 ? (
                 <div class="rail-ballot__widget">
                   <ProposalBallot
-                    client:load
+                    client:idle
                     proposalId={proposal.proposalId}
                     proposalSlug={proposal.slug}
                     proposalTitle={proposal.title}
@@ -1024,7 +1069,7 @@ const initialsFor = (name: string) =>
                       <NativeSelect id="comment-sort-select" data-comment-sort defaultValue="oldest" size="sm" wrapperClassName="w-auto" className="rounded-full" aria-label="Sort contributions">
                         <option value="top">Top endorsed</option>
                         <option value="newest">Newest first</option>
-                        <option value="oldest">Oldest first</option>
+                        <option value="oldest" selected>Oldest first</option>
                       </NativeSelect>
                     </div>
                   )}
@@ -1075,7 +1120,7 @@ const initialsFor = (name: string) =>
                     />
 
                     <div class="comment-composer__toolbar">
-                      <StanceSelector client:load />
+                      <StanceSelector client:idle />
 
                       <div class="comment-composer__submit">
                         <span id="comment-char-count" class="comment-char-count tabular">0 / 4000</span>
@@ -1323,10 +1368,10 @@ const initialsFor = (name: string) =>
                                     size="sm"
                                     wrapperClassName="w-auto"
                                   >
-                                    <option value="incorporated">Incorporated</option>
-                                    <option value="considered">Considered</option>
-                                    <option value="deferred">Deferred</option>
-                                    <option value="declined">Declined</option>
+                                    <option value="incorporated" selected={(c.feedback?.status ?? 'considered') === 'incorporated'}>Incorporated</option>
+                                    <option value="considered" selected={(c.feedback?.status ?? 'considered') === 'considered'}>Considered</option>
+                                    <option value="deferred" selected={c.feedback?.status === 'deferred'}>Deferred</option>
+                                    <option value="declined" selected={c.feedback?.status === 'declined'}>Declined</option>
                                     {c.feedback && <option value="clear">Clear response</option>}
                                   </NativeSelect>
                                   <label for={`feedback-note-${c.commentId}`} class="sr-only">Explanation for contributor (optional)</label>
@@ -1351,7 +1396,7 @@ const initialsFor = (name: string) =>
                                     >
                                       <option value="">Supporting evidence (optional) — None</option>
                                       {evidenceOptions.map((opt) => (
-                                        <option value={opt.value}>{opt.group}: {opt.label}</option>
+                                        <option value={opt.value} selected={c.feedback?.evidence ? `${c.feedback.evidence.kind}:${c.feedback.evidence.recordId}` === opt.value : false}>{opt.group}: {opt.label}</option>
                                       ))}
                                     </NativeSelect>
                                   </div>
@@ -1777,6 +1822,11 @@ const initialsFor = (name: string) =>
       const targetStance = chip.dataset.starterStance;
       const placeholder = chip.dataset.starterPlaceholder;
       if (targetStance) {
+        const stanceInput = document.querySelector<HTMLInputElement>('[data-stance-input]');
+        if (stanceInput) {
+          stanceInput.value = targetStance;
+          stanceInput.dataset.pendingStance = targetStance;
+        }
         window.dispatchEvent(new CustomEvent('engage:stance', { detail: targetStance }));
       }
       if (commentBodyInput) {

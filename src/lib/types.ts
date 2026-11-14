@@ -39,6 +39,16 @@ export interface PlatformEnv {
   BETTER_AUTH_URL?: string;
   PUBLIC_ORIGIN?: string;
   BETTER_AUTH_SECRET?: string;
+  /** Optional dedicated key for hashing rate-limit subjects. */
+  RATE_LIMIT_SECRET?: string;
+  /** Server-side Cloudflare Turnstile secret. Never expose to the client. */
+  TURNSTILE_SECRET_KEY?: string;
+  /** Public Turnstile site key rendered by the widget. */
+  PUBLIC_TURNSTILE_SITE_KEY?: string;
+  /** "on" forces enforcement, "off" disables it. Production enforces by default. */
+  TURNSTILE_ENFORCEMENT?: string;
+  /** Optional expected siteverify hostname, e.g. engage.fusionparty.org.au */
+  TURNSTILE_EXPECTED_HOSTNAME?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   RESEND_API_KEY?: string;
@@ -55,6 +65,11 @@ export interface PlatformEnv {
   ENGAGE_SOCIAL_LINKS_JSON?: string;
   ENGAGE_STATE_SITES_JSON?: string;
   ENGAGE_REPO_URL?: string;
+  /**
+   * Opt-in MongoDB driver command monitoring for the local rendering
+   * performance harness. Ignored in production.
+   */
+  ENGAGE_DB_COMMAND_MONITOR?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
@@ -180,6 +195,20 @@ export interface ProposalRecord {
   publicationScope?: "private" | "branch" | "national";
   ballotRevisionId?: string;
   ballotClosesAt?: Date;
+  /**
+   * Set by the lifecycle scheduler when the ballot deadline has passed and the
+   * closure has been recorded. Closing never changes the stage or records a
+   * result. Absent means no closure has been recorded.
+   */
+  ballotClosedAt?: Date;
+  /**
+   * The independent seconder required before a proposal enters Deliberate (D3).
+   * Server-side only; the seconder's member ID is not exposed in public DTOs.
+   */
+  secondedBy?: string;
+  secondedAt?: Date;
+  /** The deliberation deadline derived from `secondedAt` (D4). */
+  deliberationEndsAt?: Date;
   supersededByProposalId?: string;
   supersededByNote?: string;
 

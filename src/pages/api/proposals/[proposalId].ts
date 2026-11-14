@@ -11,6 +11,7 @@ import { ballotRecordsForViewer } from "../../../lib/ballot-privacy.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { requireLegalAcceptance } from "../../../lib/legal-acceptance.ts";
 import {
+  ProposalDeletionConflictError,
   deleteProposal,
   getProposalDetail,
   saveProposal,
@@ -85,15 +86,24 @@ export const DELETE: APIRoute = async ({ params, request, locals }) => {
   try {
     const db = await getDatabase(env);
     const id = params.proposalId ?? params.policyId ?? "";
-    await deleteProposal(db, user, id);
+    let reason: string | undefined;
+    try {
+      const body = (await request.json()) as Record<string, unknown>;
+      if (typeof body?.reason === "string") reason = body.reason;
+    } catch {
+      // Optional JSON body
+    }
+    await deleteProposal(db, user, id, reason);
     return privateJson({ ok: true });
   } catch (error) {
+    const status =
+      error instanceof ProposalDeletionConflictError ? error.status : 400;
     return privateJson(
       {
         error:
           error instanceof Error ? error.message : "Could not delete proposal.",
       },
-      { status: 400 },
+      { status },
     );
   }
 };

@@ -8,7 +8,7 @@ All routes are `prerender = false`. There is no `src/middleware.ts`; each route 
 
 | Group | Routes | Purpose |
 |---|---|---|
-| Auth | `POST/GET /api/auth/[...all]` | Better Auth catch-all: sign-in, callbacks, passkeys, sessions |
+| Auth | `POST/GET /api/auth/[...all]` | Better Auth catch-all: sign-in, callbacks, passkeys, sessions. Magic-link requests are Turnstile- and rate-limited. |
 | Session | `GET/POST/DELETE /api/session` | Session identity; development sign-in |
 | Health | `GET /api/health` | MongoDB ping and latency |
 | Proposals | `GET/POST /api/proposals`, `GET/PATCH/DELETE /api/proposals/:id`, `GET /api/proposals/:id/revisions` | Matter CRUD and revision history |
@@ -78,9 +78,28 @@ Three layers exist:
 
 Coverage is partial. Most JSON APIs rely on `SameSite=Lax` cookies. Do not add a state-changing endpoint without an origin or CSRF check.
 
+The abuse-prone unauthenticated routes (`POST /api/sense-box` and the Better Auth
+email routes) also require Cloudflare Turnstile and a shared rate-limit slot. See
+[security/turnstile.md](../security/turnstile.md).
+
 ### Rate limiting
 
-There is no general API limiter. Better Auth limits authentication (database-backed, magic link 5 per 60 s), and Sense Box has a 10-per-10-minute HMAC-slot limiter with a TTL collection. Do not describe the platform as rate limited in general.
+There is no general API limiter. Rate limiting is scoped to abuse-prone
+unauthenticated actions:
+
+- Better Auth limits authentication in its own database-backed limiter (magic
+  link 5 per 60 s).
+- `src/lib/rate-limit.ts` adds a shared MongoDB fixed-window limiter:
+  `sense-box-submit` 10 per 10 minutes and `auth-magic-link` 10 per 10 minutes
+  per client address, plus `auth-sign-up` 5 per hour if email sign-up is enabled.
+  It stores a keyed hash of the address with a TTL index, never the raw address.
+- `src/lib/turnstile-guard.ts` combines that limiter with mandatory Cloudflare
+  Turnstile verification on the same routes. See
+  [security/turnstile.md](../security/turnstile.md).
+
+Authenticated actions, including voting, endorsing, commenting and
+administrative writes, are neither challenged nor limited by this gate. Do not
+describe the platform as rate limited in general.
 
 ## Authentication
 
@@ -205,7 +224,10 @@ Fix these by consolidating on the catalogue and service-level checks, with tests
 4. Authorise with `requireApiPermission` or a specific helper; re-check in the service.
 5. Validate the body explicitly. Do not trust client-supplied IDs, roles or scope.
 6. Call a domain service. Do not put governance rules in the route.
-7. Return an allowlist DTO through `privateJson` or `publicJson`.
-8. Map domain errors to a human-readable status.
-9. Add a test for the unauthorised, invalid, failure and success paths.
-10. Update this page and the capability matrix if behaviour changed.
+7. If the route is an unauthenticated action that sends email, spends money or
+   publishes content, add it to `src/lib/turnstile-guard.ts` and
+   `RATE_LIMITS`; see [security/turnstile.md](../security/turnstile.md).
+8. Return an allowlist DTO through `privateJson` or `publicJson`.
+9. Map domain errors to a human-readable status.
+10. Add a test for the unauthorised, invalid, failure and success paths.
+11. Update this page and the capability matrix if behaviour changed.

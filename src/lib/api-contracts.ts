@@ -100,6 +100,14 @@ export function toProposalListItemDto(p: ProposalSummaryView) {
     ...(p.publicationScope ? { publicationScope: p.publicationScope } : {}),
     ...(p.ballotRevisionId ? { ballotRevisionId: p.ballotRevisionId } : {}),
     ...(p.ballotClosesAt ? { ballotClosesAt: p.ballotClosesAt } : {}),
+    ...(p.ballotClosedAt ? { ballotClosedAt: p.ballotClosedAt } : {}),
+    // The seconder's member ID stays server-side; members only see that the
+    // proposal has been seconded and when deliberation ends.
+    seconded: Boolean(p.secondedBy),
+    ...(p.secondedAt ? { secondedAt: p.secondedAt } : {}),
+    ...(p.deliberationEndsAt
+      ? { deliberationEndsAt: p.deliberationEndsAt }
+      : {}),
     commentCount: p.commentCount,
     votes: p.votes,
     createdAt: p.createdAt,

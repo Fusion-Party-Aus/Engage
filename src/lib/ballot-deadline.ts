@@ -51,10 +51,15 @@ export function ballotDeadlineLabel(value: Date | string): string {
 
 /**
  * Concise Australia/Melbourne calendar date, e.g. "14 January 2027".
+ * The timezone is explicit so server and client render identical markup before
+ * hydration; an implicit default would use each runtime's own timezone.
  */
-export function ballotDeadlineDateLabel(value: Date | string): string {
+export function ballotDeadlineDateLabel(
+  value: Date | string,
+  timeZone: string = BALLOT_TIMEZONE,
+): string {
   return inclusiveDisplayInstant(value).toLocaleDateString("en-AU", {
-    timeZone: BALLOT_TIMEZONE,
+    timeZone,
     day: "numeric",
     month: "long",
     year: "numeric",

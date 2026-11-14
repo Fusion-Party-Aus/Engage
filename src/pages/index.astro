@@ -31,10 +31,9 @@ if (authError) return Astro.redirect(`/member/?error=${encodeURIComponent(authEr
 const env = runtimeEnv(Astro.locals);
 const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
 const siteConfig = await getSiteConfig(db, env);
-const [proposals, publishedPolicyCount, mine] = await Promise.all([
-  listProposals(db, { includeArchived: false, user }),
+const [proposals, publishedPolicyCount] = await Promise.all([
+  listProposals(db, { includeArchived: false, user, includeDetails: false }),
   db.collection('policy_registry').countDocuments({ publicationStatus: 'published' }),
-  user?.canParticipate ? listOutstandingDecisions(db, user.memberId, user) : Promise.resolve([]),
 ]);
 const votes = proposals.filter((p) => p.stage === 'decide' && !ballotExpired(p));
 const myVoteRows = user?.canParticipate
@@ -44,6 +43,9 @@ const myVoteRows = user?.canParticipate
       votes.map((p) => proposalBallotId(p.proposalId)),
       loadBallotCryptoConfig(env),
     )
+  : [];
+const mine = user?.canParticipate
+  ? await listOutstandingDecisions(db, user.memberId, user, proposals, myVoteRows)
   : [];
 const openProposalIds = new Set(votes.map((p) => p.proposalId));
 const completedOpenVotesCount = new Set(

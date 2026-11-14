@@ -117,6 +117,7 @@ describe("API security and data minimisation", () => {
       details: "Detailed proposal text that should not appear in list summaries.",
       outcomes: ["Outcome 1"],
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
 
     await castVote(db, memberUser, {

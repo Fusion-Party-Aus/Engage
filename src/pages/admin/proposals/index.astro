@@ -6,7 +6,7 @@ import { Textarea } from '../../../components/ui/textarea';
 import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, ShieldAlert } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { listProposals } from '../../../lib/store.ts';
+import { listProposals, normalizeStage } from '../../../lib/store.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import type { ProposalStage } from '../../../lib/types.ts';
 import { Button } from '../../../components/ui/button';
@@ -31,7 +31,6 @@ if (!user.isStaff && !user.isBranchAdmin) {
 
 const db = await getDatabase(env);
 const branchAdminIds = user.branchAdminIds ?? [];
-const branches = user.isAdmin ? await db.collection('branches').find({}).sort({ name: 1 }).toArray() : user.isBranchAdmin ? await db.collection('branches').find({ branchId: { $in: branchAdminIds } }).sort({ name: 1 }).toArray() : await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray();
 const query = (Astro.url.searchParams.get('q') ?? '').trim();
 const stageFilter = (Astro.url.searchParams.get('stage') ?? 'all').trim();
 const branchFilter = (Astro.url.searchParams.get('branch') ?? 'all').trim();
@@ -39,22 +38,78 @@ const editId = (Astro.url.searchParams.get('edit') ?? '').trim();
 const reviseId = (Astro.url.searchParams.get('revise') ?? '').trim();
 const newProposal = Astro.url.searchParams.get('new') === '1';
 
-const allProposals = user.isStaff || user.isBranchAdmin
-  ? (await listProposals(db, {
-      includeArchived: true,
-      search: query,
-      stage: stageFilter,
-    })).filter((proposal) => user.isStaff || (proposal.originatingBranchId && branchAdminIds.includes(proposal.originatingBranchId)) && (!branchFilter || branchFilter === 'all' || [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branchFilter)))
-  : [];
+const [branches, scopedProposals] = await Promise.all([
+  user.isAdmin
+    ? db.collection('branches').find({}).sort({ name: 1 }).toArray()
+    : user.isBranchAdmin
+      ? db.collection('branches').find({ branchId: { $in: branchAdminIds } }).sort({ name: 1 }).toArray()
+      : db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
+  user.isStaff || user.isBranchAdmin
+    ? listProposals(db, { includeArchived: true }).then((proposals) =>
+        proposals.filter(
+          (proposal) =>
+            user.isStaff ||
+            (proposal.originatingBranchId && branchAdminIds.includes(proposal.originatingBranchId)),
+        ),
+      )
+    : Promise.resolve([]),
+]);
+const normalizedStage =
+  stageFilter && stageFilter !== 'all' ? normalizeStage(stageFilter) : '';
+const queryLower = query.toLowerCase();
+// One register read serves both the filtered rows and the stage counts. Search
+// and stage filtering keep the same semantics as listProposals.
+const allProposals = scopedProposals.filter((proposal) => {
+  if (
+    branchFilter &&
+    branchFilter !== 'all' &&
+    ![proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branchFilter)
+  ) {
+    return false;
+  }
+  if (normalizedStage && proposal.stage !== normalizedStage) return false;
+  if (queryLower) {
+    const haystack = `${proposal.proposalId} ${proposal.title} ${proposal.space} ${proposal.summary} ${proposal.details}`.toLowerCase();
+    if (!haystack.includes(queryLower)) return false;
+  }
+  return true;
+});
 const unboundBallotRevisions = new Map<string, any[]>();
-for (const proposal of allProposals.filter((item) => item.stage === 'decide' && !item.ballotRevisionId)) {
-  unboundBallotRevisions.set(proposal.proposalId, await db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray());
+const unboundProposalIds = allProposals
+  .filter((item) => item.stage === 'decide' && !item.ballotRevisionId)
+  .map((item) => item.proposalId);
+if (unboundProposalIds.length) {
+  const revisionRows = await db
+    .collection('proposal_revisions')
+    .find({ proposalId: { $in: unboundProposalIds } })
+    .sort({ createdAt: -1 })
+    .toArray();
+  for (const revision of revisionRows) {
+    const proposalId = String(revision.proposalId);
+    const rows = unboundBallotRevisions.get(proposalId) ?? [];
+    rows.push(revision);
+    unboundBallotRevisions.set(proposalId, rows);
+  }
 }
 const proposalIds = allProposals.map((proposal) => proposal.proposalId);
 const amendmentRows = proposalIds.length ? await db.collection('amendments').find({ proposalId: { $in: proposalIds }, status: { $nin: ['withdrawn', 'rejected', 'applied', 'not-endorsed', 'inconclusive'] } }).sort({ createdAt: 1 }).toArray() : [];
+const amendmentRevisionsByAmendment = new Map<string, any[]>();
+if (amendmentRows.length) {
+  const revisionRows = await db
+    .collection('amendment_revisions')
+    .find({ amendmentId: { $in: amendmentRows.map((amendment) => amendment.amendmentId) } })
+    .sort({ createdAt: 1 })
+    .toArray();
+  for (const revision of revisionRows) {
+    const amendmentId = String(revision.amendmentId);
+    const rows = amendmentRevisionsByAmendment.get(amendmentId) ?? [];
+    rows.push(revision);
+    amendmentRevisionsByAmendment.set(amendmentId, rows);
+  }
+}
 const amendmentsByProposal = new Map<string, any[]>();
 for (const amendment of amendmentRows) {
-  const history = await db.collection('amendment_revisions').find({ amendmentId: amendment.amendmentId }).sort({ createdAt: 1 }).toArray();
+  const history = amendmentRevisionsByAmendment.get(String(amendment.amendmentId)) ?? [];
   amendment.revisionHistory = history;
   const current = history.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
@@ -118,18 +173,15 @@ const initialProvenance = editingProposal
       : null);
 
 const spaces = [...new Set(allProposals.map((p) => p.space))].sort();
-const allScopedProposals = user.isStaff || user.isBranchAdmin
-  ? (await listProposals(db, { includeArchived: true })).filter((proposal) => user.isStaff || (proposal.originatingBranchId && branchAdminIds.includes(proposal.originatingBranchId)))
-  : [];
 const registerCounts = {
-  all: allScopedProposals.length,
-  propose: allScopedProposals.filter((p) => p.stage === 'propose').length,
-  deliberate: allScopedProposals.filter((p) => p.stage === 'deliberate').length,
-  decide: allScopedProposals.filter((p) => p.stage === 'decide').length,
-  implement: allScopedProposals.filter((p) => p.stage === 'implement').length,
-  archived: allScopedProposals.filter((p) => p.stage === 'archived').length,
+  all: scopedProposals.length,
+  propose: scopedProposals.filter((p) => p.stage === 'propose').length,
+  deliberate: scopedProposals.filter((p) => p.stage === 'deliberate').length,
+  decide: scopedProposals.filter((p) => p.stage === 'decide').length,
+  implement: scopedProposals.filter((p) => p.stage === 'implement').length,
+  archived: scopedProposals.filter((p) => p.stage === 'archived').length,
 };
-const unboundCount = allScopedProposals.filter((p) => p.stage === 'decide' && !p.ballotRevisionId).length;
+const unboundCount = scopedProposals.filter((p) => p.stage === 'decide' && !p.ballotRevisionId).length;
 const openAmendmentsCount = amendmentRows.length;
 
 const stageOptions: Array<[ProposalStage, string]> = [
@@ -216,14 +268,24 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
               <div class="admin-form-grid">
                 <Field label="Lifecycle stage" htmlFor="editor-stage">
                   <NativeSelect defaultValue={editingProposal ? editingProposal.stage : 'deliberate'} id="editor-stage" name="stage">
-                    {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+                    {stageOptions.map(([val, label]) => <option value={val} selected={editingProposal ? editingProposal.stage === val : val === 'deliberate'}>{label}</option>)}
                   </NativeSelect>
+                </Field>
+
+                <Field label="Ballot closing date" htmlFor="editor-ballot-closes-at" hint="Required when opening Decide (your local time).">
+                  <Input
+                    id="editor-ballot-closes-at"
+                    name="ballotClosesAt"
+                    type="datetime-local"
+                    data-iso-value={editingProposal?.ballotClosesAt ? new Date(editingProposal.ballotClosesAt).toISOString() : ''}
+                    data-initial-stage={editingProposal?.stage ?? ''}
+                  />
                 </Field>
 
                 <Field label="Classification" htmlFor="proposal-kind-select">
                   <NativeSelect defaultValue={isResolution ? 'resolution' : 'policy'} id="proposal-kind-select" name="kind" disabled={isLocked}>
-                    <option value="policy">Policy Proposal</option>
-                    <option value="resolution">Governance Resolution</option>
+                    <option value="policy" selected={!isResolution}>Policy Proposal</option>
+                    <option value="resolution" selected={isResolution}>Governance Resolution</option>
                   </NativeSelect>
                   {isLocked && <input type="hidden" name="kind" value={isResolution ? 'resolution' : 'policy'} />}
                 </Field>
@@ -244,28 +306,28 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                     <div class="admin-form-grid">
                       <Field label="Originating branch" htmlFor="editor-origin-scope">
                         <NativeSelect defaultValue={editingProposal?.originatingBranchId ?? ''} id="editor-origin-scope" name="originatingBranchId" disabled={isLocked}>
-                          <option value="">Not specified</option>
-                          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                          <option value="" selected={!editingProposal?.originatingBranchId}>Not specified</option>
+                          {branches.map((branch: any) => <option value={branch.branchId} selected={editingProposal?.originatingBranchId === branch.branchId}>{branch.name}</option>)}
                         </NativeSelect>
                       </Field>
                       <Field label="Governance authority" htmlFor="editor-governance-authority">
                         <NativeSelect defaultValue={editingProposal?.governanceAuthorityBranchId ?? ''} id="editor-governance-authority" name="governanceAuthorityBranchId" disabled={isLocked}>
-                          <option value="">Not specified</option>
-                          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                          <option value="" selected={!editingProposal?.governanceAuthorityBranchId}>Not specified</option>
+                          {branches.map((branch: any) => <option value={branch.branchId} selected={editingProposal?.governanceAuthorityBranchId === branch.branchId}>{branch.name}</option>)}
                         </NativeSelect>
                       </Field>
                       <Field label="Policy jurisdiction" htmlFor="editor-jurisdiction">
                         <NativeSelect defaultValue={editingProposal?.jurisdictionBranchId ?? ''} id="editor-jurisdiction" name="jurisdictionBranchId" disabled={isLocked}>
-                          <option value="">Not specified</option>
-                          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                          <option value="" selected={!editingProposal?.jurisdictionBranchId}>Not specified</option>
+                          {branches.map((branch: any) => <option value={branch.branchId} selected={editingProposal?.jurisdictionBranchId === branch.branchId}>{branch.name}</option>)}
                         </NativeSelect>
                       </Field>
                       <Field label="Publication scope" htmlFor="editor-publication-scope">
                         <NativeSelect defaultValue={editingProposal?.publicationScope ?? ''} id="editor-publication-scope" name="publicationScope" disabled={isLocked}>
-                          <option value="">Not specified</option>
-                          <option value="private">Private</option>
-                          <option value="branch">Branch</option>
-                          <option value="national">National</option>
+                          <option value="" selected={!editingProposal?.publicationScope}>Not specified</option>
+                          <option value="private" selected={editingProposal?.publicationScope === 'private'}>Private</option>
+                          <option value="branch" selected={editingProposal?.publicationScope === 'branch'}>Branch</option>
+                          <option value="national" selected={editingProposal?.publicationScope === 'national'}>National</option>
                         </NativeSelect>
                       </Field>
                     </div>
@@ -338,13 +400,13 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                   <div class="admin-form-grid">
                     <Field label="Provenance classification" htmlFor="prov-category-select">
                       <NativeSelect defaultValue={initialProvenance?.category ?? 'none'} id="prov-category-select" name="provCategory">
-                        <option value="none">None (clear provenance)</option>
-                        <option value="existing-repackaged">{isResolution ? 'Preceding resolution · equivalence unverified' : 'Approved policy predecessor · equivalence unverified'}</option>
-                        <option value="materially-revised">{isResolution ? 'Preceding resolution · materially revised' : 'Approved policy predecessor · materially revised'}</option>
-                        <option value="new-proposal">{isResolution ? 'New resolution · no prior authority identified' : 'New proposal · no prior policy identified'}</option>
-                        <option value="party-governance">Party governance · internal platform review</option>
-                        <option value="draft-derived">Draft branch predecessor · unapproved</option>
-                        <option value="unverified">Mapping unverified</option>
+                        <option value="none" selected={!initialProvenance?.category || initialProvenance.category === 'none'}>None (clear provenance)</option>
+                        <option value="existing-repackaged" selected={initialProvenance?.category === 'existing-repackaged'}>{isResolution ? 'Preceding resolution · equivalence unverified' : 'Approved policy predecessor · equivalence unverified'}</option>
+                        <option value="materially-revised" selected={initialProvenance?.category === 'materially-revised'}>{isResolution ? 'Preceding resolution · materially revised' : 'Approved policy predecessor · materially revised'}</option>
+                        <option value="new-proposal" selected={initialProvenance?.category === 'new-proposal'}>{isResolution ? 'New resolution · no prior authority identified' : 'New proposal · no prior policy identified'}</option>
+                        <option value="party-governance" selected={initialProvenance?.category === 'party-governance'}>Party governance · internal platform review</option>
+                        <option value="draft-derived" selected={initialProvenance?.category === 'draft-derived'}>Draft branch predecessor · unapproved</option>
+                        <option value="unverified" selected={initialProvenance?.category === 'unverified'}>Mapping unverified</option>
                       </NativeSelect>
                     </Field>
 
@@ -450,15 +512,15 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 
             <Field label="Stage" htmlFor="proposal-stage-filter">
               <NativeSelect defaultValue={stageFilter} id="proposal-stage-filter" name="stage">
-                <option value="all">All stages ({registerCounts.all})</option>
-                {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+                <option value="all" selected={!stageFilter || stageFilter === 'all'}>All stages ({registerCounts.all})</option>
+                {stageOptions.map(([val, label]) => <option value={val} selected={stageFilter === val}>{label}</option>)}
               </NativeSelect>
             </Field>
 
             <Field label="Branch" htmlFor="proposal-branch-filter">
               <NativeSelect defaultValue={branchFilter} id="proposal-branch-filter" name="branch">
-                <option value="all">All branches</option>
-                {branches.filter((branch: any) => branch.recognised).map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                <option value="all" selected={!branchFilter || branchFilter === 'all'}>All branches</option>
+                {branches.filter((branch: any) => branch.recognised).map((branch: any) => <option value={branch.branchId} selected={branchFilter === branch.branchId}>{branch.name}</option>)}
               </NativeSelect>
             </Field>
 
@@ -549,7 +611,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                           data-vote-count={item.votes.total}
                           data-title={item.title}
                         >
-                          {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+                          {stageOptions.map(([val, label]) => <option value={val} selected={item.stage === val}>{label}</option>)}
                         </NativeSelect>
                       </Field>
                     </div>
@@ -721,6 +783,22 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 </AdminLayout>
 
 <script>
+  const ballotCloseField = document.getElementById('editor-ballot-closes-at') as HTMLInputElement | null;
+  if (ballotCloseField) {
+    const iso = ballotCloseField.dataset.isoValue?.trim();
+    if (iso) {
+      const parsed = new Date(iso);
+      if (Number.isFinite(parsed.getTime())) {
+        const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000)
+          .toISOString()
+          .slice(0, 16);
+        ballotCloseField.value = local;
+        ballotCloseField.dataset.initialLocalValue = local;
+      }
+    } else {
+      ballotCloseField.dataset.initialLocalValue = '';
+    }
+  }
   // A record workspace can link directly to one register row's management
   // controls. Open the disclosure so the linked action is visible.
   if (location.hash.startsWith('#proposal-')) {
@@ -799,11 +877,24 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         provenance = null;
       }
 
+      const ballotClosesAtInput = document.getElementById('editor-ballot-closes-at') as HTMLInputElement | null;
+      const rawBallotClosesAt = String(formData.get('ballotClosesAt') || '').trim();
+      const initialBallotLocal = ballotClosesAtInput?.dataset.initialLocalValue ?? '';
+      const initialStage = ballotClosesAtInput?.dataset.initialStage ?? '';
+      const targetStage = String(formData.get('stage') || '');
+      const openingBallot = targetStage === 'decide' && initialStage !== 'decide';
+      const ballotClosesAtChanged = rawBallotClosesAt !== initialBallotLocal;
+      const ballotClosesAt =
+        rawBallotClosesAt && (ballotClosesAtChanged || openingBallot)
+          ? new Date(rawBallotClosesAt).toISOString()
+          : undefined;
+
       const data = {
         proposalId: editingId || undefined,
         title: formData.get('title'),
         space: formData.get('space'),
         stage: formData.get('stage'),
+        ...(ballotClosesAt ? { ballotClosesAt } : {}),
         kind: formData.get('kind') || undefined,
         summary: formData.get('summary'),
         details: formData.get('details'),

@@ -1,7 +1,8 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
-import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { getDatabase, runInTransaction, runtimeEnv } from "../../../../lib/db.ts";
 import { canManageBranchBallot } from "../../../../lib/auth.ts";
+import { recordGovernanceEvent } from "../../../../lib/governance-relationships.ts";
 import { hasPermission } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -79,30 +80,56 @@ export const POST: APIRoute = async ({ request, locals }) => {
         },
         { status: 403 },
       );
-    const result = await db
-      .collection("amendments")
-      .updateOne(
-        {
-          amendmentId,
-          status: "endorsed",
-          currentRevisionId: amendment.ballotAmendmentRevisionId,
-          "ballotDecision.decisionEventId":
-            amendment.ballotDecision.decisionEventId,
-        },
-        {
-          $set: {
-            status: "accepted",
-            formalApproval: {
-              decisionEventId,
-              authorityId: user.memberId,
-              approvedAt: new Date(),
-              baseRevisionId: amendment.ballotRevisionId,
-              amendmentRevisionId: amendment.ballotAmendmentRevisionId,
+    const now = new Date();
+    const modifiedCount = await runInTransaction(db, async (session) => {
+      const sessionOpts = session ? { session } : undefined;
+      const result = await db
+        .collection("amendments")
+        .updateOne(
+          {
+            amendmentId,
+            status: "endorsed",
+            currentRevisionId: amendment.ballotAmendmentRevisionId,
+            "ballotDecision.decisionEventId":
+              amendment.ballotDecision.decisionEventId,
+          },
+          {
+            $set: {
+              status: "accepted",
+              formalApproval: {
+                decisionEventId,
+                authorityId: user.memberId,
+                approvedAt: now,
+                baseRevisionId: amendment.ballotRevisionId,
+                amendmentRevisionId: amendment.ballotAmendmentRevisionId,
+              },
             },
           },
-        },
-      );
-    if (!result.modifiedCount)
+          sessionOpts,
+        );
+      if (result.modifiedCount) {
+        await recordGovernanceEvent(
+          db,
+          {
+            eventType: "amendment.accepted",
+            matterId: amendment.proposalId,
+            ballotId: `amendment:${amendmentId}`,
+            revisionId: amendment.ballotRevisionId,
+            decisionEventId,
+            actorId: user.memberId,
+            authorityBranchId: branchScope,
+            metadata: {
+              amendmentId,
+              amendmentRevisionId: amendment.ballotAmendmentRevisionId,
+            },
+            createdAt: now,
+          },
+          session,
+        );
+      }
+      return result.modifiedCount;
+    });
+    if (!modifiedCount)
       return Response.json(
         { error: "Amendment state changed; reload and try again." },
         { status: 409 },

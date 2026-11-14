@@ -18,7 +18,8 @@ import {
   verifyBranchMember,
 } from "./branch-participation.ts";
 import { castVote, listOutstandingDecisions, listProposals, saveProposal } from "./store.ts";
-import { PROPOSAL_VOTES } from "./vote-storage.ts";
+import { PROPOSAL_VOTES, findMemberVotes, proposalBallotId } from "./vote-storage.ts";
+import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
 import type { SessionUser } from "./types.ts";
 
 const national: SessionUser = {
@@ -198,6 +199,7 @@ describe("branch participation: following and verified membership", () => {
       summary: "Summary with enough words.",
       details: "Details",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
       jurisdictionBranchId: "vic",
       governanceAuthorityBranchId: "vic",
       publicationScope: "branch",
@@ -244,6 +246,7 @@ describe("branch participation: following and verified membership", () => {
       summary: "A national ballot for verified members.",
       details: "Details",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
       jurisdictionBranchId: "nat",
       governanceAuthorityBranchId: "nat",
       publicationScope: "national",
@@ -258,6 +261,25 @@ describe("branch participation: following and verified membership", () => {
     );
     const reused = await listOutstandingDecisions(db, user.memberId, user, await listProposals(db, { user }));
     assert.deepEqual(reused.map((item) => item.proposalId), outstanding.map((item) => item.proposalId), 'reusing discovery data preserves electorate filtering');
+    const discovery = await listProposals(db, { user });
+    const prefetchedVotes = await findMemberVotes(
+      db,
+      user.memberId,
+      discovery.map((item) => proposalBallotId(item.proposalId)),
+      loadBallotCryptoConfig(process.env),
+    );
+    const reusedVotes = await listOutstandingDecisions(
+      db,
+      user.memberId,
+      user,
+      discovery,
+      prefetchedVotes,
+    );
+    assert.deepEqual(
+      reusedVotes.map((item) => item.proposalId),
+      outstanding.map((item) => item.proposalId),
+      'reusing an in-flight member vote read preserves the outstanding set',
+    );
     assert.equal(
       outstanding.some((item) => item.proposalId === "national-ballot"),
       true,
@@ -356,6 +378,7 @@ describe("branch participation: verification authority and source integrity", ()
       space: "Governance",
       summary: "A member ballot with a frozen revision.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
       jurisdictionBranchId: "vic",
       governanceAuthorityBranchId: "vic",
       publicationScope: "branch",
@@ -568,6 +591,13 @@ describe("branch participation: migration and new proposal defaults", () => {
     assert.equal(branchProposal.governanceAuthorityBranchId, "vic");
     assert.equal(branchProposal.jurisdictionBranchId, "vic");
     assert.equal(branchProposal.publicationScope, "branch");
+    // D3 fixture: this test is about branch scope, not seconding.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: branchProposal.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
     await saveProposal(db, branch, {
       proposalId: branchProposal.proposalId,
       stage: "deliberate",
@@ -575,6 +605,7 @@ describe("branch participation: migration and new proposal defaults", () => {
     const ballot = await saveProposal(db, branch, {
       proposalId: branchProposal.proposalId,
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     assert.equal(ballot.stage, "decide");
     assert.ok(ballot.ballotRevisionId);

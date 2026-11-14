@@ -112,6 +112,15 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
     assert.equal(memberProposal.authorId, memberUser.memberId);
     assert.ok(memberProposal.proposalId.startsWith("PROP-"));
 
+    // D3 fixture: this test is about member submission and provenance, not
+    // seconding. Record a seconder directly, as the seconding act would.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: memberProposal.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
+
     // Staff can advance it to Deliberate or Decide, and add provenance
     const advanced = await saveProposal(db, adminUser, {
       proposalId: memberProposal.proposalId,
@@ -270,6 +279,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       summary:
         "Adopt the modern Horizon design tokens and colourway across all official digital assets.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
 
     // Cast vote with reason
@@ -310,10 +320,13 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
     assert.equal(implemented.stage, "implement");
     assert.ok(implemented.implementationNote?.includes("Design pack"));
 
-    // Cleanup test
-    await deleteProposal(db, adminUser, decision.proposalId);
+    // Matters with votes/decisions cannot be hard-deleted
+    await assert.rejects(
+      deleteProposal(db, adminUser, decision.proposalId),
+      /cannot be deleted/i,
+    );
     const detail = await getProposalDetail(db, decision.proposalId, adminUser);
-    assert.equal(detail, null);
+    assert.ok(detail);
   });
 
   it("supports member administration, role assignment, and self-lockout protection", async () => {
@@ -534,6 +547,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
     await saveProposal(db, adminUser, {
       proposalId: ballot.proposalId,
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
 
     // Attempting substantive modifications while in Decide (even before votes) must be rejected
@@ -636,6 +650,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
     await saveProposal(db, adminUser, {
       proposalId: proposal.proposalId,
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     await castVote(db, memberUser, {
       proposalId: proposal.proposalId,
@@ -741,6 +756,15 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       /must undergo member deliberation before entering Decide or Implement/,
     );
 
+    // D3 fixture: record a seconder before the officer transition. This test is
+    // about stage validity, not seconding.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: proposal.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
+
     // Advance to deliberate
     await saveProposal(db, adminUser, {
       proposalId: proposal.proposalId,
@@ -833,6 +857,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       space: "Governance",
       summary: "A proposal with text frozen when its ballot opens.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     const revision = await db
       .collection("proposal_revisions")
@@ -877,6 +902,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       title: "Proposal at ballot",
       summary: "Updated wording frozen at the moment voting opens.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     assert.equal(opened.stage, "decide");
     assert.ok(opened.ballotRevisionId);
@@ -1009,6 +1035,13 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       ),
       true,
     );
+    // D3 fixture: second the proposal before the branch officer transition.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: proposal.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
     await saveProposal(db, branchAdmin, {
       proposalId: proposal.proposalId,
       stage: "deliberate",
@@ -1019,6 +1052,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
     const ballot = await saveProposal(db, branchAdmin, {
       proposalId: proposal.proposalId,
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     assert.equal(ballot.governanceAuthorityBranchId, branchId);
     assert.equal(ballot.jurisdictionBranchId, branchId);
@@ -1064,6 +1098,21 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       ),
       true,
     );
+    // List projection changes must not alter visibility. A summary-only list
+    // still hides private drafts from anonymous readers and shows them to an
+    // authorised administrator.
+    assert.equal(
+      (await listProposals(db, { user: null, includeDetails: false })).some(
+        (item) => item.proposalId === proposal.proposalId,
+      ),
+      false,
+    );
+    assert.equal(
+      (await listProposals(db, { user: adminUser, includeDetails: false })).some(
+        (item) => item.proposalId === proposal.proposalId,
+      ),
+      true,
+    );
   });
 
   it("locks branch authority and publication scope after a ballot begins", async () => {
@@ -1079,6 +1128,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       space: "Governance",
       summary: "A proposal with a fixed ballot jurisdiction.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
       jurisdictionBranchId: "scope-a",
       publicationScope: "branch",
     });
@@ -1106,6 +1156,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       space: "Governance",
       summary: "A branch scoped ballot for members.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
       jurisdictionBranchId: "state-x",
       publicationScope: "branch",
     });
@@ -1188,6 +1239,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       space: "Governance",
       summary: "Original ballot totals must not include amendment votes.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     const original = await castVote(db, memberUser, {
       proposalId: proposal.proposalId,
@@ -1269,6 +1321,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
       space: "Transport & Infrastructure",
       summary: "Adopt 25kV AC overhead electrification across intercity rail corridors.",
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
 
     // Pending member cannot cast a formal ballot directly

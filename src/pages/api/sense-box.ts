@@ -3,6 +3,8 @@ import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { resolvePublicOrigin } from '../../lib/public-origin.ts';
 import { getSessionUser } from '../../lib/auth.ts';
 import { submitSense, listSense, reviewSense, SenseError } from '../../lib/sense-box.ts';
+import { enforceAbuseProtection } from '../../lib/turnstile-guard.ts';
+import { tokenFromBody } from '../../lib/turnstile.ts';
 export const prerender = false;
 const headers = {'cache-control':'private, no-store'};
 async function handle(context: Parameters<APIRoute>[0]) {
@@ -28,9 +30,13 @@ async function handle(context: Parameters<APIRoute>[0]) {
       return Response.json({saved:true},{headers});
     }
     if (body.website) throw new SenseError('Could not accept this submission.');
-    const secret = env.BETTER_AUTH_SECRET || env.SESSION_SECRET;
-    if (!secret && env.APP_MODE === 'production') throw new SenseError('Sense Box is temporarily unavailable. Please try again later.',503);
-    await submitSense(db,body,{address:context.clientAddress,secret:secret || 'local-preview'});
+    const refusal = await enforceAbuseProtection({
+      request, env, db, action: 'sense-box-submit',
+      token: tokenFromBody(body),
+      adapterAddress: context.clientAddress,
+    });
+    if (refusal) return refusal;
+    await submitSense(db,body);
     return Response.json({saved:true},{status:201,headers});
   } catch (error) {
     return Response.json({error:error instanceof SenseError ? error.message : "Couldn't save or load Sense Box. Please try again."},{status:error instanceof SenseError ? error.status : 503,headers});

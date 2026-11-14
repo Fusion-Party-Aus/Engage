@@ -1461,21 +1461,57 @@ export async function chooseBranchMembership(db: Db, user: SessionUser, input: {
   try {
     const branches = await db.collection('branches').find({kind:{$in:geographic?['state','territory']:['constituent']}}).project({branchId:1}).toArray();
     const memberships = await db.collection(BRANCH_MEMBERSHIPS).find({memberId:user.memberId,status:'active',branchId:{$in:branches.map(b=>b.branchId)}}).toArray();
-    const now=new Date();
-    for (const membership of memberships) {
-      if (input.join && membership.branchId===input.branchId) continue;
-      if (!input.join && membership.branchId!==input.branchId) continue;
-      const after={status:'revoked',revokedAt:now,revokedBy:user.memberId,revocationReason:'Member changed their branch membership.'};
-      await recordMembershipEvent(db,{branchId:String(membership.branchId),memberId:user.memberId,actorId:user.memberId,action:'self-left',before:membership,after});
-      await db.collection(BRANCH_MEMBERSHIPS).updateOne({memberId:user.memberId,branchId:membership.branchId},{$set:after});
+    const toRevoke = memberships.filter((membership) =>
+      input.join ? membership.branchId !== input.branchId : membership.branchId === input.branchId,
+    );
+    for (const membership of toRevoke) {
+      assertLocalMembershipMutation(membership);
     }
-    if(input.join) {
-      const existing=await db.collection(BRANCH_MEMBERSHIPS).findOne({memberId:user.memberId,branchId:input.branchId});
-      if(existing?.status!=='active') {
-        const after={memberId:user.memberId,branchId:input.branchId,status:'active',branchRole:'member',source:LOCAL_MEMBERSHIP_SOURCE,verifiedAt:now,verifiedBy:user.memberId,updatedAt:now,verification:{method:geographic?'member-declared-residence':'member-choice',verifiedAt:now}};
-        await recordMembershipEvent(db,{branchId:input.branchId,memberId:user.memberId,actorId:user.memberId,action:'self-joined',before:existing,after});
-        await db.collection(BRANCH_MEMBERSHIPS).updateOne({memberId:user.memberId,branchId:input.branchId},{$set:after},{upsert:true});
+    const existing = input.join
+      ? await db.collection(BRANCH_MEMBERSHIPS).findOne({memberId:user.memberId,branchId:input.branchId})
+      : null;
+    if (input.join && existing?.status !== 'active') {
+      assertLocalMembershipMutation(existing);
+    }
+    const now=new Date();
+    for (const membership of toRevoke) {
+      const after={status:'revoked',revokedAt:now,revokedBy:user.memberId,revocationReason:'Member changed their branch membership.',updatedAt:now};
+      const filter: Record<string, unknown> = {
+        memberId: user.memberId,
+        branchId: membership.branchId,
+        status: membership.status,
+        source: membership.source ?? LOCAL_MEMBERSHIP_SOURCE,
+      };
+      if (membership.updatedAt !== undefined) filter.updatedAt = membership.updatedAt;
+      else filter.updatedAt = { $exists: false };
+      const write = await db.collection(BRANCH_MEMBERSHIPS).updateOne(filter,{$set:after});
+      if (write.matchedCount !== 1) throw new BranchParticipationError('Membership changed while updating. Please try again.',409,'membership-stale');
+      await recordMembershipEvent(db,{branchId:String(membership.branchId),memberId:user.memberId,actorId:user.memberId,action:'self-left',before:membership,after});
+    }
+    if(input.join && existing?.status!=='active') {
+      const after={memberId:user.memberId,branchId:input.branchId,status:'active',branchRole:'member',source:LOCAL_MEMBERSHIP_SOURCE,verifiedAt:now,verifiedBy:user.memberId,updatedAt:now,verification:{method:geographic?'member-declared-residence':'member-choice',verifiedAt:now}};
+      if (existing) {
+        const filter: Record<string, unknown> = {
+          memberId: user.memberId,
+          branchId: input.branchId,
+          status: existing.status,
+          source: existing.source ?? LOCAL_MEMBERSHIP_SOURCE,
+        };
+        if (existing.updatedAt !== undefined) filter.updatedAt = existing.updatedAt;
+        else filter.updatedAt = { $exists: false };
+        const write = await db.collection(BRANCH_MEMBERSHIPS).updateOne(filter,{$set:after});
+        if (write.matchedCount !== 1) throw new BranchParticipationError('Membership changed while updating. Please try again.',409,'membership-stale');
+      } else {
+        try {
+          await db.collection(BRANCH_MEMBERSHIPS).insertOne(after);
+        } catch (err) {
+          if ((err as { code?: number }).code === 11000) {
+            throw new BranchParticipationError('Membership changed while updating. Please try again.',409,'membership-stale');
+          }
+          throw err;
+        }
       }
+      await recordMembershipEvent(db,{branchId:input.branchId,memberId:user.memberId,actorId:user.memberId,action:'self-joined',before:existing,after});
     }
     return await getMemberBranchProfile(db,user.memberId);
   } finally { await locks.deleteOne({_id}); }

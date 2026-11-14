@@ -39,6 +39,6 @@ if (allowed) {
       <AlertDescription>A national administrator can run database migrations.</AlertDescription>
     </Alert>
   ) : (
-    <AdminMigrations client:load initial={migrations} />
+    <AdminMigrations client:idle initial={migrations} />
   )}
 </AdminLayout>

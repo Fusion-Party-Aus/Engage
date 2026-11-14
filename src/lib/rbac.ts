@@ -79,7 +79,7 @@ export const PERMISSION_CATALOGUE: PermissionDefinition[] = [
     group: "Proposals & Deliberation",
     label: "Moderate deliberation comments",
     description: "Remove inappropriate member comments in deliberation threads.",
-    allowedScopes: ["national"],
+    allowedScopes: ["national", "branch"],
   },
   {
     key: "contributions.respond",
@@ -473,8 +473,25 @@ export function hasPermission(
   if (!user) return false;
   const snap = getEffectivePermissionsSnapshot(user);
   if (snap.national.includes(permission)) return true;
-  if (branchId && snap.branches[branchId]?.includes(permission)) return true;
+  if (branchId && snap.branches[branchId]?.includes(permission)) {
+    // Defence in depth: a malformed branch grant must not confer a permission
+    // that the catalogue reserves to National scope.
+    const definition = PERMISSION_MAP.get(permission);
+    return definition ? definition.allowedScopes.includes("branch") : false;
+  }
   return false;
+}
+
+export function hasPermissionAnywhere(
+  user: SessionUser | null | undefined,
+  permission: PermissionKey,
+): boolean {
+  if (!user) return false;
+  const snap = getEffectivePermissionsSnapshot(user);
+  if (snap.national.includes(permission)) return true;
+  const definition = PERMISSION_MAP.get(permission);
+  if (!definition?.allowedScopes.includes("branch")) return false;
+  return Object.values(snap.branches).some((list) => list.includes(permission));
 }
 
 /**

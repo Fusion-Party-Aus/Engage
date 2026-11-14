@@ -2,6 +2,14 @@
 
 **Status:** Current · **Verified:** 13 November 2026
 
+> **RFC 0001 programme status.** Several Priority 1 items below are implemented on
+> `feat/rfc0001-sprint1-integration` and awaiting merge. Do not treat this page as
+> the merge state. The [programme tracker](rfc0001-programme-tracker.md) records
+> what is integrated, tested and still missing; the
+> [decision register](../governance/decision-register.md) records which governance
+> questions the maintainer has now answered. Where they conflict, the decision
+> register wins. This page continues to describe the defects that remain on `main`.
+
 This is an honest register, not a task list with commitments. Items are grouped by risk. Each names the impact and the evidence; proposed fixes are directions, not approved governance.
 
 **Do not silently "fix" a governance gap by inventing a rule.** Several items below are open decisions for Fusion.
@@ -12,6 +20,8 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 **Impact:** A proposal can return to Deliberate after a ballot, have its wording edited (when no votes exist), then return to Decide while retaining the previous `ballotRevisionId`. The ballot remains frozen on superseded wording.
 
+**Resolved on `feat/rfc0001-sprint1-integration`:** a zero-vote return clears the binding and emits `ballot.unbound`; re-entry binds the current revision; edits are refused once votes exist.
+
 **Evidence:** `saveProposal` binds only when `ballotRevisionId` is unset (`src/lib/store.ts`). The field is never cleared.
 
 **Direction:** On re-entry to Decide with zero votes, either rebind explicitly and record an event, or refuse the transition until an officer chooses. Never rebind silently when votes exist. This needs a governance decision about re-opening.
@@ -20,6 +30,8 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 **Impact:** Only migrated ballots have a `ballotClosesAt`. No API writes a deadline for a newly opened ballot, so a new ballot remains open indefinitely. Closing-soon notifications and the attention queue cannot work correctly.
 
+**Resolved on `feat/rfc0001-sprint1-integration`:** opening a ballot writes a future deadline (explicit or the approved 30-day default) and the scheduler closes it. Legacy ballots without deadlines are reported, not rewritten.
+
 **Evidence:** `ballotClosesAt` is read and copied by binding/amendment opening, but no create/update path sets it. The only deadline constant is the one-off `2027-01-14T13:00:00Z` migration.
 
 **Direction:** Add an explicit ballot scheduling act with a required close time, audit event and permission. The permitted duration is a governance decision.
@@ -27,6 +39,8 @@ This is an honest register, not a task list with commitments. Items are grouped 
 ### 3. A moderator can open or reopen the Decide stage
 
 **Impact:** Moderators cannot bind a ballot or record a result, but they can move a matter into Decide through the ordinary stage transition. That blurs the operational/governance boundary described in the product.
+
+**Resolved on `feat/rfc0001-sprint1-integration`:** entering Decide requires `ballots.bind`.
 
 **Evidence:** `saveProposal` gates on `isStaff` (moderator or administrator). Only binding and result recording have separate ballot permissions.
 
@@ -51,6 +65,8 @@ This is an honest register, not a task list with commitments. Items are grouped 
 ### 6. Self-service branch switching can revoke a CRM-sourced membership
 
 **Impact:** A member switching branches could revoke an externally authoritative membership, which the admin paths explicitly forbid.
+
+**Resolved on `feat/rfc0001-sprint1-integration`:** the self-service path applies the same source guard.
 
 **Evidence:** `chooseBranchMembership` does not call `assertLocalMembershipMutation`, unlike admin mutation paths.
 
@@ -114,6 +130,8 @@ Comments can be deleted by staff, but there is no moderation state, reason or au
 
 No CSP, HSTS, `X-Frame-Options` or `X-Content-Type-Options`; no general API rate limiting; CSRF/Origin checks are partial. Cookies rely on `SameSite=Lax` for many routes.
 
+Cloudflare Turnstile and a shared MongoDB fixed-window limiter now protect the abuse-prone unauthenticated actions (Sense Box submission and magic-link sign-in) — see [security/turnstile.md](../security/turnstile.md). Authenticated voting is deliberately not challenged. General API rate limiting, the security headers and complete CSRF coverage remain.
+
 **Direction:** Add headers at the reverse proxy or app boundary, then extend origin checks to every state-changing route. Document residual risk.
 
 ### 16. The legal acceptance gate is inactive
@@ -166,9 +184,11 @@ A member can draft a new proposal, but there is no `targetPolicyId` or change ty
 
 **Direction:** Add an explicit amend/repeal relationship with lineage and a ballot path.
 
-### 24. No notice, seconding, confirmation or eligibility snapshot
+### 24. Notice periods and confirmation ballots remain undefined
 
-These are recorded as open decisions. The current implementation has no stage clocks, `opensAt`, seconder model, confirmation ballot or electorate snapshot.
+**Resolved on `feat/rfc0001-sprint1-integration`:** policy proposals require a seconder; seconding opens a 30-day deliberation clock; the scheduler advances and closes ballots automatically. Eligibility is evaluated at vote time by decision, so there is no electorate snapshot.
+
+Still open: notice periods, scheduled opening, confirmation ballots, and whether staff may create directly in a later stage. See decision register O3, O9 and O10.
 
 ### 25. Documentation drift remains in older files
 
@@ -191,34 +211,39 @@ There are no metrics, traces or alerting. Failures in email, cron or verificatio
 
 The identifiable-ballot boundary is national administrator or a delegated national permission. A dedicated election-officer role is recommended but not modelled.
 
-## Open governance decisions
+## Governance decisions
 
-The following must be supplied by Fusion, not inferred:
+The maintainer answered the RFC 0001 questionnaire on 14 November 2026. The
+[decision register](../governance/decision-register.md) is now canonical; the
+list below is retained only to show which questions are settled and which remain.
 
-- **G1** Authority to treat legacy national policy as published.
-- **G2** Instrument classification (policy, principle, position, reference).
-- **G4** Relationship between Reclaim and the national platform.
-- **G6** Whether seconding is required.
-- **G7** Deliberation and ballot periods.
-- **G8** Qualifying membership for each ballot class.
-- **G9** Thresholds, quorum, ties, abstentions and non-voters.
-- **G10** Early closure.
-- **G11** Preferential amendment method.
-- **G12** Delegated or automatic ratification.
-- **G13** Ballot secrecy versus officer-identifiable ballots.
-- **G17** Effective dates and notice.
-- **G18–G21** Status and adoption of Reclaim/national records, baseline ceremony, and document- versus commitment-level adoption.
+| Question | State |
+|---|---|
+| **G1** Authority to treat legacy national policy as published | Deferred with the National Neon import (D33, #36). No import or mapping may occur. |
+| **G2** Instrument classification | Still open. Do not infer. |
+| **G4** Relationship between Reclaim and the national platform | Still open. |
+| **G6** Whether seconding is required | **Answered:** required before Deliberate (D3). Mechanism not yet implemented. |
+| **G7** Deliberation and ballot periods | **Answered:** 30 days deliberation, 30 days ballot, 60-day ceiling (D4–D7). |
+| **G8** Qualifying membership for each ballot class | **Answered in principle:** eligibility at vote time; one geographic and one constituent branch; National for all (D2, D21). |
+| **G9** Thresholds, quorum, ties, abstentions | **Partly answered:** simple majority, tie fails, no quorum (D8, D9). Abstention denominator remains open (D10, O1). |
+| **G10** Early closure | **Deferred:** no irreversible-outcome early closure until a correct model exists (D12). |
+| **G11** Preferential amendment method | **Direction only:** direct choice for two, ranked choice for three or more; method and tie handling unspecified (D18). |
+| **G12** Delegated or automatic ratification | **Answered in principle:** automatic for zero or one amendment; collision review for two or more (D14–D20). |
+| **G13** Ballot secrecy versus officer-identifiable ballots | **Answered:** encrypted by default; individual choices never publicly identifiable; identifiable access remains restricted (D26, D29). |
+| **G17** Effective dates and notice | Still open (O3). |
+| **G18–G21** Status and adoption of Reclaim/national records | Out of scope while the import is deferred. |
 
-The full register is in `docs/engage-product-direction-governance-audit-2026-11-07.md`.
+The full historical register is in `docs/engage-product-direction-governance-audit-2026-11-07.md`.
+New open decisions are tracked as O1–O8 in the decision register.
 
 ## Verification limitations
 
-This documentation set was verified by source inspection, targeted `rg` checks, existing tests and dated audits. The following were not performed in this pass:
+This documentation set was verified by source inspection, targeted `rg` checks, existing tests and dated audits. The Sprint 1 integration additionally ran the full suite against a real MongoDB 8.0 replica set and executed two browser journeys (see [the integration report](sprint1-integration-report.md)). The following were still not performed:
 
-- a real-MongoDB test run;
-- Playwright browser journeys;
 - load or performance testing;
+- delegated-role browser journeys;
 - a production deployment;
+- migration rehearsal on production-shaped data;
 - legal or constitutional review.
 
 Claims that depend on those activities are labelled as gaps or left out.
@@ -248,5 +273,9 @@ The actionable gaps were opened as GitHub issues on 13 November 2026. This page 
 | 24 Seconding, notice, scheduled opening, confirmation ballots | #30 |
 | 25 Stale historical documentation | #44 |
 | 27 Election/Returning Officer role | #29 |
+| Rendering performance and list read path | #52 |
+| Governance command layer and route policy | #53 |
+| Decision record and responsibility queue | #54 |
+| Ballot-results index migration safety | #55 |
 
-Issue #28, #30, #36 and #40 are explicitly blocked on Fusion governance or legal decisions. Do not implement them by guessing the rule.
+Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain blocked on unresolved governance or legal decisions; implement only the parts the decision register settles.

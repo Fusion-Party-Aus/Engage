@@ -161,6 +161,13 @@ describe("governance resolution vs policy classification", () => {
       kind: "resolution",
       stage: "propose",
     });
+    // D3 fixture: this test is about classification, not seconding.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: govRes.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
     await saveProposal(db, nationalAdmin, {
       proposalId: govRes.proposalId,
       stage: "deliberate",
@@ -168,6 +175,7 @@ describe("governance resolution vs policy classification", () => {
     await saveProposal(db, nationalAdmin, {
       proposalId: govRes.proposalId,
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     const rev = await db
       .collection("proposal_revisions")
@@ -344,6 +352,13 @@ describe("governance resolution vs policy classification", () => {
       kind: "policy",
       stage: "propose",
     });
+    // D3 fixture: this test is about ratification classification, not seconding.
+    await db
+      .collection("proposals")
+      .updateOne(
+        { proposalId: pol.proposalId },
+        { $set: { secondedAt: new Date() } },
+      );
     await saveProposal(db, nationalAdmin, {
       proposalId: pol.proposalId,
       stage: "deliberate",
@@ -351,6 +366,7 @@ describe("governance resolution vs policy classification", () => {
     await saveProposal(db, nationalAdmin, {
       proposalId: pol.proposalId,
       stage: "decide",
+      ballotClosesAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
     });
     const polRev = await db
       .collection("proposal_revisions")

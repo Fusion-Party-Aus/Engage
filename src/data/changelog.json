@@ -1,5 +1,358 @@
 [
   {
+    "hash": "1865311",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "deploy",
+    "summary": "Pass Turnstile and rate-limit env vars to app container"
+  },
+  {
+    "hash": "afa49fa",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security,proposals",
+    "summary": "Address PR #51 review findings"
+  },
+  {
+    "hash": "fdb5818",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Add the Phase 2 orchestrator handover brief",
+    "details": "Record the handover state, governance invariants, traps found during delivery, the recommended Phase 2 sequence, parallelisation rules, verification commands, open decisions and the first ten actions for the next orchestrator."
+  },
+  {
+    "hash": "8d50cd3",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Mark integrated workstreams and the next Phase 2 slices"
+  },
+  {
+    "hash": "d4b5de0",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Record Phase 1, rendering performance and Turnstile integration",
+    "details": "Update I2, I6, I10, I12 and the workstream table with measured evidence and the remaining gaps. Mark the performance and Turnstile documents as merged into the integration branch."
+  },
+  {
+    "hash": "b8568a9",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh after the rendering performance merge"
+  },
+  {
+    "hash": "7ebd2cd",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "lifecycle",
+    "summary": "Record Phase 1 delivery and the remaining decisions",
+    "details": "Mark seconding, scheduled advancement and automatic closure as implemented, update the known-gap register, and add O9/O10 for the administrative direct-creation path and renewed seconding after material rewrites."
+  },
+  {
+    "hash": "fe1ae6b",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Make seconding the act that opens deliberation",
+    "details": "D3 requires a seconder before Deliberate and D4 anchors the clock to seconding. The initial Phase 1 implementation recorded the seconding but left Propose -> Deliberate to an officer, which could stall a proposal indefinitely and run the clock in the wrong stage. Seconding now performs the transition and records both the seconding and the stage transition. Officer and API transitions into Deliberate are refused without a recorded seconder. A member-facing control appears on the proposal page for eligible, non-author members, with inline feedback and no raw controls. Update the unrelated stage-transition fixtures to record a seconder explicitly. Extend the browser verification to cover seconding, the 30-day default when no ballot date is given, a rejected past date, and the editor showing the proposal's real stage."
+  },
+  {
+    "hash": "963a345",
+    "date": "2026-11-14",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Render saved values in select controls",
+    "details": "Astro renders React component slot children as raw HTML, so React never sees the options inside NativeSelect and cannot apply defaultValue. Every select rendered its first option, which meant editing a proposal could silently reset its stage, clearing provenance, changing a member's status to pending, or applying the wrong filter or sort. Mark the stored option as selected at each affected call site. The admin proposal editor and register, member administration, Sense Box review, engagement period, policy filters and public proposal filters are covered."
+  },
+  {
+    "hash": "116909f",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the rendering performance slice"
+  },
+  {
+    "hash": "9a12214",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "status",
+    "summary": "Record the rendering performance audit and measurements",
+    "details": "Classifies initial, deferred and interaction-only data per audited page; records baseline and after medians, queries removed or deferred, bundle findings, limitations and the highest-value remaining work. Adds a pnpm/npm perf:render entry point."
+  },
+  {
+    "hash": "b25e385",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "client",
+    "summary": "Defer notification hydration off the critical path",
+    "details": "The header notification bell and notification preferences hydrate when the browser is idle. The bell is secondary to page content but still loads its unread count; no API or preference behaviour changes."
+  },
+  {
+    "hash": "21bacbc",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "admin",
+    "summary": "Consolidate register reads and defer participation panel",
+    "details": "The proposals register now reads the proposal collection once and batches amendment and revision lookups instead of issuing one query per row. The overview's recent-participation panel moves to a server island with a stable fallback, so its session-dependent reads no longer block the dashboard. Admin timelines hydrate when visible; migrations hydrate on idle."
+  },
+  {
+    "hash": "0089412",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "lists",
+    "summary": "Project list reads and reuse member vote queries",
+    "details": "Stops list queries returning detailHtml and, where no search depends on it, long rationale text. Home and the proposals list reuse one member-vote read for outstanding ballots; the member page loads shared activity inputs once instead of twice. Member-page islands in inactive views hydrate only when visible. Adds visibility and vote-reuse regression tests."
+  },
+  {
+    "hash": "f6ebf8f",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "auth",
+    "summary": "Resolve a session once per request render",
+    "details": "Layouts and pages each asked for the same session. Cache the in-flight resolution against the Request object so one browser request performs one session lookup while role revocation remains request-scoped. Adds a regression test for reuse."
+  },
+  {
+    "hash": "20b389d",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "proposals",
+    "summary": "Batch independent detail reads and defer ballot hydration",
+    "details": "Runs supersede, eligibility, related-branch and evidence reads with the rest of the proposal-detail batch instead of in sequence. The ballot hydrates on idle rather than blocking load; the stance selector does the same."
+  },
+  {
+    "hash": "3500116",
+    "date": "2026-11-14",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "tooling",
+    "summary": "Add rendering performance harness and DB command metrics",
+    "details": "Adds an opt-in MongoDB command monitor (disabled unless ENGAGE_DB_COMMAND_MONITOR=1 and APP_MODE is not production), a development-only diagnostics route, and a repeatable Playwright/Mongo measurement harness with baseline and comparison modes. No production behaviour changes."
+  },
+  {
+    "hash": "2ef26d0",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "security",
+    "summary": "Name the rate-limit collection plainly"
+  },
+  {
+    "hash": "96399d5",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for Turnstile abuse protection"
+  },
+  {
+    "hash": "9a2855b",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "security",
+    "summary": "Document Turnstile enforcement and rate limits",
+    "details": "Record the protected actions, configuration contract, fail-closed states, failure messages, privacy boundary, rate-limit defaults and remaining gaps (CSP and headers stay with #38). Add the new keys to the environment example."
+  },
+  {
+    "hash": "7d9bae9",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "security",
+    "summary": "Show the Turnstile widget on protected forms",
+    "details": "Render Cloudflare Turnstile on the Sense Box and magic-link sign-in forms using Horizon primitives. The widget renders nothing when no site key is configured, reports load and expiry failures inline with a retry action, and asks for a fresh token after a rejected submission because tokens are single-use."
+  },
+  {
+    "hash": "08c61ef",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "security",
+    "summary": "Verify Turnstile tokens for unauthenticated actions",
+    "details": "Add server-side Cloudflare Turnstile verification (D32) and a shared MongoDB fixed-window limiter for the abuse-prone unauthenticated routes. - protect Sense Box submission, magic-link sign-in/first registration, and email sign-up if it is enabled later - fail closed with 503 and an operational error when production requires Turnstile but the secret or site key is missing - report missing, invalid, expired, replayed and malformed tokens with plain-language errors; never log or return the secret or token - store only a keyed hash of the client address, with a TTL index, so limits are shared across instances - leave authenticated voting, deliberation and admin writes untouched - tests cover configuration states, verification outcomes, route refusal and acceptance, real-MongoDB concurrency and the voting exemption"
+  },
+  {
+    "hash": "936eee4",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Include the lifecycle documentation commits"
+  },
+  {
+    "hash": "1e88005",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "lifecycle",
+    "summary": "State that returning to Propose keeps the seconding clock"
+  },
+  {
+    "hash": "f71ca91",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the Phase 1 lifecycle work"
+  },
+  {
+    "hash": "186baa2",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "lifecycle",
+    "summary": "Document seconding, scheduled transitions and closure",
+    "details": "Records the implemented behaviour and the assumptions visible for review: - one seconder who is not the author; seconding records the clock but does not change the stage or gate Propose -> Deliberate; - automatic proposal advancement at the deliberation deadline by a system actor, without `ballots.bind`; - the conservative blocking-amendment set, reason codes and failure behaviour; - automatic closure at the ballot deadline without a stage change or result; - the 30-day default for officer-opened ballots; - new proposal fields (`secondedBy`, `secondedAt`, `deliberationEndsAt`, `ballotClosedAt`), deterministic event IDs and scheduler transaction rules; - the read-only migration report and its manual recovery options."
+  },
+  {
+    "hash": "e0b2dfb",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ops",
+    "summary": "Add governance scheduler and deadline migration report commands",
+    "details": "- `npm run governance:scheduler` runs the lifecycle scheduler as a dry run by default and writes only with `--apply`. It prints a JSON report with advanced, skipped, closed, blockers and errors, and exits non-zero on errors. - `npm run governance:migration-report` prints the read-only legacy report. - Both require MONGODB_URI and fail loudly without it; neither adds a daemon nor requires production credentials."
+  },
+  {
+    "hash": "b6cc5a1",
+    "date": "2026-11-14",
+    "type": "feat",
+    "category": "feature",
+    "scope": "lifecycle",
+    "summary": "Second proposals and schedule advancement and ballot closure",
+    "details": "Implements the approved lifecycle schedule from the decision register (D3-D7, RFC 0001 Phase 1, refs #26 and #30). - A verified member who is not the author may second a proposal while it is in Propose. The act records `secondedBy`, `secondedAt` and `deliberationEndsAt` (30 days) and writes `proposal.seconded`. It does not change the stage or grant ballot authority. - `src/lib/lifecycle-schedule.ts` is the single source of truth for the 30-day deliberation period, 30-day ballot period and 60-day ceiling. - A system actor (`system:lifecycle-scheduler`) advances due deliberations to Decide, binding the latest immutable revision and setting `ballotClosesAt = secondedAt + 60 days`. It requires no `ballots.bind`; the human early-advancement gate is unchanged. - Advancement fails closed on unresolved amendments (`rejected`, `withdrawn`, `applied`, `not-endorsed` and `inconclusive` are the only non-blocking statuses), on votes bound to other wording, on a missing seconding anchor, and on a ceiling already in the past. - Ballots close automatically at their deadline: `ballot.closed` is recorded once, the stage and result are untouched, and voting is refused after the boundary (D12 is not implemented). - Conditional filters, deterministic event IDs and transactional writes make both operations idempotent and safe under concurrent runs. - An officer opening a ballot without a date now receives the 30-day default; explicit dates remain authoritative. - Adds a read-only report for legacy ballots without deadlines and matters in Deliberate without a deliberation clock."
+  },
+  {
+    "hash": "7d05e7f",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Correct membership workstream status",
+    "details": "The CRM branch did not add the unique branch-membership index or the duplicate-resolving migration required by #32, so I3 remains partial."
+  },
+  {
+    "hash": "5c5af39",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Track active workstreams and new implementation issues",
+    "details": "Record the Phase 1, rendering-performance and Turnstile workstreams, link the new issues for performance (#52), the command layer (#53), the decision record and responsibility queue (#54), and ballot-results migration safety (#55). Clarify that #36 is deferred rather than blocked inside this programme."
+  },
+  {
+    "hash": "1bd4fd1",
+    "date": "2026-11-14",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the Sprint 1 integration"
+  },
+  {
+    "hash": "b8030d2",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Integrate Sprint 1 and record maintainer decisions",
+    "details": "Add the canonical governance decision register, the RFC 0001 programme tracker and the Sprint 1 integration report. Update the documentation index and replace the open-question list with the decisions now supplied, while keeping genuinely unresolved questions explicit. Add a browser verification script for the deadline, voting and vote-change journeys and record its evidence."
+  },
+  {
+    "hash": "8fc83dd",
+    "date": "2026-11-14",
+    "type": "test",
+    "category": "ops",
+    "scope": "rbac",
+    "summary": "Reconcile Sprint 1 authority expectations after integration",
+    "details": "The governance branch made ballots.bind and a future closing date mandatory when entering Decide, and refuses deletion of matters with governance history. The RBAC branch assumed neither. Align the fixtures with real session permissions, supply a ballot deadline, and delete a draft with no history. Ignore branch grants for permissions the catalogue reserves to National scope, allow branch-scoped comment moderation, and prove that a branch proposals.delete grant does not confer destructive authority."
+  },
+  {
+    "hash": "c910a72",
+    "date": "2026-11-14",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Keep the deadline banner hydration-stable",
+    "details": "The ballot deadline rendered a server date and a post-mount relative time in the same text nodes. React 19 reported a text hydration mismatch on every ballot with a deadline, forcing an unnecessary client re-render. Mark the two intentionally time-dependent nodes as hydration-stable and make the date helper's timezone explicit so server and client markup match before the viewer-local deadline replaces it."
+  },
+  {
+    "hash": "0624e49",
+    "date": "2026-11-14",
+    "type": "fix",
+    "category": "fix",
+    "scope": "proposals",
+    "summary": "Clear provenance without a conflicting stage update",
+    "details": "Staff editing a proposal through the admin form always submits provenance: null for the default 'clear provenance' option. saveProposal placed provenance in both $set and $unset, which MongoDB rejects with a path conflict, so every staff edit failed against a real database. Make the clear and set branches mutually exclusive and cover the case against the real MongoDB voting suite."
+  },
+  {
+    "hash": "4ed96bc",
+    "date": "2026-11-14",
+    "type": "fix",
+    "category": "fix",
+    "scope": "rbac",
+    "summary": "Consolidate permission enforcement, ballot binding gate, and ratification authority checks (#27, #31)"
+  },
+  {
+    "hash": "af890d0",
+    "date": "2026-11-14",
+    "type": "fix",
+    "category": "fix",
+    "scope": "membership",
+    "summary": "Guard CRM-sourced memberships, exempt national row from conflict, and record manual provenance (#32)"
+  },
+  {
+    "hash": "919e7a5",
+    "date": "2026-11-14",
+    "type": "fix",
+    "category": "fix",
+    "scope": "governance",
+    "summary": "Enforce ballot deadlines, rebinding, atomic decisions, and deletion guards (#26, #50)"
+  },
+  {
+    "hash": "a132b13",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "rfc",
+    "summary": "Propose platform evolution and integrity programme"
+  },
+  {
+    "hash": "37aa2f0",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "agents",
+    "summary": "Require checking open issues before implementation (#48)"
+  },
+  {
+    "hash": "52ffaf6",
+    "date": "2026-11-14",
+    "type": "docs",
+    "category": "docs",
+    "scope": "platform",
+    "summary": "Canonical documentation set and known-gap tracking (#46)",
+    "details": "* docs(research): add cross-industry product and UX research Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence. * chore(changelog): record cross-industry research * fix(api): enforce minimal response DTOs, ballot privacy, and bounded pagination * feat(proposals): separate geographic scope from branch identity Add a canonical proposal scope model with stable keys (national, nsw, vic, ...) and consistent labels from the site's state configuration. Branch records remain the organisational identity; legacy records resolve to the canonical scope without being rewritten. Server validation now rejects display labels, non-string or conflicting scopes and ambiguous duplicate geography, and enforces branch administration independently of the rendered controls. * feat(proposals): use an accessible scope selector Replace the native proposal-scope dropdown with the existing ToggleGroup primitive, giving a single National option, consistently named states and territories, visible focus, keyboard navigation and responsive wrapping. Default to the member's authorised branch where one applies and submit the canonical scope key rather than a display label. * chore(changelog): refresh snapshot after proposal scope changes * fix(security): harden RBAC boundaries, CSRF origin checks, and markdown links * feat(ballots): add AES-256-GCM encrypted vote storage, blind indexing, and migration * refactor(auth): unify legacy administrative permission resolution * chore(changelog): record permission resolution consolidation * fix(security): handle rotated blind-index upserts and proxy-safe CSRF origins * feat(site): add branded 403, 404 and 500 error pages * chore(changelog): refresh snapshot after status pages * feat(auth): separate participation, voting and administration Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work. * chore(changelog): record authorisation consolidation * test(ci): update member lifecycle browser check for unified notification center * feat(site): open notifications in a header popover The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu. * chore(changelog): refresh snapshot after notification popover * fix(security): allow national RBAC grants in branch search and preserve scope on read * feat(auth): support multiple roles and a grouped scope select Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips. * chore(changelog): record multi-role and grouped scope select * feat(verification): verify members from Underground CRM * chore(changelog): record CRM membership verification * docs: establish canonical product, domain and architecture documentation * chore(changelog): record documentation sprint * docs(status): link known gaps to GitHub issues * chore(changelog): record known-gap tracking * chore(changelog): refresh snapshot before merge"
+  },
+  {
     "hash": "db6d4b8",
     "date": "2026-11-13",
     "type": "fix",
@@ -16,54 +369,6 @@
     "summary": "Look up encrypted votes by blind index in member queues and activity (#45)"
   },
   {
-    "hash": "2717d4e",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record known-gap tracking"
-  },
-  {
-    "hash": "5773001",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "status",
-    "summary": "Link known gaps to GitHub issues"
-  },
-  {
-    "hash": "e175ae7",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record documentation sprint"
-  },
-  {
-    "hash": "9e31379",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "platform",
-    "summary": "Establish canonical product, domain and architecture documentation"
-  },
-  {
-    "hash": "d1a24af",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record CRM membership verification"
-  },
-  {
-    "hash": "76797d6",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "verification",
-    "summary": "Verify members from Underground CRM"
-  },
-  {
     "hash": "32edbcc",
     "date": "2026-11-13",
     "type": "docs",
@@ -71,180 +376,6 @@
     "scope": "research",
     "summary": "Cross-industry product and UX research (#25)",
     "details": "* docs(research): add cross-industry product and UX research Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence. * chore(changelog): record cross-industry research * fix(api): enforce minimal response DTOs, ballot privacy, and bounded pagination * feat(proposals): separate geographic scope from branch identity Add a canonical proposal scope model with stable keys (national, nsw, vic, ...) and consistent labels from the site's state configuration. Branch records remain the organisational identity; legacy records resolve to the canonical scope without being rewritten. Server validation now rejects display labels, non-string or conflicting scopes and ambiguous duplicate geography, and enforces branch administration independently of the rendered controls. * feat(proposals): use an accessible scope selector Replace the native proposal-scope dropdown with the existing ToggleGroup primitive, giving a single National option, consistently named states and territories, visible focus, keyboard navigation and responsive wrapping. Default to the member's authorised branch where one applies and submit the canonical scope key rather than a display label. * chore(changelog): refresh snapshot after proposal scope changes * fix(security): harden RBAC boundaries, CSRF origin checks, and markdown links * feat(ballots): add AES-256-GCM encrypted vote storage, blind indexing, and migration * refactor(auth): unify legacy administrative permission resolution * chore(changelog): record permission resolution consolidation * fix(security): handle rotated blind-index upserts and proxy-safe CSRF origins * feat(site): add branded 403, 404 and 500 error pages * chore(changelog): refresh snapshot after status pages * feat(auth): separate participation, voting and administration Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work. * chore(changelog): record authorisation consolidation * test(ci): update member lifecycle browser check for unified notification center * feat(site): open notifications in a header popover The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu. * chore(changelog): refresh snapshot after notification popover * fix(security): allow national RBAC grants in branch search and preserve scope on read * feat(auth): support multiple roles and a grouped scope select Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips. * chore(changelog): record multi-role and grouped scope select"
-  },
-  {
-    "hash": "d417ab5",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record multi-role and grouped scope select"
-  },
-  {
-    "hash": "a24be08",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "auth",
-    "summary": "Support multiple roles and a grouped scope select",
-    "details": "Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips."
-  },
-  {
-    "hash": "ada97c2",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "security",
-    "summary": "Allow national RBAC grants in branch search and preserve scope on read"
-  },
-  {
-    "hash": "eead05a",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh snapshot after notification popover"
-  },
-  {
-    "hash": "d9313bb",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "site",
-    "summary": "Open notifications in a header popover",
-    "details": "The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu."
-  },
-  {
-    "hash": "69ee0e8",
-    "date": "2026-11-13",
-    "type": "test",
-    "category": "ops",
-    "scope": "ci",
-    "summary": "Update member lifecycle browser check for unified notification center"
-  },
-  {
-    "hash": "233988d",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record authorisation consolidation"
-  },
-  {
-    "hash": "8e5f9ab",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "auth",
-    "summary": "Separate participation, voting and administration",
-    "details": "Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work."
-  },
-  {
-    "hash": "6850011",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh snapshot after status pages"
-  },
-  {
-    "hash": "66dc64d",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "site",
-    "summary": "Add branded 403, 404 and 500 error pages"
-  },
-  {
-    "hash": "7af887e",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "security",
-    "summary": "Handle rotated blind-index upserts and proxy-safe CSRF origins"
-  },
-  {
-    "hash": "20373bd",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record permission resolution consolidation"
-  },
-  {
-    "hash": "f809655",
-    "date": "2026-11-13",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "auth",
-    "summary": "Unify legacy administrative permission resolution"
-  },
-  {
-    "hash": "1836213",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ballots",
-    "summary": "Add AES-256-GCM encrypted vote storage, blind indexing, and migration"
-  },
-  {
-    "hash": "b3f69d5",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "security",
-    "summary": "Harden RBAC boundaries, CSRF origin checks, and markdown links"
-  },
-  {
-    "hash": "d77fdd2",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh snapshot after proposal scope changes"
-  },
-  {
-    "hash": "dd4b251",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Use an accessible scope selector",
-    "details": "Replace the native proposal-scope dropdown with the existing ToggleGroup primitive, giving a single National option, consistently named states and territories, visible focus, keyboard navigation and responsive wrapping. Default to the member's authorised branch where one applies and submit the canonical scope key rather than a display label."
-  },
-  {
-    "hash": "7e64b76",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Separate geographic scope from branch identity",
-    "details": "Add a canonical proposal scope model with stable keys (national, nsw, vic, ...) and consistent labels from the site's state configuration. Branch records remain the organisational identity; legacy records resolve to the canonical scope without being rewritten. Server validation now rejects display labels, non-string or conflicting scopes and ambiguous duplicate geography, and enforces branch administration independently of the rendered controls."
-  },
-  {
-    "hash": "9c27e4b",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "api",
-    "summary": "Enforce minimal response DTOs, ballot privacy, and bounded pagination"
-  },
-  {
-    "hash": "e0b85f8",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record cross-industry research"
-  },
-  {
-    "hash": "ff5e240",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "research",
-    "summary": "Add cross-industry product and UX research",
-    "details": "Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence."
   },
   {
     "hash": "787160a",
@@ -542,121 +673,5 @@
     "category": "fix",
     "scope": "email",
     "summary": "Keep verification notices within narrow mobile screens"
-  },
-  {
-    "hash": "300966c",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Let administrators inspect the proposed re-engagement audience"
-  },
-  {
-    "hash": "9e72e64",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "member",
-    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
-  },
-  {
-    "hash": "71a61de",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ci",
-    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
-  },
-  {
-    "hash": "cb39b60",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record lifecycle audit, consent assessment and rollout checks"
-  },
-  {
-    "hash": "52c6570",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Connect verification, participation and legacy consent journeys"
-  },
-  {
-    "hash": "ee47cdf",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record administrator test email delivery"
-  },
-  {
-    "hash": "eb5f365",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "email",
-    "summary": "Let administrators send themselves a sample digest",
-    "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
-  },
-  {
-    "hash": "cfbf459",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record notification preferences and digest rollout defaults"
-  },
-  {
-    "hash": "bc6409f",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Separate email preferences and explain rollout defaults",
-    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
-  },
-  {
-    "hash": "7a56a95",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "engagement",
-    "summary": "Add proposal rankings, ballot deadlines and member reminders",
-    "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
-  },
-  {
-    "hash": "0b8b375",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "settings",
-    "summary": "Save the configured source repository URL"
-  },
-  {
-    "hash": "6fad513",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record granular analytics improvements"
-  },
-  {
-    "hash": "2167573",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "analytics",
-    "summary": "Measure Engage navigation and participation outcomes"
   }
 ]

@@ -1,6 +1,6 @@
 import { ensureDigestCohort } from "./digest-preferences.ts";
 import { ensureVoteStorage, PROPOSAL_VOTES } from "./vote-storage.ts";
-import { MongoClient, ObjectId, type Db } from "mongodb";
+import { MongoClient, ObjectId, type ClientSession, type Db } from "mongodb";
 import { createHash } from "node:crypto";
 import baselineItems from "../data/policies.json" with { type: "json" };
 import { ensureLegacyProposalRevision } from "./proposal-revision.ts";
@@ -11,6 +11,75 @@ let clientUri: string | undefined;
 let mongoFallbackUntil = 0;
 const dbInstanceCache = new Map<string, Db>();
 const seededDbs = new WeakMap<object, Promise<void>>();
+
+/**
+ * Opt-in driver command monitoring used by the rendering-performance harness.
+ * It is disabled unless `ENGAGE_DB_COMMAND_MONITOR=1` and the application is
+ * not running in production. Counters are process-wide and are only read from
+ * the development-only `/api/dev/render-metrics` diagnostic route.
+ */
+export interface DbCommandMetricsSnapshot {
+  enabled: boolean;
+  commands: number;
+  failed: number;
+  durationMs: number;
+  byCommand: Record<string, { count: number; durationMs: number }>;
+}
+
+const dbCommandMetrics = {
+  commands: 0,
+  failed: 0,
+  durationMs: 0,
+  byCommand: new Map<string, { count: number; durationMs: number }>(),
+};
+
+export function dbCommandMonitoringEnabled(env: PlatformEnv): boolean {
+  return (
+    env.ENGAGE_DB_COMMAND_MONITOR === "1" && env.APP_MODE !== "production"
+  );
+}
+
+function recordDbCommand(commandName: string, durationMs: number): void {
+  const name = commandName || "unknown";
+  dbCommandMetrics.commands += 1;
+  dbCommandMetrics.durationMs += durationMs;
+  const entry = dbCommandMetrics.byCommand.get(name) ?? {
+    count: 0,
+    durationMs: 0,
+  };
+  entry.count += 1;
+  entry.durationMs += durationMs;
+  dbCommandMetrics.byCommand.set(name, entry);
+}
+
+export function snapshotDbCommandMetrics(
+  env: PlatformEnv = runtimeEnv(),
+): DbCommandMetricsSnapshot {
+  return {
+    enabled: dbCommandMonitoringEnabled(env),
+    commands: dbCommandMetrics.commands,
+    failed: dbCommandMetrics.failed,
+    durationMs: Math.round(dbCommandMetrics.durationMs * 1000) / 1000,
+    byCommand: Object.fromEntries(
+      [...dbCommandMetrics.byCommand.entries()]
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(([name, value]) => [
+          name,
+          {
+            count: value.count,
+            durationMs: Math.round(value.durationMs * 1000) / 1000,
+          },
+        ]),
+    ),
+  };
+}
+
+export function resetDbCommandMetrics(): void {
+  dbCommandMetrics.commands = 0;
+  dbCommandMetrics.failed = 0;
+  dbCommandMetrics.durationMs = 0;
+  dbCommandMetrics.byCommand.clear();
+}
 
 export function runtimeEnv(locals?: unknown): PlatformEnv {
   const runtime = locals as
@@ -47,11 +116,37 @@ export async function getDatabase(
     if (clientUri !== uri || !clientPromise) {
       clientUri = uri;
       dbInstanceCache.clear();
-      clientPromise = new MongoClient(uri, {
+      const monitorCommands = dbCommandMonitoringEnabled(env);
+      const client = new MongoClient(uri, {
         maxPoolSize: 10,
         serverSelectionTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
         connectTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
-      }).connect();
+        monitorCommands,
+      });
+      if (monitorCommands) {
+        const startedAt = new Map<number, number>();
+        client.on("commandStarted", (event) => {
+          startedAt.set(event.requestId, performance.now());
+        });
+        client.on("commandSucceeded", (event) => {
+          const started = startedAt.get(event.requestId);
+          startedAt.delete(event.requestId);
+          recordDbCommand(
+            event.commandName,
+            started === undefined ? 0 : performance.now() - started,
+          );
+        });
+        client.on("commandFailed", (event) => {
+          const started = startedAt.get(event.requestId);
+          startedAt.delete(event.requestId);
+          dbCommandMetrics.failed += 1;
+          recordDbCommand(
+            event.commandName,
+            started === undefined ? 0 : performance.now() - started,
+          );
+        });
+      }
+      clientPromise = client.connect();
     }
     const client = await clientPromise;
     const cacheKey = `${uri}::${dbName}`;
@@ -101,7 +196,7 @@ export async function initializeDatabase(db: Db): Promise<void> {
   await ensureDigestCohort(db);
   await Promise.all([
     db.collection("sense_submissions").createIndex({branchId:1,createdAt:-1}),
-    db.collection("sense_limits").createIndex({expiresAt:1},{expireAfterSeconds:0}),
+    db.collection("rate_limits").createIndex({expiresAt:1},{expireAfterSeconds:0,name:"rate_limit_expiry"}),
   ]);
   await Promise.all([
     db.collection("engagement_lifecycle_events").createIndex({memberId:1,event:1,at:1}),
@@ -224,10 +319,28 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .collection("publication_events")
         .createIndex({ eventId: 1 }, { unique: true })
         .catch(() => {}),
-      db
-        .collection("ballot_results")
-        .createIndex({ proposalId: 1 }, { unique: true })
-        .catch(() => {}),
+      (async () => {
+        const col = db.collection("ballot_results");
+        const existing =
+          typeof col.indexes === "function"
+            ? await col.indexes().catch(() => [])
+            : [];
+        await col.createIndex(
+          { ballotId: 1 },
+          {
+            unique: true,
+            name: "ballot_results_ballot_unique",
+            partialFilterExpression: { ballotId: { $type: "string" } },
+          },
+        );
+        const legacyIdx = existing.find(
+          (idx) => idx.name === "proposalId_1" && idx.unique === true,
+        );
+        if (legacyIdx) {
+          await col.dropIndex("proposalId_1").catch(() => {});
+        }
+        await col.createIndex({ proposalId: 1 }).catch(() => {});
+      })(),
       db
         .collection("ballot_binding_events")
         .createIndex({ eventId: 1 }, { unique: true })
@@ -581,6 +694,7 @@ export function createMemoryDb(): Db {
           update: {
             $set?: Record<string, any>;
             $setOnInsert?: Record<string, any>;
+            $inc?: Record<string, number>;
             $unset?: Record<string, any>;
           },
           options?: { upsert?: boolean },
@@ -588,6 +702,10 @@ export function createMemoryDb(): Db {
           const idx = store.findIndex((doc) => matchesFilter(doc, filter));
           if (idx >= 0) {
             if (update.$set) Object.assign(store[idx]!, update.$set);
+            // Atomic in MongoDB; the in-memory preview only needs the semantics.
+            for (const [field, amount] of Object.entries(update.$inc ?? {})) {
+              store[idx]![field] = Number(store[idx]![field] ?? 0) + amount;
+            }
             for (const field of Object.keys(update.$unset || {})) delete store[idx]![field];
             return { matchedCount: 1, modifiedCount: 1, acknowledged: true };
           }
@@ -604,6 +722,9 @@ export function createMemoryDb(): Db {
             }
             if (update.$setOnInsert) Object.assign(doc, update.$setOnInsert);
             if (update.$set) Object.assign(doc, update.$set);
+            for (const [field, amount] of Object.entries(update.$inc ?? {})) {
+              doc[field] = Number(doc[field] ?? 0) + amount;
+            }
             store.push(doc);
             return {
               matchedCount: 0,
@@ -613,6 +734,45 @@ export function createMemoryDb(): Db {
             };
           }
           return { matchedCount: 0, modifiedCount: 0, acknowledged: true };
+        },
+        findOneAndUpdate: async (
+          filter: Record<string, any>,
+          update: {
+            $set?: Record<string, any>;
+            $setOnInsert?: Record<string, any>;
+            $inc?: Record<string, number>;
+            $unset?: Record<string, any>;
+          },
+          options?: { upsert?: boolean; returnDocument?: "before" | "after" },
+        ) => {
+          const idx = store.findIndex((doc) => matchesFilter(doc, filter));
+          if (idx >= 0) {
+            const before = { ...store[idx]! };
+            if (update.$set) Object.assign(store[idx]!, update.$set);
+            for (const [field, amount] of Object.entries(update.$inc ?? {})) {
+              store[idx]![field] = Number(store[idx]![field] ?? 0) + amount;
+            }
+            for (const field of Object.keys(update.$unset || {})) delete store[idx]![field];
+            return options?.returnDocument === "before" ? { ...before } : { ...store[idx]! };
+          }
+          if (!options?.upsert) return null;
+          const _id = new ObjectId();
+          const doc: Record<string, any> = { _id };
+          for (const [k, v] of Object.entries(filter)) {
+            if (
+              typeof v !== "object" ||
+              v instanceof ObjectId ||
+              v instanceof Date
+            )
+              doc[k] = v;
+          }
+          if (update.$setOnInsert) Object.assign(doc, update.$setOnInsert);
+          if (update.$set) Object.assign(doc, update.$set);
+          for (const [field, amount] of Object.entries(update.$inc ?? {})) {
+            doc[field] = Number(doc[field] ?? 0) + amount;
+          }
+          store.push(doc);
+          return { ...doc };
         },
         deleteOne: async (filter: Record<string, any>) => {
           const idx = store.findIndex((doc) => matchesFilter(doc, filter));
@@ -637,5 +797,30 @@ export function createMemoryDb(): Db {
 function getMemoryDb(): Db {
   if (!sharedMemoryDb) sharedMemoryDb = createMemoryDb();
   return sharedMemoryDb;
+}
+
+/**
+ * Run a persistence callback inside a MongoDB transaction when supported by
+ * the underlying client (e.g. a real replica set). Falls back to direct
+ * execution on the in-memory development/test database.
+ */
+export async function runInTransaction<T>(
+  db: Db,
+  fn: (session?: ClientSession) => Promise<T>,
+): Promise<T> {
+  const dbClient = (db as Db & { client?: MongoClient }).client;
+  if (!dbClient || typeof dbClient.startSession !== "function") {
+    return fn(undefined);
+  }
+  const session = dbClient.startSession();
+  try {
+    let result!: T;
+    await session.withTransaction(async () => {
+      result = await fn(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
 

@@ -1,7 +1,8 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
-import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import { getDatabase, runInTransaction, runtimeEnv } from "../../../../lib/db.ts";
 import { loadBallotCryptoConfig } from "../../../../lib/ballot-crypto.ts";
+import { recordGovernanceEvent } from "../../../../lib/governance-relationships.ts";
 import { PROPOSAL_VOTES, decodeStoredVote } from "../../../../lib/vote-storage.ts";
 import { canManageBranchBallot } from "../../../../lib/auth.ts";
 import { hasPermission } from "../../../../lib/rbac.ts";
@@ -82,25 +83,48 @@ export const POST: APIRoute = async ({ request, locals }) => {
       else tally.reject++;
       tally.total++;
     }
+    const now = new Date();
     const ballotDecision = {
       result,
       decisionEventId,
       tally,
       decidedBy: user.memberId,
-      decidedAt: new Date(),
+      decidedAt: now,
       revisionId: amendment.ballotRevisionId,
     };
-    const update = await db
-      .collection("amendments")
-      .updateOne(
-        {
-          amendmentId,
-          status: "voting",
-          ballotRevisionId: amendment.ballotRevisionId,
-        },
-        { $set: { status: result, ballotDecision } },
-      );
-    if (!update.modifiedCount)
+    const modifiedCount = await runInTransaction(db, async (session) => {
+      const sessionOpts = session ? { session } : undefined;
+      const update = await db
+        .collection("amendments")
+        .updateOne(
+          {
+            amendmentId,
+            status: "voting",
+            ballotRevisionId: amendment.ballotRevisionId,
+          },
+          { $set: { status: result, ballotDecision } },
+          sessionOpts,
+        );
+      if (update.modifiedCount) {
+        await recordGovernanceEvent(
+          db,
+          {
+            eventType: "amendment.ballot_closed",
+            matterId: amendment.proposalId,
+            ballotId: `amendment:${amendmentId}`,
+            revisionId: amendment.ballotRevisionId,
+            decisionEventId,
+            actorId: user.memberId,
+            authorityBranchId: branchScope,
+            metadata: { amendmentId, result, tally },
+            createdAt: now,
+          },
+          session,
+        );
+      }
+      return update.modifiedCount;
+    });
+    if (!modifiedCount)
       return Response.json(
         { error: "Amendment ballot was already closed." },
         { status: 409 },

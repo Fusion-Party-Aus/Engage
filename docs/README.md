@@ -24,11 +24,16 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Work on persistence, revisions or votes | [architecture/data-and-persistence.md](architecture/data-and-persistence.md) |
 | Add or change an API route | [architecture/api-and-authorisation.md](architecture/api-and-authorisation.md) |
 | Work on email, notifications or PWA | [architecture/notifications-and-jobs.md](architecture/notifications-and-jobs.md) |
+| Protect sign-in and public submissions | [security/turnstile.md](security/turnstile.md) |
 | Build, test or deploy | [architecture/build-deploy-operations.md](architecture/build-deploy-operations.md) |
 | Make a change | [guides/contributing.md](guides/contributing.md) |
 | Act as an autonomous agent | [guides/agent-guide.md](guides/agent-guide.md) |
 | Know what is actually shipped | [status/capability-matrix.md](status/capability-matrix.md) |
 | Know what is broken or undecided | [status/known-gaps.md](status/known-gaps.md) |
+| Know which governance rules the maintainer has approved | [governance/decision-register.md](governance/decision-register.md) |
+| Track RFC 0001 implementation progress | [status/rfc0001-programme-tracker.md](status/rfc0001-programme-tracker.md) |
+| Take over the RFC 0001 programme | [status/orchestrator-handover.md](status/orchestrator-handover.md) |
+| Understand a proposed direction | [rfc/README.md](rfc/README.md) |
 
 ## Documentation map
 
@@ -51,9 +56,19 @@ docs/
 ├── guides/
 │   ├── contributing.md               # Change protocol and quality gates
 │   └── agent-guide.md                # Orientation, invariants, traps, recipes
-└── status/
-    ├── capability-matrix.md          # Implemented / partial / planned
-    └── known-gaps.md                 # Defects, risks and open decisions
+├── governance/
+│   └── decision-register.md          # Maintainer-approved governance rules
+├── security/
+│   └── turnstile.md                  # Turnstile, abuse protection, rate limits
+├── status/
+│   ├── capability-matrix.md          # Implemented / partial / planned
+│   ├── known-gaps.md                 # Defects, risks and open decisions
+│   ├── rfc0001-programme-tracker.md  # Recommendation-by-recommendation progress
+│   ├── orchestrator-handover.md      # Operating brief for the next orchestrator
+│   └── sprint1-integration-report.md # Verification evidence for the first slice
+└── rfc/
+    ├── README.md                     # RFC status, structure and rules
+    └── 0001-…                        # Proposed platform evolution RFC
 ```
 
 ## Relationship to other documents
@@ -63,6 +78,7 @@ docs/
 - **`DESIGN.md`** defines the Horizon implementation contract: tokens, typography, components and layout.
 - **`docs/governance/`**, **`docs/architecture/`** and **`docs/integrations/`** contain earlier focused specifications. They remain useful for detail, but this set is the entry point and resolves their status.
 - **`docs/research/`** is evidence and option analysis, not a commitment. Nothing in it is implemented merely because it is documented.
+- **`docs/rfc/`** contains proposed directions and decision records. An RFC is not current behaviour and is not an implementation authorisation. Where an RFC and this documentation set disagree about what is shipped, this set and the code are authoritative.
 - Dated audits, release records and migration inventories are historical. They describe the system at a point in time and must not be read as current state.
 
 ## Status vocabulary

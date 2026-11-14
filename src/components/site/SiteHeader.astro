@@ -93,7 +93,7 @@ if (isStaff) {
     <div class:list={{ 'site-actions': true, 'site-actions--signed-in': Boolean(user) }}>
       {user ? (
         <>
-          <NotificationBell client:load />
+          <NotificationBell client:idle />
           <div class="site-actions__account">
             <Button href="/member/" size="sm" variant="outline" className="h-9 px-3.5 text-sm">My Engage</Button>
             <Button className="site-signout" type="button" variant="ghost" size="sm" data-signout>Sign out</Button>
