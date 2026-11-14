@@ -53,14 +53,14 @@ const hasRegistryRecords = records.length > 0;
       </Field>
       <Field label="Jurisdiction" htmlFor="policy-jurisdiction">
         <NativeSelect id="policy-jurisdiction" name="jurisdiction" defaultValue={jurisdiction}>
-          <option value="">All jurisdictions</option>
-          {jurisdictions.map((value) => <option value={value}>{value}</option>)}
+          <option value="" selected={!jurisdiction}>All jurisdictions</option>
+          {jurisdictions.map((value) => <option value={value} selected={jurisdiction === value}>{value}</option>)}
         </NativeSelect>
       </Field>
       <Field label="Branch" htmlFor="policy-branch">
         <NativeSelect id="policy-branch" name="branch" defaultValue={branchId}>
-          <option value="">All branches</option>
-          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+          <option value="" selected={!branchId}>All branches</option>
+          {branches.map((branch: any) => <option value={branch.branchId} selected={branchId === branch.branchId}>{branch.name}</option>)}
         </NativeSelect>
       </Field>
       <Button type="submit">Search</Button>

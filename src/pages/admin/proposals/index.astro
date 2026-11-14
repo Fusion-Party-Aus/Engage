@@ -216,7 +216,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
               <div class="admin-form-grid">
                 <Field label="Lifecycle stage" htmlFor="editor-stage">
                   <NativeSelect defaultValue={editingProposal ? editingProposal.stage : 'deliberate'} id="editor-stage" name="stage">
-                    {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+                    {stageOptions.map(([val, label]) => <option value={val} selected={editingProposal ? editingProposal.stage === val : val === 'deliberate'}>{label}</option>)}
                   </NativeSelect>
                 </Field>
 
@@ -231,8 +231,8 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 
                 <Field label="Classification" htmlFor="proposal-kind-select">
                   <NativeSelect defaultValue={isResolution ? 'resolution' : 'policy'} id="proposal-kind-select" name="kind" disabled={isLocked}>
-                    <option value="policy">Policy Proposal</option>
-                    <option value="resolution">Governance Resolution</option>
+                    <option value="policy" selected={!isResolution}>Policy Proposal</option>
+                    <option value="resolution" selected={isResolution}>Governance Resolution</option>
                   </NativeSelect>
                   {isLocked && <input type="hidden" name="kind" value={isResolution ? 'resolution' : 'policy'} />}
                 </Field>
@@ -253,28 +253,28 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                     <div class="admin-form-grid">
                       <Field label="Originating branch" htmlFor="editor-origin-scope">
                         <NativeSelect defaultValue={editingProposal?.originatingBranchId ?? ''} id="editor-origin-scope" name="originatingBranchId" disabled={isLocked}>
-                          <option value="">Not specified</option>
-                          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                          <option value="" selected={!editingProposal?.originatingBranchId}>Not specified</option>
+                          {branches.map((branch: any) => <option value={branch.branchId} selected={editingProposal?.originatingBranchId === branch.branchId}>{branch.name}</option>)}
                         </NativeSelect>
                       </Field>
                       <Field label="Governance authority" htmlFor="editor-governance-authority">
                         <NativeSelect defaultValue={editingProposal?.governanceAuthorityBranchId ?? ''} id="editor-governance-authority" name="governanceAuthorityBranchId" disabled={isLocked}>
-                          <option value="">Not specified</option>
-                          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                          <option value="" selected={!editingProposal?.governanceAuthorityBranchId}>Not specified</option>
+                          {branches.map((branch: any) => <option value={branch.branchId} selected={editingProposal?.governanceAuthorityBranchId === branch.branchId}>{branch.name}</option>)}
                         </NativeSelect>
                       </Field>
                       <Field label="Policy jurisdiction" htmlFor="editor-jurisdiction">
                         <NativeSelect defaultValue={editingProposal?.jurisdictionBranchId ?? ''} id="editor-jurisdiction" name="jurisdictionBranchId" disabled={isLocked}>
-                          <option value="">Not specified</option>
-                          {branches.map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                          <option value="" selected={!editingProposal?.jurisdictionBranchId}>Not specified</option>
+                          {branches.map((branch: any) => <option value={branch.branchId} selected={editingProposal?.jurisdictionBranchId === branch.branchId}>{branch.name}</option>)}
                         </NativeSelect>
                       </Field>
                       <Field label="Publication scope" htmlFor="editor-publication-scope">
                         <NativeSelect defaultValue={editingProposal?.publicationScope ?? ''} id="editor-publication-scope" name="publicationScope" disabled={isLocked}>
-                          <option value="">Not specified</option>
-                          <option value="private">Private</option>
-                          <option value="branch">Branch</option>
-                          <option value="national">National</option>
+                          <option value="" selected={!editingProposal?.publicationScope}>Not specified</option>
+                          <option value="private" selected={editingProposal?.publicationScope === 'private'}>Private</option>
+                          <option value="branch" selected={editingProposal?.publicationScope === 'branch'}>Branch</option>
+                          <option value="national" selected={editingProposal?.publicationScope === 'national'}>National</option>
                         </NativeSelect>
                       </Field>
                     </div>
@@ -347,13 +347,13 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                   <div class="admin-form-grid">
                     <Field label="Provenance classification" htmlFor="prov-category-select">
                       <NativeSelect defaultValue={initialProvenance?.category ?? 'none'} id="prov-category-select" name="provCategory">
-                        <option value="none">None (clear provenance)</option>
-                        <option value="existing-repackaged">{isResolution ? 'Preceding resolution · equivalence unverified' : 'Approved policy predecessor · equivalence unverified'}</option>
-                        <option value="materially-revised">{isResolution ? 'Preceding resolution · materially revised' : 'Approved policy predecessor · materially revised'}</option>
-                        <option value="new-proposal">{isResolution ? 'New resolution · no prior authority identified' : 'New proposal · no prior policy identified'}</option>
-                        <option value="party-governance">Party governance · internal platform review</option>
-                        <option value="draft-derived">Draft branch predecessor · unapproved</option>
-                        <option value="unverified">Mapping unverified</option>
+                        <option value="none" selected={!initialProvenance?.category || initialProvenance.category === 'none'}>None (clear provenance)</option>
+                        <option value="existing-repackaged" selected={initialProvenance?.category === 'existing-repackaged'}>{isResolution ? 'Preceding resolution · equivalence unverified' : 'Approved policy predecessor · equivalence unverified'}</option>
+                        <option value="materially-revised" selected={initialProvenance?.category === 'materially-revised'}>{isResolution ? 'Preceding resolution · materially revised' : 'Approved policy predecessor · materially revised'}</option>
+                        <option value="new-proposal" selected={initialProvenance?.category === 'new-proposal'}>{isResolution ? 'New resolution · no prior authority identified' : 'New proposal · no prior policy identified'}</option>
+                        <option value="party-governance" selected={initialProvenance?.category === 'party-governance'}>Party governance · internal platform review</option>
+                        <option value="draft-derived" selected={initialProvenance?.category === 'draft-derived'}>Draft branch predecessor · unapproved</option>
+                        <option value="unverified" selected={initialProvenance?.category === 'unverified'}>Mapping unverified</option>
                       </NativeSelect>
                     </Field>
 
@@ -459,15 +459,15 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 
             <Field label="Stage" htmlFor="proposal-stage-filter">
               <NativeSelect defaultValue={stageFilter} id="proposal-stage-filter" name="stage">
-                <option value="all">All stages ({registerCounts.all})</option>
-                {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+                <option value="all" selected={!stageFilter || stageFilter === 'all'}>All stages ({registerCounts.all})</option>
+                {stageOptions.map(([val, label]) => <option value={val} selected={stageFilter === val}>{label}</option>)}
               </NativeSelect>
             </Field>
 
             <Field label="Branch" htmlFor="proposal-branch-filter">
               <NativeSelect defaultValue={branchFilter} id="proposal-branch-filter" name="branch">
-                <option value="all">All branches</option>
-                {branches.filter((branch: any) => branch.recognised).map((branch: any) => <option value={branch.branchId}>{branch.name}</option>)}
+                <option value="all" selected={!branchFilter || branchFilter === 'all'}>All branches</option>
+                {branches.filter((branch: any) => branch.recognised).map((branch: any) => <option value={branch.branchId} selected={branchFilter === branch.branchId}>{branch.name}</option>)}
               </NativeSelect>
             </Field>
 
@@ -558,7 +558,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                           data-vote-count={item.votes.total}
                           data-title={item.title}
                         >
-                          {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+                          {stageOptions.map(([val, label]) => <option value={val} selected={item.stage === val}>{label}</option>)}
                         </NativeSelect>
                       </Field>
                     </div>

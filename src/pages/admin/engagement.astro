@@ -53,7 +53,7 @@ const date=(v:any)=>v ? new Date(v).toLocaleString('en-AU',{timeZone:'Australia/
  <div class="engagement-dashboard">
   <div class="engagement-toolbar">
    <span class="engagement-badge">Scheduled digests {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}</span>
-   <form method="get" class="engagement-controls"><label for="engagement-period">Email reporting period</label><NativeSelect name="days" id="engagement-period" defaultValue={String(days)} wrapperClassName="w-auto" className="w-auto">{[7,30,90].map(n=><option value={n}>Last {n} days</option>)}</NativeSelect><Button type="submit" size="sm" variant="outline">Apply</Button></form>
+   <form method="get" class="engagement-controls"><label for="engagement-period">Email reporting period</label><NativeSelect name="days" id="engagement-period" defaultValue={String(days)} wrapperClassName="w-auto" className="w-auto">{[7,30,90].map(n=><option value={n} selected={Number(days) === n}>Last {n} days</option>)}</NativeSelect><Button type="submit" size="sm" variant="outline">Apply</Button></form>
   </div>
   {!report && <p class="engagement-feedback" role="alert">Engagement data could not be loaded. Refresh this page to try again. The testing controls remain available.</p>}
   <section aria-label="Engagement overview" class="engagement-kpis">

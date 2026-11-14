@@ -54,25 +54,25 @@ const statusTone = (status: string) =>
         <form class="flex flex-wrap items-end gap-4" method="get">
           <Field label="Branch" htmlFor="sense-branch" class="min-w-52">
             <NativeSelect id="sense-branch" name="branchId" defaultValue={Astro.url.searchParams.get('branchId') ?? ''}>
-              <option value="">All your branches</option>
+              <option value="" selected={!Astro.url.searchParams.get('branchId')}>All your branches</option>
               {branches.map((branch) => (
-                <option value={branch.branchId}>{branch.name}</option>
+                <option value={branch.branchId} selected={Astro.url.searchParams.get('branchId') === branch.branchId}>{branch.name}</option>
               ))}
             </NativeSelect>
           </Field>
           <Field label="Topic" htmlFor="sense-topic" class="min-w-52">
             <NativeSelect id="sense-topic" name="topic" defaultValue={Astro.url.searchParams.get('topic') ?? ''}>
-              <option value="">All topics</option>
+              <option value="" selected={!Astro.url.searchParams.get('topic')}>All topics</option>
               {Object.entries(SENSE_TOPICS).map(([key, label]) => (
-                <option value={key}>{label} ({inbox.topics[key] || 0})</option>
+                <option value={key} selected={Astro.url.searchParams.get('topic') === key}>{label} ({inbox.topics[key] || 0})</option>
               ))}
             </NativeSelect>
           </Field>
           <Field label="Status" htmlFor="sense-status" class="min-w-44">
             <NativeSelect id="sense-status" name="status" defaultValue={Astro.url.searchParams.get('status') ?? ''}>
-              <option value="">All statuses</option>
+              <option value="" selected={!Astro.url.searchParams.get('status')}>All statuses</option>
               {Object.entries(SENSE_STATUSES).map(([key, label]) => (
-                <option value={key}>{label}</option>
+                <option value={key} selected={Astro.url.searchParams.get('status') === key}>{label}</option>
               ))}
             </NativeSelect>
           </Field>
@@ -110,7 +110,7 @@ const statusTone = (status: string) =>
                   <Field label="Status" htmlFor={`sense-item-status-${item.submissionId}`}>
                     <NativeSelect id={`sense-item-status-${item.submissionId}`} name="status" defaultValue={item.status} size="sm">
                       {Object.entries(SENSE_STATUSES).map(([key, label]) => (
-                        <option value={key}>{label}</option>
+                        <option value={key} selected={item.status === key}>{label}</option>
                       ))}
                     </NativeSelect>
                   </Field>

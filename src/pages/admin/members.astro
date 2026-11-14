@@ -155,9 +155,9 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
                       <div class="admin-form-grid pt-3">
                         <Field label="Membership status" htmlFor={`status-${m.memberId}`}>
                           <NativeSelect defaultValue={m.status} id={`status-${m.memberId}`} name="status" aria-label={`Membership status for ${m.name || m.email}`} disabled={isSelf || !canVerifyMembers}>
-                            <option value="pending">Pending verification</option>
-                            <option value="verified">Verified member</option>
-                            <option value="suspended">Suspended</option>
+                            <option value="pending" selected={m.status === 'pending'}>Pending verification</option>
+                            <option value="verified" selected={m.status === 'verified'}>Verified member</option>
+                            <option value="suspended" selected={m.status === 'suspended'}>Suspended</option>
                           </NativeSelect>
                         </Field>
 
@@ -197,8 +197,8 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 
                         <Field label="Access state" htmlFor={`disabled-${m.memberId}`}>
                           <NativeSelect defaultValue={String(m.disabled)} id={`disabled-${m.memberId}`} name="disabled" aria-label={`Access state for ${m.name || m.email}`} disabled={isSelf || !canVerifyMembers}>
-                            <option value="false">Active</option>
-                            <option value="true">Disabled</option>
+                            <option value="false" selected={String(m.disabled) !== 'true'}>Active</option>
+                            <option value="true" selected={String(m.disabled) === 'true'}>Disabled</option>
                           </NativeSelect>
                         </Field>
                       </div>

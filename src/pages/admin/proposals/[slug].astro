@@ -422,7 +422,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                 data-vote-count={proposal.votes.total}
                 data-title={proposal.title}
               >
-                {stageOptions.map(([val, label]) => <option value={val}>{label}</option>)}
+                {stageOptions.map(([val, label]) => <option value={val} selected={proposal.stage === val}>{label}</option>)}
               </NativeSelect>
             </div>
           )}
@@ -708,10 +708,10 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                       <div class="admin-form-grid">
                         <Field label="Outcome" htmlFor={`ballot-result-${proposal.proposalId}`}>
                           <NativeSelect defaultValue={ballotResult?.result ?? ''} id={`ballot-result-${proposal.proposalId}`} name="result" required>
-                            <option value="">Choose outcome</option>
-                            <option value="successful">Successful</option>
-                            <option value="unsuccessful">Unsuccessful</option>
-                            <option value="inconclusive">Inconclusive</option>
+                            <option value="" selected={!ballotResult?.result}>Choose outcome</option>
+                            <option value="successful" selected={ballotResult?.result === 'successful'}>Successful</option>
+                            <option value="unsuccessful" selected={ballotResult?.result === 'unsuccessful'}>Unsuccessful</option>
+                            <option value="inconclusive" selected={ballotResult?.result === 'inconclusive'}>Inconclusive</option>
                           </NativeSelect>
                         </Field>
                         <Field label="Decision event reference" htmlFor={`ballot-event-${proposal.proposalId}`}>
@@ -1005,10 +1005,10 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                               <div class="admin-form-grid">
                                 <Field label="Outcome" htmlFor={`feedback-status-${comment.commentId}`}>
                                   <NativeSelect defaultValue={fb?.status ?? 'considered'} id={`feedback-status-${comment.commentId}`} name="status" required>
-                                    <option value="incorporated">Incorporated</option>
-                                    <option value="considered">Considered</option>
-                                    <option value="deferred">Deferred</option>
-                                    <option value="declined">Declined</option>
+                                    <option value="incorporated" selected={(fb?.status ?? 'considered') === 'incorporated'}>Incorporated</option>
+                                    <option value="considered" selected={(fb?.status ?? 'considered') === 'considered'}>Considered</option>
+                                    <option value="deferred" selected={fb?.status === 'deferred'}>Deferred</option>
+                                    <option value="declined" selected={fb?.status === 'declined'}>Declined</option>
                                   </NativeSelect>
                                 </Field>
                                 <Field label="Response note (optional)" htmlFor={`feedback-note-${comment.commentId}`}>
@@ -1021,25 +1021,25 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                                   name="evidenceRef"
                                   defaultValue={fb?.evidence ? `${fb.evidence.kind}:${fb.evidence.recordId}` : ''}
                                 >
-                                  <option value="">None (note only)</option>
+                                  <option value="" selected={!fb?.evidence}>None (note only)</option>
                                   {revisions.map((rev: any, idx: number) => (
-                                    <option value={`revision:${String(rev.revisionId)}`}>
+                                    <option value={`revision:${String(rev.revisionId)}`} selected={fb?.evidence?.kind === 'revision' && fb.evidence.recordId === String(rev.revisionId)}>
                                       Revision: {revisionDisplayLabel({ revisionId: String(rev.revisionId), createdAt: rev.createdAt, ordinal: revisions.length - idx })}
                                       {rev.revisionId === proposal.ballotRevisionId ? ' (ballot wording)' : ''}
                                     </option>
                                   ))}
                                   {amendmentRows.filter((a: any) => a.status !== 'withdrawn').map((am: any) => (
-                                    <option value={`amendment:${String(am.amendmentId)}`}>
+                                    <option value={`amendment:${String(am.amendmentId)}`} selected={fb?.evidence?.kind === 'amendment' && fb.evidence.recordId === String(am.amendmentId)}>
                                       Amendment: {String(am.changes?.title ?? am.title ?? am.amendmentId)} ({String(am.status ?? 'proposed')})
                                     </option>
                                   ))}
                                   {ballotResult && (
-                                    <option value={`decision:${String(ballotResult.decisionEventId ?? proposal.proposalId)}`}>
+                                    <option value={`decision:${String(ballotResult.decisionEventId ?? proposal.proposalId)}`} selected={fb?.evidence?.kind === 'decision'}>
                                       Decision: Ballot outcome ({String(ballotResult.result ?? 'recorded')})
                                     </option>
                                   )}
                                   {policy && (
-                                    <option value={`policy:${String(policy.policyId)}`}>
+                                    <option value={`policy:${String(policy.policyId)}`} selected={fb?.evidence?.kind === 'policy' && fb.evidence.recordId === String(policy.policyId)}>
                                       Policy: {String(policy.title ?? policy.policyId)} ({String(policy.publicationStatus ?? 'unpublished')})
                                     </option>
                                   )}
