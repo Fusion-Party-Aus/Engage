@@ -16,7 +16,7 @@ Governance semantics were not changed. No voting, quorum, eligibility, adoption 
 
 ## Screenshots
 
-All screenshots are in [`docs/screenshots/engage-ui-refinement-2026-11-09/`](./screenshots/engage-ui-refinement-2026-11-09/). The “before” images retain the Astro development toolbar; the “after” images were captured with the development toolbar removed.
+All screenshots were captured into `docs/screenshots/engage-ui-refinement-2026-11-09/`, which is not committed to this repository. The “before” images retain the Astro development toolbar; the “after” images were captured with the development toolbar removed.
 
 | Surface | Before | After |
 | --- | --- | --- |

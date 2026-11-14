@@ -55,6 +55,6 @@ Use the same project name and its existing private `.env` to retain the verified
 - The preview namespace restore does not certify encrypted off-host production recovery, production account/session data recovery, or a complete host-loss exercise.
 - Controlled-provider tests do not prove live Google callbacks, secure cookies or HTTPS reverse-proxy configuration.
 - GitHub-hosted CI remains blocked before runner allocation by account billing/spending limits. Local Docker success does not make that check green.
-- Member-only deliberation reads, separate editor/reviewer/Election Officer duties, ballot-authorisation UX, independent security review and governance/organisational approvals remain M1 work. See [M1 blockers](mvp-roadmap.md#remaining-m1-blockers).
+- Member-only deliberation reads, separate editor/reviewer/Election Officer duties, ballot-authorisation UX, independent security review and governance/organisational approvals remain M1 work. See [known gaps](status/known-gaps.md).
 
 No public deployment, real member-data integration or binding activation was performed.

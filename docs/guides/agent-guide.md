@@ -68,16 +68,7 @@ Then open the files you intend to change. Do not plan from documentation alone.
 
 ### Documentation drift
 
-These documents are known stale or contradictory:
-
-- `README.md` historically described `/policies/` as the 76-policy voting surface. That is wrong: `/policies/` is the published registry; the seed lives at `/proposals/`. This set corrects it.
-- `docs/operations.md` references removed endpoints and scripts.
-- `docs/engage-legal-privacy-review-2026-11-08.md` predates CRM verification and Plausible; its "not implemented" list is stale.
-- `docs/coolify-deployment.md` has an out-of-date status banner.
-- `docs/member-engagement.md` contains an older deadline than `ballot-deadline.ts`.
-- ADR 0003 describes a transactional ballot-admission protocol that the current `castVote` does not implement.
-
-Always check code before repeating a documentation claim.
+Historical and superseded pages under `docs/` carry a document status label at the top. Read the label before trusting a page: [`docs/README.md`](../README.md) defines the labels and names the canonical replacement for each superseded page. Always check code before repeating a documentation claim, and run `pnpm docs:check-links` after moving or renaming a page.
 
 ### The stage table is partly declarative
 
@@ -178,6 +169,7 @@ A documented gap is a valid outcome. A guessed rule is not.
 
 ```sh
 pnpm check
+pnpm docs:check-links
 pnpm test
 pnpm build
 rg -n '<(button|select|input|textarea|table|dialog)\b' <changed-files>
