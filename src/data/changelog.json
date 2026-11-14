@@ -1,5 +1,13 @@
 [
   {
+    "hash": "2c7be22",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the second-pass review fixes"
+  },
+  {
     "hash": "078aa3e",
     "date": "2026-11-15",
     "type": "docs",
@@ -660,13 +668,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
-  },
-  {
-    "hash": "31e34df",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
   }
 ]
