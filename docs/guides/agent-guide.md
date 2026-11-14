@@ -91,9 +91,11 @@ Always check code before repeating a documentation claim.
 
 Proposal ballots close by deadline, not by an officer action. No API sets `ballotClosesAt` for a new ballot. Amendment ballots have an explicit close. Do not add a close endpoint that bypasses the deadline or writes a result.
 
-### Result is not computed
+### Result is computed and checked
 
-The officer supplies `successful`/`unsuccessful`/`inconclusive`. The tally is not compared. Any change to compute results requires thresholds and tie rules that do not exist.
+The officer supplies `successful`, `unsuccessful` or `inconclusive`, and the result must match the outcome computed from the votes bound to the ballot and revision. The only encoded rule is D9: approve greater than reject approves, a tie and zero votes do not, and abstentions never change the comparison because no abstention denominator is defined (D10/O1). No quorum or turnout applies (D8). The basis is versioned as `simple-majority-d9-v1`.
+
+A contradicting result is accepted only as an explicit override with a written reason, and the override is stored on the result and in the `decision.recorded` event. Do not add a threshold, quorum, abstention denominator or ranked-choice rule without a recorded maintainer decision — see the decision register open items O1 and O2.
 
 ### Permission keys are not all wired
 

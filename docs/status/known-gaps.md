@@ -96,11 +96,11 @@ Two amendments can edit the same field and both be `ready`. Conflict detection c
 
 **Direction:** Detect field overlap at resolution time and require an explicit precedence decision.
 
-### 10. Results are officer-supplied and unvalidated against the tally
+### 10. Results are checked against the tally but the voting rules are incomplete
 
-The result endpoint does not compare the tally, check turnout, or enforce a threshold. This is deliberate while rules are absent, but it means a recorded result can contradict the votes.
+**Resolved on `feat/ballot-outcome-validation`:** `recordFormalDecision` computes the outcome from the votes bound to the ballot and exact revision at certification and refuses a contradicting officer result unless an explicit override with a written reason is recorded. The result stores the tally, `ruleBasis: "simple-majority-d9-v1"` and `computedResult`; the `decision.recorded` event carries the actor, reason, computed result and recorded result. Historical results are returned unchanged. Tests: `ballot-outcome.test.ts`, `ballot-outcome-mongo.test.ts`.
 
-**Direction:** Keep manual recording until thresholds, quorum and ties are approved. Then add a computed check with an audit override.
+**Still open:** the abstention denominator (decision register O1), quorum and turnout (none are authorised, D8), ranked choice (O2), confirmation ballots (O3) and election rules. Simple majority (D9) is the only rule encoded; a tie and zero votes are not successful. Do not treat the computed check as a complete rule engine.
 
 ### 11. National membership row can conflict with CRM assignment
 
@@ -278,4 +278,4 @@ The actionable gaps were opened as GitHub issues on 13 November 2026. This page 
 | Decision record and responsibility queue | #54 |
 | Ballot-results index migration safety — resolved 15 November 2026 | #55 |
 
-Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain blocked on unresolved governance or legal decisions; implement only the parts the decision register settles.
+Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain partly blocked on unresolved governance or legal decisions; implement only the parts the decision register settles. #28's Yes-versus-No computed check is implemented against D8/D9, while the abstention denominator (O1, D10) remains undecided.

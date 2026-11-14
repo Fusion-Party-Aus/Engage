@@ -211,7 +211,17 @@ An officer records a result through `POST /api/admin/ballots/result`. Requiremen
 - result `successful`, `unsuccessful` or `inconclusive`;
 - an external `decisionEventId`.
 
-The record is immutable, one per ballot, and certifies the ballot. The tally is available for display but is **not** compared with the result.
+The officer-supplied result is checked against the outcome computed from the votes bound to that ballot and immutable revision. The comparison is deliberately narrow:
+
+- **Yes greater than No approves; a tie does not** (D9). A tie and a ballot with zero votes therefore compute `unsuccessful`.
+- **Abstentions never change the comparison** (D10/O1). They are counted and stored but excluded from the Yes-versus-No test; no denominator is used, because the maintainer has not defined one.
+- **No quorum, turnout or minimum-participation threshold applies** (D8).
+
+The rule is versioned as `simple-majority-d9-v1`. The record keeps the evidence at the moment of certification: `tally` (approve, abstain, reject, total), `ruleBasis`, `computedResult`, the recorded `result`, and, when used, `override` (reason, actor, time).
+
+A result that contradicts the computed outcome is refused unless the officer supplies a written reason; it is then recorded as an explicit override. The `decision.recorded` governance event carries the actor, the reason, the computed result, the recorded result, the tally and the rule basis. Engage never silently accepts a contradiction and never silently rewrites a recorded result.
+
+The record is immutable, one per ballot, and certifies the ballot in the same transaction as the result and the audit event. Historical results recorded before the comparison existed remain readable with their original fields; they are returned unchanged on an identical retry and are not backfilled.
 
 ### 10. Formal decision processing
 
@@ -391,7 +401,7 @@ A workflow state can be reversed. A protected act cannot: later corrections are 
 | Deliberation deadline passes with unresolved amendments | The scheduler refuses to advance and reports the amendment IDs |
 | Scheduler runs late, past the 60-day ceiling | Advancement refused and reported; an officer must re-open with an explicit date |
 | Proposal in Deliberate without a seconder | Never advances automatically; the migration report lists it |
-| Result recorded without a tally | Allowed; result is officer-supplied |
+| Result recorded without a tally | Refused unless the officer records an explicit override with a written reason; the tally at certification is stored on the result |
 | Matter returned to Deliberate after a ballot, wording edited, then returned to Decide | Existing `ballotRevisionId` is retained; a zero-vote ballot is rebound to the new revision on re-entry, a voted ballot is refused rather than silently rebound |
 | Amendment base no longer latest | Amendment becomes `stale`; applying requires a current base |
 | Two amendments change the same field | Both can be `ready`; no inter-amendment conflict detection; both block the scheduler |
@@ -401,15 +411,14 @@ A workflow state can be reversed. A protected act cannot: later corrections are 
 
 ## What is deliberately missing
 
-- Thresholds, quorum, turnout, tie-breaking, abstention and non-voter rules.
+- Quorum, turnout, minimum-participation, non-voter and abstention-denominator rules (D8, D10/O1). Ordinary Yes/No ballots use simple majority without them (D9).
 - Notice periods, campaign windows and scheduled ballot opening.
 - Eligibility snapshots at ballot open.
 - A hard seconding gate on Propose → Deliberate, competing seconders, and renewed seconding after a material wording change (see the assumption under Deliberation).
 - Confirmation ballots or multiple ballot instances per matter.
 - Automatic ratification.
-- Preferential amendment resolution.
+- Preferential amendment resolution and ranked-choice ballots (D18/O2).
 - A proposal-ballot close operation that closes a ballot before its deadline. D12 defers mathematically-irreversible early closure.
-- A second result-validation step comparing the tally with the recorded result.
 
 Automatic advancement at the deliberation deadline and automatic closure at the ballot deadline are now implemented (D4–D7). Scheduled opening remains missing: the clock starts at seconding and the ballot opens when a human advances early or the scheduler advances at the deadline.
 

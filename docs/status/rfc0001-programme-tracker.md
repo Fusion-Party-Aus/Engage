@@ -20,7 +20,7 @@ Status values:
 | Phase | Scope | State |
 |---|---|---|
 | Integration | Combine Sprint 1 branches, reconcile with decisions, verify | **Integrated** — see [integration report](sprint1-integration-report.md) |
-| 1 | Integrity, deadlines, automatic advancement, outcome correctness | **Integrated** — deadlines, seconding, advancement and closure on PR #51; outcome validation next |
+| 1 | Integrity, deadlines, automatic advancement, outcome correctness | **Integrated** — deadlines, seconding, advancement, closure and computed outcome validation on branches from PR #51 |
 | 2 | Command layer, route policy, read models, jobs, Turnstile, notifications | **In progress** — rendering-performance and Turnstile slices integrated; command layer (#53), read models (#54) and notifications (#33) pending |
 | 3 | Decision records, following, admin queues, role UX, Horizon consistency | Planned |
 | 4 | Durable jobs, identity/CRM ports, observability, audit viewer, encryption hardening | Planned |
@@ -34,6 +34,7 @@ Status values:
 | Rendering performance | `feat/rfc0001-sprint1-integration` | #52 | **Integrated** — harness, audit, projections, session reuse, query batching, deferred secondary panels, hydration changes |
 | Turnstile and abuse protection | `feat/rfc0001-sprint1-integration` | #38 (part) | **Integrated** — server verification, protected unauthenticated actions, durable rate limiting. Headers/CSRF remain. |
 | Ballot-results migration safety | `fix/ballot-results-index-migration` | #55 | **Done** — read-only preflight, backup, verified apply, loud failure, recovery report, replica-set tests. See [procedure](../ballot-results-index-migration.md). |
+| Computed ballot outcome validation | `feat/ballot-outcome-validation` | #28 | **Integrated** — Yes-versus-No comparison (D9), no quorum or turnout (D8), abstentions excluded without a denominator (D10/O1), versioned rule basis, stored tally, audited override. Replica-set tests. Abstention denominator and ranked choice remain open. |
 | Governance command layer | — | #53 | Planned — next Phase 2 slice |
 | Decision record and responsibility queue | — | #54 | Planned — depends on #53 |
 
@@ -47,7 +48,7 @@ Sprint 1 and the slices above were merged to `main` as `3b36947` (PR #51) on 14 
 | I2 | Make ballot deadlines mandatory and audited | #26 | **Integrated** | Seconding starts a 30-day deliberation clock and performs Propose → Deliberate. The scheduler advances at the deadline as `system:lifecycle-scheduler`, binds the latest revision and sets a 60-day-from-seconding ballot close. Officer-opened ballots default to 30 days; an explicit future date wins. Due ballots are closed once with a `ballot.closed` event. Idempotent events, dry-run/apply CLI, and a read-only legacy deadline report. Tests: `lifecycle-scheduler.test.ts`, `lifecycle-scheduler-mongo.test.ts`. Remaining: production cron wiring and notification fan-out. |
 | I3 | Stop writes during session resolution; fix CRM national-row conflict | #32 | **Partial** | CRM-sourced memberships cannot be overwritten by self-service; the national row is exempt from the geographic conflict check; manual verification records source and verifier. Tests: `membership-crm-sprint1.test.ts`. Missing: unique `(branchId, memberId)` index + duplicate-resolving migration, and branch-model documentation. |
 | I4 | Enforce the permission catalogue | #31 | **Partial** | `ballots.bind`, `proposals.delete`, `proposals.manage_supersession`, `proposals.view_archived`, `comments.moderate`, `amendments.*`, `branches.manage`, `branches.refer_proposals`, `sense_box.review` are enforced in the domain or route. Branch grants for national-only permissions are ignored (defence in depth). Remaining: role administration UX (#41), any dead keys found by the catalogue audit. |
-| I5 | Make result recording atomic, idempotent and audited | #26, #50 | **Integrated** | `recordFormalDecision` writes result, ballot certification and governance event in one transaction; repeated identical payloads are idempotent; conflicting payloads are refused. Tests use the real-MongoDB replica set for the voting suite; the governance-integrity suite still needs a real-MongoDB atomicity case. |
+| I5 | Make result recording atomic, idempotent and audited | #26, #50 | **Integrated** | `recordFormalDecision` writes result, ballot certification and governance event in one transaction; repeated identical payloads are idempotent; conflicting payloads are refused. Tests use the real-MongoDB replica set for the voting suite; `ballot-outcome-mongo.test.ts` now runs the result, certification and audit writes on the replica set with the computed tally and audited override. |
 | I6 | Record every lifecycle and ballot act | #50 | **Integrated** | Stage transitions (including seconding and scheduled advancement), ballot bind/unbind, decision recording, ballot closure and amendment open/close/accept write governance events. Remaining: notification fan-out (#33), audit viewer (S8). |
 | I7 | Rebind re-opened ballots explicitly | #26 | **Integrated** | Returning a zero-vote ballot to Deliberate unbinds the revision and emits `ballot.unbound`; re-entry binds the current revision. Substantive edits are refused once votes exist. Tests: `governance-integrity-sprint1.test.ts`. |
 | I8 | Close the small high-risk defects | #27, #32, #35, #42 | **Partial** | Ratification authority is cross-checked against the governance authority and the recorded ballot decision. Remaining: public supersession visibility (#35), comment moderation state and audit trail (#42), moderation UX. |
@@ -73,7 +74,7 @@ Sprint 1 and the slices above were merged to `main` as `3b36947` (PR #51) on 14 
 
 | ID | Recommendation | Issue | State | Notes |
 |---|---|---|---|---|
-| L1 | Threshold, quorum and turnout rule engine | #28 | **Partial** | D8/D9 settle simple majority and the absence of quorum. A computed Yes-versus-No check with an audited override is implementable. Abstention denominator (O1) remains open; no rule engine yet. |
+| L1 | Threshold, quorum and turnout rule engine | #28 | **Partial** | Computed Yes-versus-No validation with a written, audited override is implemented (`simple-majority-d9-v1`); a tie and zero votes are not successful, and no quorum or turnout applies (D8, D9). Still open: the abstention denominator (O1/D10) and ranked choice (O2), so this is not yet a general rule engine. |
 | L2 | Amend or repeal from a published policy | #37 | **Planned** | Governance dependency: whether a normal proposal suffices. |
 | L3 | Confirmation ballots and multiple ballot instances | #30 | **Partial** | Result cardinality is corrected (one result per ballot, multiple ballots per matter possible). Confirmation ballots are not specified (O3). |
 | L4 | Shared Fusion identity / OIDC | — | **Deferred** | D31: seam only. |
@@ -114,7 +115,7 @@ Sprint 1 and the slices above were merged to `main` as `3b36947` (PR #51) on 14 
 Phase 1, in this order:
 
 1. ~~Proposal lifecycle scheduling~~ — integrated: seconding, deliberation and ballot deadlines, system advancement, automatic closure, idempotent scheduler.
-2. Computed outcome validation (Yes versus No, tie fails) with an audited officer override; do not decide abstentions.
+2. ~~Computed outcome validation (Yes versus No, tie fails) with an audited officer override; do not decide abstentions~~ — integrated on `feat/ballot-outcome-validation` (`simple-majority-d9-v1`). Abstentions remain recorded but outside the comparison, and no denominator is encoded.
 3. Real-MongoDB concurrency and crash-recovery tests for the remaining governance writes (deletion guard, transition events, result atomicity).
 4. ~~`ballot_results` migration preflight and recovery procedure~~ — done (#55).
 5. Notification outbox foundation, so scheduled transitions produce durable notices.
