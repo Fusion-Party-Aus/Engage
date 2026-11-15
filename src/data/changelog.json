@@ -1,11 +1,39 @@
 [
   {
-    "hash": "ead59ab",
+    "hash": "290d08e",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Document the command contract and mark #53 partial",
+    "details": "Describe the typed command contract, the central route policy table and the two-stage authorisation rule. Record that the ballot lifecycle is extracted while proposals, amendments and membership remain route-local."
+  },
+  {
+    "hash": "7d7a002",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "governance",
+    "summary": "Prove ballot command and route policy equivalence",
+    "details": "Cover policy-table drift, the authorisation matrix for both commands, route authentication, bind idempotency and record_result preconditions against a real MongoDB replica set. Existing route suites continue to exercise the same behaviour."
+  },
+  {
+    "hash": "8a0c5e1",
+    "date": "2026-11-15",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "governance",
+    "summary": "Add typed ballot commands and central route policy",
+    "details": "Extract ballot.bind and ballot.record_result into typed commands that call the existing domain functions, and declare both routes in one policy table. Routes now validate input, run the command and map errors; no permission literals or role checks remain in the route files. No governance behaviour changes."
+  },
+  {
+    "hash": "7e3d243",
     "date": "2026-11-15",
     "type": "docs",
     "category": "docs",
     "scope": "status",
-    "summary": "Record merged outcome validation and replica-set governance coverage"
+    "summary": "Record merged outcome validation and replica-set coverage (#92)",
+    "details": "* docs(status): record merged outcome validation and replica-set governance coverage * chore(changelog): refresh the snapshot after the phase 1 merges"
   },
   {
     "hash": "10146b9",
@@ -636,29 +664,5 @@
     "category": "feature",
     "scope": "proposals",
     "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
   }
 ]
