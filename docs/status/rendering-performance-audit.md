@@ -1,9 +1,9 @@
 # Rendering performance audit — RFC 0001 Phase 2
 
-**Status:** Current · **Measured:** 14 November 2026; register follow-up measured 15 November 2026
+**Status:** Current · **Measured:** 14 November 2026; register follow-up measured 15 November 2026; header follow-up measured 15 November 2026
 **Branch:** merged into `feat/rfc0001-sprint1-integration` (PR #51) · **Baseline commit:** `1bd4fd1` · **Measured after commit:** `b25e385`
 **Harness:** [`scripts/rendering-performance.mjs`](../../scripts/rendering-performance.mjs)
-**Data:** [`rendering-performance-baseline.json`](rendering-performance-baseline.json) · [`rendering-performance-after.json`](rendering-performance-after.json) · register follow-up: [`rendering-performance-register-before.json`](rendering-performance-register-before.json) · [`rendering-performance-register-after.json`](rendering-performance-register-after.json)
+**Data:** [`rendering-performance-baseline.json`](rendering-performance-baseline.json) · [`rendering-performance-after.json`](rendering-performance-after.json) · register follow-up: [`rendering-performance-register-before.json`](rendering-performance-register-before.json) · [`rendering-performance-register-after.json`](rendering-performance-register-after.json) · header follow-up: [`rendering-performance-header-before.json`](rendering-performance-header-before.json) · [`rendering-performance-header-after.json`](rendering-performance-header-after.json)
 
 This audit measures the server render cost and client experience of representative public, member and administrator pages, then removes duplicated and render-blocking work that does not affect governance authority. Local measurements are **indicative, not production SLA evidence**. See [Limitations](#limitations).
 
@@ -51,7 +51,7 @@ Reading the table:
 
 | Page | Required in the initial response | Deferred or secondary | Interaction-only |
 |---|---|---|---|
-| `/` | Session identity; visible proposal summaries and stage counts; open ballots for the signed-in member; next-action CTA; site configuration | Proposal highlights are derived from the same list; branch activity counts; prefetch hints | Infinite-scroll/filter behaviour does not exist here; service-worker registration; notification bell |
+| `/` | Session identity; visible proposal summaries and stage counts; open ballots for the signed-in member; next-action CTA; site configuration | Proposal highlights are derived from the same list; branch activity counts; prefetch hints | Infinite-scroll/filter behaviour does not exist here; service-worker registration; native notification disclosure (fetches after idle or on first open) |
 | `/proposals/` | Visible proposal summaries for the requested page; stage counts; active filters; member vote/outstanding state; branch names | Secondary sort metrics; pagination beyond the current page | Nothing beyond navigation; member focus cookie is written server-side |
 | `/proposals/[slug]/` | Proposal wording, stage, bound revision, tally, the member's own vote/eligibility, ballot-open state, comments and amendment rows | Related proposals; full revision history; activity chain; evidence map; next-ballot recommendation | Ballot selection/submission; stance selector; comment composer |
 | `/policies/` | Published/withdrawn/superseded registry rows, filters, branch names | None; no session data | Search/filter submit (normal GET) |
@@ -92,6 +92,7 @@ Supersede lookup, eligibility, related branches and contribution evidence now ru
 | `ProposalBallot` | `client:load` | `client:idle` | Voting is primary, but hydration need not block first paint. Idle hydration starts immediately after load and the SSR markup remains readable. |
 | `StanceSelector` | `client:load` | `client:idle` | Composer control well below the fold; no critical-path interaction. |
 | `NotificationBell` | `client:load` | `client:idle` | Secondary header control; still fetches unread state after load. |
+| Header notifications | `client:idle` React island | Native `<details>` + vanilla module | Removed the React runtime from signed-in pages whose only island was the bell. See [Header notifications without React](#header-notifications-without-react-15-november-2026). |
 | Member onboarding/settings/branch/activity islands | `client:load` | `client:visible` | Most render inside inactive CSS-selected views or below the fold. Active views hydrate on intersection; inactive views do not fetch their chunks. |
 | Admin activity timelines | `client:load` | `client:visible` | Secondary panels/tabs. |
 | Admin migrations | `client:load` | `client:idle` | Operational page, not a dashboard first-paint dependency. |
@@ -100,10 +101,11 @@ Supersede lookup, eligibility, related branches and contribution evidence now ru
 ## Bundle findings
 
 - Anonymous public pages load **15.4 KB** of JavaScript (baseline and after).
-- Any signed-in page loads React because `NotificationBell` is a React island: **337 KB** on home/proposals, **345–347 KB** in admin, **451–462 KB** on `/member/`. This is the single largest client cost in the audit and is not reduced by moving hydration to idle.
-- `/proposals/[slug]/` loads **322 KB anonymous / 387 KB member** because the ballot and stance islands require React.
-- `client:visible` on inactive member views reduced `/member/` transferred JS by about 11 KB and avoids hydration work for those panels, but the shared React runtime still loads for the header bell.
-- No new dependencies and no new client-side framework were added.
+- Before the header follow-up, any signed-in page loaded React because `NotificationBell` was a React island: **337 KB** on home/proposals, **345–347 KB** in admin, **451–462 KB** on `/member/`. That was the single largest client cost in the audit and was not reduced by moving hydration to idle.
+- After the header follow-up, signed-in `/`, `/proposals/`, `/policies/` and `/admin/proposals/` load **15.4–27 KB** and no React runtime at all. `/member/` (426 KB), `/admin/` (288 KB) and `/proposals/[slug]/` (332 KB) still ship React for their own islands but no longer pay for the header bell.
+- `/proposals/[slug]/` loads **322 KB anonymous / 332 KB member** because the ballot and stance islands require React.
+- `client:visible` on inactive member views reduced `/member/` transferred JS by about 11 KB and avoids hydration work for those panels.
+- No new dependencies and no new client-side framework were added. The header panel is a native disclosure and one bundled vanilla module.
 
 ## Queries removed or deferred
 
@@ -216,12 +218,86 @@ production evidence.
   editor's vote count is a count query for that single proposal, not a
   decryption.
 
+## Header notifications without React (15 November 2026)
+
+The signed-in header rendered `NotificationBell`, a React island hydrated with
+`client:idle`. It fetched the member's unread count and a short inbox after
+load, which put the React runtime (~329 KB) on every signed-in page for one
+small bell. This slice replaces it with a native `<details>` disclosure and a
+small bundled vanilla module, without moving the inbox read into the document
+response.
+
+**Method.** The full harness with synthetic data and three runs per
+page/identity before and after. The before snapshot records `b9286f4`; the after
+snapshot records `ad34a17`. Snapshots:
+[before](rendering-performance-header-before.json) ·
+[after](rendering-performance-header-after.json).
+
+| Page (identity) | JS KB | LCP ms | HTML KB | Script requests | Document DB commands |
+|---|---|---|---|---|---|
+| `/` (member) | 344.9 → **15.7** | 120 → 104 | 66.5 → 66.9 | 20 → **4** | 14 → 14 |
+| `/proposals/` (member) | 344.9 → **15.7** | 312 → 108 | 102.3 → 102.7 | 20 → **4** | 15 → 15 |
+| `/admin/proposals/` (administrator) | 356.9 → **27.7** | 148 → 144 | 284.4 → 284.7 | 22 → **6** | 17 → 17 |
+| `/admin/` (administrator) | 355.4 → 288.0 | 88 → 84 | 90.0 → 90.4 | 27 → 21 | 19 → 19 |
+| `/member/` (member) | 462.2 → 425.7 | 100 → 128 | 158.9 → 164.6 | 42 → 40 | 34 → 34 |
+| `/proposals/[slug]/` (member) | 396.7 → 332.4 | 72 → 156 | 122.7 → 128.4 | 33 → 29 | 16 → 16 |
+| `/policies/` (anonymous control) | 15.7 → 15.7 | 76 → 76 | 33.2 → 36.7 | 4 → 4 | 3 → 3 |
+
+Reading the numbers:
+
+- The measured signed-in pages whose only island was the bell (`/`,
+  `/proposals/`, `/admin/proposals/`) lose the React runtime entirely: −95%,
+  −95% and −92% transferred JavaScript. `/policies/` was checked separately in
+  the signed-in browser comparison (344,862 → 15,728 bytes, 20 → 4 script
+  requests, one `NotificationBell` island → none).
+- `/member/`, `/admin/` and `/proposals/[slug]/` keep React for their own
+  settings, timeline and ballot islands, but drop the header's chunk (−8%,
+  −19% and −16%).
+- Document database commands are identical everywhere, and the browser-phase
+  count is unchanged too. The inbox is fetched client-side exactly as before;
+  it is not read during the server render. The header does not add a database
+  read to any page.
+- LCP and TTFB are noise-dominated in this setup. The before run hit a loaded
+  machine (proposals TTFB 275 ms; anonymous control pages moved by 20–100 ms
+  without any code change), and the after run moved LCP in both directions on
+  pages this change does not touch. The deterministic result is JavaScript
+  bytes, script request count and island count, not an LCP claim.
+- Signed-in HTML got slightly smaller because the old SSR'd island markup
+  (props, wrapper and popover markup) was larger than the new panel. Anonymous
+  HTML grew by ~3.4 KB because Astro inlines the shared header module script
+  under the CSP hash policy: 507 → 3,741 bytes. There is no extra request and no
+  change to anonymous JavaScript transfer.
+
+**Panel behaviour**
+
+- The summary is the bell. Its accessible name is `Notifications` and becomes
+  `Notifications, N unread` once the count is known. It is keyboard operable,
+  keeps the Horizon focus ring, and carries the unread count as a badge.
+- The panel is read-only: it shows the latest five notifications with title,
+  relative time and link, plus "View all notifications" to
+  `/member/?view=notifications`. Empty (`No notifications yet`) and error
+  (`Couldn't load notifications.` with a retry) states are explicit.
+- The inbox is fetched with `cache: "no-store"` only after idle or on first open,
+  once per page, and the same request serves the unread badge. There is no
+  polling.
+- Escape closes the panel and returns focus to the summary; outside clicks close
+  it; the mobile navigation menu and the notification panel are mutually
+  exclusive.
+- Without JavaScript the summary's anchor opens the notification centre
+  directly. With JavaScript the anchor's `href` is removed so the summary is the
+  single disclosure control rather than a duplicate tab stop.
+- Marking notifications as read was removed from the header. That stays in the
+  member notification centre, so opening the panel no longer posts mutations.
+  Clicking a notification now navigates to its target without a mark-read
+  request; the centre reconciles unread state on the next load.
+
 ## Deliberately left alone
 
 - **Per-vote decryption and full vote scans in `listProposals`.** Member and public list cards still need approve/reject/abstain totals, and encrypted ballots can only be tallied after decryption. The admin register no longer does this; a tally read model for the remaining list pages is S4/I12 work.
 - **Full-collection proposal search.** `/proposals/` searches `details` client-side for consistency with the existing UX. Moving search into MongoDB with the same semantics needs its own change and index review. The admin register now searches in MongoDB because pagination requires it.
 - **Ballot authority, eligibility and tally.** All remain server-computed and in the initial response. The ballot island is still server-rendered; hydration timing changed only. The register shows certified tallies and the workspace keeps the live bound tally.
 - **Per-request session freshness.** No session caching across requests. No member-specific page or API caching was added.
+- **Remaining React islands.** `/member/`, `/admin/` and `/proposals/[slug]/` still use React for settings, timelines and the ballot. Their hydration timing was already tuned; replacing them is separate work.
 - **No SPA, skeleton screen, CDN, ISR or client-side data grid** was introduced.
 
 ## Limitations
@@ -236,22 +312,26 @@ production evidence.
 - The register follow-up measures one page/identity pair on the same synthetic data. Its profiler window is a separate local run, not part of the harness output.
 - The register's certified tally is only as complete as the stored `ballot_results` record. Legacy results recorded before tallies were stored show the outcome without counts.
 - Authorisation and eligibility were not re-tested at scale; the register keeps the same branch scope and permission checks, covered by unit and browser checks rather than load testing.
+- The header follow-up ran the full harness before and after on the same machine, but local load varied between the two invocations (the before run shows the higher TTFB). JavaScript bytes and script counts are deterministic; LCP and TTFB deltas are direction only. LCP moved on anonymous control pages the change does not affect.
+- The header browser comparison used a scripted Playwright run against the before (`b9286f4`) and after (`ad34a17`) builds rather than the harness byte totals. It reports decoded body size for scripts, so its absolute KB values differ slightly from the harness transfer-size figures.
+- The header panel was browser-tested with seeded notifications, intercepted empty and `500` responses, a no-JavaScript context and reduced motion. It was not exercised against a production-scale notification inbox or real push subscription state.
 
 ## Top remaining opportunities, by expected value
 
-1. **Remove React from the signed-in header path.** Replace `NotificationBell` with a lightweight native disclosure/popover that fetches on open, or hydrate it only on interaction. This removes ~330 KB of JavaScript from every signed-in page and is the largest client-side win available.
-2. **Tally/read model for member list pages (S4/I12).** `/` and `/proposals/` still scan every vote and decrypt every ballot for approve/reject/abstain totals. Store aggregate counts per ballot/revision so those pages stop doing per-vote work. The admin register no longer needs it.
-3. **Pair the member lists with server-side filtering and pagination.** `/proposals/` still reads and filters the whole collection in the page. The register's projected, paginated read is a working pattern to reuse, including search semantics.
-4. **Defer more `/member/` secondary data.** Notification inbox, passkey count, push subscriptions and branch profile can move behind small endpoints or server islands so the member's next action and outstanding ballots render without waiting for preference data.
-5. **Command layer and central route policy (S1).** A single request context would make session resolution, authorisation and query batching uniform rather than page-by-page.
+1. **Tally/read model for member list pages (S4/I12).** `/` and `/proposals/` still scan every vote and decrypt every ballot for approve/reject/abstain totals. Store aggregate counts per ballot/revision so those pages stop doing per-vote work. The admin register no longer needs it.
+2. **Pair the member lists with server-side filtering and pagination.** `/proposals/` still reads and filters the whole collection in the page. The register's projected, paginated read is a working pattern to reuse, including search semantics.
+3. **Defer more `/member/` secondary data.** Notification inbox, passkey count, push subscriptions and branch profile can move behind small endpoints or server islands so the member's next action and outstanding ballots render without waiting for preference data.
+4. **Command layer and central route policy (S1).** A single request context would make session resolution, authorisation and query batching uniform rather than page-by-page.
 
 ## Verification
 
-- `npm run check` — 0 errors, 0 warnings (22 pre-existing hints at the time of the first pass; the register follow-up leaves 23 hints, none in the changed files).
-- `npm test` with `VOTING_TEST_MONGODB_URI` — 306 tests passed for the first pass; the register follow-up runs the full suite at 532 tests, 0 fail, including `proposal-register.test.ts` (pagination boundaries, filters, empty and out-of-range pages, stable ordering, no `proposal_votes` access, projection shape, certified and open ballot display, editing from a later page).
+- `npm run check` — 0 errors, 0 warnings (22 pre-existing hints at the time of the first pass; the header follow-up leaves 20 hints, none in the changed files).
+- `npm test` with `VOTING_TEST_MONGODB_URI` — 306 tests passed for the first pass; the register follow-up runs the full suite at 532 tests, and the header follow-up runs it at 600 tests, 0 fail. That includes `site-header-notifications.test.ts` (no React import or island, native disclosure, no-JavaScript link, lazy `no-store` fetch, Escape focus restoration) and `proposal-register.test.ts` (pagination boundaries, filters, empty and out-of-range pages, stable ordering, no `proposal_votes` access, projection shape, certified and open ballot display, editing from a later page).
 - `npm run build` — production build succeeds.
-- Harness run against the committed code, three runs per page/identity; before/after JSON committed under `docs/status/`. The register follow-up ran `--filter admin-proposals --runs 3` against `78c07c0` (before) and `c1f72c0` (after).
+- Harness run against the committed code, three runs per page/identity; before/after JSON committed under `docs/status/`. The register follow-up ran `--filter admin-proposals --runs 3` against `78c07c0` (before) and `c1f72c0` (after). The header follow-up ran the full harness against `b9286f4` (before) and `ad34a17` (after).
 - Register follow-up browser verification at 1440×1000 and 390×844: 65 checks passed, including 25-row pages, range text, filter preservation, keyboard focus on the pagination links with a visible ring, empty and out-of-range states, edit/revise/new resolving off-page proposals, no horizontal overflow, and no console, page or request errors.
+- Header follow-up browser verification at 1440×1000 and 390×844: 42 checks passed. Covered seeded notifications (three items, two unread) rendering title and relative time, unread accessible name and badge, panel open/close, Escape restoring summary focus, outside-click close, keyboard-only reaching the summary with a visible 3 px focus ring and Enter opening the panel, intercepted empty and `500` states with a working retry, the panel fitting a 390 px viewport without horizontal overflow, no console/page errors or failed first-party requests, a JavaScript-disabled context where the bell navigates to the notification centre, and reduced-motion rendering.
+- Header follow-up script comparison against both builds: `/`, `/proposals/` and `/policies/` served the `NotificationBell` island with 20 script requests before and no island with 4 script requests after; `/admin/proposals/` served no island after.
 - Browser verification: `/admin/` server island replaces its fallback and its nested activity timeline hydrates on scroll with no console errors; the proposal ballot hydrates and responds to a click on desktop (member click-to-next-paint proxy 97 ms in the measured run).
-- Raw-control audit on changed files: no new raw `<button>`, `<select>`, `<input>`, `<textarea>`, `<table>` or `<dialog>` elements. The server island composes existing Card and timeline components.
+- Raw-control audit on changed files: no new raw `<button>`, `<select>`, `<input>`, `<textarea>`, `<table>` or `<dialog>` elements. The notification list rows use plain anchors for navigation; the summary is a native `<details>/<summary>` disclosure; the retry and view-all controls use the existing `Button` primitive.
 - No new arbitrary palette values or undefined Horizon custom properties were introduced.
