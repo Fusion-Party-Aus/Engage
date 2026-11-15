@@ -1,5 +1,39 @@
 [
   {
+    "hash": "8de3f47",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Regenerate snapshot for member updates and participation fixes"
+  },
+  {
+    "hash": "d4acfa1",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Classify votes as votes in the participation feed",
+    "details": "The panel built vote activities with kind 'vote' but only handled 'votes', so every vote rendered as a proposal submission with the wrong filter and count. Encrypted ballot records carry no member identity, which made the mismatch affect all recent votes. Votes, contributions and proposals now share one classifier and one seven-day window. Vote rows use the recorded timestamp and the existing canViewIdentifiableBallots gate; encrypted records render as 'A member' and choices, reasons, tallies and envelopes are never read. Replayed records collapse by ballot and voter, while separate ballots and voters remain separate rows. The summary strip and tabs are derived from the same rows, and the previously truncated feed now shows the whole window. Refs #56"
+  },
+  {
+    "hash": "e5d0f2e",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "member",
+    "summary": "Keep unread updates until the member dismisses them",
+    "details": "My Engage advanced engage_member_last_seen on every page load, so navigating away and back hid updates the member never opened. Reading the page now only resolves the window; the cursor advances only through POST /api/member/updates/dismiss. Adds a 'Mark updates as seen' action to the catch-up digest, a matching status message, a seven-day window for members who have never dismissed updates, and a pure helper so the window, list and counts share one rule. Refs #108"
+  },
+  {
+    "hash": "d642bfc",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "status",
+    "summary": "Record the merged command layer and paginated register (#107)"
+  },
+  {
     "hash": "b9286f4",
     "date": "2026-11-15",
     "type": "update",
@@ -639,37 +673,5 @@
     "category": "feature",
     "scope": "time",
     "summary": "Display time in user's local timezone"
-  },
-  {
-    "hash": "5de3c91",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "participation",
-    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
-  },
-  {
-    "hash": "46f1b9b",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Fix error on branch pages, and seed branches to database"
-  },
-  {
-    "hash": "c14ee07",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
-  },
-  {
-    "hash": "31e34df",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
   }
 ]

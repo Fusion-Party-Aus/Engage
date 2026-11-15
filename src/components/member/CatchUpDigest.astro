@@ -9,11 +9,13 @@ interface Props {
   groups: MemberCatchUpGroup[];
   total: number;
   sinceLabel: string;
-  hasLastVisit: boolean;
+  hasCursor: boolean;
   idPrefix?: string;
+  /** Where to return after the member marks updates as seen. */
+  dismissReturnTo?: string;
 }
 
-const { groups, total, sinceLabel, hasLastVisit, idPrefix = 'catchup' } = Astro.props;
+const { groups, total, sinceLabel, hasCursor, idPrefix = 'catchup', dismissReturnTo } = Astro.props;
 const headingId = `${idPrefix}-heading`;
 const groupId = (proposalId: string) => `${idPrefix}-${proposalId}`;
 const icons = {
@@ -35,9 +37,9 @@ const formatDate = (value: Date | string) =>
 <Card className="catchup-card" aria-labelledby={headingId}>
   <div class="catchup-head">
     <div>
-      <h2 id={headingId}>{hasLastVisit ? 'Since your last visit' : 'Recent activity on followed proposals'}</h2>
+      <h2 id={headingId}>{hasCursor ? 'Unread updates' : 'Recent activity on proposals you follow'}</h2>
       <p class="catchup-lead">
-        Activity on proposals you follow, vote on, or authored. {sinceLabel}
+        Activity on proposals you follow, vote on or authored. {sinceLabel}
       </p>
     </div>
     <Badge variant={total ? 'secondary' : 'muted'}>
@@ -47,8 +49,8 @@ const formatDate = (value: Date | string) =>
 
   {visibleGroups.length === 0 ? (
     <div class="catchup-empty">
-      <p>Nothing new on the proposals you follow.</p>
-      <span>Discussion, wording changes and recorded decisions will collect here between visits.</span>
+      <p>{hasCursor ? 'You’re up to date.' : 'Nothing new in the last seven days.'}</p>
+      <span>Discussion, wording changes and decisions will collect here.</span>
     </div>
   ) : (
     <div class="catchup-groups">
@@ -172,6 +174,16 @@ const formatDate = (value: Date | string) =>
           </div>
         </details>
       )}
+    </div>
+  )}
+
+  {total > 0 && dismissReturnTo && (
+    <div class="catchup-actions">
+      <p>Updates stay here until you mark them as seen.</p>
+      <form method="post" action="/api/member/updates/dismiss">
+        <input type="hidden" name="returnTo" value={dismissReturnTo} />
+        <Button type="submit" variant="outline" size="sm">Mark updates as seen</Button>
+      </form>
     </div>
   )}
 </Card>
@@ -393,9 +405,34 @@ const formatDate = (value: Date | string) =>
     outline-offset: -2px;
   }
 
+  .catchup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem 1rem;
+    padding: 0.85rem 1.5rem;
+    border-top: 1px solid var(--horizon-line);
+    background: var(--horizon-surface);
+  }
+
+  .catchup-actions p {
+    margin: 0;
+    color: var(--horizon-muted);
+    font-size: 0.82rem;
+  }
+
+  .catchup-actions form {
+    margin: 0;
+  }
+
   @media (max-width: 700px) {
     .catchup-head {
       padding: 1.15rem 1rem;
+    }
+
+    .catchup-actions {
+      padding: 0.85rem 1rem;
     }
 
     .catchup-group {
