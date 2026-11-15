@@ -116,7 +116,6 @@ const sections = branch
 const currentCount = records.filter((policy: any) => policy.publicationStatus === 'published').length;
 const pastCount = records.length - currentCount;
 const imported = records.filter((policy: any) => policy.recordOrigin === 'branch-import');
-const ratified = records.filter((policy: any) => policy.recordOrigin !== 'branch-import');
 const importedAt = imported
   .map((policy: any) => policy.import?.importedAt)
   .filter(Boolean)
@@ -163,7 +162,7 @@ const sourceHref = branch?.websiteHref
         <p>{showHistory
           ? `Withdrawn, superseded and repealed ${branchLabel} records. They are not current policy.`
           : imported.length > 0
-            ? `${currentCount} ${currentCount === 1 ? 'policy' : 'policies'} adopted by the ${branchLabel} executive${ratified.length ? `, plus ${ratified.length} ratified through Engage` : ''}. Imported from the branch’s published policy record${importedAt ? ` on ${new Date(importedAt).toLocaleDateString('en-AU', { dateStyle: 'long' })}` : ''}.`
+            ? `${currentCount} published ${currentCount === 1 ? 'policy' : 'policies'} from ${branchLabel}. Each record explains its adoption. This registry also includes policy adopted by the branch executive before being imported${importedAt ? ` on ${new Date(importedAt).toLocaleDateString('en-AU', { dateStyle: 'long' })}` : ''}.`
             : `${currentCount} adopted ${currentCount === 1 ? 'policy' : 'policies'} under ${branchLabel} authority.`}</p>
         <nav class="registry-tabs" aria-label="Policy status">
           <Button href={tabHref(false)} variant={!showHistory ? 'default' : 'ghost'} size="sm">Current policy <span class="tabular">{currentCount}</span></Button>
@@ -186,7 +185,7 @@ const sourceHref = branch?.websiteHref
         <p class="registry-footnote">
           {sourceHref && <a href={sourceHref} target="_blank" rel="noreferrer noopener">Branch policy platform ↗</a>}
           {sourceHref && importSource && <span>·</span>}
-          {importSource && <a href={importSource} target="_blank" rel="noreferrer noopener">Source feed used for import ↗</a>}
+          {importSource && <a href={importSource} target="_blank" rel="noreferrer noopener">Original policy data ↗</a>}
         </p>
       )}
     </div>
@@ -197,7 +196,7 @@ const sourceHref = branch?.websiteHref
       <Card>
         <CardContent className="grid justify-items-start gap-3 py-10">
           <h1>Policy not found</h1>
-          <p>This address is not a published policy or a recognised branch registry.</p>
+          <p>We couldn’t find a published policy or branch policy page at this address.</p>
           <Button href="/policies/" variant="outline">Policy registry</Button>
         </CardContent>
       </Card>

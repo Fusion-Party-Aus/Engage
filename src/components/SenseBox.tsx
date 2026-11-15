@@ -52,7 +52,7 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
     return (
       <div role="status" className="space-y-4">
         <h2>Thank you for sharing</h2>
-        <p>Your priority is in your branch’s Sense Box. Organisers can use it to identify shared concerns and explore future proposals.</p>
+        <p>Your priority has been sent to the selected branch’s Sense Box. Organisers can consider it alongside other contributions.</p>
         <p>We don’t collect contact details here, so you won’t receive a personal reply.</p>
         <Button href="/proposals/">Explore Engage proposals</Button>
       </div>
@@ -63,7 +63,7 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
     <form onSubmit={submit} className="space-y-5">
       <fieldset disabled={busy} className="space-y-5">
         <div className="grid gap-2">
-          <Label htmlFor="sense-branch">State or territory</Label>
+          <Label htmlFor="sense-branch">Where does this apply?</Label>
           <NativeSelect
             id="sense-branch"
             name="branchId"

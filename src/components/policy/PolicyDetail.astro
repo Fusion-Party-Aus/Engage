@@ -38,7 +38,7 @@ const branchSlug = typeof policy.branchSlug === 'string' ? policy.branchSlug : n
 const pillar = typeof policy.pillar === 'string' && policy.pillar ? humanisePolicyLabel(policy.pillar) : null;
 const revisions = policy.revisionIds ?? [policy.revisionId].filter(Boolean);
 const changeLabel = (changeType: string) => changeType === 'repeal' ? 'Repeal' : changeType === 'replace' ? 'Replace' : 'Amend';
-const stageLabel = (stage: string) => stage === 'decide' ? 'Open vote' : stage === 'deliberate' ? 'In discussion' : stage === 'implement' ? 'Decided' : stage === 'archived' ? 'Closed' : 'Gathering support';
+const stageLabel = (stage: string) => stage === 'decide' ? 'Voting stage' : stage === 'deliberate' ? 'In discussion' : stage === 'implement' ? 'Implementation' : stage === 'archived' ? 'Closed' : 'Gathering support';
 const formatDate = (value: unknown) => value ? new Date(String(value)).toLocaleDateString('en-AU', { dateStyle: 'long' }) : null;
 ---
 
@@ -110,14 +110,14 @@ const formatDate = (value: unknown) => value ? new Date(String(value)).toLocaleD
       </CardContent>
     </Card>
   ) : (
-    <p class="policy-retired-note">This historical policy record remains visible to explain its status. It is not presented as current approved wording.</p>
+    <p class="policy-retired-note">This policy is no longer current. The record remains available so you can follow what changed.</p>
   )}
 
   {changeProposals.length > 0 && (
     <Card>
       <CardHeader>
         <CardTitle>Changes to this policy</CardTitle>
-        <p class="policy-card-note">A proposal changes this policy only after a successful ballot and ratification.</p>
+        <p class="policy-card-note">Submitting a proposal leaves this policy unchanged. An adopted amendment or replacement takes effect when published; a repeal takes effect at ratification.</p>
       </CardHeader>
       <CardContent>
         <ul class="policy-change-list">
@@ -132,7 +132,7 @@ const formatDate = (value: unknown) => value ? new Date(String(value)).toLocaleD
               ) : policy.supersededBy === proposal.proposalId ? (
                 <Badge variant="success">In force</Badge>
               ) : proposal.stage === 'implement' ? (
-                <Badge variant="info">Decided, awaiting publication</Badge>
+                <Badge variant="info">Check the decision record</Badge>
               ) : (
                 <Badge variant="outline">In progress</Badge>
               )}
@@ -173,11 +173,11 @@ const formatDate = (value: unknown) => value ? new Date(String(value)).toLocaleD
 
   <Card className="policy-governance">
     <details>
-      <summary>Governance record and provenance</summary>
+      <summary>Adoption record and sources</summary>
       <dl>
         <dt>Policy identifier</dt><dd><code>{policy.policyId}</code></dd>
         <dt>How it was adopted</dt><dd>{imported ? `Imported from ${policy.provenance?.label ?? 'the branch policy platform'}; adopted by the branch executive.` : 'Ratified through an Engage member ballot.'}</dd>
-        <dt>Source proposal</dt><dd>{sourceProposal ? <a href={`/proposals/${sourceProposal.slug}/`}>{sourceProposal.title}</a> : 'None. This policy was not produced by an Engage proposal.'}</dd>
+        <dt>Source proposal</dt><dd>{sourceProposal ? <a href={`/proposals/${sourceProposal.slug}/`}>{sourceProposal.title}</a> : 'No source proposal recorded.'}</dd>
         <dt>Ballot result</dt><dd>{sourceResult ? `${String(sourceResult.result)}${sourceResult.recordedAt ? ` · ${formatDate(sourceResult.recordedAt)}` : ''}` : 'No Engage ballot recorded'}</dd>
         <dt>Authority</dt><dd>{authority?.name ?? policy.ratification?.authorityBranchId ?? 'Not recorded'}</dd>
         <dt>Decision event</dt><dd>{policy.ratification?.decisionEventId ?? policy.repealedBy?.decisionEventId ?? 'Not recorded'}</dd>

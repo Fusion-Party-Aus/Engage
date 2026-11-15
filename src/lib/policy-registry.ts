@@ -103,7 +103,7 @@ const STATUS_ORDER = ["withdrawn", "superseded", "repealed"] as const;
 
 const STATUS_DESCRIPTION: Record<string, string> = {
   withdrawn:
-    "Removed from current authority because the publication was incorrect or withdrawn by its authority.",
+    "Withdrawn from publication by the responsible authority, including corrections to an incorrect publication.",
   superseded:
     "Replaced by a later policy. The successor is the current policy.",
   repealed:
