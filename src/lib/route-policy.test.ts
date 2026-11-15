@@ -225,6 +225,8 @@ describe("governed route discovery", () => {
         "const patch = () => new Response();\nexport { patch as PATCH };\n",
       "admin/ballots/index.ts":
         "export const GET = () => new Response();\nexport const prerender = false;\n",
+      "admin/ballots/multi.ts":
+        "export const prerender = false, POST = async () => new Response();\n",
       "admin/ballots/helper.ts":
         "export const helper = () => 1;\n",
     });
@@ -250,6 +252,14 @@ describe("governed route discovery", () => {
       assert.ok(
         keys.includes("GET /api/admin/ballots"),
         "index route key omits /index",
+      );
+      assert.ok(
+        keys.includes("POST /api/admin/ballots/multi"),
+        "multi-binding export handler discovered after non-handler binding",
+      );
+      assert.ok(
+        undeclaredGovernanceRoutes(routes).includes("POST /api/admin/ballots/multi"),
+        "undeclaredGovernanceRoutes reports multi-binding POST route",
       );
       assert.ok(
         !keys.some((key) => key.includes("helper")),

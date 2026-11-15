@@ -161,7 +161,7 @@ interface GovernanceCommand<TInput, TSubject> {
 
 The actor is always the resolved session member (`actor.memberId`), never a client-supplied identity.
 
-`preconditions` and `effects` are declarative documentation for readers. The command layer does not re-check them; the domain function it calls (`bindBallotToRevision`, `recordFormalDecision`) enforces the rules and raises the domain errors the route maps.
+`preconditions` and `effects` are declarative documentation for readers. `loadSubject` checks that the proposal is in the `decide` stage and, for result recording, has a bound revision before `execute` runs, while `bindBallotToRevision` and `recordFormalDecision` enforce the domain rules and raise the domain errors the route maps.
 
 ### Central route policy
 

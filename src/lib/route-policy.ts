@@ -100,8 +100,120 @@ function routeFilesRecursively(directory: string): string[] {
 }
 
 /**
- * Handler exports in any supported form: `export const POST`, `export function
- * GET`, `export async function POST` and `export { handler as POST }`.
+ * Extract top-level `export const|let|var` declaration binding names, including
+ * multi-binding declarations such as `export const prerender = false, POST = ...`.
+ */
+function extractVariableExportNames(source: string): string[] {
+  const names: string[] = [];
+  const headerRe = /export\s+(?:const|let|var)\s+/g;
+  for (const match of source.matchAll(headerRe)) {
+    let i = (match.index ?? 0) + match[0].length;
+    let depth = 0;
+    let inInitializer = false;
+    let quote: string | null = null;
+    let inLineComment = false;
+    let inBlockComment = false;
+    let token = "";
+
+    const flushToken = () => {
+      if (token) {
+        names.push(token);
+        token = "";
+      }
+    };
+
+    while (i < source.length) {
+      const ch = source[i];
+      const next = source[i + 1];
+
+      if (inLineComment) {
+        if (ch === "\n") inLineComment = false;
+        i++;
+        continue;
+      }
+      if (inBlockComment) {
+        if (ch === "*" && next === "/") {
+          inBlockComment = false;
+          i += 2;
+        } else {
+          i++;
+        }
+        continue;
+      }
+      if (quote) {
+        if (ch === "\\") {
+          i += 2;
+          continue;
+        }
+        if (ch === quote) quote = null;
+        i++;
+        continue;
+      }
+
+      if (ch === "/" && next === "/") {
+        inLineComment = true;
+        i += 2;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        inBlockComment = true;
+        i += 2;
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === "`") {
+        quote = ch;
+        i++;
+        continue;
+      }
+
+      if (ch === "(" || ch === "[" || ch === "{") {
+        depth++;
+        i++;
+        continue;
+      }
+      if (ch === ")" || ch === "]" || ch === "}") {
+        if (depth > 0) depth--;
+        i++;
+        continue;
+      }
+
+      if (depth === 0) {
+        if (ch === ";") {
+          flushToken();
+          break;
+        }
+        if (ch === ",") {
+          flushToken();
+          inInitializer = false;
+          i++;
+          continue;
+        }
+        if (!inInitializer) {
+          if (ch === "=" || ch === ":") {
+            flushToken();
+            inInitializer = true;
+            i++;
+            continue;
+          }
+          if (/[A-Za-z0-9_$]/.test(ch)) {
+            token += ch;
+            i++;
+            continue;
+          }
+          flushToken();
+        }
+      }
+      i++;
+    }
+    flushToken();
+  }
+  return names;
+}
+
+/**
+ * Handler exports in any supported form: `export const POST`, `export const
+ * prerender = false, POST = ...`, `export function GET`, `export async
+ * function POST` and `export { handler as POST }`.
  */
 function exportedHandlerMethods(source: string): string[] {
   const exported = new Set<string>();
@@ -109,10 +221,7 @@ function exportedHandlerMethods(source: string): string[] {
     if ((HTTP_HANDLER_METHODS as readonly string[]).includes(name))
       exported.add(name);
   };
-  for (const match of source.matchAll(
-    /export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\b/g,
-  ))
-    addIfHandler(match[1]);
+  for (const name of extractVariableExportNames(source)) addIfHandler(name);
   for (const match of source.matchAll(
     /export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\b/g,
   ))

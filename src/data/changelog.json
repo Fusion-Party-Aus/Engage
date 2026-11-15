@@ -1,5 +1,21 @@
 [
   {
+    "hash": "f0f19b0",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "governance",
+    "summary": "Inspect multi-binding route exports and clarify command preconditions"
+  },
+  {
+    "hash": "f8e8f83",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the command layer after merging main"
+  },
+  {
     "hash": "b2fd65a",
     "date": "2026-11-15",
     "type": "feat",
@@ -655,23 +671,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record notification preferences and digest rollout defaults"
-  },
-  {
-    "hash": "bc6409f",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Separate email preferences and explain rollout defaults",
-    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
   }
 ]
