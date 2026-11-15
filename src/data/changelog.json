@@ -1,5 +1,21 @@
 [
   {
+    "hash": "e1baf80",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "header",
+    "summary": "Keep a retry from issuing duplicate inbox reads"
+  },
+  {
+    "hash": "c9fe043",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh the snapshot for the header performance work"
+  },
+  {
     "hash": "d8b8cda",
     "date": "2026-11-16",
     "type": "docs",
@@ -657,21 +673,5 @@
     "category": "ops",
     "scope": "analytics",
     "summary": "Install Plausible tracker package"
-  },
-  {
-    "hash": "b98af1d",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "time",
-    "summary": "Display time in user's local timezone"
-  },
-  {
-    "hash": "5de3c91",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "participation",
-    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
   }
 ]
