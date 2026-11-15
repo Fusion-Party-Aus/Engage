@@ -1,5 +1,13 @@
 [
   {
+    "hash": "71d1903",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Include registry filter fix in the snapshot"
+  },
+  {
     "hash": "b1bafb9",
     "date": "2026-11-15",
     "type": "fix",
@@ -651,13 +659,5 @@
     "category": "feature",
     "scope": "editor",
     "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
   }
 ]
