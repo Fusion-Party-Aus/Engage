@@ -1,5 +1,49 @@
 [
   {
+    "hash": "c94e3f9",
+    "date": "2026-11-15",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "governance",
+    "summary": "Typed ballot commands and central route policy (#53) (#94)",
+    "details": "* refactor(governance): add typed ballot commands and central route policy Extract ballot.bind and ballot.record_result into typed commands that call the existing domain functions, and declare both routes in one policy table. Routes now validate input, run the command and map errors; no permission literals or role checks remain in the route files. No governance behaviour changes. * test(governance): prove ballot command and route policy equivalence Cover policy-table drift, the authorisation matrix for both commands, route authentication, bind idempotency and record_result preconditions against a real MongoDB replica set. Existing route suites continue to exercise the same behaviour. * docs(governance): document the command contract and mark #53 partial Describe the typed command contract, the central route policy table and the two-stage authorisation rule. Record that the ballot lifecycle is extracted while proposals, amendments and membership remain route-local. * chore(changelog): refresh the snapshot for the ballot command layer * fix(governance): preserve bind route error mapping and harden route drift guard Map domain errors per route so a BallotDomainError escaping bind still returns the generic 400, while result keeps its 409. Discover governed routes recursively across .ts, .js and .mjs with all handler export forms. Rename the route-level helper to authoriseGovernanceRouteRole and document the deliberate coarse-gate repeat. Correct the precondition wording: the delegated domain function enforces it. * test(governance): cover bind conflict status, route scope denial and recursive discovery Prove the bind route still returns 400 with one binding event for a conflicting ballot revision, prove an out-of-branch result request is denied with no write, and prove each declared audit event is written. Add temporary-directory fixtures for nested, index, JavaScript and re-exported routes, plus a malformed-body ordering check. * docs(governance): correct command preconditions and route policy scope Preconditions and effects are documentation enforced by the delegated domain function, not re-checked by the command layer. Describe the coarse role gate, its defensive repetition, per-route error mapping and recursive route discovery. * chore(changelog): refresh the snapshot after the PR review fixes * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * fix(governance): inspect multi-binding route exports and clarify command preconditions"
+  },
+  {
+    "hash": "b2fd65a",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Administrator responsibility queue (#54) (#106)",
+    "details": "* feat(admin): add the administrator responsibility queue (#54) Group ballot outcomes, closing ballots, unbound wording, overdue advancement, amendment decisions, member verification and publication into one queue. Every item names the authority that makes it actionable and is filtered server-side by permission and branch scope. A failed source degrades to one short message for its group. * docs(status): record the administrator responsibility queue (#54) The queue is built and tested; multi-amendment derivation, collision review and role legibility remain outstanding. Note that publication failures have no durable failed state to queue. * chore(changelog): refresh the snapshot for the responsibility queue * fix(admin): never imply a ballot close date that was not recorded A legacy closed ballot with no close time now says only that it closed, instead of presenting the current date as the close date. * chore(changelog): refresh the snapshot for the queue close-date fix"
+  },
+  {
+    "hash": "be5f523",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Member-facing decision record (#54) (#105)",
+    "details": "* feat(proposals): add member-facing decision record Compose one matter's immutable voted wording, revision history, amendment outcomes, certified ballot result and publication state in a permission-aware read model. Derive adopted wording under D15 (zero applied amendments) and D16 (one applied amendment), with explicit review states for two or more applied amendments (D17-D18), approved-but-unapplied amendments and mismatched result wording. No individual votes, voter or author identifiers cross the read-model boundary. Add /proposals/[slug]/record/ and link it from the proposal page. * docs(governance): record the decision-record read model Document the member-facing decision record, the D15/D16 derivation, the explicit D17-D18 collision-review seam and the outstanding administrator queue. Mark S2/#54 partial and note the reporting limit on inter-amendment gaps. * chore(changelog): refresh the snapshot for the decision record"
+  },
+  {
+    "hash": "9478783",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ci",
+    "summary": "Run the perimeter browser harness on every pull request (#38) (#104)",
+    "details": "* fix(security): bound the perimeter browser harness and always clean up The harness now has a hard 180-second deadline (ENGAGE_PERIMETER_TIMEOUT_MS) that stops the run and fails instead of hanging, signals the preview server before any await, escalates to SIGKILL, bounds Chromium shutdown, and kills the child from a process exit handler as a last resort. A page error, failed request or CSP violation that appears after a page's own check also fails the run. Adds 'perimeter:browser' for local use; a build and ENGAGE_PLAYWRIGHT_MODULE are still required. * feat(ci): run the perimeter browser harness on every pull request Runs scripts/security-perimeter-browser.mjs after the build and after the existing Playwright 1.57.0 install, reusing the same ENGAGE_PLAYWRIGHT_MODULE path rather than installing a second copy. Extends src/lib/ci-workflow.test.ts to compare step positions, so it fails if the step disappears, moves before the build or the Playwright install, installs its own Playwright, or if 'perimeter:browser' and the harness file drift apart. * docs(security): record that the perimeter harness runs in CI States what the CI step proves, how it is made safe to run unattended, and the remaining gap: the production build against the in-memory seed, not Cloudflare/Coolify, a real MongoDB or the real providers. * chore(changelog): refresh the snapshot for the perimeter CI step"
+  },
+  {
+    "hash": "5dc8afb",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "copy",
+    "summary": "Finalise editorial coverage and resumable handover (#97)"
+  },
+  {
     "hash": "95913e6",
     "date": "2026-11-15",
     "type": "fix",
@@ -621,259 +665,5 @@
     "category": "fix",
     "scope": "email",
     "summary": "Keep verification notices within narrow mobile screens"
-  },
-  {
-    "hash": "300966c",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Let administrators inspect the proposed re-engagement audience"
-  },
-  {
-    "hash": "9e72e64",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "member",
-    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
-  },
-  {
-    "hash": "71a61de",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ci",
-    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
-  },
-  {
-    "hash": "cb39b60",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record lifecycle audit, consent assessment and rollout checks"
-  },
-  {
-    "hash": "52c6570",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Connect verification, participation and legacy consent journeys"
-  },
-  {
-    "hash": "ee47cdf",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record administrator test email delivery"
-  },
-  {
-    "hash": "eb5f365",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "email",
-    "summary": "Let administrators send themselves a sample digest",
-    "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
-  },
-  {
-    "hash": "cfbf459",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record notification preferences and digest rollout defaults"
-  },
-  {
-    "hash": "bc6409f",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Separate email preferences and explain rollout defaults",
-    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
-  },
-  {
-    "hash": "7a56a95",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "engagement",
-    "summary": "Add proposal rankings, ballot deadlines and member reminders",
-    "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
-  },
-  {
-    "hash": "0b8b375",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "settings",
-    "summary": "Save the configured source repository URL"
-  },
-  {
-    "hash": "6fad513",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record granular analytics improvements"
-  },
-  {
-    "hash": "2167573",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "analytics",
-    "summary": "Measure Engage navigation and participation outcomes"
-  },
-  {
-    "hash": "e41ac7d",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "analytics",
-    "summary": "Initialize Plausible tracking on production"
-  },
-  {
-    "hash": "71a98bb",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "analytics",
-    "summary": "Install Plausible tracker package"
-  },
-  {
-    "hash": "b98af1d",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "time",
-    "summary": "Display time in user's local timezone"
-  },
-  {
-    "hash": "5de3c91",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "participation",
-    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
-  },
-  {
-    "hash": "46f1b9b",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Fix error on branch pages, and seed branches to database"
-  },
-  {
-    "hash": "c14ee07",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
-  },
-  {
-    "hash": "31e34df",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
-  },
-  {
-    "hash": "ac9bb41",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "deploy",
-    "summary": "Automate production deployment gated on staging health"
-  },
-  {
-    "hash": "c6edce0",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "audit",
-    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
-  },
-  {
-    "hash": "3098b44",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
-  },
-  {
-    "hash": "3512e0a",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "workspaces",
-    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
-  },
-  {
-    "hash": "f58e150",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "f65f00c",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Wire ballot opened and closing soon through a durable outbox",
-    "details": "Add notification_outbox, written immediately after a committed lifecycle transition and drained by npm run notifications:drain (dry-run by default, --apply to send). Two events are wired: a ballot opened by the lifecycle scheduler (new_ballots) and an open ballot inside the approved seven-day window (closing_deadlines). The audience is the voting electorate. Candidates are confirmed with getProposalEligibility and canViewProposal, the same predicate and visibility gate used when casting a vote, and eligibility is checked again at drain time so a revoked membership is suppressed rather than notified. Rows carry one unique dedupeKey per member, ballot and event; the drain claims with a conditional lease, retries at 1/2/4/8 minutes and stops at five attempts. Terminal rows carry a two-year retention TTL. Enqueue and delivery can never fail, block or alter a governance transition, and the scheduler report is unchanged. governance_outcomes and contribution_responses stay unwired: the result route is being refactored and the comment-outcome event needs a product decision."
-  },
-  {
-    "hash": "681c18e",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "notifications",
-    "summary": "Write the delivery dedupe key the unique index requires",
-    "details": "The notification_deliveries unique index is on dedupeKey, but in-app and push delivery documents only set a composite _id. Every insert after the first therefore collided on a missing dedupeKey and was swallowed as a duplicate, so production could create at most one inbox item in total. Write the composite value to dedupeKey (and a push equivalent), keeping the existing _id dedupe contract and index shape unchanged."
   }
 ]

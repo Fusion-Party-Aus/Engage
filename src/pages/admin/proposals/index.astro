@@ -6,22 +6,21 @@ import { Textarea } from '../../../components/ui/textarea';
 import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, ShieldAlert } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { listProposals, normalizeStage } from '../../../lib/store.ts';
+import { isProposalLocked } from '../../../lib/store.ts';
 import {
-  ballotOutcomeLabel,
-  loadBallotTallyCryptoConfig,
-  readBoundBallotTallies,
-  resolveBallotClosure,
-} from '../../../lib/ballots.ts';
-import { proposalBallotId } from '../../../lib/vote-storage.ts';
+  EMPTY_PROPOSAL_REGISTER,
+  listProposalRegister,
+  loadProposalEditorRecord,
+  parseRegisterPage,
+  parseRegisterStage,
+  registerPageHref,
+} from '../../../lib/proposal-register.ts';
 
-import { ballotDeadlineLabel } from '../../../lib/ballot-deadline.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import type { ProposalStage } from '../../../lib/types.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import Field from '../../../components/admin/Field.astro';
-import BallotOutcomeBasis from '../../../components/admin/BallotOutcomeBasis.astro';
 import Alert from '../../../components/admin/Alert.astro';
 import AlertTitle from '../../../components/admin/AlertTitle.astro';
 import AlertDescription from '../../../components/admin/AlertDescription.astro';
@@ -41,120 +40,72 @@ if (!user.isStaff && !user.isBranchAdmin) {
 
 const db = await getDatabase(env);
 const branchAdminIds = user.branchAdminIds ?? [];
+const canOpenRegister = Boolean(user.isStaff || user.isBranchAdmin);
 const query = (Astro.url.searchParams.get('q') ?? '').trim();
-const stageFilter = (Astro.url.searchParams.get('stage') ?? 'all').trim();
+const stageFilter = parseRegisterStage(Astro.url.searchParams.get('stage'));
 const branchFilter = (Astro.url.searchParams.get('branch') ?? 'all').trim();
 const editId = (Astro.url.searchParams.get('edit') ?? '').trim();
 const reviseId = (Astro.url.searchParams.get('revise') ?? '').trim();
 const newProposal = Astro.url.searchParams.get('new') === '1';
+const requestedPage = parseRegisterPage(Astro.url.searchParams.get('page'));
 
-const [branches, scopedProposals] = await Promise.all([
+// The register is a vote-free, rationale-free list read. The detail workspace
+// owns the live tally, ballot outcome and full text.
+const [branches, register] = await Promise.all([
   user.isAdmin
     ? db.collection('branches').find({}).sort({ name: 1 }).toArray()
     : user.isBranchAdmin
       ? db.collection('branches').find({ branchId: { $in: branchAdminIds } }).sort({ name: 1 }).toArray()
       : db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
-  user.isStaff || user.isBranchAdmin
-    ? listProposals(db, { includeArchived: true, tolerateUnreadableVotes: true }).then((proposals) =>
-        proposals.filter(
-          (proposal) =>
-            user.isStaff ||
-            (proposal.originatingBranchId && branchAdminIds.includes(proposal.originatingBranchId)),
-        ),
-      )
-    : Promise.resolve([]),
+  canOpenRegister
+    ? listProposalRegister(db, {
+        page: requestedPage,
+        search: query,
+        stage: stageFilter,
+        branch: branchFilter,
+        ...(user.isStaff ? {} : { branchScopeIds: branchAdminIds }),
+      })
+    : Promise.resolve(EMPTY_PROPOSAL_REGISTER),
 ]);
-const normalizedStage =
-  stageFilter && stageFilter !== 'all' ? normalizeStage(stageFilter) : '';
-const queryLower = query.toLowerCase();
-// One register read serves both the filtered rows and the stage counts. Search
-// and stage filtering keep the same semantics as listProposals.
-const allProposals = scopedProposals.filter((proposal) => {
-  if (
-    branchFilter &&
-    branchFilter !== 'all' &&
-    ![proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branchFilter)
-  ) {
-    return false;
-  }
-  if (normalizedStage && proposal.stage !== normalizedStage) return false;
-  if (queryLower) {
-    const haystack = `${proposal.proposalId} ${proposal.title} ${proposal.space} ${proposal.summary} ${proposal.details}`.toLowerCase();
-    if (!haystack.includes(queryLower)) return false;
-  }
-  return true;
-});
-const unboundBallotRevisions = new Map<string, any[]>();
-const unboundProposalIds = allProposals
-  .filter((item) => item.stage === 'decide' && !item.ballotRevisionId)
-  .map((item) => item.proposalId);
-if (unboundProposalIds.length) {
-  const revisionRows = await db
-    .collection('proposal_revisions')
-    .find({ proposalId: { $in: unboundProposalIds } })
-    .sort({ createdAt: -1 })
-    .toArray();
-  for (const revision of revisionRows) {
-    const proposalId = String(revision.proposalId);
-    const rows = unboundBallotRevisions.get(proposalId) ?? [];
-    rows.push(revision);
-    unboundBallotRevisions.set(proposalId, rows);
-  }
-}
-const proposalIds = allProposals.map((proposal) => proposal.proposalId);
-// A result can only be recorded once the ballot is closed, and the tally shown
-// to the officer must be the bound tally certification enforces. Both follow the
-// same closure precedence: the ballot row first, then the matter.
-const decisionProposals = user.isAdmin || user.isBranchAdmin
-  ? allProposals.filter((proposal) => proposal.stage === 'decide')
-  : [];
-const mainBallotIds = decisionProposals.map((proposal) => proposalBallotId(proposal.proposalId));
-const [decideBallotResults, decideBallotRows, boundBallotTallies] = await Promise.all([
-  mainBallotIds.length
-    ? db
-        .collection('ballot_results')
-        .find({
-          $or: [
-            { ballotId: { $in: mainBallotIds } },
-            {
-              proposalId: { $in: decisionProposals.map((proposal) => proposal.proposalId) },
-              ballotId: { $exists: false },
-            },
-          ],
-        })
-        .toArray()
-    : Promise.resolve([]),
-  mainBallotIds.length
-    ? db
-        .collection('ballots')
-        .find({ ballotId: { $in: mainBallotIds } }, { projection: { ballotId: 1, status: 1, closesAt: 1 } })
-        .toArray()
-    : Promise.resolve([]),
-  readBoundBallotTallies(db, {
-    ballots: decisionProposals
-      .filter((proposal) => proposal.ballotRevisionId)
-      .map((proposal) => ({ matterId: proposal.proposalId, revisionId: String(proposal.ballotRevisionId) })),
-    cryptoConfig: loadBallotTallyCryptoConfig(env),
-  }),
-]);
-const decideResultsByBallot = new Map(
-  decideBallotResults.map((row: any) => [
-    String(row.ballotId ?? proposalBallotId(String(row.proposalId))),
-    row,
-  ]),
-);
-const decideBallotRowsById = new Map(decideBallotRows.map((row: any) => [String(row.ballotId), row]));
-const closureFor = (item: any) =>
-  resolveBallotClosure({
-    ballot: decideBallotRowsById.get(proposalBallotId(item.proposalId)) ?? null,
-    matter: item,
-    now: new Date(),
-  });
-const closingLabel = (item: any) => {
-  const closesAt = closureFor(item).closesAt;
-  return closesAt ? ballotDeadlineLabel(closesAt) : null;
+
+const registerCounts = register.stageCounts;
+const entries = register.entries;
+const pageProposalIds = entries.map((entry) => entry.row.proposalId);
+const pageCount = register.pageCount;
+const currentPage = register.page;
+const unboundCount = register.unboundBallotCount;
+const spaces = register.spaces;
+const pageHref = (page: number) => registerPageHref({ q: query, stage: stageFilter, branch: branchFilter }, page);
+const rangeSummary = register.total === 0
+  ? 'No proposals match this filter.'
+  : `Showing ${register.startIndex}–${register.endIndex} of ${register.total} proposal${register.total === 1 ? '' : 's'}. Page ${currentPage} of ${pageCount}.`;
+
+// Open amendments are counted across the viewer's whole register, not just the
+// visible page, so the summary strip does not change when an officer pages.
+const scopedProposalIds = register.scopedProposalIds;
+const openAmendmentStatusFilter = {
+  $nin: ['withdrawn', 'rejected', 'applied', 'not-endorsed', 'inconclusive'],
 };
-const amendmentRows = proposalIds.length ? await db.collection('amendments').find({ proposalId: { $in: proposalIds }, status: { $nin: ['withdrawn', 'rejected', 'applied', 'not-endorsed', 'inconclusive'] } }).sort({ createdAt: 1 }).toArray() : [];
+const [openAmendmentsCount, amendmentRows] = canOpenRegister
+  ? await Promise.all([
+      scopedProposalIds.length
+        ? db.collection('amendments').countDocuments({
+            proposalId: { $in: scopedProposalIds },
+            status: openAmendmentStatusFilter,
+          })
+        : Promise.resolve(0),
+      pageProposalIds.length
+        ? db
+            .collection('amendments')
+            .find({
+              proposalId: { $in: pageProposalIds },
+              status: openAmendmentStatusFilter,
+            })
+            .sort({ createdAt: 1 })
+            .toArray()
+        : Promise.resolve([]),
+    ])
+  : [0, []];
 const amendmentRevisionsByAmendment = new Map<string, any[]>();
 if (amendmentRows.length) {
   const revisionRows = await db
@@ -178,14 +129,41 @@ for (const amendment of amendmentRows) {
   amendmentsByProposal.set(amendment.proposalId, [...(amendmentsByProposal.get(amendment.proposalId) ?? []), amendment]);
 }
 
-const editingProposal = editId ? allProposals.find((p) => p.proposalId === editId) : null;
-const revisingProposal = reviseId ? allProposals.find((p) => p.proposalId === reviseId) : null;
+const unboundBallotRevisions = new Map<string, any[]>();
+const unboundProposalIds = entries
+  .filter((entry) => entry.row.stage === 'decide' && !entry.row.ballotRevisionId)
+  .map((entry) => entry.row.proposalId);
+if (unboundProposalIds.length) {
+  const revisionRows = await db
+    .collection('proposal_revisions')
+    .find({ proposalId: { $in: unboundProposalIds } })
+    .sort({ createdAt: -1 })
+    .toArray();
+  for (const revision of revisionRows) {
+    const proposalId = String(revision.proposalId);
+    const rows = unboundBallotRevisions.get(proposalId) ?? [];
+    rows.push(revision);
+    unboundBallotRevisions.set(proposalId, rows);
+  }
+}
+
+// Editing loads the one full record it needs, from any page. Access still
+// follows the register's own scope, so a branch administrator cannot open a
+// proposal outside their branches by editing the URL.
+const inScope = (proposalId: string) => canOpenRegister && scopedProposalIds.includes(proposalId);
+const [editingRecord, revisingRecord] = await Promise.all([
+  inScope(editId) ? loadProposalEditorRecord(db, editId) : Promise.resolve(null),
+  inScope(reviseId) ? loadProposalEditorRecord(db, reviseId) : Promise.resolve(null),
+]);
+const editingProposal = editingRecord?.proposal ?? null;
+const revisingProposal = revisingRecord?.proposal ?? null;
 const isRevision = Boolean(revisingProposal && !editingProposal);
 
+const voteCount = editingRecord?.voteCount ?? 0;
 const isLocked = editingProposal
-  ? editingProposal.stage === 'decide' || editingProposal.votes.total > 0
+  ? isProposalLocked(editingProposal.stage, voteCount)
   : false;
-const voteCount = editingProposal?.votes.total ?? 0;
+const revisingVoteCount = revisingRecord?.voteCount ?? 0;
 const currentKind = editingProposal
   ? (editingProposal.kind ?? (editingProposal.proposalId.startsWith('GOV-') ? 'resolution' : 'policy'))
   : (revisingProposal ? (revisingProposal.kind ?? 'policy') : 'policy');
@@ -234,18 +212,6 @@ const initialProvenance = editingProposal
         }
       : null);
 
-const spaces = [...new Set(allProposals.map((p) => p.space))].sort();
-const registerCounts = {
-  all: scopedProposals.length,
-  propose: scopedProposals.filter((p) => p.stage === 'propose').length,
-  deliberate: scopedProposals.filter((p) => p.stage === 'deliberate').length,
-  decide: scopedProposals.filter((p) => p.stage === 'decide').length,
-  implement: scopedProposals.filter((p) => p.stage === 'implement').length,
-  archived: scopedProposals.filter((p) => p.stage === 'archived').length,
-};
-const unboundCount = scopedProposals.filter((p) => p.stage === 'decide' && !p.ballotRevisionId).length;
-const openAmendmentsCount = amendmentRows.length;
-
 const stageOptions: Array<[ProposalStage, string]> = [
   ['propose', '1. Propose (Intake)'],
   ['deliberate', '2. Deliberate (Discussion)'],
@@ -257,6 +223,7 @@ const stageTone = (stage: string) => stage === 'decide' ? 'warning' : stage === 
 const stageLabel = (stage: string) => stage === 'decide' ? 'Open vote' : stage === 'deliberate' ? 'In discussion' : stage === 'implement' ? 'Implement' : stage === 'archived' ? 'Archived' : 'New idea';
 const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && item.governanceAuthorityBranchId === item.jurisdictionBranchId && branchAdminIds.includes(item.governanceAuthorityBranchId ?? ''));
 ---
+
 
 <AdminLayout
   title="Review ideas and votes"
@@ -302,7 +269,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                 <AlertTitle>Create a revised proposal</AlertTitle>
                 <AlertDescription>
                   Creating a revised motion based on <strong>{revisingProposal?.proposalId}</strong> ({revisingProposal?.title}).
-                  The original proposal and its {revisingProposal?.votes.total} vote(s) remain untouched in the archives.
+                  The original proposal and its {revisingVoteCount} vote(s) remain untouched in the archives.
                 </AlertDescription>
               </Alert>
             )}
@@ -555,8 +522,8 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
             ].map(([val, label, count]) => (
               <a
                 href={val === 'all' ? '/admin/proposals/' : `/admin/proposals/?stage=${val}`}
-                class:list={['project-tab', { 'is-active': stageFilter === val }]}
-                aria-current={stageFilter === val ? 'page' : undefined}
+                class:list={['project-tab', { 'is-active': (stageFilter || 'all') === val }]}
+                aria-current={(stageFilter || 'all') === val ? 'page' : undefined}
               >
                 {label}
                 <span class="project-tab__count tabular">{count}</span>
@@ -573,8 +540,8 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
             </Field>
 
             <Field label="Stage" htmlFor="proposal-stage-filter">
-              <NativeSelect defaultValue={stageFilter} id="proposal-stage-filter" name="stage">
-                <option value="all" selected={!stageFilter || stageFilter === 'all'}>All stages ({registerCounts.all})</option>
+              <NativeSelect defaultValue={stageFilter || 'all'} id="proposal-stage-filter" name="stage">
+                <option value="all" selected={!stageFilter}>All stages ({registerCounts.all})</option>
                 {stageOptions.map(([val, label]) => <option value={val} selected={stageFilter === val}>{label}</option>)}
               </NativeSelect>
             </Field>
@@ -588,11 +555,11 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 
             <div class="flex items-end gap-2">
               <Button type="submit" size="sm" variant="outline">Apply</Button>
-              {(query || stageFilter !== 'all' || branchFilter !== 'all') && (
+              {(query || stageFilter || (branchFilter && branchFilter !== 'all')) && (
                 <Button href="/admin/proposals/" size="sm" variant="ghost">Reset</Button>
               )}
               <Button
-                href={`/api/admin/reports/proposals.csv?stage=${encodeURIComponent(stageFilter)}&branch=${encodeURIComponent(branchFilter)}&q=${encodeURIComponent(query)}`}
+                href={`/api/admin/reports/proposals.csv?stage=${encodeURIComponent(stageFilter || 'all')}&branch=${encodeURIComponent(branchFilter)}&q=${encodeURIComponent(query)}`}
                 size="sm"
                 variant="outline"
               >
@@ -603,13 +570,15 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         </div>
 
         <section class="admin-register-list" aria-label="Proposals register">
-          {allProposals.length === 0 ? (
+          {entries.length === 0 ? (
             <div class="px-5 py-10 text-center">
               <p class="m-0 text-sm font-semibold text-foreground">No proposals match this filter.</p>
               <p class="m-0 mt-1 text-sm text-muted-foreground">Try clearing your search term or selecting all stages.</p>
             </div>
           ) : (
-            allProposals.map((item) => {
+            entries.map((entry) => {
+              const item = entry.row;
+              const ballot = entry.ballot;
               const itemAmendments = amendmentsByProposal.get(item.proposalId) ?? [];
               const branchLabel = item.jurisdictionBranchId
                 ? branches.find((branch: any) => branch.branchId === item.jurisdictionBranchId)?.name ?? 'Branch scoped'
@@ -638,10 +607,25 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                       </h3>
 
                       <p class="admin-register-row__stats tabular">
-                        <span><strong>{item.votes.total}</strong> votes ({item.votes.approve} approve · {item.votes.reject} reject)</span>
-                        {item.unreadableVoteCount ? (
-                          <span><strong>{item.unreadableVoteCount}</strong> unreadable</span>
-                        ) : null}
+                        {ballot.state === 'certified' ? (
+                          <>
+                            <Badge variant={ballot.outcomeLabel === 'Successful' ? 'success' : ballot.outcomeLabel === 'Unsuccessful' ? 'warning' : 'muted'}>
+                              Certified · {ballot.outcomeLabel}
+                            </Badge>
+                            {ballot.overridden && <Badge variant="warning">Overridden</Badge>}
+                            {ballot.tally ? (
+                              <span>
+                                <strong>{ballot.tally.total}</strong> votes ({ballot.tally.approve} approve · {ballot.tally.abstain} abstain · {ballot.tally.reject} reject)
+                              </span>
+                            ) : (
+                              <span>Result recorded without a stored tally</span>
+                            )}
+                          </>
+                        ) : (
+                          <span>
+                            {ballot.href ? <a href={ballot.href}>{ballot.label}</a> : ballot.label}
+                          </span>
+                        )}
                         <span aria-hidden="true">·</span>
                         <span><strong>{item.commentCount}</strong> deliberation stances</span>
                       </p>
@@ -660,10 +644,13 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                       <div class="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">{item.proposalId}</Badge>
                         {item.provenance && <Badge variant="muted" label={item.provenance.label} />}
-                        <Badge variant="success">{item.votes.approve} approve</Badge>
-                        <Badge variant="muted">{item.votes.abstain} abstain</Badge>
-                        <Badge variant="destructive">{item.votes.reject} reject</Badge>
+                        {ballot.state === 'certified' && ballot.ruleBasisLabel && (
+                          <span class="admin-inline-note">Certified under {ballot.ruleBasisLabel}{ballot.computedLabel ? ` · votes computed ${ballot.computedLabel}` : ''}</span>
+                        )}
                       </div>
+                      {ballot.overrideReason && (
+                        <p class="admin-inline-note">Outcome override: {ballot.overrideReason}</p>
+                      )}
 
                       <div class="admin-form-grid">
                         <Field label="Lifecycle stage" htmlFor={`quick-stage-${item.proposalId}`}>
@@ -672,10 +659,10 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                             id={`quick-stage-${item.proposalId}`}
                             aria-label={`Stage for ${item.title}`}
                             data-quick-proposal-id={item.proposalId}
-                          data-current-stage={item.stage}
-                          data-vote-count={item.votes.total}
-                          data-title={item.title}
-                        >
+                            data-current-stage={item.stage}
+                            data-vote-count={ballot.tally ? String(ballot.tally.total) : ''}
+                            data-title={item.title}
+                          >
                           {stageOptions.map(([val, label]) => <option value={val} selected={item.stage === val}>{label}</option>)}
                         </NativeSelect>
                       </Field>
@@ -711,91 +698,50 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                       </details>
                     )}
 
-                    {canManageBallot(item) && item.stage === 'decide' && (
-                      <details class="admin-disclosure admin-disclosure--muted">
+                    {canManageBallot(item) && item.stage === 'decide' && item.ballotRevisionId && ballot.state === 'closed' && (
+                      <details
+                        class="admin-disclosure admin-disclosure--muted inline-outcome-disclosure"
+                        data-proposal-id={item.proposalId}
+                      >
                         <summary><Gavel className="size-4" aria-hidden="true" />Record ballot outcome</summary>
-                        <div class="admin-disclosure__body">
-                          {(() => {
-                            const recorded = decideResultsByBallot.get(proposalBallotId(item.proposalId));
-                            if (recorded) {
-                              const overrideReason = typeof recorded.override?.reason === 'string' ? recorded.override.reason : null;
-                              return (
-                                <div class="grid gap-2">
-                                  <div class="flex flex-wrap items-center gap-2 text-sm">
-                                    <Badge variant={recorded.result === 'successful' ? 'success' : 'warning'}>{ballotOutcomeLabel(String(recorded.result))}</Badge>
-                                    {overrideReason && <Badge variant="warning">Overridden</Badge>}
-                                    <span class="admin-inline-note">
-                                      {recorded.computedResult ? `Votes computed ${ballotOutcomeLabel(String(recorded.computedResult))}` : 'Recorded before outcomes were computed'}
-                                    </span>
-                                  </div>
-                                  {overrideReason && (
-                                    <p class="admin-inline-note">Override reason: {overrideReason}</p>
-                                  )}
-                                  <p class="admin-inline-note">Recorded results are immutable. Open the workspace for the decision event and full evidence.</p>
-                                </div>
-                              );
-                            }
-                            if (!item.ballotRevisionId) {
-                              return <p class="admin-inline-note">Bind a reviewed wording revision before recording the outcome.</p>;
-                            }
-                            if (!closureFor(item).closed) {
-                              const closesAt = closingLabel(item);
-                              return (
-                                <div class="grid gap-2">
-                                  <BallotOutcomeBasis summary={boundBallotTallies.get(item.proposalId) ?? null} />
-                                  <p class="admin-inline-note">
-                                    {closesAt
-                                      ? `Voting is open until ${closesAt}. The outcome can be recorded after the ballot closes.`
-                                      : 'This ballot has no recorded close. Set a closing date or close the ballot before recording the outcome.'}
-                                  </p>
-                                </div>
-                              );
-                            }
-                            const tally = boundBallotTallies.get(item.proposalId);
-                            if (tally && ['unbound', 'decryption-unavailable', 'unreadable'].includes(tally.state)) {
-                              return (
-                                <div class="grid gap-2">
-                                  <BallotOutcomeBasis summary={tally} />
-                                  <p class="admin-inline-note">Resolve the ballot tally problem above before recording the outcome.</p>
-                                </div>
-                              );
-                            }
-                            return (
-                              <div class="grid gap-3">
-                                <BallotOutcomeBasis summary={tally ?? null} />
-                                <p class="admin-inline-note">A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
-                                <form
-                                  class="ballot-result-form grid gap-3"
-                                  data-proposal-id={item.proposalId}
-                                  data-computed-result={boundBallotTallies.get(item.proposalId)?.computedResult ?? ''}
-                                >
-                                  <div class="admin-form-grid">
-                                    <Field label="Outcome" htmlFor={`ballot-result-${item.proposalId}`}>
-                                      <NativeSelect defaultValue="" id={`ballot-result-${item.proposalId}`} name="result" required>
-                                        <option value="">Choose outcome</option>
-                                        <option value="successful">Successful</option>
-                                        <option value="unsuccessful">Unsuccessful</option>
-                                        <option value="inconclusive">Inconclusive</option>
-                                      </NativeSelect>
-                                    </Field>
-                                    <Field label="Decision event reference" htmlFor={`ballot-event-${item.proposalId}`}>
-                                      <Input id={`ballot-event-${item.proposalId}`} name="decisionEventId" required maxLength={200} />
-                                    </Field>
-                                  </div>
-                                  <div data-override-field hidden>
-                                    <Field label="Reason for overriding the computed outcome" htmlFor={`ballot-override-${item.proposalId}`}>
-                                      <Textarea id={`ballot-override-${item.proposalId}`} name="overrideReason" rows={2} maxLength={1000} placeholder="Why does the recorded outcome differ from the votes?" />
-                                    </Field>
-                                  </div>
-                                  <p class="sr-only" data-override-announcement aria-live="polite"></p>
-                                  <div class="admin-actions">
-                                    <Button variant="outline" size="sm" type="submit">Record result</Button>
-                                    <span class="admin-status" role="status" aria-live="polite"></span>
-                                  </div>
-                                </form>
-                              </div>
-                            );
-                          })()}
+                        <div class="admin-disclosure__body grid gap-3">
+                          <div class="inline-outcome-tally" aria-live="polite">
+                            <p class="admin-inline-note">Open to load the bound ballot tally…</p>
+                          </div>
+                          <div class="admin-actions" data-tally-retry-wrap hidden>
+                            <Button variant="outline" size="sm" type="button" data-tally-retry>Retry tally</Button>
+                          </div>
+                          <p class="admin-inline-note">A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
+                          <form
+                            class="ballot-result-form grid gap-3"
+                            data-proposal-id={item.proposalId}
+                            data-computed-result=""
+                            hidden
+                          >
+                            <div class="admin-form-grid">
+                              <Field label="Outcome" htmlFor={`ballot-result-${item.proposalId}`}>
+                                <NativeSelect defaultValue="" id={`ballot-result-${item.proposalId}`} name="result" required>
+                                  <option value="">Choose outcome</option>
+                                  <option value="successful">Successful</option>
+                                  <option value="unsuccessful">Unsuccessful</option>
+                                  <option value="inconclusive">Inconclusive</option>
+                                </NativeSelect>
+                              </Field>
+                              <Field label="Decision event reference" htmlFor={`ballot-event-${item.proposalId}`}>
+                                <Input id={`ballot-event-${item.proposalId}`} name="decisionEventId" required maxLength={200} />
+                              </Field>
+                            </div>
+                            <div data-override-field hidden>
+                              <Field label="Reason for overriding the computed outcome" htmlFor={`ballot-override-${item.proposalId}`}>
+                                <Textarea id={`ballot-override-${item.proposalId}`} name="overrideReason" rows={2} maxLength={1000} placeholder="Why does the recorded outcome differ from the votes?" />
+                              </Field>
+                            </div>
+                            <p class="sr-only" data-override-announcement aria-live="polite"></p>
+                            <div class="admin-actions">
+                              <Button variant="outline" size="sm" type="submit">Record result</Button>
+                              <span class="admin-status" role="status" aria-live="polite"></span>
+                            </div>
+                          </form>
                         </div>
                       </details>
                     )}
@@ -902,6 +848,35 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
           })
         )}
         </section>
+
+        <nav class="admin-register-pagination" aria-label="Register pages">
+          <p class="admin-register-pagination__range tabular" id="register-range" role="status" aria-live="polite">{rangeSummary}</p>
+          {pageCount > 1 && (
+            <div class="admin-register-pagination__controls">
+              <Button
+                href={pageHref(currentPage - 1)}
+                variant="outline"
+                size="sm"
+                aria-label="Previous page"
+                aria-disabled={currentPage === 1}
+                tabIndex={currentPage === 1 ? -1 : undefined}
+              >
+                ← Previous
+              </Button>
+              <span class="tabular" aria-current="page">Page {currentPage} of {pageCount}</span>
+              <Button
+                href={pageHref(currentPage + 1)}
+                variant="outline"
+                size="sm"
+                aria-label="Next page"
+                aria-disabled={currentPage === pageCount}
+                tabIndex={currentPage === pageCount ? -1 : undefined}
+              >
+                Next →
+              </Button>
+            </div>
+          )}
+        </nav>
       </div>
     </div>
   )}
@@ -1055,17 +1030,106 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
     }
   });
 
+  const loadInlineTally = async (disclosure: HTMLDetailsElement) => {
+    const proposalId = disclosure.dataset.proposalId;
+    if (!proposalId || disclosure.dataset.loaded === 'true' || disclosure.dataset.loading === 'true') return;
+    const tallyContainer = disclosure.querySelector<HTMLElement>('.inline-outcome-tally');
+    const retryWrap = disclosure.querySelector<HTMLElement>('[data-tally-retry-wrap]');
+    const form = disclosure.querySelector<HTMLFormElement>('.ballot-result-form');
+    if (!tallyContainer || !form) return;
+
+    disclosure.dataset.loading = 'true';
+    if (retryWrap) retryWrap.hidden = true;
+    tallyContainer.replaceChildren();
+    const loadingNote = document.createElement('p');
+    loadingNote.className = 'admin-inline-note';
+    loadingNote.textContent = 'Loading bound ballot tally…';
+    tallyContainer.appendChild(loadingNote);
+
+    try {
+      const response = await fetch(`/api/admin/proposals/ballot-tally?proposalId=${encodeURIComponent(proposalId)}`, {
+        credentials: 'same-origin',
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Could not load the bound ballot tally.');
+
+      disclosure.dataset.loaded = 'true';
+      tallyContainer.replaceChildren();
+      const summary = payload.summary;
+      if (!summary) {
+        const note = document.createElement('p');
+        note.className = 'admin-inline-note';
+        note.textContent = 'No bound tally summary is available.';
+        tallyContainer.appendChild(note);
+        return;
+      }
+
+      const basis = document.createElement('p');
+      basis.className = 'admin-inline-note';
+      if (summary.tally) {
+        const computedText = payload.computedLabel ? ` · Computed outcome: ${payload.computedLabel}` : '';
+        basis.textContent = `Bound tally: Approve ${summary.tally.approve ?? 0}, Abstain ${summary.tally.abstain ?? 0}, Reject ${summary.tally.reject ?? 0} (${summary.tally.total ?? 0} total)${computedText}`;
+      } else {
+        basis.textContent = summary.message || `Ballot state: ${summary.state}`;
+      }
+      tallyContainer.appendChild(basis);
+
+      if (['unbound', 'decryption-unavailable', 'unreadable'].includes(summary.state)) {
+        const blocked = document.createElement('p');
+        blocked.className = 'admin-inline-note';
+        blocked.textContent = 'Resolve the ballot tally problem above before recording the outcome.';
+        tallyContainer.appendChild(blocked);
+        return;
+      }
+
+      form.dataset.computedResult = summary.computedResult ?? '';
+      form.hidden = false;
+      wireBallotOutcomeForm(form);
+    } catch (error) {
+      tallyContainer.replaceChildren();
+      const errNote = document.createElement('p');
+      errNote.className = 'admin-inline-note';
+      errNote.textContent = error instanceof Error ? error.message : 'Could not load the bound ballot tally.';
+      tallyContainer.appendChild(errNote);
+      if (retryWrap) retryWrap.hidden = false;
+    } finally {
+      delete disclosure.dataset.loading;
+    }
+  };
+
+  document.querySelectorAll<HTMLDetailsElement>('.inline-outcome-disclosure').forEach((disclosure) => {
+    disclosure.addEventListener('toggle', () => {
+      if (disclosure.open) void loadInlineTally(disclosure);
+    });
+    const retryBtn = disclosure.querySelector<HTMLButtonElement>('[data-tally-retry]');
+    retryBtn?.addEventListener('click', () => {
+      delete disclosure.dataset.loaded;
+      void loadInlineTally(disclosure);
+    });
+  });
+
   document.querySelectorAll<HTMLFormElement>('.ballot-result-form').forEach((form) => {
-    wireBallotOutcomeForm(form);
     form.addEventListener('submit', async (event) => {
-      event.preventDefault(); if (!form.reportValidity()) return;
-      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); const status = formStatusRegion(form);
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      const status = formStatusRegion(form);
       if (button) button.disabled = true;
       try {
-        const response = await fetch('/api/admin/ballots/result', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ballotResultPayload(form)) });
-        const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || 'Could not record ballot result.');
-        if (status) status.textContent = 'Outcome recorded.'; location.reload();
-      } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not record ballot result.'; if (button) button.disabled = false; }
+        const response = await fetch('/api/admin/ballots/result', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(ballotResultPayload(form)),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Could not record ballot result.');
+        if (status) status.textContent = 'Outcome recorded.';
+        location.reload();
+      } catch (error) {
+        if (status) status.textContent = error instanceof Error ? error.message : 'Could not record ballot result.';
+        if (button) button.disabled = false;
+      }
     });
   });
 
@@ -1142,15 +1206,18 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
       const proposalId = select.dataset.quickProposalId;
       const title = select.dataset.title || proposalId;
       const currentStage = select.dataset.currentStage || select.value;
-      const voteCount = parseInt(select.dataset.voteCount || '0', 10);
+      const rawVoteCount = select.dataset.voteCount?.trim() ?? '';
+      const voteCount = rawVoteCount ? Number.parseInt(rawVoteCount, 10) : null;
       const newStage = select.value;
       if (!proposalId || currentStage === newStage) return;
 
       let confirmMsg = '';
       if (newStage === 'decide') {
         confirmMsg = `Open ballot for "${title}" (Stage 3: Decide)? Once voting begins, substantive content will be locked to protect ballot integrity.`;
-      } else if (currentStage === 'decide' && voteCount > 0) {
-        confirmMsg = `This proposal currently has ${voteCount} member vote(s). Moving it to "${newStage}" will conclude or pause active voting. All cast votes will remain safely preserved. Proceed?`;
+      } else if (currentStage === 'decide') {
+        confirmMsg = voteCount
+          ? `This proposal has ${voteCount} certified vote${voteCount === 1 ? '' : 's'}. Moving it to "${newStage}" will conclude or pause active voting. All cast votes will remain safely preserved. Proceed?`
+          : `Moving "${title}" out of Decide will conclude or pause active voting. All cast votes will remain safely preserved. Proceed?`;
       } else if (newStage === 'implement') {
         confirmMsg = `Move "${title}" to Stage 4 · Implement? This starts delivery tracking after a successful ballot; formal ratification and publication remain separate.`;
       } else if (newStage === 'archived') {
@@ -1294,6 +1361,43 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 
   .admin-register-row__stats strong {
     color: var(--horizon-ink);
+  }
+
+  .admin-register-row__stats a {
+    color: var(--horizon-purple);
+    font-weight: 600;
+  }
+
+  .admin-register-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 1.25rem;
+    border-top: 1px solid var(--horizon-line);
+    background: var(--horizon-surface);
+  }
+
+  .admin-register-pagination__range {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .admin-register-pagination__controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .admin-register-pagination__controls a[aria-disabled="true"] {
+    opacity: 0.4;
+    pointer-events: none;
   }
 
   .admin-register-row__actions {

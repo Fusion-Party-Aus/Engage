@@ -165,23 +165,32 @@ test("the submit handler targets the visible status line, not the hidden announc
   assert.notEqual(formStatusRegion(form), hidden);
 });
 
-test("both admin result forms keep the announcement out of the status lookup", () => {
-  const pages = [
-    readFileSync(
-      new URL("../pages/admin/proposals/[slug].astro", import.meta.url),
-      "utf8",
-    ),
-    readFileSync(
-      new URL("../pages/admin/proposals/index.astro", import.meta.url),
-      "utf8",
-    ),
-  ];
+test("the workspace result form keeps the announcement out of the status lookup", () => {
+  const workspace = readFileSync(
+    new URL("../pages/admin/proposals/[slug].astro", import.meta.url),
+    "utf8",
+  );
 
-  for (const source of pages) {
-    assert.match(source, /data-override-announcement aria-live="polite"/);
-    assert.doesNotMatch(source, /data-override-announcement role="status"/);
-    assert.match(source, /const status = formStatusRegion\(form\);/);
-  }
+  assert.match(workspace, /data-override-announcement aria-live="polite"/);
+  assert.doesNotMatch(workspace, /data-override-announcement role="status"/);
+  assert.match(workspace, /const status = formStatusRegion\(form\);/);
+});
+
+test("the register keeps the list read vote-free and loads tallies on demand for inline outcome recording", () => {
+  // The register list read remains vote-free (no readBoundBallotTallies on SSR);
+  // opening a row's inline outcome disclosure fetches /api/admin/proposals/ballot-tally
+  // on demand before revealing the ballot-result-form.
+  const register = readFileSync(
+    new URL("../pages/admin/proposals/index.astro", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(register, /readBoundBallotTallies/);
+  assert.match(register, /listProposalRegister/);
+  assert.match(register, /class="ballot-result-form/);
+  assert.match(register, /\/api\/admin\/proposals\/ballot-tally/);
+  assert.match(register, /data-override-announcement aria-live="polite"/);
+  assert.doesNotMatch(register, /data-override-announcement role="status"/);
 });
 
 test("display key loading degrades to null instead of throwing", () => {

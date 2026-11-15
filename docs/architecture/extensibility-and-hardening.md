@@ -32,6 +32,7 @@ Each matter type declares:
 
 - **Integrations** (`src/lib/integrations.ts`): `MembershipAuthorityAdapter` (`StandaloneMembershipAuthority` default) decouples voting from synchronous external CRM availability. The automatic Underground CRM verification worker (`src/lib/membership-verification.ts`) pulls the CRM's read-only people and membership feed, verifies eligible pending members and applies only explicitly mapped geographic branch facts; see [the integration guide](../integrations/underground-crm.md).
 - **Read models** (`src/lib/read-models.ts`): `buildAuthorizedMatterBriefing` provides permission-scoped, confidentiality-safe access to bound wording and decisions for reporting, PDFs, and future AI briefings.
+- **Register read model** (`src/lib/proposal-register.ts`): the admin proposal register's projected, server-paginated list read. It excludes rationale, never reads or decrypts `proposal_votes`, and reports the tally stored on `ballot_results` at certification; an uncertified ballot links to the workspace, which keeps the live bound tally.
 - **Resilience** (`src/lib/resilience.ts`, `src/pages/api/health.ts`): bounded pagination (`parsePaginationParams`), redacted structured operational logging (`logOperationalEvent`), MongoDB indexes in `src/lib/db.ts`, and structured `/api/health` checks.
 
 ## 6. Open Ballot Expiry Migration (`src/lib/ballot-expiry-migration.ts`)

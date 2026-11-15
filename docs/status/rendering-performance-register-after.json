@@ -1,0 +1,92 @@
+{
+  "generatedAt": "2026-11-15T08:59:25.545Z",
+  "git": {
+    "commit": "c1f72c0",
+    "branch": "feat/admin-register-pagination"
+  },
+  "environment": {
+    "node": "v24.22.1",
+    "platform": "darwin",
+    "runs": 3,
+    "port": 4399,
+    "syntheticData": {
+      "votes": 1200,
+      "comments": 600,
+      "ballots": 10
+    },
+    "note": "Local synthetic measurements. Indicative only; not production SLA evidence."
+  },
+  "pages": [
+    {
+      "id": "admin-proposals",
+      "label": "/admin/proposals/",
+      "path": "/admin/proposals/",
+      "identity": "administrator",
+      "document": {
+        "status": 200,
+        "durationMs": 58.7,
+        "htmlBytes": 283915,
+        "dbCommands": 16,
+        "dbDurationMs": 14.979,
+        "dbByCommand": {
+          "find": {
+            "count": 13,
+            "durationMs": 11.753
+          },
+          "update": {
+            "count": 1,
+            "durationMs": 1.238
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 1.234
+          },
+          "getMore": {
+            "count": 1,
+            "durationMs": 0.753
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 56.1,
+        "navigationMs": 143.1,
+        "lcpMs": 136,
+        "cls": 0,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": 58,
+        "maxEventDurationMs": null,
+        "jsBytes": 353174,
+        "cssBytes": 133988,
+        "fontBytes": 146136,
+        "imageBytes": 3667,
+        "scriptCount": 21,
+        "requestCount": 33,
+        "failedRequests": [],
+        "dbCommands": 23,
+        "dbDurationMs": 26.235,
+        "dbByCommand": {
+          "find": {
+            "count": 19,
+            "durationMs": 18.71
+          },
+          "update": {
+            "count": 2,
+            "durationMs": 1.979
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 1.642
+          },
+          "getMore": {
+            "count": 1,
+            "durationMs": 0.628
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    }
+  ]
+}
