@@ -1,30 +1,30 @@
 [
   {
-    "hash": "a1f614c",
+    "hash": "b183003",
     "date": "2026-11-15",
     "type": "docs",
     "category": "docs",
-    "scope": "security",
-    "summary": "Record that the perimeter harness runs in CI",
-    "details": "States what the CI step proves, how it is made safe to run unattended, and the remaining gap: the production build against the in-memory seed, not Cloudflare/Coolify, a real MongoDB or the real providers."
+    "scope": "governance",
+    "summary": "Record the decision-record read model",
+    "details": "Document the member-facing decision record, the D15/D16 derivation, the explicit D17-D18 collision-review seam and the outstanding administrator queue. Mark S2/#54 partial and note the reporting limit on inter-amendment gaps."
   },
   {
-    "hash": "d94bbcf",
+    "hash": "15bbda4",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Add member-facing decision record",
+    "details": "Compose one matter's immutable voted wording, revision history, amendment outcomes, certified ballot result and publication state in a permission-aware read model. Derive adopted wording under D15 (zero applied amendments) and D16 (one applied amendment), with explicit review states for two or more applied amendments (D17-D18), approved-but-unapplied amendments and mismatched result wording. No individual votes, voter or author identifiers cross the read-model boundary. Add /proposals/[slug]/record/ and link it from the proposal page."
+  },
+  {
+    "hash": "9478783",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
     "scope": "ci",
-    "summary": "Run the perimeter browser harness on every pull request",
-    "details": "Runs scripts/security-perimeter-browser.mjs after the build and after the existing Playwright 1.57.0 install, reusing the same ENGAGE_PLAYWRIGHT_MODULE path rather than installing a second copy. Extends src/lib/ci-workflow.test.ts to compare step positions, so it fails if the step disappears, moves before the build or the Playwright install, installs its own Playwright, or if 'perimeter:browser' and the harness file drift apart."
-  },
-  {
-    "hash": "1f60094",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "security",
-    "summary": "Bound the perimeter browser harness and always clean up",
-    "details": "The harness now has a hard 180-second deadline (ENGAGE_PERIMETER_TIMEOUT_MS) that stops the run and fails instead of hanging, signals the preview server before any await, escalates to SIGKILL, bounds Chromium shutdown, and kills the child from a process exit handler as a last resort. A page error, failed request or CSP violation that appears after a page's own check also fails the run. Adds 'perimeter:browser' for local use; a build and ENGAGE_PLAYWRIGHT_MODULE are still required."
+    "summary": "Run the perimeter browser harness on every pull request (#38) (#104)",
+    "details": "* fix(security): bound the perimeter browser harness and always clean up The harness now has a hard 180-second deadline (ENGAGE_PERIMETER_TIMEOUT_MS) that stops the run and fails instead of hanging, signals the preview server before any await, escalates to SIGKILL, bounds Chromium shutdown, and kills the child from a process exit handler as a last resort. A page error, failed request or CSP violation that appears after a page's own check also fails the run. Adds 'perimeter:browser' for local use; a build and ENGAGE_PLAYWRIGHT_MODULE are still required. * feat(ci): run the perimeter browser harness on every pull request Runs scripts/security-perimeter-browser.mjs after the build and after the existing Playwright 1.57.0 install, reusing the same ENGAGE_PLAYWRIGHT_MODULE path rather than installing a second copy. Extends src/lib/ci-workflow.test.ts to compare step positions, so it fails if the step disappears, moves before the build or the Playwright install, installs its own Playwright, or if 'perimeter:browser' and the harness file drift apart. * docs(security): record that the perimeter harness runs in CI States what the CI step proves, how it is made safe to run unattended, and the remaining gap: the production build against the in-memory seed, not Cloudflare/Coolify, a real MongoDB or the real providers. * chore(changelog): refresh the snapshot for the perimeter CI step"
   },
   {
     "hash": "78c07c0",
