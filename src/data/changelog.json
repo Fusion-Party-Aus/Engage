@@ -1,5 +1,32 @@
 [
   {
+    "hash": "4f5cc1f",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "profiles",
+    "summary": "Document profile visibility and CRM redirect",
+    "details": "Record the owner visibility switch, hidden-profile 404 and link suppression, the opt-in CRM identifier seam and its 301 behaviour, initials-only avatars, the absent self-service account deletion, and the display-only comment score. Refs #113"
+  },
+  {
+    "hash": "d20a5ce",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "profiles",
+    "summary": "Add profile visibility and CRM identifier seam",
+    "details": "Let owners hide their public profile; other viewers and visitors receive 404 and author links are suppressed, while the owner keeps a preview. Extend the profile settings route to update biography and visibility together. Add an opt-in CRM identifier seam: with ENGAGE_PROFILE_CRM_IDENTIFIERS=on, an active CRM identity link becomes the canonical profile path and legacy member-id paths redirect with 301; the lookup is local and off by default. Add coverage for both behaviours and verify the visibility control in the browser harness. Refs #113"
+  },
+  {
+    "hash": "45cec59",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the comment score rename",
+    "details": "Refresh the snapshot after the rename commit so the public entry carries the commit's final hash and the preserved history stays intact. Refs #113"
+  },
+  {
     "hash": "4172209",
     "date": "2026-11-16",
     "type": "refactor",
