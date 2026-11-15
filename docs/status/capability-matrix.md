@@ -66,11 +66,14 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 |---|---|---|
 | Comments on proposals | Implemented | 5–5,000 characters |
 | Stances: support, concern, amendment, comment | Implemented | A stance is a label, not a procedural act |
-| Endorse comments | Implemented | Display-only |
+| Comment votes | Implemented | Upvote or downvote; one active vote per member; switching replaces the previous vote; aggregate score and upvote percentage only ([#57](https://github.com/Fusion-Party-Aus/Engage/issues/57)) |
+| Comment vote privacy | Implemented | Individual voter identities are never returned in a DTO; members see only their own choice |
 | Contribution feedback with evidence | Implemented | Four statuses plus history |
 | Comment editing | Not implemented | Comments are immutable; deletion only |
 | Comment moderation state and audit | Partial | `comments.moderate` declared; no moderation record |
-| Threaded replies | Not implemented | Flat comments |
+| Threaded replies | Implemented | `parentCommentId` and stored `depth`; one recursive component; replies stay under their parent and siblings stay chronological ([#57](https://github.com/Fusion-Party-Aus/Engage/issues/57)) |
+| Thread collapsing | Implemented | Per-comment reply disclosure with keyboard-operable toggle |
+| Comment sorting | Implemented | Best (confidence-weighted Wilson lower bound, default), Top score, Newest, Oldest; applies to siblings at every depth with deterministic tie-breaking |
 
 ## Amendments
 

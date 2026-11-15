@@ -195,14 +195,20 @@ A comment is the unit of deliberation. It has:
 
 - an author, body (5–5,000 characters) and timestamp;
 - a **stance**: `support`, `concern`, `amendment` or `comment`;
-- endorsements (`upvotes` plus event history);
-- optional structured **contribution feedback**.
+- **comment votes**: `upvotes` and `downvotes` store one choice per member. A member has at most one active vote per comment; voting the other way switches the vote, and voting the same way again clears it. Readers see the net score and upvote percentage, never the identity or individual choice of another voter. Comment votes are display-only and are not ballots;
+- optional structured **contribution feedback**;
+- an optional **parent comment** (`parentCommentId`) and stored `depth`. A reply is a comment whose parent is another comment in the same proposal. Replies are rendered underneath their parent; they are never flattened into the top-level list or reordered by the top-level sort;
+- a **deletion placeholder**. When a comment with replies is deleted, its body is cleared, `deletedAt` is set and the record is retained so surviving replies keep their context. A comment with no replies is deleted outright.
 
-A stance is a label. `amendment` as a stance does **not** create an amendment record. Real amendments are separate.
+A stance is a label. `amendment` as a stance does **not** create an amendment record. Real amendments are separate. A reply chooses its own stance; it does not inherit the parent's.
 
-### Endorsement
+### Comment ranking
 
-An endorsement is a member adding or removing themselves from a comment's `upvotes`. It is display-only. It never counts toward a ballot, threshold or promotion.
+The default **Best** order applies to each sibling group. It uses the Wilson score lower bound over upvotes and downvotes, so a comment with one upvote and no downvotes does not outrank a comment with broad support. Ties fall back to net score, then older first, then `commentId`. **Top score** orders by net score, then confidence. **Newest** and **Oldest** are chronological. A parent is always followed by its own descendants; sorting never flattens a thread.
+
+### Comment vote
+
+A comment vote is an upvote or downvote on a contribution. A member has at most one active vote per comment; voting the other way switches it, and voting the same way again clears it. The net score and upvote percentage are display-only and never count toward a ballot, threshold, promotion or quorum. Voter identities stay server-side and are never returned to another member.
 
 ### Contribution feedback
 
@@ -323,7 +329,7 @@ Channel consent is independent: push defaults off and is never inferred from ema
 | Revision | `proposal_revisions`, `revisionId` | Never call a raw ID a revision in UI |
 | Vote | `proposal_votes`, `VoteRecord` | Formal ballot only |
 | Comment / stance | `comments`, `CommentRecord` | Not a vote |
-| Endorse | `upvotes`, `upvoteEvents` | Display-only support |
+| Comment vote | `upvotes`, `downvotes`, `upvoteEvents` | Display-only; aggregate score and percentage only |
 | Wording change | Amendment, `amendments` | A first-class record with its own ballot |
 | Ballot outcome | `ballot_results`, `result` | Officer-recorded, not computed |
 | Official policy | `policy_registry` with `publicationStatus: "published"` | Not a proposal, not a ballot result |

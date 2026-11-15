@@ -256,6 +256,10 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .catch(() => {}),
       db
         .collection("comments")
+        .createIndex({ proposalId: 1, parentCommentId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("comments")
         .createIndex({ memberId: 1, createdAt: 1 })
         .catch(() => {}),
       db

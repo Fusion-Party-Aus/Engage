@@ -32,7 +32,7 @@ Engage addresses these by combining deliberation, formal ballots, a policy regis
 |---|---|---|
 | **Public reader** | Understand what Fusion is considering and what it has adopted, without an account. | Read public proposals, published policy, branch directory, how-it-works and changelog. |
 | **New or unverified member** | Join, understand eligibility, and participate as soon as they are verified. | Sign in by email link, Google or passkey; see verification status; save a vote preference while pending; follow branches. |
-| **Verified member** | Find relevant activity, deliberate, and vote when eligible. | Create proposals, comment, endorse, submit amendments, vote in national ballots, join a branch, manage notifications. |
+| **Verified member** | Find relevant activity, deliberate, and vote when eligible. | Create proposals, comment, reply, upvote or downvote comments, submit amendments, vote in national ballots, join a branch, manage notifications. |
 | **Branch member** | Participate in the branch they belong to. | Vote in that branch's ballots; follow any branch for updates. |
 | **Proposal author** | Shape an idea into a proposal and see how contributions were handled. | Edit while in Propose; read structured feedback on comments; follow revisions and outcomes. |
 | **Branch officer** | Run branch participation within delegated scope. | Verify branch members, manage branch proposals, resolve/apply amendments, bind ballots and record results where authority and jurisdiction match. |
@@ -60,7 +60,7 @@ A member follows branches for updates and may join one geographic branch and one
 
 ### 4. Deliberate
 
-On a proposal in Propose or Deliberate, a verified member can comment with a stance (`support`, `concern`, `amendment` or `comment`), endorse others' comments, and propose a structured wording amendment against the current revision.
+On a proposal in Propose or Deliberate, a verified member can comment with a stance (`support`, `concern`, `amendment` or `comment`), reply to another member's comment in a nested thread, upvote or downvote comments, and propose a structured wording amendment against the current revision. Replies are associated with their parent comment on the server; the top-level sort never flattens them.
 
 ### 5. Decide
 
@@ -90,7 +90,7 @@ For a policy proposal, a national officer may ratify the exact successful revisi
 
 Engage is not a forum with a poll attached. The differences are structural:
 
-- **Deliberation stances are not ballots.** `support`, `concern`, `amendment` and `comment` describe discussion. `approve`, `abstain` and `reject` are formal votes. They are stored and presented separately, and neither is derived from the other.
+- **Deliberation stances and comment votes are not ballots.** `support`, `concern`, `amendment` and `comment` describe discussion. Upvotes and downvotes rank contributions for reading. `approve`, `abstain` and `reject` are formal votes. They are stored and presented separately, and neither is derived from the other.
 - **Amendments are first-class records.** An amendment has its own revision chain, ballot, result and formal acceptance before it can change proposal wording.
 - **Votes bind to wording.** Changing the text invalidates the basis of existing votes; the system locks substantive edits once a ballot opens or a vote exists.
 - **Eligibility is scoped, not global.** National ballots are open to verified members. Branch ballots require membership of that branch. Administration never creates voting rights.
@@ -104,9 +104,9 @@ Engage is not a forum with a poll attached. The differences are structural:
 | | Participation | Formal decision-making |
 |---|---|---|
 | **Purpose** | Shape, test and improve a proposal. | Establish an authoritative outcome. |
-| **Typical acts** | Comment, endorse, submit an amendment, discuss. | Open a ballot, cast a formal vote, record a result, ratify, publish. |
+| **Typical acts** | Comment, reply, vote on comments, submit an amendment, discuss. | Open a ballot, cast a formal vote, record a result, ratify, publish. |
 | **Who** | Any verified member (subject to visibility). | Eligible voters for the ballot; authorised officers for the acts around it. |
-| **Record** | Comment, stance, endorsement, amendment revision, contribution feedback. | Ballot binding, vote record, decision event, ballot result, ratification, publication event. |
+| **Record** | Comment, stance, comment vote, amendment revision, contribution feedback. | Ballot binding, vote record, decision event, ballot result, ratification, publication event. |
 | **Reversible?** | Yes. Discussion can continue and wording can change before a ballot. | No. Results and publication events are immutable; later states are recorded as new events. |
 | **Effect** | Influences the proposal. | Creates an official outcome, and for policies, an authoritative published revision. |
 
@@ -125,7 +125,7 @@ A member commenting "I support this" has not voted. A proposal with 90% supporti
 
 ## Current capabilities and future ambitions
 
-**Shipping today:** proposals with five lifecycle stages; deliberation with stances and endorsements; structured amendments with their own revisions and ballots; formal ballot binding and result recording; policy ratification, publication, withdrawal and supersession; branch following and branch membership; scoped RBAC; UndergroundCRM verification behind a feature flag; email, in-app and Web Push plumbing; PWA; public API v1; encrypted-vote support.
+**Shipping today:** proposals with five lifecycle stages; deliberation with stances, threaded replies and confidence-weighted comment ranking; structured amendments with their own revisions and ballots; formal ballot binding and result recording; policy ratification, publication, withdrawal and supersession; branch following and branch membership; scoped RBAC; UndergroundCRM verification behind a feature flag; email, in-app and Web Push plumbing; PWA; public API v1; encrypted-vote support.
 
 **Not shipping today:** a populated national policy baseline (the registry starts empty); automated thresholds, quorum or tally computation; scheduled ballot opening; eligibility snapshots taken at ballot open; seconding; confirmation ballots; election-officer roles; amendment/repeal initiated from a policy page; AI briefings; Signal or Horizon CMS integration; Fusion Core/Auth.
 

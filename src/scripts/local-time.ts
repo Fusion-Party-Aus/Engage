@@ -1,5 +1,8 @@
 const formatLocalTimes = () => {
   document.querySelectorAll<HTMLElement>('time[datetime]').forEach((element) => {
+    // Hydrated islands format their own timestamps. Rewriting them between SSR
+    // and hydration causes a React hydration mismatch.
+    if (element.dataset.localTime === 'off') return;
     const raw = element.getAttribute('datetime');
     if (!raw) return;
     const date = new Date(raw);

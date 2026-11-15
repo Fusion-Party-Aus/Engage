@@ -17,7 +17,7 @@ sequenceDiagram
 
   Author->>Engage: Create matter (generally Propose; administrators may create directly in Deliberate)
   Member->>Engage: Second the proposal (Propose only) — records secondedAt + deliberationEndsAt
-  Member->>Engage: Comment, endorse, propose amendment
+  Member->>Engage: Comment, reply, vote, propose amendment
   Officer->>Engage: Advance to Deliberate (existing workflow transition)
   Officer->>Engage: Resolve / rebase / reject amendments
   Scheduler->>Engage: At deliberationEndsAt — system advances to Decide and binds the latest revision
@@ -39,7 +39,7 @@ sequenceDiagram
 | Stage | Member-facing meaning | What is expected | Substantive edits |
 |---|---|---|---|
 | `propose` | **Propose** | The idea is being written and shaped. Another member may second it, starting the 30-day deliberation clock. | Author or officer |
-| `deliberate` | **Deliberate** | Members discuss, endorse and propose amendments. The system advances the matter at the deliberation deadline. | Officer; wording may change into a new revision |
+| `deliberate` | **Deliberate** | Members discuss, reply, vote on contributions and propose amendments. The system advances the matter at the deliberation deadline. | Officer; wording may change into a new revision |
 | `decide` | **Decide** | A formal ballot is open on a fixed revision. | Locked |
 | `implement` | **Implement** | The outcome is recorded and being carried out. | Locked |
 | `archived` | **Archived** | Closed without further active work. | Restricted to authorised viewers |
@@ -146,7 +146,7 @@ A proposal created directly in Deliberate by an officer has no seconder and no d
 
 Returning a seconded proposal to Propose does not clear the seconder or the clock: the schedule is anchored to the original seconding. Whether a materially rewritten proposal needs renewed seconding is an open question and is not implemented.
 
-Seconding advances the matter to `deliberate`. Comments, endorsements and amendments become the substantive input. Deliberation can continue in `decide` and `implement` as discussion, but it can no longer change the ballot wording.
+Seconding advances the matter to `deliberate`. Comments, threaded replies, comment votes and amendments become the substantive input. Deliberation can continue in `decide` and `implement` as discussion, but it can no longer change the ballot wording.
 
 ### 4. Contributions and amendments
 
@@ -443,7 +443,7 @@ The ballot model reserves a `consultation` purpose, but no production consultati
 |---|---|---|---|
 | Create matter | Participation | Verified member | Proposal + revision |
 | Second a proposal | Participation | Verified member who is not the author | `secondedBy`, `secondedAt`, `deliberationEndsAt`, event |
-| Comment / endorse | Participation | Verified member | Comment record / upvote event |
+| Comment / reply / vote | Participation | Verified member | Comment record, parent link, vote record |
 | Submit amendment | Participation | Verified member | Amendment + amendment revision |
 | Advance to Deliberate | Workflow | Staff or origin branch admin | Stage change, lifecycle event |
 | Resolve amendment | Workflow | Branch/national administrator | Amendment revision + decision |

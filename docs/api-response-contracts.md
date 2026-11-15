@@ -18,7 +18,7 @@ All Engage API endpoints (`src/pages/api/**`) must expose deliberate application
      - Anonymous visitors receive `votesList: []`.
      - Ordinary members receive only their own vote record (without `_id`, `memberId`, or `authorName`).
      - Only national administrators (`canViewIdentifiableBallots`) receive identifiable `memberId` and `authorName` fields, still without `_id`.
-   - `PATCH /api/comments` returns `{ count, endorsed, hasUpvoted }` and never exposes the `upvotes` array of endorser `memberId`s.
+   - `PATCH /api/comments` accepts `{ commentId, action }` where `action` is `upvote` or `downvote`. It returns `{ count, score, upvoteCount, downvoteCount, upvotePercent, endorsed, hasUpvoted, hasDownvoted }`; `count` is the net score for compatibility. It never exposes the `upvotes` or `downvotes` arrays of member ids.
 
 4. **Pagination & bounding**
    - Collection endpoints (`GET /api/proposals`, `GET /api/amendments`, `GET /api/admin/members`, `GET /api/admin/branches/referrals`, `GET /api/notifications/inbox`, `GET /api/v1/*`) bound page sizes via `parsePagination` (or explicit `limit` clamping) and return bounded slices.

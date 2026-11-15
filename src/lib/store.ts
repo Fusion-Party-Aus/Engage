@@ -145,6 +145,13 @@ export const VALID_STANCES: CommentStance[] = [
   "comment",
 ];
 
+/**
+ * Hard ceiling on stored reply nesting. The interface caps visual indentation
+ * far earlier; this only stops a corrupted or scripted chain from growing
+ * without bound.
+ */
+export const MAX_COMMENT_DEPTH = 20;
+
 export function isValidStage(value: unknown): value is ProposalStage {
   if (typeof value !== "string") return false;
   const raw = value.trim().toLowerCase();
@@ -648,6 +655,14 @@ export async function getProposalDetail(
     ...c,
     stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
     upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
+    downvotes: Array.isArray(c.downvotes) ? c.downvotes : [],
+    parentCommentId:
+      typeof c.parentCommentId === "string" && c.parentCommentId
+        ? c.parentCommentId
+        : null,
+    depth: Number.isFinite(c.depth) ? Number(c.depth) : 0,
+    // Deleted contributions keep their place in the thread, never their text.
+    ...(c.deletedAt ? { body: "" } : {}),
   }));
   // Read-only path: tolerate a broken key ring so the page can render an
   // operational message instead of failing before it is read.
@@ -2198,6 +2213,39 @@ export async function addComment(
     ? (rawStance as CommentStance)
     : "comment";
 
+  // Replies are bound to a parent comment in the same proposal. The parent is
+  // verified server-side so a client cannot attach a reply to another thread
+  // or to a comment it cannot see.
+  const parentCommentIdInput =
+    typeof body.parentCommentId === "string"
+      ? body.parentCommentId.trim()
+      : "";
+  let parentCommentId: string | null = null;
+  let depth = 0;
+  if (parentCommentIdInput) {
+    const parent = await db
+      .collection<CommentRecord>("comments")
+      .findOne({ commentId: parentCommentIdInput });
+    if (!parent || parent.proposalId !== proposal.proposalId) {
+      throw new Error(
+        "The comment you are replying to is no longer available.",
+      );
+    }
+    if (parent.deletedAt) {
+      throw new Error("You cannot reply to a deleted contribution.");
+    }
+    const parentDepth = Number.isFinite(parent.depth)
+      ? Number(parent.depth)
+      : 0;
+    if (parentDepth + 1 > MAX_COMMENT_DEPTH) {
+      throw new Error(
+        "This conversation is nested too deeply to reply here. Reply to an earlier comment instead.",
+      );
+    }
+    parentCommentId = parent.commentId;
+    depth = parentDepth + 1;
+  }
+
   const record: CommentRecord = {
     commentId: `cmt-${crypto.randomUUID()}`,
     proposalId: proposal.proposalId,
@@ -2205,7 +2253,11 @@ export async function addComment(
     authorName: user.name || "Verified Member",
     stance,
     body: text,
+    ...(parentCommentId ? { parentCommentId } : {}),
+    depth,
     upvotes: [],
+    downvotes: [],
+    voteVersion: 0,
     createdAt: new Date(),
   };
 
@@ -2213,6 +2265,160 @@ export async function addComment(
   return record;
 }
 
+export interface CommentVoteResult {
+  /** Net score (upvotes minus downvotes). */
+  count: number;
+  score: number;
+  upvoteCount: number;
+  downvoteCount: number;
+  upvotePercent: number;
+  upvoted: boolean;
+  downvoted: boolean;
+  hasUpvoted: boolean;
+  hasDownvoted: boolean;
+}
+
+const COMMENT_VOTE_ACTIONS = ["upvote", "downvote"] as const;
+export type CommentVoteAction = (typeof COMMENT_VOTE_ACTIONS)[number];
+
+/**
+ * Apply one member's upvote or downvote to a comment.
+ *
+ * A member can have at most one active vote per comment: the opposite vote is
+ * removed when they switch, and a second click on the same vote clears it.
+ * Only aggregate counts and the caller's own choice are ever returned. Voter
+ * identities stay in the record and are never serialised to a client.
+ */
+export async function voteOnComment(
+  db: Db,
+  user: SessionUser,
+  commentId: string,
+  action: CommentVoteAction,
+): Promise<CommentVoteResult> {
+  if (!user.canParticipate) {
+    throw new Error(
+      "Your membership must be verified to vote on deliberation points.",
+    );
+  }
+  if (!COMMENT_VOTE_ACTIONS.includes(action)) {
+    throw new Error("Choose upvote or downvote.");
+  }
+  const id = commentId.trim();
+  if (!id) throw new Error("Comment ID is required.");
+  const col = db.collection<CommentRecord>("comments");
+  const visible = await col.findOne({ commentId: id });
+  if (!visible) throw new Error("Comment not found.");
+  if (visible.deletedAt) {
+    throw new Error("Deleted contributions cannot be voted on.");
+  }
+
+  const proposal = await db
+    .collection<ProposalRecord>("proposals")
+    .findOne({ proposalId: visible.proposalId });
+  if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user))
+    throw new Error("Comment not found.");
+
+  // The vote is a single-document compare-and-swap. A concurrent vote bumps
+  // `voteVersion`, so this write misses and retries against the new state
+  // instead of overwriting another member's vote.
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const existing = await col.findOne({ commentId: id });
+    if (!existing) throw new Error("Comment not found.");
+    if (existing.deletedAt) {
+      throw new Error("Deleted contributions cannot be voted on.");
+    }
+    const upvotes = Array.isArray(existing.upvotes) ? [...existing.upvotes] : [];
+    const downvotes = Array.isArray(existing.downvotes)
+      ? [...existing.downvotes]
+      : [];
+    const upvoteEvents = Array.isArray(existing.upvoteEvents)
+      ? [...existing.upvoteEvents]
+      : [];
+    const hasUpvoted = upvotes.includes(user.memberId);
+    const hasDownvoted = downvotes.includes(user.memberId);
+    let upvoted = false;
+    let downvoted = false;
+
+    const removeUpvote = () => {
+      const index = upvotes.indexOf(user.memberId);
+      if (index >= 0) upvotes.splice(index, 1);
+      for (let i = upvoteEvents.length - 1; i >= 0; i -= 1) {
+        if (upvoteEvents[i]!.memberId === user.memberId) upvoteEvents.splice(i, 1);
+      }
+    };
+    const removeDownvote = () => {
+      const index = downvotes.indexOf(user.memberId);
+      if (index >= 0) downvotes.splice(index, 1);
+    };
+
+    if (action === "upvote") {
+      removeDownvote();
+      if (hasUpvoted) {
+        removeUpvote();
+      } else {
+        upvotes.push(user.memberId);
+        upvoteEvents.push({ memberId: user.memberId, at: new Date() });
+        upvoted = true;
+      }
+    } else {
+      removeUpvote();
+      if (hasDownvoted) {
+        removeDownvote();
+      } else {
+        downvotes.push(user.memberId);
+        downvoted = true;
+      }
+    }
+
+    const storedVersion = existing.voteVersion;
+    const version =
+      typeof storedVersion === "number" && Number.isFinite(storedVersion)
+        ? storedVersion
+        : 0;
+    const versionFilter =
+      storedVersion === undefined
+        ? { voteVersion: { $exists: false } }
+        : { voteVersion: storedVersion };
+    const result = await col.updateOne(
+      { commentId: id, ...versionFilter },
+      {
+        $set: {
+          upvotes,
+          downvotes,
+          upvoteEvents,
+          voteVersion: version + 1,
+        },
+      },
+    );
+    if (result.matchedCount === 1) {
+      const score = upvotes.length - downvotes.length;
+      const total = upvotes.length + downvotes.length;
+      return {
+        count: score,
+        score,
+        upvoteCount: upvotes.length,
+        downvoteCount: downvotes.length,
+        upvotePercent:
+          total > 0 ? Math.round((upvotes.length / total) * 100) : 0,
+        upvoted,
+        downvoted,
+        hasUpvoted: upvoted,
+        hasDownvoted: downvoted,
+      };
+    }
+    // Small jitter avoids two writers retrying in lockstep.
+    await new Promise((resolve) =>
+      setTimeout(resolve, 2 + Math.floor(Math.random() * 6)),
+    );
+  }
+
+  throw new Error("Comment votes changed at the same time. Try again.");
+}
+
+/**
+ * Backwards-compatible single-direction vote used by older callers and tests.
+ * New code should call `voteOnComment` so downvotes and switching are explicit.
+ */
 export async function toggleUpvoteComment(
   db: Db,
   user: SessionUser,
@@ -2223,43 +2429,15 @@ export async function toggleUpvoteComment(
   endorsed: boolean;
   hasUpvoted: boolean;
 }> {
-  if (!user.canParticipate) {
-    throw new Error(
-      "Your membership must be verified to endorse deliberation points.",
-    );
-  }
-  const id = commentId.trim();
-  const col = db.collection<CommentRecord>("comments");
-  const existing = await col.findOne({ commentId: id });
-  if (!existing) throw new Error("Comment not found.");
-
-  const proposal = await db
-    .collection<ProposalRecord>("proposals")
-    .findOne({ proposalId: existing.proposalId });
-  if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user))
-    throw new Error("Comment not found.");
-
-  const current = Array.isArray(existing.upvotes) ? existing.upvotes : [];
-  const hasEndorsed = current.includes(user.memberId);
-  const updated = hasEndorsed
-    ? current.filter((m) => m !== user.memberId)
-    : [...current, user.memberId];
-  const currentEvents = Array.isArray(existing.upvoteEvents)
-    ? existing.upvoteEvents
-    : [];
-  const updatedEvents = hasEndorsed
-    ? currentEvents.filter((event) => event.memberId !== user.memberId)
-    : [...currentEvents, { memberId: user.memberId, at: new Date() }];
-
-  await col.updateOne(
-    { commentId: id },
-    { $set: { upvotes: updated, upvoteEvents: updatedEvents } },
-  );
+  const result = await voteOnComment(db, user, commentId, "upvote");
+  const stored = await db
+    .collection<CommentRecord>("comments")
+    .findOne({ commentId: commentId.trim() });
   return {
-    upvotes: updated,
-    count: updated.length,
-    endorsed: !hasEndorsed,
-    hasUpvoted: !hasEndorsed,
+    upvotes: Array.isArray(stored?.upvotes) ? stored.upvotes : [],
+    count: result.score,
+    endorsed: result.hasUpvoted,
+    hasUpvoted: result.hasUpvoted,
   };
 }
 
@@ -2267,7 +2445,12 @@ export async function deleteComment(
   db: Db,
   user: SessionUser,
   commentId: string,
-): Promise<void> {
+): Promise<{
+  deleted: boolean;
+  tombstoned: boolean;
+  replyCount: number;
+  prunedIds: string[];
+}> {
   const id = commentId.trim();
   if (!id) throw new Error("Comment ID is required.");
   const col = db.collection<CommentRecord>("comments");
@@ -2285,7 +2468,50 @@ export async function deleteComment(
   ) {
     throw new Error("You can only delete your own contributions.");
   }
+
+  const replyCount = await col.countDocuments({ parentCommentId: id });
+  if (replyCount > 0) {
+    // Replies depend on this comment for context. Remove the text but keep a
+    // placeholder so the surviving conversation is not silently re-parented
+    // or reordered.
+    await col.updateOne(
+      { commentId: id },
+      {
+        $set: {
+          body: "",
+          deletedAt: new Date(),
+          deletedBy: user.memberId,
+        },
+      },
+    );
+    return { deleted: false, tombstoned: true, replyCount, prunedIds: [] };
+  }
+
   await col.deleteOne({ commentId: id });
+  const prunedIds = [id];
+
+  // Remove any chain of empty placeholders that no longer has replies to
+  // preserve. A placeholder is only kept while a surviving reply depends on it.
+  let parentId =
+    typeof existing.parentCommentId === "string"
+      ? existing.parentCommentId
+      : "";
+  while (parentId) {
+    const parent = await col.findOne({ commentId: parentId });
+    if (!parent?.deletedAt) break;
+    const remainingReplies = await col.countDocuments({
+      parentCommentId: parent.commentId,
+    });
+    if (remainingReplies > 0) break;
+    await col.deleteOne({ commentId: parent.commentId });
+    prunedIds.push(parent.commentId);
+    parentId =
+      typeof parent.parentCommentId === "string"
+        ? parent.parentCommentId
+        : "";
+  }
+
+  return { deleted: true, tombstoned: false, replyCount: 0, prunedIds };
 }
 
 const VALID_FEEDBACK_STATUSES: ContributionFeedbackStatus[] = [

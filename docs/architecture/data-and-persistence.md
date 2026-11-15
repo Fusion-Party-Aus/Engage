@@ -23,7 +23,7 @@
 |---|---|
 | `proposals` | Matters: wording, stage, type, scope, authority, ballot binding |
 | `proposal_revisions` | Immutable wording snapshots with hashes and parent chain |
-| `comments` | Deliberation contributions, stances, endorsements, feedback |
+| `comments` | Deliberation contributions, stances, upvote/downvote member ids (aggregated in DTOs), feedback, `parentCommentId`/`depth` thread structure and deletion placeholders |
 | `amendments` | Amendment records and their lifecycle state |
 | `amendment_revisions` | Immutable amendment wording snapshots |
 | `proposal_votes` | Current vote per member per ballot, plaintext or encrypted |
