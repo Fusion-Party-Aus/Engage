@@ -1,11 +1,13 @@
 import type { APIRoute } from "astro";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { safeEqual } from "../../../lib/engagement-email.ts";
+import { withJobRun } from "../../../lib/job-runs.ts";
 import {
   CrmConfigurationError,
   crmVerificationEnabled,
 } from "../../../lib/underground-crm.ts";
 import { runVerificationCycle } from "../../../lib/membership-verification.ts";
+import type { PlatformEnv } from "../../../lib/types.ts";
 
 export const prerender = false;
 
@@ -15,12 +17,14 @@ export const prerender = false;
  * This endpoint is disabled unless a deployment explicitly enables it. A CRM
  * outage is handled inside the cycle as a retryable operational failure; it is
  * never treated as a verification failure and never revokes a membership.
+ *
+ * Authorised runs are recorded in the job-run ledger, successful or not. An
+ * unauthenticated call (401) and a disabled feature (409) are not scheduled
+ * runs and are not recorded.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
-  const env = runtimeEnv(locals) as unknown as Record<
-    string,
-    string | undefined
-  >;
+  const env = runtimeEnv(locals) as PlatformEnv &
+    Record<string, string | undefined>;
   const secret = String(env.ENGAGE_CRM_VERIFICATION_CRON_SECRET ?? "");
   if (
     !secret ||
@@ -36,7 +40,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   try {
-    const report = await runVerificationCycle(await getDatabase(env), env);
+    const db = await getDatabase(env);
+    const report = await withJobRun(
+      db,
+      "membership-verification",
+      () => runVerificationCycle(db, env),
+      {
+        mode: "apply",
+        summarise: (cycle) => ({
+          processed: cycle.processed,
+          verified: cycle.verified,
+          reviews: cycle.reviews,
+          retried: cycle.retried,
+          blocked: cycle.blocked,
+          reconciled: cycle.reconciled,
+        }),
+      },
+    );
     return Response.json(report, {
       headers: { "cache-control": "no-store" },
     });

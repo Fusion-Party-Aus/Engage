@@ -1,38 +1,74 @@
 [
   {
-    "hash": "fdb948e",
+    "hash": "ff2056e",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ops",
+    "summary": "Report a failing job as failing on the health probe"
+  },
+  {
+    "hash": "9f7abfe",
     "date": "2026-11-15",
     "type": "chore",
     "category": "ops",
     "scope": "changelog",
-    "summary": "Refresh the snapshot after the PR review fixes"
+    "summary": "Refresh snapshot for the two-tier thresholds",
+    "details": "Refs #39"
   },
   {
-    "hash": "5160299",
+    "hash": "2adcd9e",
     "date": "2026-11-15",
     "type": "docs",
     "category": "docs",
-    "scope": "governance",
-    "summary": "Correct command preconditions and route policy scope",
-    "details": "Preconditions and effects are documentation enforced by the delegated domain function, not re-checked by the command layer. Describe the coarse role gate, its defensive repetition, per-route error mapping and recursive route discovery."
+    "scope": "ops",
+    "summary": "Document two-tier warn and fail job thresholds",
+    "details": "Show cadence, warn and fail for each scheduled job, explain that warn is a small multiple of cadence (not one missed tick) and why a 24-hour-only alert hid 96 missed 15-minute ticks, and record the invalid-pair behaviour, per-state meanings and escalation timing. Refs #39"
   },
   {
-    "hash": "06964a6",
-    "date": "2026-11-15",
-    "type": "test",
-    "category": "ops",
-    "scope": "governance",
-    "summary": "Cover bind conflict status, route scope denial and recursive discovery",
-    "details": "Prove the bind route still returns 400 with one binding event for a conflicting ballot revision, prove an out-of-branch result request is denied with no write, and prove each declared audit event is written. Add temporary-directory fixtures for nested, index, JavaScript and re-exported routes, plus a malformed-body ordering check."
-  },
-  {
-    "hash": "5548a2e",
+    "hash": "ce9b934",
     "date": "2026-11-15",
     "type": "fix",
     "category": "fix",
-    "scope": "governance",
-    "summary": "Preserve bind route error mapping and harden route drift guard",
-    "details": "Map domain errors per route so a BallotDomainError escaping bind still returns the generic 400, while result keeps its 409. Discover governed routes recursively across .ts, .js and .mjs with all handler export forms. Rename the route-level helper to authoriseGovernanceRouteRole and document the deliberate coarse-gate repeat. Correct the precondition wording: the delegated domain function enforces it."
+    "scope": "ops",
+    "summary": "Warn before a scheduled job reaches its fail threshold",
+    "details": "A 15-minute job judged healthy for 24 hours leaves a full day blind to a complete outage. Each time-based check now has two tiers: degraded past warn (governance scheduler 2h, digest 1h, verification 2h) and failing past fail (26h, 24h, 24h). Within warn stays ok; a missing run stays failing; a failed last run stays failing. Warn and fail are configurable with the existing fail variables plus GOVERNANCE_SCHEDULER_WARN_HOURS, DIGEST_WARN_HOURS and MEMBERSHIP_VERIFICATION_WARN_HOURS. A warn value that is not below fail reports unknown with the conflicting values instead of trusting either. The report's thresholds block names both values and their source. Check ids, report shape, the ledger and route behaviour are unchanged; ops:health still exits 2 degraded and 1 failing. Refs #39"
+  },
+  {
+    "hash": "89b32c7",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the operational observability slice",
+    "details": "Refs #39"
+  },
+  {
+    "hash": "daac0bd",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "ops",
+    "summary": "Record job cadence, health command and runbook",
+    "details": "Document the job_runs ledger, the documented cadence and stale thresholds for each scheduled job, the ops:health command and exit codes, what each degraded state means, the maintainer escalation placeholder and the runbook actions. Record explicitly that production cron wiring and production verification are not done, so #39 remains partial. Update the tracker I10/S8 rows and known gap 21. Refs #39"
+  },
+  {
+    "hash": "b737cec",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ops",
+    "summary": "Add exit-coded operational health checks and ops:health",
+    "details": "Evaluate governance scheduler recency and errors, ballot deadlines that passed without closure, digest cadence and held deliveries, verification recency and due backlog, recent failed or held email, and Turnstile configuration. Every threshold is named in the report and settable by environment variable; checks are count-only and never expose secrets, provider responses, member identifiers or ballot choices. /api/health now publishes coarse governanceScheduler and jobs states. A database failure stays 503, while a degraded job stays 200 so a container restart loop cannot hide a missing external scheduler. npm run ops:health prints JSON (or --human) and exits 0 healthy, 2 degraded or unknown, 1 failing or unreachable, requiring MONGODB_URI. Refs #39"
+  },
+  {
+    "hash": "972e0fc",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ops",
+    "summary": "Record authorised scheduled runs in a durable job ledger",
+    "details": "Add a job_runs collection with a 90-day TTL on startedAt and a withJobRun helper that records success or failure after the job finishes. A failed ledger write or summariser is logged and never changes the job result or error, so observability cannot break the thing it observes. Wire the governance scheduler (apply and dry-run), the ballot digest endpoint and the membership verification endpoint. Only authorised runs are recorded: 401 and 409 responses are not scheduled runs. Status codes, bodies, secrets, scheduling and governance writes are unchanged. Refs #39"
   },
   {
     "hash": "20dfa90",
@@ -42,41 +78,6 @@
     "scope": "policies",
     "summary": "Resolve a branch's public slug for registry addresses (#93)",
     "details": "Production's Victorian branch predates the standard identifiers and has a UUID, so a policy address derived from the branch ID would be unusable and the import could not target the existing branch without creating a duplicate. - branch records may carry an explicit public slug (vic, nat); - the registry resolves /policies/<slug>/ and import targets by that slug; - ratification writes the branch slug onto new policy records; - the standard branch migration backfills a missing slug without renaming, re-parenting or un-recognising an existing branch; - the import CLI accepts either the branch ID or its public slug."
-  },
-  {
-    "hash": "adedae1",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh the snapshot for the ballot command layer"
-  },
-  {
-    "hash": "290d08e",
-    "date": "2026-11-15",
-    "type": "docs",
-    "category": "docs",
-    "scope": "governance",
-    "summary": "Document the command contract and mark #53 partial",
-    "details": "Describe the typed command contract, the central route policy table and the two-stage authorisation rule. Record that the ballot lifecycle is extracted while proposals, amendments and membership remain route-local."
-  },
-  {
-    "hash": "7d7a002",
-    "date": "2026-11-15",
-    "type": "test",
-    "category": "ops",
-    "scope": "governance",
-    "summary": "Prove ballot command and route policy equivalence",
-    "details": "Cover policy-table drift, the authorisation matrix for both commands, route authentication, bind idempotency and record_result preconditions against a real MongoDB replica set. Existing route suites continue to exercise the same behaviour."
-  },
-  {
-    "hash": "8a0c5e1",
-    "date": "2026-11-15",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "governance",
-    "summary": "Add typed ballot commands and central route policy",
-    "details": "Extract ballot.bind and ballot.record_result into typed commands that call the existing domain functions, and declare both routes in one policy table. Routes now validate input, run the command and map errors; no permission literals or role checks remain in the route files. No governance behaviour changes."
   },
   {
     "hash": "7e3d243",

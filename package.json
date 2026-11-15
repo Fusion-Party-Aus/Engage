@@ -20,6 +20,7 @@
     "ballots:migrate": "node --experimental-strip-types scripts/ballot-migration.ts",
     "ballots:results-index": "node --experimental-strip-types scripts/migrate-ballot-results-index.ts",
     "governance:scheduler": "node --experimental-strip-types scripts/run-governance-scheduler.ts",
+    "ops:health": "node --experimental-strip-types scripts/operational-health.ts",
     "governance:migration-report": "node --experimental-strip-types scripts/report-governance-deadline-migration.ts",
     "ballots:encrypt-migrate": "node --experimental-strip-types scripts/migrate-encrypted-votes.ts",
     "branches:migrate": "node --experimental-strip-types scripts/seed-branches.ts",

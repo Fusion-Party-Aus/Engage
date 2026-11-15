@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { BALLOTS_COLLECTION } from "./ballots.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEventOnce } from "./governance-relationships.ts";
+import { withJobRun } from "./job-runs.ts";
 import {
   LIFECYCLE_SYSTEM_ACTOR,
   amendmentBlocksScheduledAdvancement,
@@ -546,6 +547,11 @@ export async function closeDueBallots(
 /**
  * One scheduler run: advance due deliberations, then record due ballot closures.
  * Pass `dryRun` to compute the same report without writing anything.
+ *
+ * Every completed run — apply or dry-run — also records one entry in the
+ * `job_runs` ledger. The ledger is observability only: it cannot change the
+ * report, scheduling, conditional writes or governance events, and a ledger
+ * failure never fails the run.
  */
 export async function runGovernanceScheduler(
   db: Db,
@@ -553,25 +559,42 @@ export async function runGovernanceScheduler(
 ): Promise<GovernanceSchedulerReport> {
   const now = options.now ?? new Date();
   const dryRun = options.dryRun === true;
-  const advancement = await advanceDueDeliberations(db, { now, dryRun });
-  const closure = await closeDueBallots(db, { now, dryRun });
-  const skipped = [...advancement.skipped, ...closure.skipped];
-  const errors = [...advancement.errors, ...closure.errors];
-  return {
-    mode: dryRun ? "dry-run" : "apply",
-    actorId: LIFECYCLE_SYSTEM_ACTOR,
-    now: now.toISOString(),
-    counts: {
-      advanced: advancement.advanced.length,
-      skipped: skipped.length,
-      closed: closure.closed.length,
-      blockers: advancement.blockers.length,
-      errors: errors.length,
+  return withJobRun(
+    db,
+    "governance-scheduler",
+    async () => {
+      const advancement = await advanceDueDeliberations(db, { now, dryRun });
+      const closure = await closeDueBallots(db, { now, dryRun });
+      const skipped = [...advancement.skipped, ...closure.skipped];
+      const errors = [...advancement.errors, ...closure.errors];
+      return {
+        mode: dryRun ? "dry-run" : "apply",
+        actorId: LIFECYCLE_SYSTEM_ACTOR,
+        now: now.toISOString(),
+        counts: {
+          advanced: advancement.advanced.length,
+          skipped: skipped.length,
+          closed: closure.closed.length,
+          blockers: advancement.blockers.length,
+          errors: errors.length,
+        },
+        advanced: advancement.advanced,
+        skipped,
+        closed: closure.closed,
+        blockers: advancement.blockers,
+        errors,
+      } satisfies GovernanceSchedulerReport;
     },
-    advanced: advancement.advanced,
-    skipped,
-    closed: closure.closed,
-    blockers: advancement.blockers,
-    errors,
-  };
+    {
+      now,
+      mode: dryRun ? "dry-run" : "apply",
+      summarise: (report) => ({
+        advanced: report.counts.advanced,
+        closed: report.counts.closed,
+        skipped: report.counts.skipped,
+        blockers: report.counts.blockers,
+        errors: report.counts.errors,
+      }),
+    },
+  );
 }
