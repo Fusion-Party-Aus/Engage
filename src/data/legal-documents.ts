@@ -784,7 +784,7 @@ export const termsOfUse: LegalDocument = {
       blocks: [
         {
           type: "paragraph",
-          text: `Engage counts the votes bound to each ballot and computes the outcome under the published simple-majority rule (rule version simple-majority-d9-v1): Yes greater than No approves the question, while a tie or a ballot with no votes does not. Abstentions are recorded but do not change that comparison, and no quorum or minimum turnout applies. An authorised administrator records the formal result. If the recorded result differs from the computed outcome, it may be recorded only as an explicit override with a written reason, which is kept with the result and in the audit record. Aggregate tallies are public and, in a very small ballot, may effectively reveal how a small number of voters voted.`,
+          text: `Engage counts the votes bound to each ballot and computes the outcome under the published simple-majority rule (rule version simple-majority-d9-v1): Yes greater than No approves the question, while a tie or a ballot with no votes does not. Abstentions are recorded but do not change that comparison, and no quorum or minimum turnout applies. An authorised administrator records the formal result. If the recorded result differs from the computed outcome, it may be recorded only as an explicit override with a written reason, which is kept with the result and in the audit record. This rule applies to ordinary Yes/No ballots on a matter. Amendment endorsement ballots follow a separate procedure, and their result is recorded by an authorised administrator. Aggregate tallies are public and, in a very small ballot, may effectively reveal how a small number of voters voted.`,
         },
         {
           type: "paragraph",
