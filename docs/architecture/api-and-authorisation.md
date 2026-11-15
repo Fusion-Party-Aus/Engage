@@ -13,7 +13,7 @@ All routes are `prerender = false`. `src/middleware.ts` is a perimeter layer onl
 | Health | `GET /api/health` | MongoDB ping and latency |
 | Proposals | `GET/POST /api/proposals`, `GET/PATCH/DELETE /api/proposals/:id`, `GET /api/proposals/:id/revisions` | Matter CRUD and revision history |
 | Policies (alias) | `GET/POST /api/policies`, `…/:id` | Compatibility aliases over the proposal handlers |
-| Deliberation | `GET/POST/PATCH/PUT/DELETE /api/comments` | Comments, endorsements, contribution feedback |
+| Deliberation | `GET/POST/PATCH/PUT/DELETE /api/comments` | Comments, threaded replies (`parentCommentId`), upvotes/downvotes (`action`), contribution feedback. `PATCH` returns aggregate score/percentage and the caller's own vote only; vote identities are never serialised. `DELETE` tombstones a comment that still has replies. |
 | Amendments | `POST /api/amendments` | Submit an amendment |
 | Votes | `GET/POST /api/votes` | Read and cast formal votes or save pending preferences |
 | Sense Box | `POST /api/sense-box` | Public concern submission |
