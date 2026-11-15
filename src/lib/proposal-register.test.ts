@@ -188,6 +188,40 @@ describe("admin proposal register pagination", () => {
     assert.ok(decide.entries.some((entry) => entry.row.proposalId === "POL-LEGACY"));
   });
 
+  it("reads legacy policyId/status/category records without loading rationale", async () => {
+    const db = await seedRegister(5);
+    await db.collection("proposals").insertOne({
+      policyId: "POL-LEGACY-2",
+      title: "Legacy policy record",
+      category: "Legacy space",
+      status: "voting",
+      statement: "Legacy statement text",
+      slug: "legacy-policy-record",
+      kind: "policy",
+      details: "Legacy rationale that mentions a legacycanary.",
+      originatingBranchId: "branch-b",
+      updatedAt: new Date(),
+    });
+
+    const all = await listProposalRegister(db);
+    assert.equal(all.total, 6, "legacy identifiers are counted");
+    assert.deepEqual(all.spaces, ["Economy", "Governance", "Legacy space"]);
+
+    const legacy = all.entries.find((entry) => entry.row.proposalId === "POL-LEGACY-2");
+    assert.ok(legacy, "the row is keyed by its legacy policy id");
+    assert.equal(legacy.row.stage, "decide", "the legacy status maps to its stage");
+    assert.equal(legacy.row.space, "Legacy space");
+
+    const decide = await listProposalRegister(db, { stage: "decide" });
+    assert.ok(decide.entries.some((entry) => entry.row.proposalId === "POL-LEGACY-2"));
+    assert.equal(decide.total, decide.entries.length);
+
+    const searched = await listProposalRegister(db, { search: "legacycanary" });
+    assert.equal(searched.total, 1, "search still matches legacy rationale");
+    assert.equal(searched.entries[0]!.row.proposalId, "POL-LEGACY-2");
+    assert.equal("details" in searched.entries[0]!.row, false);
+  });
+
   it("keeps search working on rationale without loading it", async () => {
     const db = await seedRegister(60);
     const result = await listProposalRegister(db, { search: "zebra crossing" });

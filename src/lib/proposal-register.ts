@@ -276,13 +276,19 @@ export function describeRegisterBallot(input: {
   };
 }
 
+// Legacy records key the same facts under `policyId`, `status` and `category`.
+// Project the aliases too so the shared normaliser reads them, without widening
+// the projection to rationale or ballot data.
 const REGISTER_PROJECTION = {
   _id: 0,
   proposalId: 1,
+  policyId: 1,
   slug: 1,
   title: 1,
   space: 1,
+  category: 1,
   stage: 1,
+  status: 1,
   kind: 1,
   ballotRevisionId: 1,
   ballotClosesAt: 1,
@@ -296,8 +302,11 @@ const REGISTER_PROJECTION = {
 const REGISTER_METADATA_PROJECTION = {
   _id: 0,
   proposalId: 1,
+  policyId: 1,
   stage: 1,
+  status: 1,
   space: 1,
+  category: 1,
   ballotRevisionId: 1,
 } as const;
 
@@ -336,7 +345,15 @@ function registerMatchFilter(options: {
     });
   }
   const stage = parseRegisterStage(options.stage);
-  if (stage) clauses.push({ stage: { $in: STAGE_STORAGE_VALUES[stage] } });
+  if (stage) {
+    const values = STAGE_STORAGE_VALUES[stage];
+    clauses.push({
+      $or: [
+        { stage: { $in: values } },
+        { stage: { $exists: false }, status: { $in: values } },
+      ],
+    });
+  }
   const branch = (options.branch ?? "").trim();
   if (branch && branch !== "all") {
     clauses.push({
@@ -436,8 +453,8 @@ async function readScopedMetadata(
     .toArray();
   return rows.map((row: Record<string, any>) => ({
     proposalId: String(row.proposalId ?? row.policyId ?? ""),
-    stage: normalizeStage(row.stage),
-    space: String(row.space ?? "General"),
+    stage: normalizeStage(row.stage ?? row.status),
+    space: String(row.space ?? row.category ?? "General"),
     ...(row.ballotRevisionId ? { ballotRevisionId: String(row.ballotRevisionId) } : {}),
   }));
 }
