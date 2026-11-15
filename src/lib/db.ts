@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import baselineItems from "../data/policies.json" with { type: "json" };
 import { ensureLegacyProposalRevision } from "./proposal-revision.ts";
 import { ensureBallotResultsIndexes } from "./ballot-results-index-migration.ts";
+import { ensureJobRunIndexes } from "./job-runs.ts";
 import type { PlatformEnv, ProposalRecord, ProposalStage } from "./types.ts";
 
 let clientPromise: Promise<MongoClient> | undefined;
@@ -195,6 +196,7 @@ async function ensureSeeded(db: Db): Promise<void> {
 
 export async function initializeDatabase(db: Db): Promise<void> {
   await ensureDigestCohort(db);
+  await ensureJobRunIndexes(db);
   await Promise.all([
     db.collection("sense_submissions").createIndex({branchId:1,createdAt:-1}),
     db.collection("rate_limits").createIndex({expiresAt:1},{expireAfterSeconds:0,name:"rate_limit_expiry"}),
