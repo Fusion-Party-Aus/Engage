@@ -1,5 +1,22 @@
 [
   {
+    "hash": "2d25398",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "copy",
+    "summary": "Clarify participation and public discussion (#97)"
+  },
+  {
+    "hash": "20dfa90",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "policies",
+    "summary": "Resolve a branch's public slug for registry addresses (#93)",
+    "details": "Production's Victorian branch predates the standard identifiers and has a UUID, so a policy address derived from the branch ID would be unusable and the import could not target the existing branch without creating a duplicate. - branch records may carry an explicit public slug (vic, nat); - the registry resolves /policies/<slug>/ and import targets by that slug; - ratification writes the branch slug onto new policy records; - the standard branch migration backfills a missing slug without renaming, re-parenting or un-recognising an existing branch; - the import CLI accepts either the branch ID or its public slug."
+  },
+  {
     "hash": "7e3d243",
     "date": "2026-11-15",
     "type": "docs",
@@ -645,21 +662,5 @@
     "category": "feature",
     "scope": "walkthrough",
     "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
-  },
-  {
-    "hash": "d6f09b0",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "settings",
-    "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
   }
 ]

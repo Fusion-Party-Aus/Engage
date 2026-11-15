@@ -6,7 +6,7 @@ Updated 15 November 2026. Source of truth: pushed branch and this document, not 
 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review`, based on main `20dfa90`.
-- PR: pending creation; find the single draft PR from this branch.
+- PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
 - Next task: batch 2, rewrite `/how-it-works/` against the decision register and current lifecycle. Seconding and scheduling are implemented, not future features. D13–D20 distinguish member authority from officer certification; automatic ratification remains incomplete. Check the first-round exception before publishing dates. Do not repeat batch 1.
 - This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
 
@@ -28,7 +28,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 
 | Batch | Area | State |
 |---|---|---|
-| 1 | Homepage introduction/lifecycle wording; discussion heading and cross-references; sign-in discussion intent | Validated; delivery confirmed in #97 after publication |
+| 1 | Homepage introduction/lifecycle wording; discussion heading and cross-references; sign-in discussion intent | Delivered in `2d25398`; validated and published in PR #98 |
 | 2 | How-it-works guide, public metadata, shared layout/navigation/footer and remaining homepage copy | Next |
 | 3 | Proposal browse/create/detail, seconding, comments, forms, amendment and ballot interfaces | Not reviewed beyond batch 1 strings |
 | 4 | Policy registry, policy detail, provenance and change proposals; branch journeys and Sense Box | Not reviewed |
