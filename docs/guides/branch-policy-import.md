@@ -44,9 +44,13 @@ branch executive and links the original.
 ## Before running
 
 1. Confirm the branch has been seeded: `pnpm branches:migrate`.
-2. Confirm the authority basis with the branch executive and keep the wording
+2. `--branch` accepts either the internal branch identifier or the branch's
+   public slug. A branch that predates the standard identifiers (production's
+   Victorian branch) carries an explicit `slug` field; do not create a second
+   branch record for it.
+3. Confirm the authority basis with the branch executive and keep the wording
    you pass on the command line.
-3. Take a database backup. Imports are insert-only and idempotent, but a backup
+4. Take a database backup. Imports are insert-only and idempotent, but a backup
    is still the correct operational habit.
 
 ## Preview
@@ -54,7 +58,7 @@ branch executive and links the original.
 ```sh
 pnpm policies:import-branch \
   --source https://vic.fusionparty.org.au/api/policies.json \
-  --branch branch-vic \
+  --branch vic \
   --dry-run \
   --report /tmp/vic-policy-import-preview.json
 ```
@@ -67,7 +71,7 @@ A preview writes nothing. Review every entry marked `changed`, `conflict`,
 ```sh
 pnpm policies:import-branch \
   --source https://vic.fusionparty.org.au/api/policies.json \
-  --branch branch-vic \
+  --branch vic \
   --authority-basis "Adopted by the Victorian branch executive. Confirmed by the Engage maintainer on 2026-11-15 that all live Victorian branch policies are ratified and adopted." \
   --report /tmp/vic-policy-import.json
 ```
@@ -81,12 +85,13 @@ the import failed.
 - `/policies/vic/` lists 41 current policies, grouped by the branch's topics.
 - `/policies/vic/complete-neighbourhoods/` resolves the branch path; the older
   `/policies/vic-complete-neighbourhoods/` address redirects to it.
-- `/api/v1/policies?branch=branch-vic` returns the same records.
+- `/api/v1/policies?branch=<branch-id>` returns the same records; the API filters
+  by the internal branch identifier, not the public slug.
 - Open one policy: the wording, key commitments and authority should match the
   branch's published page.
 - `/admin/policies/` shows the records with origin "Imported branch policy".
-- `GET /api/v1/policies?branch=branch-vic` includes `branchSlug`, `policySlug`
-  and `canonicalPath` for each record.
+- `GET /api/v1/policies` includes `branchSlug`, `policySlug` and
+  `canonicalPath` for each record.
 
 ## Re-running
 

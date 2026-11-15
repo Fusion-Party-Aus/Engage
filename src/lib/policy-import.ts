@@ -84,8 +84,8 @@ export interface BranchPolicySource {
 export interface BranchImportAuthority {
   branchId: string;
   name: string;
-  /** Short registry prefix, for example "vic" for branch-vic. */
-  code: string;
+  /** Public branch slug, for example "vic". */
+  slug: string;
 }
 
 export interface BranchPolicyImportOptions {
@@ -301,7 +301,7 @@ export function buildImportedPolicyRecord(
   policy: BranchPolicySourcePolicy,
 ): { registry: Record<string, unknown>; revision: PolicyRevisionRecord } {
   const slug = text(policy.slug);
-  const policyId = branchPolicyId(options.branch.branchId, slug);
+  const policyId = `${options.branch.slug}-${slug}`;
   const contentHash = branchPolicyContentHash(policy);
   const canonicalUrl = text(policy.canonical_url);
   const publisher = text(policy.authority?.publisher) || options.branch.name;
@@ -350,7 +350,7 @@ export function buildImportedPolicyRecord(
     contentHash,
     provenance,
   };
-  const branchSlug = options.branch.branchId.replace(/^branch-/, "").toLowerCase();
+  const branchSlug = options.branch.slug;
   const registry: Record<string, unknown> = {
     policyId,
     proposalId: null,

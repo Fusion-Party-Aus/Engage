@@ -13,7 +13,7 @@ import {
 } from "./policy-import.ts";
 
 const SOURCE_URL = "https://vic.example.org/api/policies.json";
-const BRANCH = { branchId: "branch-vic", name: "Fusion Victoria", code: "vic" };
+const BRANCH = { branchId: "branch-vic", name: "Fusion Victoria", slug: "vic" };
 const AUTHORITY =
   "Adopted by the Victorian branch executive; recorded for the test fixture.";
 

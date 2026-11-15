@@ -10,6 +10,7 @@ import {
   isPolicyChangeType,
 } from "../../../../lib/policy-change.ts";
 import {
+  branchPublicSlug,
   policySlugFromTitle,
   uniquePolicySlug,
 } from "../../../../lib/policy-registry.ts";
@@ -136,11 +137,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
         },
         { status: 409 },
       );
-    if (
-      !(await db
-        .collection("branches")
-        .findOne({ branchId: authorityBranchId, recognised: true }))
-    )
+    const authorityBranch = await db
+      .collection("branches")
+      .findOne({ branchId: authorityBranchId, recognised: true });
+    if (!authorityBranch)
       return Response.json(
         { error: "Ratifying authority must be a recognised branch." },
         { status: 400 },
@@ -341,7 +341,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
       ratifiedBy: user.memberId,
       ratifiedAt: new Date(),
     };
-    const branchSlug = authorityBranchId.replace(/^branch-/, "").toLowerCase();
+    const branchSlug =
+      branchPublicSlug(authorityBranch) ??
+      authorityBranchId.replace(/^branch-/, "").toLowerCase();
     const policySlug = await uniquePolicySlug(
       db,
       branchSlug,
