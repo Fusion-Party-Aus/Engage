@@ -1,5 +1,9 @@
 import type { Db } from "mongodb";
-import { listMatterBallots, type BallotRecord } from "./ballots.ts";
+import {
+  listMatterBallots,
+  proposalBallotResultFilter,
+  type BallotRecord,
+} from "./ballots.ts";
 import { canViewProposal, getProposalDetail } from "./store.ts";
 import { normalizeMatterType, type MatterTypeId } from "./matters.ts";
 import { hasPermission } from "./rbac.ts";
@@ -71,7 +75,7 @@ export async function buildAuthorizedMatterBriefing(
       : Promise.resolve(null),
     db
       .collection("ballot_results")
-      .findOne({ proposalId: proposal.proposalId }),
+      .findOne(proposalBallotResultFilter(proposal.proposalId)),
   ]);
 
   const branchScope =

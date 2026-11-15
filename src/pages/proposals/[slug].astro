@@ -1,6 +1,7 @@
 ---
 import { recordLifecycle } from '../../lib/member-lifecycle.ts';
 import { ballotExpired } from '../../lib/ballot-deadline.ts';
+import { proposalBallotResultFilter } from '../../lib/ballots.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
 import SecondProposalButton from '../../components/ui/SecondProposalButton';
@@ -54,7 +55,7 @@ const [
         : Promise.resolve(null),
       db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray(),
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
-      db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
+      db.collection('ballot_results').findOne(proposalBallotResultFilter(proposal.proposalId)),
       db.collection('proposals')
         .find({ space: proposal.space, proposalId: { $ne: proposal.proposalId }, stage: { $ne: 'archived' } })
         .sort({ updatedAt: -1 })

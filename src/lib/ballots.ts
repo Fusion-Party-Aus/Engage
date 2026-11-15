@@ -47,6 +47,90 @@ export function computeBallotOutcome(tally: {
   return tally.approve > tally.reject ? "successful" : "unsuccessful";
 }
 
+/** Title-case label for a stored result or computed outcome. */
+export function ballotOutcomeLabel(value: string | null | undefined): string {
+  return value === "successful"
+    ? "Successful"
+    : value === "unsuccessful"
+      ? "Unsuccessful"
+      : value === "inconclusive"
+        ? "Inconclusive"
+        : "Not recorded";
+}
+
+/**
+ * Filter for the formal result attached to a matter's primary ballot.
+ *
+ * Results are keyed by `ballotId`: a matter may have more than one ballot, and a
+ * result on one must not hide the recording state of another. Legacy results
+ * recorded before ballot records existed have no `ballotId`.
+ */
+export function proposalBallotResultFilter(matterId: string) {
+  return {
+    $or: [
+      { ballotId: proposalBallotId(matterId) },
+      { proposalId: matterId, ballotId: { $exists: false } },
+    ],
+  };
+}
+
+/**
+ * Where the closure state of a ballot comes from. The addressed ballot's own
+ * record wins; the matter is only a fallback for legacy ballots with no row.
+ */
+export interface BallotClosure {
+  closed: boolean;
+  /** Close time that decided the state, when one was recorded. */
+  closesAt?: Date;
+  basis: "ballot" | "matter" | "none";
+}
+
+function asValidDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+/**
+ * Resolve whether the addressed ballot may be certified.
+ *
+ * Shared by the server gate and the admin pages so the offered form and the
+ * accepted request cannot disagree.
+ */
+export function resolveBallotClosure(input: {
+  ballot?: { status?: string | null; closesAt?: Date | string | null } | null;
+  matter?: {
+    ballotClosedAt?: Date | string | null;
+    ballotClosesAt?: Date | string | null;
+  } | null;
+  now?: Date;
+}): BallotClosure {
+  const now = input.now ?? new Date();
+  if (input.ballot?.status === "closed") {
+    return { closed: true, basis: "ballot" };
+  }
+  const ballotClosesAt = asValidDate(input.ballot?.closesAt);
+  if (ballotClosesAt) {
+    return {
+      closed: ballotClosesAt.getTime() <= now.getTime(),
+      closesAt: ballotClosesAt,
+      basis: "ballot",
+    };
+  }
+  if (input.matter?.ballotClosedAt) {
+    return { closed: true, basis: "matter" };
+  }
+  const matterClosesAt = asValidDate(input.matter?.ballotClosesAt);
+  if (matterClosesAt) {
+    return {
+      closed: matterClosesAt.getTime() <= now.getTime(),
+      closesAt: matterClosesAt,
+      basis: "matter",
+    };
+  }
+  return { closed: false, basis: "none" };
+}
+
 /** Sum recorded choices into the three recognised outcomes. */
 export function sumVoteTally(choices: Iterable<VoteChoice>): VoteTally {
   const tally: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
@@ -302,7 +386,9 @@ export async function readBoundBallotTallies(
   const rowsByBallot = new Map<string, Array<Record<string, any>>>();
   for (const row of rows) {
     const ballotId = String(row.ballotId);
-    rowsByBallot.set(ballotId, [...(rowsByBallot.get(ballotId) ?? []), row]);
+    const existing = rowsByBallot.get(ballotId);
+    if (existing) existing.push(row);
+    else rowsByBallot.set(ballotId, [row]);
   }
 
   for (const ballot of input.ballots) {
@@ -345,18 +431,6 @@ export async function assertBallotClosedForCertification(
     { ballotId: input.ballotId },
     { projection: { status: 1, closesAt: 1 }, ...(sessionOpts ?? {}) },
   );
-  if (ballot?.status === "closed") return;
-
-  const ballotClosesAt = ballot?.closesAt ? new Date(ballot.closesAt) : null;
-  if (ballotClosesAt && Number.isFinite(ballotClosesAt.getTime())) {
-    if (ballotClosesAt.getTime() <= input.now.getTime()) return;
-    throw new BallotDomainError(
-      `This ballot can still accept votes until ${ballotDeadlineLabel(ballotClosesAt)}. Record the outcome after it closes.`,
-      409,
-      "BALLOT_NOT_CLOSED",
-    );
-  }
-
   const proposal = await db.collection("proposals").findOne(
     { proposalId: input.matterId },
     {
@@ -364,20 +438,19 @@ export async function assertBallotClosedForCertification(
       ...(sessionOpts ?? {}),
     },
   );
-  if (proposal?.ballotClosedAt) return;
-
-  const matterClosesAt = proposal?.ballotClosesAt
-    ? new Date(proposal.ballotClosesAt)
-    : null;
-  if (matterClosesAt && Number.isFinite(matterClosesAt.getTime())) {
-    if (matterClosesAt.getTime() <= input.now.getTime()) return;
+  const closure = resolveBallotClosure({
+    ballot: ballot as { status?: string; closesAt?: Date } | null,
+    matter: proposal as { ballotClosedAt?: Date; ballotClosesAt?: Date } | null,
+    now: input.now,
+  });
+  if (closure.closed) return;
+  if (closure.closesAt) {
     throw new BallotDomainError(
-      `This ballot can still accept votes until ${ballotDeadlineLabel(matterClosesAt)}. Record the outcome after it closes.`,
+      `This ballot can still accept votes until ${ballotDeadlineLabel(closure.closesAt)}. Record the outcome after it closes.`,
       409,
       "BALLOT_NOT_CLOSED",
     );
   }
-
   throw new BallotDomainError(
     "This ballot has no recorded close, so its outcome cannot be certified. Close the ballot or set a close date first.",
     409,
@@ -779,6 +852,15 @@ export async function recordFormalDecision(
           `The ballot's recorded votes compute the outcome "${computedResult}" (${tally.approve} approve, ${tally.reject} reject). Recording any other result, including inconclusive, requires a written reason.`,
           409,
           "RESULT_OVERRIDE_REASON_REQUIRED",
+        );
+      }
+      if (!isOverride && overrideReason) {
+        // Never silently drop a written reason: the caller is describing an
+        // override that this result does not need, so the intent is ambiguous.
+        throw new BallotDomainError(
+          `The recorded votes already compute the outcome "${computedResult}". Remove the override reason, or choose a different result.`,
+          400,
+          "RESULT_OVERRIDE_REASON_UNEXPECTED",
         );
       }
 
