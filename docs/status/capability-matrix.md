@@ -1,6 +1,6 @@
 # Capability matrix
 
-**Status:** Current · **Verified:** 13 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 This page answers "does Engage do this today?" Use it instead of inferring from a screen, a collection name or a design document.
 
@@ -42,6 +42,11 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Shared Fusion identity / SSO / Fusion Auth | Planned | No code or dependency |
 | Legal acceptance gate | Implemented but inactive | Requires flag and published documents |
 | Self-service email change or account deletion | Not implemented | Not in scope today |
+| Public member profile | Implemented | `/members/[memberId]/`; viewer-relative history and statistics, no separate profile store ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)) |
+| Editable public biography | Implemented | Owner-only `POST /api/member/profile`; plain text ≤500 characters |
+| Comment karma | Implemented, display only | Sum of net scores on visible, non-deleted comments; no eligibility, permission or ballot effect |
+| Public leaderboards or karma-weighted privileges | Not implemented, by design | Karma never ranks members or grants authority |
+| Custom avatar upload | Not implemented | Initials from the display name; no image upload or storage |
 
 ## Branches
 
@@ -74,6 +79,8 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Threaded replies | Implemented | `parentCommentId` and stored `depth`; one recursive component; replies stay under their parent and siblings stay chronological ([#57](https://github.com/Fusion-Party-Aus/Engage/issues/57)) |
 | Thread collapsing | Implemented | Per-comment reply disclosure with keyboard-operable toggle |
 | Comment sorting | Implemented | Best (confidence-weighted Wilson lower bound, default), Top score, Newest, Oldest; applies to siblings at every depth with deterministic tie-breaking |
+| Public contribution history | Implemented | Profile tabs for comments, proposals and amendments; paginated; deep links to `#comment-*` and `#amendment-*` ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)) |
+| Profile author links | Implemented | Comment names/avatars, the proposal author and amendment authors link to the profile when authorship is recorded |
 
 ## Amendments
 
