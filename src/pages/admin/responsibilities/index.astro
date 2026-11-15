@@ -1,0 +1,119 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { ArrowRight } from 'lucide-react';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { buildResponsibilityQueue } from '../../../lib/responsibility-queue.ts';
+import { Button } from '../../../components/ui/button';
+import { Badge } from '../../../components/ui/badge';
+import Card from '../../../components/admin/Card.astro';
+import CardContent from '../../../components/admin/CardContent.astro';
+import CardDescription from '../../../components/admin/CardDescription.astro';
+import CardHeader from '../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../components/admin/CardTitle.astro';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/', 302);
+
+const db = await getDatabase(env);
+const queue = await buildResponsibilityQueue(db, user, { now: new Date() });
+
+/** Keep the queue scannable; the full register remains one click away. */
+const VISIBLE_ITEMS_PER_GROUP = 6;
+
+function overflowTarget(key: string): { href: string; label: string } {
+  if (key === "ballot-outcome" || key === "ballot-closing" || key === "ballot-binding")
+    return { href: "/admin/ballots/", label: "Open ballot register" };
+  if (key === "policy-publication")
+    return { href: "/admin/policies/", label: "Open policy registry" };
+  return { href: "/admin/proposals/", label: "Open proposals" };
+}
+---
+
+<AdminLayout
+  title="Responsibilities"
+  description="Work waiting for an officer, grouped by the decision or review it needs."
+  section="responsibilities"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  {!queue.hasResponsibility ? (
+    <Card class="gap-0">
+      <CardHeader>
+        <CardTitle class="text-base">No administrator responsibilities</CardTitle>
+        <CardDescription>
+          This queue lists ballot, amendment, verification and publication work for people with the
+          relevant authority. Your account does not hold any of those responsibilities.
+        </CardDescription>
+      </CardHeader>
+    </Card>
+  ) : queue.groups.length === 0 ? (
+    <Card class="gap-0">
+      <CardHeader>
+        <CardTitle class="text-base">You're up to date</CardTitle>
+        <CardDescription>No ballots, amendments, verifications or publications are waiting for you.</CardDescription>
+      </CardHeader>
+    </Card>
+  ) : (
+    <div class="admin-stack">
+      {queue.groups.map((group) => (
+        <Card class="gap-0">
+          <CardHeader class="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+            <div class="grid gap-1">
+              <CardTitle class="text-base">{group.title}</CardTitle>
+              <CardDescription>{group.summary}</CardDescription>
+            </div>
+            {group.error ? (
+              <Badge variant="destructive">Unavailable</Badge>
+            ) : (
+              <Badge variant="muted">{group.count}</Badge>
+            )}
+          </CardHeader>
+          <CardContent class="p-0">
+            {group.error ? (
+              <div class="p-4">
+                <Alert variant="destructive">
+                  <AlertTitle>Couldn't load this group</AlertTitle>
+                  <AlertDescription>{group.error}</AlertDescription>
+                </Alert>
+              </div>
+            ) : (
+              <ul class="m-0 list-none divide-y p-0">
+                {group.items.slice(0, VISIBLE_ITEMS_PER_GROUP).map((item) => (
+                  <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                    <div class="grid min-w-0 gap-1">
+                      <strong class="break-words text-sm font-semibold text-foreground">{item.title}</strong>
+                      <p class="m-0 text-xs text-muted-foreground">{item.reason}</p>
+                    </div>
+                    <Button href={item.href} variant="outline" size="sm" className="shrink-0">
+                      {item.actionLabel}
+                      <ArrowRight aria-hidden="true" />
+                    </Button>
+                  </li>
+                ))}
+                {group.items.length > VISIBLE_ITEMS_PER_GROUP && (
+                  <li class="flex flex-wrap items-center justify-between gap-3 bg-muted/40 px-5 py-3">
+                    <p class="m-0 text-xs text-muted-foreground">
+                      {group.items.length - VISIBLE_ITEMS_PER_GROUP} more not shown.
+                    </p>
+                    <Button href={overflowTarget(group.key).href} variant="ghost" size="sm" className="shrink-0">
+                      {overflowTarget(group.key).label}
+                      <ArrowRight aria-hidden="true" />
+                    </Button>
+                  </li>
+                )}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )}
+</AdminLayout>
