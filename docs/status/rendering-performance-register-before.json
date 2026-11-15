@@ -1,0 +1,84 @@
+{
+  "generatedAt": "2026-11-15T08:36:51.634Z",
+  "git": {
+    "commit": "78c07c0",
+    "branch": "feat/admin-register-pagination"
+  },
+  "environment": {
+    "node": "v24.22.1",
+    "platform": "darwin",
+    "runs": 3,
+    "port": 4399,
+    "syntheticData": {
+      "votes": 1200,
+      "comments": 600,
+      "ballots": 10
+    },
+    "note": "Local synthetic measurements. Indicative only; not production SLA evidence."
+  },
+  "pages": [
+    {
+      "id": "admin-proposals",
+      "label": "/admin/proposals/",
+      "path": "/admin/proposals/",
+      "identity": "administrator",
+      "document": {
+        "status": 200,
+        "durationMs": 171,
+        "htmlBytes": 938422,
+        "dbCommands": 19,
+        "dbDurationMs": 28.665,
+        "dbByCommand": {
+          "find": {
+            "count": 14,
+            "durationMs": 28.32
+          },
+          "getMore": {
+            "count": 4,
+            "durationMs": 4.804
+          },
+          "update": {
+            "count": 1,
+            "durationMs": 1.704
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 103.1,
+        "navigationMs": 214.5,
+        "lcpMs": 196,
+        "cls": 0,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": null,
+        "jsBytes": 354682,
+        "cssBytes": 129576,
+        "fontBytes": 146136,
+        "imageBytes": 3667,
+        "scriptCount": 22,
+        "requestCount": 33,
+        "failedRequests": [],
+        "dbCommands": 26,
+        "dbDurationMs": 45.061,
+        "dbByCommand": {
+          "find": {
+            "count": 20,
+            "durationMs": 25.349
+          },
+          "getMore": {
+            "count": 4,
+            "durationMs": 4.548
+          },
+          "update": {
+            "count": 2,
+            "durationMs": 2.295
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    }
+  ]
+}

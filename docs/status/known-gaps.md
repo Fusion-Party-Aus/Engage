@@ -168,6 +168,8 @@ The gate code is implemented, but the documents are `owner-authorised` with plac
 
 Projections and indexes are no-ops and there are no transactions. Development and some tests can pass where production would behave differently.
 
+**Partly improved:** the in-memory preview now applies `$and` filters and cursor `skip`, which the paginated admin register read needs. Projections are still ignored by the preview (tests that assert projection shape spy on the query instead), and indexes and transactions remain unsupported.
+
 **Direction:** Run persistence-sensitive tests against real MongoDB. Do not rely on in-memory behaviour for uniqueness or minimisation.
 
 ### 18. Amendments can open a ballot without being resolved
