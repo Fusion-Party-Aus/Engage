@@ -12,6 +12,9 @@ export interface ProposalPdfReportInput {
     result: string;
     decisionEventId?: string;
     recordedAt?: Date;
+    computedResult?: string;
+    overrideReason?: string;
+    ruleBasis?: string;
   } | null;
   policyRecord?: {
     policyId: string;
@@ -318,6 +321,17 @@ export function buildProposalPdfReport(input: ProposalPdfReportInput): Uint8Arra
         : "Voting has not opened";
 
   addKeyValueRow("Ballot status", ballotStatusText);
+  if (ballotResult) {
+    addKeyValueRow(
+      "Computed outcome",
+      ballotResult.computedResult
+        ? `${ballotResult.computedResult} (${ballotResult.ruleBasis ?? "simple-majority"})`
+        : "Not computed when this result was recorded",
+    );
+    if (ballotResult.overrideReason) {
+      addKeyValueRow("Officer override", ballotResult.overrideReason);
+    }
+  }
   addKeyValueRow("Voting start date", formatDate(ballotOpenedAt));
   addKeyValueRow("Voting closing date", formatDate(proposal.ballotClosesAt));
 

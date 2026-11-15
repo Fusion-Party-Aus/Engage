@@ -5,6 +5,7 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { isPolicyRegistryRecordForResolution } from '../../lib/store.ts';
+import { proposalBallotResultFilter } from '../../lib/ballots.ts';
 export const prerender = false;
 const policyId = Astro.params.slug ?? '';
 const db = await getDatabase(runtimeEnv(Astro.locals));
@@ -21,7 +22,7 @@ const policy =
 if (!policy) Astro.response.status = 404;
 const branch = policy?.jurisdictionBranchId ? await db.collection('branches').findOne({ branchId: policy.jurisdictionBranchId }) : null;
 const authority = policy?.governanceAuthorityBranchId ? await db.collection('branches').findOne({ branchId: policy.governanceAuthorityBranchId }) : null;
-const sourceResult = policy?.proposalId ? await db.collection('ballot_results').findOne({ proposalId: policy.proposalId }) : null;
+const sourceResult = policy?.proposalId ? await db.collection('ballot_results').findOne(proposalBallotResultFilter(policy.proposalId)) : null;
 const revisions = policy?.revisionIds ?? [policy?.revisionId].filter(Boolean);
 const statusLabel = policy?.publicationStatus === 'published' ? 'Published policy' : policy?.publicationStatus === 'withdrawn' ? 'Withdrawn from publication' : 'Superseded policy';
 const statusVariant = policy?.publicationStatus === 'published' ? 'success' : policy?.publicationStatus === 'withdrawn' ? 'warning' : 'destructive';

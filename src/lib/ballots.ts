@@ -1,12 +1,462 @@
 import type { ClientSession, Db } from "mongodb";
+import {
+  loadBallotCryptoConfig,
+  loadBallotCryptoConfigForRead,
+  type BallotCryptoConfig,
+} from "./ballot-crypto.ts";
+import { ballotDeadlineLabel } from "./ballot-deadline.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEvent } from "./governance-relationships.ts";
 import { normalizeMatterType, type MatterTypeId } from "./matters.ts";
-import { proposalBallotId } from "./vote-storage.ts";
+import type { VoteChoice, VoteTally } from "./types.ts";
+import {
+  PROPOSAL_VOTES,
+  decodeStoredVote,
+  proposalBallotId,
+} from "./vote-storage.ts";
 
 export const BALLOT_SCHEMA_VERSION = 1;
 export const BALLOTS_COLLECTION = "ballots";
 export const FORMAL_DECISIONS_COLLECTION = "ballot_results";
+
+/**
+ * Versioned basis for a computed ballot outcome.
+ *
+ * - D9: an ordinary Yes/No ballot is approved only when approve is greater than
+ *   reject. A tie does not approve.
+ * - D10 / O1: abstentions may be recorded, but their effect on a denominator is
+ *   undefined. Abstentions are therefore recorded and excluded from the
+ *   comparison instead of being added to, or removed from, any denominator.
+ * - D8: no quorum, turnout or minimum-participation threshold is applied.
+ *
+ * Changing the comparison requires a new basis identifier; recorded results keep
+ * the identifier they were certified under.
+ */
+export const BALLOT_OUTCOME_RULE_BASIS = "simple-majority-d9-v1";
+
+export type ComputedBallotOutcome = "successful" | "unsuccessful";
+
+/**
+ * Compare Yes against No only (D9, D10/O1, D8). Zero votes and ties are not
+ * successful.
+ */
+export function computeBallotOutcome(tally: {
+  approve: number;
+  reject: number;
+}): ComputedBallotOutcome {
+  return tally.approve > tally.reject ? "successful" : "unsuccessful";
+}
+
+/** Title-case label for a stored result or computed outcome. */
+export function ballotOutcomeLabel(value: string | null | undefined): string {
+  return value === "successful"
+    ? "Successful"
+    : value === "unsuccessful"
+      ? "Unsuccessful"
+      : value === "inconclusive"
+        ? "Inconclusive"
+        : "Not recorded";
+}
+
+/**
+ * Filter for the formal result attached to a matter's primary ballot.
+ *
+ * Results are keyed by `ballotId`: a matter may have more than one ballot, and a
+ * result on one must not hide the recording state of another. Legacy results
+ * recorded before ballot records existed have no `ballotId`.
+ */
+export function proposalBallotResultFilter(matterId: string) {
+  return {
+    $or: [
+      { ballotId: proposalBallotId(matterId) },
+      { proposalId: matterId, ballotId: { $exists: false } },
+    ],
+  };
+}
+
+/**
+ * Where the closure state of a ballot comes from. The addressed ballot's own
+ * record wins; the matter is only a fallback for legacy ballots with no row.
+ */
+export interface BallotClosure {
+  closed: boolean;
+  /** Close time that decided the state, when one was recorded. */
+  closesAt?: Date;
+  basis: "ballot" | "matter" | "none";
+}
+
+function asValidDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+/**
+ * Resolve whether the addressed ballot may be certified.
+ *
+ * Shared by the server gate and the admin pages so the offered form and the
+ * accepted request cannot disagree.
+ */
+export function resolveBallotClosure(input: {
+  ballot?: { status?: string | null; closesAt?: Date | string | null } | null;
+  matter?: {
+    ballotClosedAt?: Date | string | null;
+    ballotClosesAt?: Date | string | null;
+  } | null;
+  now?: Date;
+}): BallotClosure {
+  const now = input.now ?? new Date();
+  if (input.ballot?.status === "closed") {
+    return { closed: true, basis: "ballot" };
+  }
+  const ballotClosesAt = asValidDate(input.ballot?.closesAt);
+  if (ballotClosesAt) {
+    return {
+      closed: ballotClosesAt.getTime() <= now.getTime(),
+      closesAt: ballotClosesAt,
+      basis: "ballot",
+    };
+  }
+  if (input.matter?.ballotClosedAt) {
+    return { closed: true, basis: "matter" };
+  }
+  const matterClosesAt = asValidDate(input.matter?.ballotClosesAt);
+  if (matterClosesAt) {
+    return {
+      closed: matterClosesAt.getTime() <= now.getTime(),
+      closesAt: matterClosesAt,
+      basis: "matter",
+    };
+  }
+  return { closed: false, basis: "none" };
+}
+
+/** Sum recorded choices into the three recognised outcomes. */
+export function sumVoteTally(choices: Iterable<VoteChoice>): VoteTally {
+  const tally: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
+  for (const choice of choices) {
+    if (choice === "approve") tally.approve += 1;
+    else if (choice === "abstain") tally.abstain += 1;
+    else if (choice === "reject") tally.reject += 1;
+    else
+      throw new BallotDomainError(
+        "A recorded vote could not be read, so the ballot outcome cannot be computed.",
+        409,
+        "BALLOT_TALLY_MALFORMED",
+      );
+    tally.total += 1;
+  }
+  return tally;
+}
+
+/**
+ * Tally the votes bound to one ballot and immutable revision.
+ *
+ * Votes are read through the same storage and decryption path as every other
+ * vote read, so encrypted ballots certify from their real choices. Eligibility
+ * was already decided when each vote was cast (D2) and is never snapshotted here.
+ *
+ * The tally is the whole ballot's truth: a vote on the ballot that is missing a
+ * revision reference or names another revision makes the outcome uncomputable
+ * (`BALLOT_TALLY_UNBOUND_VOTES`) instead of being silently dropped. Missing
+ * decryption configuration is a server fault (`BALLOT_DECRYPTION_UNAVAILABLE`);
+ * votes that cannot be decrypted are a ballot fault (`BALLOT_TALLY_UNREADABLE`).
+ */
+export async function readBoundBallotTally(
+  db: Db,
+  input: {
+    ballotId: string;
+    revisionId: string;
+    cryptoConfig?: BallotCryptoConfig | null;
+    session?: ClientSession;
+  },
+): Promise<VoteTally> {
+  const scan = await scanBallotVotes(db, input);
+  if (scan.unboundVoteCount > 0) {
+    throw new BallotDomainError(
+      "Some recorded votes are not bound to this ballot's frozen wording, so the outcome cannot be computed. Review the ballot binding first.",
+      409,
+      "BALLOT_TALLY_UNBOUND_VOTES",
+    );
+  }
+  if (scan.decryptionUnavailable) {
+    throw new BallotDomainError(
+      "Encrypted ballot votes are present but this server cannot decrypt them, so the outcome cannot be computed.",
+      503,
+      "BALLOT_DECRYPTION_UNAVAILABLE",
+    );
+  }
+  if (scan.unreadableVoteCount > 0) {
+    throw new BallotDomainError(
+      "Some recorded votes could not be read, so the outcome cannot be computed.",
+      409,
+      "BALLOT_TALLY_UNREADABLE",
+    );
+  }
+  return sumVoteTally(scan.choices);
+}
+
+export type BallotTallyState =
+  | "computed"
+  | "no-votes"
+  | "unbound"
+  | "decryption-unavailable"
+  | "unreadable";
+
+/** Display-safe tally for one ballot, computed from the same bound set. */
+export interface BoundBallotTallySummary {
+  tally: VoteTally;
+  unboundVoteCount: number;
+  unreadableVoteCount: number;
+  state: BallotTallyState;
+  /** Present whenever the tally is computable, including a zero-vote ballot. */
+  computedResult?: ComputedBallotOutcome;
+}
+
+interface BallotVoteScan {
+  choices: VoteChoice[];
+  unboundVoteCount: number;
+  unreadableVoteCount: number;
+  decryptionUnavailable: boolean;
+}
+
+const BALLOT_VOTE_SCAN_PROJECTION = {
+  ballotId: 1,
+  proposalId: 1,
+  policyId: 1,
+  revisionId: 1,
+  amendmentRevisionId: 1,
+  voterBlindIndex: 1,
+  voteEnvelope: 1,
+  choice: 1,
+} as const;
+
+function resolveTallyCryptoConfig(
+  supplied: BallotCryptoConfig | null | undefined,
+): BallotCryptoConfig | null {
+  if (supplied !== undefined) return supplied;
+  try {
+    return loadBallotCryptoConfig(process.env);
+  } catch {
+    // Invalid or incomplete key configuration is a server fault, not a voter's.
+    throw new BallotDomainError(
+      "Ballot decryption keys are not configured correctly on this server, so the outcome cannot be computed.",
+      503,
+      "BALLOT_DECRYPTION_UNAVAILABLE",
+    );
+  }
+}
+
+/**
+ * Load ballot decryption keys for a display-only tally. A misconfigured server
+ * returns `null` so admin pages can render an operational message instead of
+ * failing the whole page; the tally then reports `decryption-unavailable` when
+ * encrypted votes are actually present.
+ */
+export function loadBallotTallyCryptoConfig(
+  env: Partial<import("./types.ts").PlatformEnv> | Record<string, string | undefined>,
+): BallotCryptoConfig | null {
+  return loadBallotCryptoConfigForRead(env);
+}
+
+async function scanBallotVotes(
+  db: Db,
+  input: {
+    ballotId: string;
+    revisionId: string;
+    cryptoConfig?: BallotCryptoConfig | null;
+    session?: ClientSession;
+  },
+): Promise<BallotVoteScan> {
+  const cryptoConfig = resolveTallyCryptoConfig(input.cryptoConfig);
+  const rows = await db
+    .collection(PROPOSAL_VOTES)
+    .find(
+      { ballotId: input.ballotId },
+      {
+        projection: BALLOT_VOTE_SCAN_PROJECTION,
+        ...(input.session ? { session: input.session } : {}),
+      },
+    )
+    .toArray();
+  return classifyBallotVotes(
+    rows as Array<Record<string, any>>,
+    input.revisionId,
+    cryptoConfig,
+  );
+}
+
+function classifyBallotVotes(
+  rows: Array<Record<string, any>>,
+  revisionId: string,
+  cryptoConfig: BallotCryptoConfig | null,
+): BallotVoteScan {
+  const scan: BallotVoteScan = {
+    choices: [],
+    unboundVoteCount: 0,
+    unreadableVoteCount: 0,
+    decryptionUnavailable: false,
+  };
+  for (const row of rows) {
+    if (row.revisionId !== revisionId) {
+      scan.unboundVoteCount += 1;
+      continue;
+    }
+    if (row.voteEnvelope && !cryptoConfig) {
+      scan.decryptionUnavailable = true;
+      continue;
+    }
+    try {
+      const choice = decodeStoredVote(
+        row as Record<string, any>,
+        cryptoConfig,
+      ).choice;
+      if (
+        choice !== "approve" &&
+        choice !== "abstain" &&
+        choice !== "reject"
+      ) {
+        scan.unreadableVoteCount += 1;
+        continue;
+      }
+      scan.choices.push(choice);
+    } catch {
+      scan.unreadableVoteCount += 1;
+    }
+  }
+  return scan;
+}
+
+function summariseScan(scan: BallotVoteScan): BoundBallotTallySummary {
+  const tally = sumVoteTally(scan.choices);
+  // State the cause the officer can act on first. Unbound votes are a binding
+  // fault they can resolve; unavailable keys are a server configuration fault;
+  // unreadable votes are a ballot integrity fault. A zero-vote tally is still
+  // computable (D9 computes unsuccessful), so the UI can require an override.
+  const state: BallotTallyState =
+    scan.unboundVoteCount > 0
+      ? "unbound"
+      : scan.decryptionUnavailable
+        ? "decryption-unavailable"
+        : scan.unreadableVoteCount > 0
+          ? "unreadable"
+          : tally.total === 0
+            ? "no-votes"
+            : "computed";
+  const computable = state === "computed" || state === "no-votes";
+  return {
+    tally,
+    unboundVoteCount: scan.unboundVoteCount,
+    unreadableVoteCount: scan.unreadableVoteCount,
+    state,
+    ...(computable ? { computedResult: computeBallotOutcome(tally) } : {}),
+  };
+}
+
+/**
+ * Read the display tally for several matter ballots in one query. Admin surfaces
+ * use this so the tally they show and the tally certification enforces come from
+ * the same bound set and cannot disagree.
+ */
+export async function readBoundBallotTallies(
+  db: Db,
+  input: {
+    ballots: Array<{ matterId: string; revisionId: string }>;
+    cryptoConfig?: BallotCryptoConfig | null;
+    session?: ClientSession;
+  },
+): Promise<Map<string, BoundBallotTallySummary>> {
+  const summaries = new Map<string, BoundBallotTallySummary>();
+  if (input.ballots.length === 0) return summaries;
+  const cryptoConfig = resolveTallyCryptoConfig(input.cryptoConfig);
+  const ballotIds = input.ballots.map((ballot) =>
+    proposalBallotId(ballot.matterId),
+  );
+  const rows = (await db
+    .collection(PROPOSAL_VOTES)
+    .find(
+      { ballotId: { $in: ballotIds } },
+      {
+        projection: BALLOT_VOTE_SCAN_PROJECTION,
+        ...(input.session ? { session: input.session } : {}),
+      },
+    )
+    .toArray()) as Array<Record<string, any>>;
+
+  const rowsByBallot = new Map<string, Array<Record<string, any>>>();
+  for (const row of rows) {
+    const ballotId = String(row.ballotId);
+    const existing = rowsByBallot.get(ballotId);
+    if (existing) existing.push(row);
+    else rowsByBallot.set(ballotId, [row]);
+  }
+
+  for (const ballot of input.ballots) {
+    summaries.set(
+      ballot.matterId,
+      summariseScan(
+        classifyBallotVotes(
+          rowsByBallot.get(proposalBallotId(ballot.matterId)) ?? [],
+          ballot.revisionId,
+          cryptoConfig,
+        ),
+      ),
+    );
+  }
+  return summaries;
+}
+
+/**
+ * Refuse certification unless the addressed ballot is closed.
+ *
+ * The ballot's own row is authoritative first: a `closed` status or a close time
+ * that has passed allows certification, and a future close time refuses it even
+ * when another ballot for the same matter is closed. Only when the ballot row is
+ * neither closed nor carries a close time does the matter's closure
+ * (`ballotClosedAt` / `ballotClosesAt`) apply, which keeps legacy records
+ * certifiable once the matter is closed.
+ *
+ * A ballot with no recorded close is deliberately refused rather than assumed
+ * closed. Legacy ballots without a deadline already need an operator to schedule
+ * or close them (see the lifecycle gaps); certifying one would let a result be
+ * contradicted by later votes.
+ */
+export async function assertBallotClosedForCertification(
+  db: Db,
+  input: { matterId: string; ballotId: string; now: Date },
+  session?: ClientSession,
+): Promise<void> {
+  const sessionOpts = session ? { session } : undefined;
+  const ballot = await db.collection(BALLOTS_COLLECTION).findOne(
+    { ballotId: input.ballotId },
+    { projection: { status: 1, closesAt: 1 }, ...(sessionOpts ?? {}) },
+  );
+  const proposal = await db.collection("proposals").findOne(
+    { proposalId: input.matterId },
+    {
+      projection: { ballotClosedAt: 1, ballotClosesAt: 1 },
+      ...(sessionOpts ?? {}),
+    },
+  );
+  const closure = resolveBallotClosure({
+    ballot: ballot as { status?: string; closesAt?: Date } | null,
+    matter: proposal as { ballotClosedAt?: Date; ballotClosesAt?: Date } | null,
+    now: input.now,
+  });
+  if (closure.closed) return;
+  if (closure.closesAt) {
+    throw new BallotDomainError(
+      `This ballot can still accept votes until ${ballotDeadlineLabel(closure.closesAt)}. Record the outcome after it closes.`,
+      409,
+      "BALLOT_NOT_CLOSED",
+    );
+  }
+  throw new BallotDomainError(
+    "This ballot has no recorded close, so its outcome cannot be certified. Close the ballot or set a close date first.",
+    409,
+    "BALLOT_NOT_CLOSED",
+  );
+}
 
 export interface BallotElectorate {
   scope: "national" | "branch";
@@ -31,6 +481,12 @@ export interface BallotRecord {
   updatedAt: Date;
 }
 
+export interface FormalDecisionOverride {
+  reason: string;
+  by: string;
+  at: Date;
+}
+
 export interface FormalDecisionRecord {
   decisionEventId: string;
   ballotId: string;
@@ -38,6 +494,13 @@ export interface FormalDecisionRecord {
   matterId: string;
   revisionId: string;
   result: "successful" | "unsuccessful" | "inconclusive";
+  /** Votes bound to the ballot and revision at the moment of certification. */
+  tally?: VoteTally;
+  /** Versioned rule the computed outcome was derived from. */
+  ruleBasis?: string;
+  computedResult?: ComputedBallotOutcome;
+  /** Present only when the recorded result contradicts the computed outcome. */
+  override?: FormalDecisionOverride;
   authorityBranchId?: string;
   recordedBy: string;
   recordedAt: Date;
@@ -298,6 +761,14 @@ export async function listMatterBallots(
  * Record an immutable formal decision for a specific ballot and wording revision.
  * Runs atomically with ballot certification and the `decision.recorded` governance event,
  * and is idempotent when retried with the same `decisionEventId` and payload.
+ *
+ * Certification requires a closed ballot. The result is checked against the
+ * outcome computed from the votes bound to the ballot and revision (D8, D9;
+ * abstentions excluded per D10/O1). A contradicting result — including
+ * `inconclusive`, which can never equal a computed outcome — is accepted only as
+ * an explicit override with a written reason, and the override is recorded on the
+ * result and in the audit event. Existing results are returned unchanged and are
+ * never rewritten.
  */
 export async function recordFormalDecision(
   db: Db,
@@ -309,18 +780,31 @@ export async function recordFormalDecision(
     decisionEventId: string;
     authorityBranchId?: string;
     recordedBy: string;
+    overrideReason?: string;
+    cryptoConfig?: BallotCryptoConfig | null;
     now?: Date;
   },
 ): Promise<FormalDecisionRecord> {
   const ballotId = (input.ballotId ?? proposalBallotId(input.matterId)).trim();
   const now = input.now ?? new Date();
+  const overrideReason = (input.overrideReason ?? "").trim();
+  if (overrideReason.length > 1000) {
+    throw new BallotDomainError(
+      "The override reason must be 1000 characters or fewer.",
+      400,
+      "RESULT_OVERRIDE_REASON_TOO_LONG",
+    );
+  }
   const matchesPayload = (existing: Record<string, any>) =>
     existing.decisionEventId === input.decisionEventId &&
     (existing.ballotId ?? proposalBallotId(input.matterId)) === ballotId &&
     existing.revisionId === input.revisionId &&
     existing.result === input.result &&
     (existing.authorityBranchId ?? undefined) ===
-      (input.authorityBranchId ?? undefined);
+      (input.authorityBranchId ?? undefined) &&
+    // A retry that rewrites the recorded override reason is a different act,
+    // not an identical retry. It must conflict rather than report success.
+    (existing.override?.reason ?? "") === overrideReason;
 
   try {
     return await runInTransaction(db, async (session) => {
@@ -337,6 +821,8 @@ export async function recordFormalDecision(
       );
 
       if (existing) {
+        // Identical retries return the recorded evidence as it stands, including
+        // historical results recorded before outcomes were computed.
         if (matchesPayload(existing)) {
           return existing as unknown as FormalDecisionRecord;
         }
@@ -347,6 +833,37 @@ export async function recordFormalDecision(
         );
       }
 
+      await assertBallotClosedForCertification(
+        db,
+        { matterId: input.matterId, ballotId, now },
+        session,
+      );
+
+      const tally = await readBoundBallotTally(db, {
+        ballotId,
+        revisionId: input.revisionId,
+        cryptoConfig: input.cryptoConfig,
+        session,
+      });
+      const computedResult = computeBallotOutcome(tally);
+      const isOverride = input.result !== computedResult;
+      if (isOverride && !overrideReason) {
+        throw new BallotDomainError(
+          `The ballot's recorded votes compute the outcome "${computedResult}" (${tally.approve} approve, ${tally.reject} reject). Recording any other result, including inconclusive, requires a written reason.`,
+          409,
+          "RESULT_OVERRIDE_REASON_REQUIRED",
+        );
+      }
+      if (!isOverride && overrideReason) {
+        // Never silently drop a written reason: the caller is describing an
+        // override that this result does not need, so the intent is ambiguous.
+        throw new BallotDomainError(
+          `The recorded votes already compute the outcome "${computedResult}". Remove the override reason, or choose a different result.`,
+          400,
+          "RESULT_OVERRIDE_REASON_UNEXPECTED",
+        );
+      }
+
       const record: FormalDecisionRecord = {
         decisionEventId: input.decisionEventId,
         ballotId,
@@ -354,6 +871,18 @@ export async function recordFormalDecision(
         matterId: input.matterId,
         revisionId: input.revisionId,
         result: input.result,
+        tally,
+        ruleBasis: BALLOT_OUTCOME_RULE_BASIS,
+        computedResult,
+        ...(isOverride
+          ? {
+              override: {
+                reason: overrideReason,
+                by: input.recordedBy,
+                at: now,
+              },
+            }
+          : {}),
         ...(input.authorityBranchId
           ? { authorityBranchId: input.authorityBranchId }
           : {}),
@@ -381,7 +910,16 @@ export async function recordFormalDecision(
           decisionEventId: input.decisionEventId,
           actorId: input.recordedBy,
           authorityBranchId: input.authorityBranchId,
-          metadata: { result: input.result },
+          ...(isOverride ? { reason: overrideReason } : {}),
+          metadata: {
+            result: input.result,
+            computedResult,
+            tally,
+            ruleBasis: BALLOT_OUTCOME_RULE_BASIS,
+            ...(isOverride
+              ? { override: { by: input.recordedBy, reason: overrideReason } }
+              : {}),
+          },
           createdAt: now,
         },
         session,

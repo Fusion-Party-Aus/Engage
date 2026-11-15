@@ -1,5 +1,5 @@
 import { recordLifecycle, recordParticipation, notePriorParticipation } from "./member-lifecycle.ts";
-import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
+import { loadBallotCryptoConfig, loadBallotCryptoConfigForRead } from "./ballot-crypto.ts";
 import { BALLOTS_COLLECTION, FORMAL_DECISIONS_COLLECTION } from "./ballots.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEvent } from "./governance-relationships.ts";
@@ -376,6 +376,13 @@ export async function listProposals(
      * caller also does not search on `details`; the summary view then omits it.
      */
     includeDetails?: boolean;
+    /**
+     * Render a page even when a stored vote cannot be read (for example with a
+     * missing decryption key). Callers that opt in must show the unavailable
+     * state; `unreadableVoteCount` is set on affected rows. Defaults to false so
+     * every other read keeps failing loudly.
+     */
+    tolerateUnreadableVotes?: boolean;
   } = {},
 ): Promise<ProposalSummaryView[]> {
   const rawProposals = await db
@@ -395,7 +402,9 @@ export async function listProposals(
 
   const allProposals = rawProposals.map(normalizeProposalDoc);
 
-  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  // Read-only path: a broken key ring must not fail a list that renders no
+  // encrypted votes. Encrypted votes still fail loudly at decode time.
+  const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
   const [allComments, allVotes] = await Promise.all([
     db
       .collection<CommentRecord>("comments")
@@ -425,11 +434,21 @@ export async function listProposals(
   }
 
   const voteMap = new Map<string, VoteTally>();
+  const unreadableVoteCounts = new Map<string, number>();
   for (const v of allVotes) {
     const id = v.proposalId || (v as any).policyId;
     if (!id) continue;
     if (v.ballotId !== proposalBallotId(id)) continue;
-    const decoded = decodeStoredVote(v as Record<string, any>, cryptoConfig);
+    let decoded: ReturnType<typeof decodeStoredVote>;
+    try {
+      decoded = decodeStoredVote(v as Record<string, any>, cryptoConfig);
+    } catch (error) {
+      // Pages that opt in can render an explicit unavailable state. Anything
+      // else keeps failing loudly so a tally is never quietly under-reported.
+      if (!options.tolerateUnreadableVotes) throw error;
+      unreadableVoteCounts.set(id, (unreadableVoteCounts.get(id) ?? 0) + 1);
+      continue;
+    }
     const current = voteMap.get(id) ?? {
       approve: 0,
       abstain: 0,
@@ -499,6 +518,9 @@ export async function listProposals(
         reject: 0,
         total: 0,
       },
+      ...(unreadableVoteCounts.get(p.proposalId)
+        ? { unreadableVoteCount: unreadableVoteCounts.get(p.proposalId) }
+        : {}),
     }));
 }
 
@@ -548,10 +570,12 @@ export async function getProposalDetail(
   db: Db,
   idOrSlug: string,
   user: SessionUser | null,
+  options: { tolerateUnreadableVotes?: boolean } = {},
 ): Promise<{
   proposal: ProposalSummaryView;
   comments: CommentRecord[];
   votesList: VoteRecord[];
+  unreadableVoteCount: number;
   myVote: VoteChoice | null;
   myReason: string;
   myPendingVote?: VoteChoice | null;
@@ -612,7 +636,9 @@ export async function getProposalDetail(
     stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
     upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
   }));
-  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  // Read-only path: tolerate a broken key ring so the page can render an
+  // operational message instead of failing before it is read.
+  const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
   const currentBallotId = proposalBallotId(proposal.proposalId);
   const myBlindIndexes =
     user && cryptoConfig
@@ -625,9 +651,21 @@ export async function getProposalDetail(
         )
       : null;
 
-  const proposalVotes = votes
-    .filter((vote) => vote.ballotId === currentBallotId)
-    .map((vote) => decodeStoredVote(vote as Record<string, any>, cryptoConfig));
+  const proposalVotes: ReturnType<typeof decodeStoredVote>[] = [];
+  let unreadableVoteCount = 0;
+  for (const vote of votes) {
+    if (vote.ballotId !== currentBallotId) continue;
+    try {
+      proposalVotes.push(
+        decodeStoredVote(vote as Record<string, any>, cryptoConfig),
+      );
+    } catch (error) {
+      // Same contract as listProposals: opt-in pages render an unavailable
+      // state, everyone else keeps failing loudly.
+      if (!options.tolerateUnreadableVotes) throw error;
+      unreadableVoteCount += 1;
+    }
+  }
 
   const tally: VoteTally = { approve: 0, abstain: 0, reject: 0, total: 0 };
   let myVote: VoteChoice | null = null;
@@ -661,9 +699,11 @@ export async function getProposalDetail(
       ...proposal,
       commentCount: comments.length,
       votes: tally,
+      ...(unreadableVoteCount ? { unreadableVoteCount } : {}),
     },
     comments,
     votesList: proposalVotes as unknown as VoteRecord[],
+    unreadableVoteCount,
     myVote,
     myReason,
     myPendingVote,
@@ -3095,7 +3135,7 @@ export async function listUserActivity(
     }
   >;
 }> {
-  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
   const [proposals, comments] = await Promise.all([
     availableProposals
       ? Promise.resolve(availableProposals)
@@ -3147,7 +3187,7 @@ export async function listOutstandingDecisions(
   memberVotes?: Awaited<ReturnType<typeof findMemberVotes>> | Promise<Awaited<ReturnType<typeof findMemberVotes>>>,
 ): Promise<ProposalSummaryView[]> {
   if (user && !user.canParticipate) return [];
-  const cryptoConfig = loadBallotCryptoConfig(process.env);
+  const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
   const decisions = availableProposals
     ? availableProposals.filter((proposal) => proposal.stage === "decide")
     : (await db

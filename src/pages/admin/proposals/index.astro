@@ -7,11 +7,21 @@ import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, Shiel
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { listProposals, normalizeStage } from '../../../lib/store.ts';
+import {
+  ballotOutcomeLabel,
+  loadBallotTallyCryptoConfig,
+  readBoundBallotTallies,
+  resolveBallotClosure,
+} from '../../../lib/ballots.ts';
+import { proposalBallotId } from '../../../lib/vote-storage.ts';
+
+import { ballotDeadlineLabel } from '../../../lib/ballot-deadline.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
 import type { ProposalStage } from '../../../lib/types.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import Field from '../../../components/admin/Field.astro';
+import BallotOutcomeBasis from '../../../components/admin/BallotOutcomeBasis.astro';
 import Alert from '../../../components/admin/Alert.astro';
 import AlertTitle from '../../../components/admin/AlertTitle.astro';
 import AlertDescription from '../../../components/admin/AlertDescription.astro';
@@ -45,7 +55,7 @@ const [branches, scopedProposals] = await Promise.all([
       ? db.collection('branches').find({ branchId: { $in: branchAdminIds } }).sort({ name: 1 }).toArray()
       : db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
   user.isStaff || user.isBranchAdmin
-    ? listProposals(db, { includeArchived: true }).then((proposals) =>
+    ? listProposals(db, { includeArchived: true, tolerateUnreadableVotes: true }).then((proposals) =>
         proposals.filter(
           (proposal) =>
             user.isStaff ||
@@ -92,6 +102,58 @@ if (unboundProposalIds.length) {
   }
 }
 const proposalIds = allProposals.map((proposal) => proposal.proposalId);
+// A result can only be recorded once the ballot is closed, and the tally shown
+// to the officer must be the bound tally certification enforces. Both follow the
+// same closure precedence: the ballot row first, then the matter.
+const decisionProposals = user.isAdmin || user.isBranchAdmin
+  ? allProposals.filter((proposal) => proposal.stage === 'decide')
+  : [];
+const mainBallotIds = decisionProposals.map((proposal) => proposalBallotId(proposal.proposalId));
+const [decideBallotResults, decideBallotRows, boundBallotTallies] = await Promise.all([
+  mainBallotIds.length
+    ? db
+        .collection('ballot_results')
+        .find({
+          $or: [
+            { ballotId: { $in: mainBallotIds } },
+            {
+              proposalId: { $in: decisionProposals.map((proposal) => proposal.proposalId) },
+              ballotId: { $exists: false },
+            },
+          ],
+        })
+        .toArray()
+    : Promise.resolve([]),
+  mainBallotIds.length
+    ? db
+        .collection('ballots')
+        .find({ ballotId: { $in: mainBallotIds } }, { projection: { ballotId: 1, status: 1, closesAt: 1 } })
+        .toArray()
+    : Promise.resolve([]),
+  readBoundBallotTallies(db, {
+    ballots: decisionProposals
+      .filter((proposal) => proposal.ballotRevisionId)
+      .map((proposal) => ({ matterId: proposal.proposalId, revisionId: String(proposal.ballotRevisionId) })),
+    cryptoConfig: loadBallotTallyCryptoConfig(env),
+  }),
+]);
+const decideResultsByBallot = new Map(
+  decideBallotResults.map((row: any) => [
+    String(row.ballotId ?? proposalBallotId(String(row.proposalId))),
+    row,
+  ]),
+);
+const decideBallotRowsById = new Map(decideBallotRows.map((row: any) => [String(row.ballotId), row]));
+const closureFor = (item: any) =>
+  resolveBallotClosure({
+    ballot: decideBallotRowsById.get(proposalBallotId(item.proposalId)) ?? null,
+    matter: item,
+    now: new Date(),
+  });
+const closingLabel = (item: any) => {
+  const closesAt = closureFor(item).closesAt;
+  return closesAt ? ballotDeadlineLabel(closesAt) : null;
+};
 const amendmentRows = proposalIds.length ? await db.collection('amendments').find({ proposalId: { $in: proposalIds }, status: { $nin: ['withdrawn', 'rejected', 'applied', 'not-endorsed', 'inconclusive'] } }).sort({ createdAt: 1 }).toArray() : [];
 const amendmentRevisionsByAmendment = new Map<string, any[]>();
 if (amendmentRows.length) {
@@ -577,6 +639,9 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 
                       <p class="admin-register-row__stats tabular">
                         <span><strong>{item.votes.total}</strong> votes ({item.votes.approve} approve · {item.votes.reject} reject)</span>
+                        {item.unreadableVoteCount ? (
+                          <span><strong>{item.unreadableVoteCount}</strong> unreadable</span>
+                        ) : null}
                         <span aria-hidden="true">·</span>
                         <span><strong>{item.commentCount}</strong> deliberation stances</span>
                       </p>
@@ -650,27 +715,87 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                       <details class="admin-disclosure admin-disclosure--muted">
                         <summary><Gavel className="size-4" aria-hidden="true" />Record ballot outcome</summary>
                         <div class="admin-disclosure__body">
-                          <p class="admin-inline-note">Apply the organisation&apos;s authorised rules. Engage does not calculate a passing threshold. A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
-                          <p class="m-0 text-sm"><strong>Frozen revision:</strong> {item.ballotRevisionId ? <code>{item.ballotRevisionId}</code> : 'Needs administrator review'}</p>
-                          <form class="ballot-result-form grid gap-3" data-proposal-id={item.proposalId}>
-                            <div class="admin-form-grid">
-                              <Field label="Outcome" htmlFor={`ballot-result-${item.proposalId}`}>
-                                <NativeSelect defaultValue="" id={`ballot-result-${item.proposalId}`} name="result" required>
-                                  <option value="">Choose outcome</option>
-                                  <option value="successful">Successful</option>
-                                  <option value="unsuccessful">Unsuccessful</option>
-                                  <option value="inconclusive">Inconclusive</option>
-                                </NativeSelect>
-                              </Field>
-                              <Field label="Decision event reference" htmlFor={`ballot-event-${item.proposalId}`}>
-                                <Input id={`ballot-event-${item.proposalId}`} name="decisionEventId" required maxLength={200} />
-                              </Field>
-                            </div>
-                            <div class="admin-actions">
-                              <Button variant="outline" size="sm" type="submit" disabled={!item.ballotRevisionId}>Record result</Button>
-                              <span class="admin-status" role="status" aria-live="polite"></span>
-                            </div>
-                          </form>
+                          {(() => {
+                            const recorded = decideResultsByBallot.get(proposalBallotId(item.proposalId));
+                            if (recorded) {
+                              const overrideReason = typeof recorded.override?.reason === 'string' ? recorded.override.reason : null;
+                              return (
+                                <div class="grid gap-2">
+                                  <div class="flex flex-wrap items-center gap-2 text-sm">
+                                    <Badge variant={recorded.result === 'successful' ? 'success' : 'warning'}>{ballotOutcomeLabel(String(recorded.result))}</Badge>
+                                    {overrideReason && <Badge variant="warning">Overridden</Badge>}
+                                    <span class="admin-inline-note">
+                                      {recorded.computedResult ? `Votes computed ${ballotOutcomeLabel(String(recorded.computedResult))}` : 'Recorded before outcomes were computed'}
+                                    </span>
+                                  </div>
+                                  {overrideReason && (
+                                    <p class="admin-inline-note">Override reason: {overrideReason}</p>
+                                  )}
+                                  <p class="admin-inline-note">Recorded results are immutable. Open the workspace for the decision event and full evidence.</p>
+                                </div>
+                              );
+                            }
+                            if (!item.ballotRevisionId) {
+                              return <p class="admin-inline-note">Bind a reviewed wording revision before recording the outcome.</p>;
+                            }
+                            if (!closureFor(item).closed) {
+                              const closesAt = closingLabel(item);
+                              return (
+                                <div class="grid gap-2">
+                                  <BallotOutcomeBasis summary={boundBallotTallies.get(item.proposalId) ?? null} />
+                                  <p class="admin-inline-note">
+                                    {closesAt
+                                      ? `Voting is open until ${closesAt}. The outcome can be recorded after the ballot closes.`
+                                      : 'This ballot has no recorded close. Set a closing date or close the ballot before recording the outcome.'}
+                                  </p>
+                                </div>
+                              );
+                            }
+                            const tally = boundBallotTallies.get(item.proposalId);
+                            if (tally && ['unbound', 'decryption-unavailable', 'unreadable'].includes(tally.state)) {
+                              return (
+                                <div class="grid gap-2">
+                                  <BallotOutcomeBasis summary={tally} />
+                                  <p class="admin-inline-note">Resolve the ballot tally problem above before recording the outcome.</p>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div class="grid gap-3">
+                                <BallotOutcomeBasis summary={tally ?? null} />
+                                <p class="admin-inline-note">A branch administrator can record only a ballot whose authority and jurisdiction explicitly match their branch assignment.</p>
+                                <form
+                                  class="ballot-result-form grid gap-3"
+                                  data-proposal-id={item.proposalId}
+                                  data-computed-result={boundBallotTallies.get(item.proposalId)?.computedResult ?? ''}
+                                >
+                                  <div class="admin-form-grid">
+                                    <Field label="Outcome" htmlFor={`ballot-result-${item.proposalId}`}>
+                                      <NativeSelect defaultValue="" id={`ballot-result-${item.proposalId}`} name="result" required>
+                                        <option value="">Choose outcome</option>
+                                        <option value="successful">Successful</option>
+                                        <option value="unsuccessful">Unsuccessful</option>
+                                        <option value="inconclusive">Inconclusive</option>
+                                      </NativeSelect>
+                                    </Field>
+                                    <Field label="Decision event reference" htmlFor={`ballot-event-${item.proposalId}`}>
+                                      <Input id={`ballot-event-${item.proposalId}`} name="decisionEventId" required maxLength={200} />
+                                    </Field>
+                                  </div>
+                                  <div data-override-field hidden>
+                                    <Field label="Reason for overriding the computed outcome" htmlFor={`ballot-override-${item.proposalId}`}>
+                                      <Textarea id={`ballot-override-${item.proposalId}`} name="overrideReason" rows={2} maxLength={1000} placeholder="Why does the recorded outcome differ from the votes?" />
+                                    </Field>
+                                  </div>
+                                  <p class="sr-only" data-override-announcement aria-live="polite"></p>
+                                  <div class="admin-actions">
+                                    <Button variant="outline" size="sm" type="submit">Record result</Button>
+                                    <span class="admin-status" role="status" aria-live="polite"></span>
+                                  </div>
+                                </form>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </details>
                     )}
@@ -783,6 +908,8 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 </AdminLayout>
 
 <script>
+  import { ballotResultPayload, formStatusRegion, wireBallotOutcomeForm } from '../../../lib/ballot-outcome-form.ts';
+
   const ballotCloseField = document.getElementById('editor-ballot-closes-at') as HTMLInputElement | null;
   if (ballotCloseField) {
     const iso = ballotCloseField.dataset.isoValue?.trim();
@@ -928,17 +1055,19 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
     }
   });
 
-  document.querySelectorAll<HTMLFormElement>('.ballot-result-form').forEach((form) => form.addEventListener('submit', async (event) => {
-    event.preventDefault(); if (!form.reportValidity()) return;
-    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); const status = form.querySelector<HTMLElement>('[role="status"]');
-    if (button) button.disabled = true;
-    try {
-      const fields = new FormData(form); const body = { proposalId: form.dataset.proposalId, result: fields.get('result'), decisionEventId: fields.get('decisionEventId') };
-      const response = await fetch('/api/admin/ballots/result', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || 'Could not record ballot result.');
-      if (status) status.textContent = 'Outcome recorded.'; location.reload();
-    } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not record ballot result.'; if (button) button.disabled = false; }
-  }));
+  document.querySelectorAll<HTMLFormElement>('.ballot-result-form').forEach((form) => {
+    wireBallotOutcomeForm(form);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault(); if (!form.reportValidity()) return;
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]'); const status = formStatusRegion(form);
+      if (button) button.disabled = true;
+      try {
+        const response = await fetch('/api/admin/ballots/result', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ballotResultPayload(form)) });
+        const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || 'Could not record ballot result.');
+        if (status) status.textContent = 'Outcome recorded.'; location.reload();
+      } catch (error) { if (status) status.textContent = error instanceof Error ? error.message : 'Could not record ballot result.'; if (button) button.disabled = false; }
+    });
+  });
 
   document.querySelectorAll<HTMLFormElement>('.ballot-bind-form').forEach((form) => form.addEventListener('submit', async (event) => {
     event.preventDefault(); if (!form.reportValidity()) return;
