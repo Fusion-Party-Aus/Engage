@@ -1,5 +1,40 @@
 [
   {
+    "hash": "277576c",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Never imply a ballot close date that was not recorded",
+    "details": "A legacy closed ballot with no close time now says only that it closed, instead of presenting the current date as the close date."
+  },
+  {
+    "hash": "e22253a",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh the snapshot for the responsibility queue"
+  },
+  {
+    "hash": "29d849d",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "status",
+    "summary": "Record the administrator responsibility queue (#54)",
+    "details": "The queue is built and tested; multi-amendment derivation, collision review and role legibility remain outstanding. Note that publication failures have no durable failed state to queue."
+  },
+  {
+    "hash": "41ade2f",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add the administrator responsibility queue (#54)",
+    "details": "Group ballot outcomes, closing ballots, unbound wording, overdue advancement, amendment decisions, member verification and publication into one queue. Every item names the authority that makes it actionable and is filtered server-side by permission and branch scope. A failed source degrades to one short message for its group."
+  },
+  {
     "hash": "be5f523",
     "date": "2026-11-15",
     "type": "feat",
@@ -7,14 +42,6 @@
     "scope": "proposals",
     "summary": "Member-facing decision record (#54) (#105)",
     "details": "* feat(proposals): add member-facing decision record Compose one matter's immutable voted wording, revision history, amendment outcomes, certified ballot result and publication state in a permission-aware read model. Derive adopted wording under D15 (zero applied amendments) and D16 (one applied amendment), with explicit review states for two or more applied amendments (D17-D18), approved-but-unapplied amendments and mismatched result wording. No individual votes, voter or author identifiers cross the read-model boundary. Add /proposals/[slug]/record/ and link it from the proposal page. * docs(governance): record the decision-record read model Document the member-facing decision record, the D15/D16 derivation, the explicit D17-D18 collision-review seam and the outstanding administrator queue. Mark S2/#54 partial and note the reporting limit on inter-amendment gaps. * chore(changelog): refresh the snapshot for the decision record"
-  },
-  {
-    "hash": "a2630a8",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the command layer after merging main"
   },
   {
     "hash": "9478783",
@@ -26,14 +53,6 @@
     "details": "* fix(security): bound the perimeter browser harness and always clean up The harness now has a hard 180-second deadline (ENGAGE_PERIMETER_TIMEOUT_MS) that stops the run and fails instead of hanging, signals the preview server before any await, escalates to SIGKILL, bounds Chromium shutdown, and kills the child from a process exit handler as a last resort. A page error, failed request or CSP violation that appears after a page's own check also fails the run. Adds 'perimeter:browser' for local use; a build and ENGAGE_PLAYWRIGHT_MODULE are still required. * feat(ci): run the perimeter browser harness on every pull request Runs scripts/security-perimeter-browser.mjs after the build and after the existing Playwright 1.57.0 install, reusing the same ENGAGE_PLAYWRIGHT_MODULE path rather than installing a second copy. Extends src/lib/ci-workflow.test.ts to compare step positions, so it fails if the step disappears, moves before the build or the Playwright install, installs its own Playwright, or if 'perimeter:browser' and the harness file drift apart. * docs(security): record that the perimeter harness runs in CI States what the CI step proves, how it is made safe to run unattended, and the remaining gap: the production build against the in-memory seed, not Cloudflare/Coolify, a real MongoDB or the real providers. * chore(changelog): refresh the snapshot for the perimeter CI step"
   },
   {
-    "hash": "12cc8af",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the command layer after merging main"
-  },
-  {
     "hash": "78c07c0",
     "date": "2026-11-15",
     "type": "feat",
@@ -41,14 +60,6 @@
     "scope": "notifications",
     "summary": "Durable outbox for ballot opened and closing soon (#33) (#102)",
     "details": "* fix(notifications): write the delivery dedupe key the unique index requires The notification_deliveries unique index is on dedupeKey, but in-app and push delivery documents only set a composite _id. Every insert after the first therefore collided on a missing dedupeKey and was swallowed as a duplicate, so production could create at most one inbox item in total. Write the composite value to dedupeKey (and a push equivalent), keeping the existing _id dedupe contract and index shape unchanged. * feat(notifications): wire ballot opened and closing soon through a durable outbox Add notification_outbox, written immediately after a committed lifecycle transition and drained by npm run notifications:drain (dry-run by default, --apply to send). Two events are wired: a ballot opened by the lifecycle scheduler (new_ballots) and an open ballot inside the approved seven-day window (closing_deadlines). The audience is the voting electorate. Candidates are confirmed with getProposalEligibility and canViewProposal, the same predicate and visibility gate used when casting a vote, and eligibility is checked again at drain time so a revoked membership is suppressed rather than notified. Rows carry one unique dedupeKey per member, ballot and event; the drain claims with a conditional lease, retries at 1/2/4/8 minutes and stops at five attempts. Terminal rows carry a two-year retention TTL. Enqueue and delivery can never fail, block or alter a governance transition, and the scheduler report is unchanged. governance_outcomes and contribution_responses stay unwired: the result route is being refactored and the comment-outcome event needs a product decision. * chore(changelog): refresh snapshot for the notification outbox"
-  },
-  {
-    "hash": "c7ffad9",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the command layer after merging main"
   },
   {
     "hash": "0aea7b5",
@@ -60,14 +71,6 @@
     "details": "* feat(security): add perimeter headers, CSP and cross-site request rule Every response now carries nosniff, a strict referrer policy, frame denial, a minimal Permissions-Policy and a Content Security Policy. HSTS is sent only in production when HTTPS is provable. The policy keeps Astro's build-time script and style hashes and allows only the external hosts the app uses: Cloudflare Turnstile (script, frame, connect) and the first-party Plausible host (script, connect). Inline style attributes are allowed through style-src-attr only, because tally and progress bars use them; script-src has no unsafe-inline and no directive permits unsafe-eval. The service-worker registration was is:inline, which Astro does not hash, so it is now a processed script. Astro's form-post origin check is kept, and allowedDomains trusts the production host over HTTPS so its comparison uses the public origin behind the proxy. The middleware adds what Astro's check deliberately exempts: every state-changing method, JSON bodies, a cross-site Sec-Fetch-Site, an Origin that differs from the trusted public origin, and an absent Origin when a session or dev cookie is present. Bearer cron calls and webhooks carry no cookie and stay allowed. Refs #38 * test(security): verify the CSP and origin rule in a real browser The production build is served with a disposable in-memory database. Chromium checks the home, proposal, sign-in and Sense Box pages for CSP violations, console errors and failed requests; proves the Turnstile script and frame and the Plausible script and event endpoint reach the network layer; asserts the document and JSON header sets; and shows same-origin fetches and native form posts succeed while browser, JSON and cookie-without-Origin state-changing requests are refused. Cloudflare and Plausible are intercepted and answered locally; the script never contacts production. Refs #38 * docs(security): record the perimeter header set, CSP and origin rule Adds docs/security/perimeter.md as the operating contract for headers, CSP sources and the cross-site rule, with the exact values, every external host and its reason, the scoped style-src-attr allowance, verification commands and residual risk. Corrects the pages that said there is no middleware and that a CSP, HSTS, frame or content-type headers are absent, updates the Turnstile and API/authorisation contracts, and records the #38 and I10 state in the programme tracker and known gaps. Remaining work is explicit: proxy headers for static assets and Astro's early 403, a reporting endpoint, CSRF tokens, and production header observation. Refs #38 * chore(changelog): refresh snapshot for the perimeter security slice Refs #38 * docs(security): clarify origin-check exemptions and deployment requirements States the form-like and safe-method exemptions precisely, scopes includeSubDomains to the sending host rather than fusionparty.org.au, and records that production must configure PUBLIC_ORIGIN or BETTER_AUTH_URL or browser writes are refused against the proxy's localhost origin. Refs #38"
   },
   {
-    "hash": "0fd2f69",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the command layer after merging main"
-  },
-  {
     "hash": "23f88d8",
     "date": "2026-11-15",
     "type": "feat",
@@ -77,49 +80,6 @@
     "details": "* feat(ops): record authorised scheduled runs in a durable job ledger Add a job_runs collection with a 90-day TTL on startedAt and a withJobRun helper that records success or failure after the job finishes. A failed ledger write or summariser is logged and never changes the job result or error, so observability cannot break the thing it observes. Wire the governance scheduler (apply and dry-run), the ballot digest endpoint and the membership verification endpoint. Only authorised runs are recorded: 401 and 409 responses are not scheduled runs. Status codes, bodies, secrets, scheduling and governance writes are unchanged. Refs #39 * feat(ops): add exit-coded operational health checks and ops:health Evaluate governance scheduler recency and errors, ballot deadlines that passed without closure, digest cadence and held deliveries, verification recency and due backlog, recent failed or held email, and Turnstile configuration. Every threshold is named in the report and settable by environment variable; checks are count-only and never expose secrets, provider responses, member identifiers or ballot choices. /api/health now publishes coarse governanceScheduler and jobs states. A database failure stays 503, while a degraded job stays 200 so a container restart loop cannot hide a missing external scheduler. npm run ops:health prints JSON (or --human) and exits 0 healthy, 2 degraded or unknown, 1 failing or unreachable, requiring MONGODB_URI. Refs #39 * docs(ops): record job cadence, health command and runbook Document the job_runs ledger, the documented cadence and stale thresholds for each scheduled job, the ops:health command and exit codes, what each degraded state means, the maintainer escalation placeholder and the runbook actions. Record explicitly that production cron wiring and production verification are not done, so #39 remains partial. Update the tracker I10/S8 rows and known gap 21. Refs #39 * chore(changelog): refresh snapshot for the operational observability slice Refs #39 * fix(ops): warn before a scheduled job reaches its fail threshold A 15-minute job judged healthy for 24 hours leaves a full day blind to a complete outage. Each time-based check now has two tiers: degraded past warn (governance scheduler 2h, digest 1h, verification 2h) and failing past fail (26h, 24h, 24h). Within warn stays ok; a missing run stays failing; a failed last run stays failing. Warn and fail are configurable with the existing fail variables plus GOVERNANCE_SCHEDULER_WARN_HOURS, DIGEST_WARN_HOURS and MEMBERSHIP_VERIFICATION_WARN_HOURS. A warn value that is not below fail reports unknown with the conflicting values instead of trusting either. The report's thresholds block names both values and their source. Check ids, report shape, the ledger and route behaviour are unchanged; ops:health still exits 2 degraded and 1 failing. Refs #39 * docs(ops): document two-tier warn and fail job thresholds Show cadence, warn and fail for each scheduled job, explain that warn is a small multiple of cadence (not one missed tick) and why a 24-hour-only alert hid 96 missed 15-minute ticks, and record the invalid-pair behaviour, per-state meanings and escalation timing. Refs #39 * chore(changelog): refresh snapshot for the two-tier thresholds Refs #39 * fix(ops): report a failing job as failing on the health probe * chore(changelog): refresh after rewriting the synthetic token fixture"
   },
   {
-    "hash": "4072270",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the command layer after merging main"
-  },
-  {
-    "hash": "fdb948e",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh the snapshot after the PR review fixes"
-  },
-  {
-    "hash": "5160299",
-    "date": "2026-11-15",
-    "type": "docs",
-    "category": "docs",
-    "scope": "governance",
-    "summary": "Correct command preconditions and route policy scope",
-    "details": "Preconditions and effects are documentation enforced by the delegated domain function, not re-checked by the command layer. Describe the coarse role gate, its defensive repetition, per-route error mapping and recursive route discovery."
-  },
-  {
-    "hash": "06964a6",
-    "date": "2026-11-15",
-    "type": "test",
-    "category": "ops",
-    "scope": "governance",
-    "summary": "Cover bind conflict status, route scope denial and recursive discovery",
-    "details": "Prove the bind route still returns 400 with one binding event for a conflicting ballot revision, prove an out-of-branch result request is denied with no write, and prove each declared audit event is written. Add temporary-directory fixtures for nested, index, JavaScript and re-exported routes, plus a malformed-body ordering check."
-  },
-  {
-    "hash": "5548a2e",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "governance",
-    "summary": "Preserve bind route error mapping and harden route drift guard",
-    "details": "Map domain errors per route so a BallotDomainError escaping bind still returns the generic 400, while result keeps its 409. Discover governed routes recursively across .ts, .js and .mjs with all handler export forms. Rename the route-level helper to authoriseGovernanceRouteRole and document the deliberate coarse-gate repeat. Correct the precondition wording: the delegated domain function enforces it."
-  },
-  {
     "hash": "20dfa90",
     "date": "2026-11-15",
     "type": "fix",
@@ -127,41 +87,6 @@
     "scope": "policies",
     "summary": "Resolve a branch's public slug for registry addresses (#93)",
     "details": "Production's Victorian branch predates the standard identifiers and has a UUID, so a policy address derived from the branch ID would be unusable and the import could not target the existing branch without creating a duplicate. - branch records may carry an explicit public slug (vic, nat); - the registry resolves /policies/<slug>/ and import targets by that slug; - ratification writes the branch slug onto new policy records; - the standard branch migration backfills a missing slug without renaming, re-parenting or un-recognising an existing branch; - the import CLI accepts either the branch ID or its public slug."
-  },
-  {
-    "hash": "adedae1",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh the snapshot for the ballot command layer"
-  },
-  {
-    "hash": "290d08e",
-    "date": "2026-11-15",
-    "type": "docs",
-    "category": "docs",
-    "scope": "governance",
-    "summary": "Document the command contract and mark #53 partial",
-    "details": "Describe the typed command contract, the central route policy table and the two-stage authorisation rule. Record that the ballot lifecycle is extracted while proposals, amendments and membership remain route-local."
-  },
-  {
-    "hash": "7d7a002",
-    "date": "2026-11-15",
-    "type": "test",
-    "category": "ops",
-    "scope": "governance",
-    "summary": "Prove ballot command and route policy equivalence",
-    "details": "Cover policy-table drift, the authorisation matrix for both commands, route authentication, bind idempotency and record_result preconditions against a real MongoDB replica set. Existing route suites continue to exercise the same behaviour."
-  },
-  {
-    "hash": "8a0c5e1",
-    "date": "2026-11-15",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "governance",
-    "summary": "Add typed ballot commands and central route policy",
-    "details": "Extract ballot.bind and ballot.record_result into typed commands that call the existing domain functions, and declare both routes in one policy table. Routes now validate input, run the command and map errors; no permission literals or role checks remain in the route files. No governance behaviour changes."
   },
   {
     "hash": "7e3d243",
@@ -673,5 +598,77 @@
     "category": "fix",
     "scope": "settings",
     "summary": "Save the configured source repository URL"
+  },
+  {
+    "hash": "6fad513",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record granular analytics improvements"
+  },
+  {
+    "hash": "2167573",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "analytics",
+    "summary": "Measure Engage navigation and participation outcomes"
+  },
+  {
+    "hash": "e41ac7d",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "analytics",
+    "summary": "Initialize Plausible tracking on production"
+  },
+  {
+    "hash": "71a98bb",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "analytics",
+    "summary": "Install Plausible tracker package"
+  },
+  {
+    "hash": "b98af1d",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "time",
+    "summary": "Display time in user's local timezone"
+  },
+  {
+    "hash": "5de3c91",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "participation",
+    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
+  },
+  {
+    "hash": "46f1b9b",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "branches",
+    "summary": "Fix error on branch pages, and seed branches to database"
+  },
+  {
+    "hash": "c14ee07",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
+  },
+  {
+    "hash": "31e34df",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
   }
 ]
