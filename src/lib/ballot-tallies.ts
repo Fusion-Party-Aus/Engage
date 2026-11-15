@@ -340,11 +340,36 @@ export async function updateBallotTallyProjection(
     choice: VoteChoice;
     hadPreviousVote: boolean;
     previousChoice?: VoteChoice | null;
+    /** Revision the member's previous vote was bound to, when it changed. */
+    previousRevisionId?: string | null;
     cryptoConfig?: BallotCryptoConfig | null;
     now?: Date;
   },
 ): Promise<void> {
   const now = input.now ?? new Date();
+  if (
+    input.hadPreviousVote &&
+    input.previousChoice &&
+    input.previousRevisionId &&
+    input.previousRevisionId !== input.revisionId
+  ) {
+    // An amendment ballot can be re-bound to a newer revision. The member's
+    // old count belongs to the old row, so recount both rows from their votes
+    // instead of moving a count inside the new revision.
+    await rebuildBallotTallyProjection(db, {
+      ballotId: input.ballotId,
+      revisionId: input.previousRevisionId,
+      cryptoConfig: input.cryptoConfig,
+      now,
+    });
+    await rebuildBallotTallyProjection(db, {
+      ballotId: input.ballotId,
+      revisionId: input.revisionId,
+      cryptoConfig: input.cryptoConfig,
+      now,
+    });
+    return;
+  }
   const delta = voteTallyDelta(input);
   if (delta) {
     const increments: Record<string, number> = {};
@@ -420,6 +445,7 @@ export async function projectCommittedVoteTally(
     choice: VoteChoice;
     hadPreviousVote: boolean;
     previousChoice?: VoteChoice | null;
+    previousRevisionId?: string | null;
     cryptoConfig?: BallotCryptoConfig | null;
     now?: Date;
     deadlineMs?: number;

@@ -192,6 +192,57 @@ describe("ballot tally projection storage", () => {
     );
   });
 
+  it("moves a count to the row of the revision the member now belongs to", async () => {
+    const db = createMemoryDb();
+    // The member's previous vote lived on rev-old; both revisions now have
+    // votes from other members too.
+    await seedVotes(db, [
+      { memberId: "member-other", choice: "approve", revisionId: "rev-old" },
+      { memberId: "member-1", choice: "reject", revisionId: REVISION_ID },
+      { memberId: "member-other-2", choice: "approve", revisionId: REVISION_ID },
+    ]);
+    await db.collection(BALLOT_TALLIES).insertOne({
+      ballotId: BALLOT_ID,
+      revisionId: "rev-old",
+      approve: 2,
+      abstain: 0,
+      reject: 0,
+      total: 2,
+      updatedAt: new Date(),
+    });
+    await db.collection(BALLOT_TALLIES).insertOne({
+      ballotId: BALLOT_ID,
+      revisionId: REVISION_ID,
+      approve: 1,
+      abstain: 0,
+      reject: 0,
+      total: 1,
+      updatedAt: new Date(),
+    });
+    await updateBallotTallyProjection(db, {
+      ballotId: BALLOT_ID,
+      revisionId: REVISION_ID,
+      choice: "reject",
+      hadPreviousVote: true,
+      previousChoice: "approve",
+      previousRevisionId: "rev-old",
+    });
+    const oldRow = (await db.collection(BALLOT_TALLIES).findOne({
+      revisionId: "rev-old",
+    }))!;
+    const newRow = (await db.collection(BALLOT_TALLIES).findOne({
+      revisionId: REVISION_ID,
+    }))!;
+    assert.deepEqual(
+      { approve: oldRow.approve, reject: oldRow.reject, total: oldRow.total },
+      { approve: 1, reject: 0, total: 1 },
+    );
+    assert.deepEqual(
+      { approve: newRow.approve, reject: newRow.reject, total: newRow.total },
+      { approve: 1, reject: 1, total: 2 },
+    );
+  });
+
   it("rebuilds from votes when the row is missing, scoped to the revision", async () => {
     const db = createMemoryDb();
     await seedVotes(db, [

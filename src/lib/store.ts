@@ -2750,12 +2750,14 @@ async function upsertStoredVote(
   votes: VoteTally;
   hadPreviousVote: boolean;
   previousChoice: VoteChoice | null;
+  previousRevisionId: string | null;
 }> {
   const sessionOpts = session ? { session } : undefined;
   const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
   const now = new Date();
   let hadPreviousVote = false;
   let previousChoice: VoteChoice | null = null;
+  let previousRevisionId: string | null = null;
   if (cryptoConfig?.mode === "encrypt") {
     const encryptedFields = buildEncryptedVoteFields(cryptoConfig, {
       ...input,
@@ -2778,6 +2780,10 @@ async function upsertStoredVote(
     )) as (VoteRecord & { _id?: ObjectId }) | null;
     if (existing?._id) {
       hadPreviousVote = true;
+      previousRevisionId =
+        typeof existing.revisionId === "string"
+          ? existing.revisionId
+          : null;
       try {
         previousChoice = decodeStoredVote(
           existing as Record<string, any>,
@@ -2829,6 +2835,8 @@ async function upsertStoredVote(
     )) as (VoteRecord & { _id?: ObjectId }) | null;
     if (before) {
       hadPreviousVote = true;
+      previousRevisionId =
+        typeof before.revisionId === "string" ? before.revisionId : null;
       previousChoice =
         before.choice === "approve" ||
         before.choice === "abstain" ||
@@ -2849,7 +2857,7 @@ async function upsertStoredVote(
     else votes.reject += 1;
     votes.total += 1;
   }
-  return { votes, hadPreviousVote, previousChoice };
+  return { votes, hadPreviousVote, previousChoice, previousRevisionId };
 }
 
 export async function castVote(
@@ -2958,6 +2966,7 @@ export async function castVote(
       choice,
       hadPreviousVote: votes.hadPreviousVote,
       previousChoice: votes.previousChoice,
+      previousRevisionId: votes.previousRevisionId,
       cryptoConfig,
     });
     return { choice, votes: votes.votes, amendmentId };
@@ -3109,6 +3118,7 @@ export async function castVote(
     choice,
     hadPreviousVote: committed.hadPreviousVote,
     previousChoice: committed.previousChoice,
+    previousRevisionId: committed.previousRevisionId,
     cryptoConfig,
   });
   return { choice, votes: committed.votes };
