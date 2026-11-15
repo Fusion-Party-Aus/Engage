@@ -28,6 +28,7 @@ describe("decoupled ballots, formal decisions, and governance provenance", () =>
       kind: "policy",
       stage: "decide",
       ballotRevisionId: "rev-1",
+      ballotClosedAt: now,
       publicationScope: "national",
       createdAt: now,
       updatedAt: now,
@@ -69,7 +70,23 @@ describe("decoupled ballots, formal decisions, and governance provenance", () =>
         err instanceof BallotDomainError && err.code === "BALLOT_REVISION_CONFLICT",
     );
 
-    // Formal decision certifies the ballot and cannot be overwritten
+    // Formal decision certifies the ballot and cannot be overwritten. With no
+    // votes the computed outcome is unsuccessful, so a successful result needs
+    // an explicit reason.
+    await assert.rejects(
+      recordFormalDecision(db, {
+        ballotId: "proposal:POL-MULTI",
+        matterId: "POL-MULTI",
+        revisionId: "rev-1",
+        result: "successful",
+        decisionEventId: "dec-multi-1",
+        recordedBy: "admin-1",
+        now,
+      }),
+      (err: unknown) =>
+        err instanceof BallotDomainError &&
+        err.code === "RESULT_OVERRIDE_REASON_REQUIRED",
+    );
     const decision = await recordFormalDecision(db, {
       ballotId: "proposal:POL-MULTI",
       matterId: "POL-MULTI",
@@ -78,6 +95,8 @@ describe("decoupled ballots, formal decisions, and governance provenance", () =>
       decisionEventId: "dec-multi-1",
       recordedBy: "admin-1",
       now,
+      // No votes exist, so the computed outcome is unsuccessful (D9).
+      overrideReason: "Procedure test: certification mechanics with no cast votes.",
     });
     assert.equal(decision.result, "successful");
 

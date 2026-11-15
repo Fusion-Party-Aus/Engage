@@ -258,6 +258,23 @@ export function loadBallotCryptoConfig(
 }
 
 /**
+ * Load ballot keys for read-only display paths.
+ *
+ * A misconfigured key ring must not fail a page that renders no encrypted votes.
+ * Returns `null` on invalid or incomplete configuration; encrypted votes then
+ * fail loudly at decode time and are never silently omitted from a tally.
+ */
+export function loadBallotCryptoConfigForRead(
+  env: Partial<PlatformEnv> | Record<string, string | undefined>,
+): BallotCryptoConfig | null {
+  try {
+    return loadBallotCryptoConfig(env);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Derive a deterministic, domain-separated HMAC-SHA-256 blind index for `(ballotId, memberId)`.
  * Including `ballotId` prevents cross-ballot correlation from a database-only snapshot.
  */

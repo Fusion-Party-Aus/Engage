@@ -3,6 +3,7 @@ import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { branchesWithPermission, hasPermission } from "../../../../lib/rbac.ts";
 import { getProposalDetail, isGovernanceResolution } from "../../../../lib/store.ts";
+import { proposalBallotResultFilter } from "../../../../lib/ballots.ts";
 import { buildProposalPdfReport } from "../../../../lib/proposal-pdf.ts";
 
 export const prerender = false;
@@ -46,7 +47,7 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
 
   const [branches, ballotResult, rawPolicyRecord, ballotBindEvent] = await Promise.all([
     db.collection("branches").find({}).toArray(),
-    db.collection("ballot_results").findOne({ proposalId: proposal.proposalId }),
+    db.collection("ballot_results").findOne(proposalBallotResultFilter(proposal.proposalId)),
     db.collection("policy_registry").findOne({ proposalId: proposal.proposalId }),
     db
       .collection("ballot_binding_events")
@@ -79,6 +80,16 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
             : undefined,
           recordedAt: ballotResult.recordedAt
             ? new Date(String(ballotResult.recordedAt))
+            : undefined,
+          computedResult: ballotResult.computedResult
+            ? String(ballotResult.computedResult)
+            : undefined,
+          overrideReason:
+            typeof ballotResult.override?.reason === "string"
+              ? ballotResult.override.reason
+              : undefined,
+          ruleBasis: ballotResult.ruleBasis
+            ? String(ballotResult.ruleBasis)
             : undefined,
         }
       : null,

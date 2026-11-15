@@ -283,6 +283,11 @@ export interface VoteTally {
 export interface ProposalSummaryView extends ProposalRecord {
   commentCount: number;
   votes: VoteTally;
+  /**
+   * Set only when a display read opted into tolerating unreadable votes. The
+   * tally then covers readable votes only and callers must surface the gap.
+   */
+  unreadableVoteCount?: number;
 }
 
 export type ContributionFeedbackStatus =

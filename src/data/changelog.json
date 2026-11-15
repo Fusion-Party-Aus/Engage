@@ -1,45 +1,214 @@
 [
   {
-    "hash": "71d1903",
+    "hash": "37f1fa4",
     "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Include registry filter fix in the snapshot"
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Record stray-reason refusal and display degradation",
+    "details": "Document that a reason supplied for a matching result is refused rather than dropped, that a broken key ring degrades admin displays to an explicit unavailable state with unreadable votes counted while certification stays strict, and keep the Terms-of-Use pointer and per-ballot closure precedence accurate. Refs #28."
   },
   {
-    "hash": "b1bafb9",
+    "hash": "20e7e99",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "legal",
+    "summary": "Scope the outcome rule to ordinary Yes/No ballots",
+    "details": "Say that the computed simple-majority rule applies to ordinary Yes/No ballots on a matter, and that amendment endorsement ballots follow a separate procedure recorded by an authorised officer. The publication status and the inactive acceptance gate are unchanged; this stays inside the existing unreleased Terms version 1.1. Refs #28, #40."
+  },
+  {
+    "hash": "d177f27",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Cover closure precedence, per-ballot results and stray reasons",
+    "details": "Add pure cases for closure precedence (ballot row before matter) and outcome labels, and replica-set cases proving an unnecessary override reason is refused rather than silently dropped, that display reads tolerate unreadable votes while strict reads still fail, and that primary and sibling results resolve to their own ballots. Refs #28."
+  },
+  {
+    "hash": "ccc599d",
     "date": "2026-11-15",
     "type": "fix",
     "category": "fix",
-    "scope": "policies",
-    "summary": "Clear search and branch filters together in the registry"
+    "scope": "admin",
+    "summary": "Derive the result and closure state from the balloted record",
+    "details": "Use the shared closure rule on both canvassing surfaces and the oversight page so the form is offered exactly when certification would accept it, including the case where a sibling ballot's close time differs from the matter's. Look up recorded results by the primary ballot, show \"N unreadable\" when the display tally is partial, and render computed outcomes in title case alongside recorded results. Refs #28."
   },
   {
-    "hash": "04787cc",
+    "hash": "65a017b",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Key results by ballot, share closure state and reject stray override reasons",
+    "details": "Add `proposalBallotResultFilter` so the result attached to a matter's primary ballot is addressed by `ballotId` (legacy results without a ballotId still resolve). Apply it to the admin workspace, the proposal PDF, the public proposal and policy pages and the matter read model, so a result on one ballot no longer shadows another. Add `resolveBallotClosure` as the single closure rule used by the server gate and the pages: the addressed ballot's own status/close time first, the matter as the fallback. Add `ballotOutcomeLabel` for consistent title-case rendering and fix the quadratic vote grouping in `readBoundBallotTallies`. Refuse a written `overrideReason` when the result already matches the computed outcome (`RESULT_OVERRIDE_REASON_UNEXPECTED`, 400) instead of accepting it once and then failing an identical retry, so a reason is never silently discarded. Refs #28."
+  },
+  {
+    "hash": "c7a0303",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Let display reads degrade instead of failing on unreadable votes",
+    "details": "Add an opt-in `tolerateUnreadableVotes` read mode to `listProposals` and `getProposalDetail`. Admin pages use it so a broken key ring renders an explicit \"decryption unavailable\" state instead of returning 500, and affected rows carry `unreadableVoteCount` so the missing votes are counted and shown rather than quietly dropped. Every other read keeps today's loud failure, and certification is untouched. Refs #28."
+  },
+  {
+    "hash": "0177f7f",
     "date": "2026-11-15",
     "type": "chore",
     "category": "ops",
     "scope": "changelog",
-    "summary": "Refresh public changelog for policy registry work"
+    "summary": "Include the final verification commits"
   },
   {
-    "hash": "175df5d",
+    "hash": "2c7be22",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the second-pass review fixes"
+  },
+  {
+    "hash": "078aa3e",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Correct the legal pointer and merge wording",
+    "details": "The privacy review said the Privacy Policy describes the computed rule; the Privacy Policy is deliberately unchanged and the correction is in the Terms of Use. Correct that sentence, rename the lifecycle row so it describes the zero-vote case rather than implying every untallied result needs an override, qualify the display-versus-enforcement claim, and state per-ballot closure. Align the tracker and handover on \"integrated, branch only; not merged\". Refs #28, #40."
+  },
+  {
+    "hash": "1d653f7",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Cover per-ballot closure, zero-vote overrides and the status line",
+    "details": "Prove an open second ballot on a closed matter is refused while its closed sibling certifies, and that a zero-vote ballot records successful only with a written reason. Pin the tally-state precedence (unbound before unreadable), distinguish missing keys from unreadable votes, and assert display key loading degrades to null instead of throwing. Guard the UI regression: the announcement is not a `[role=\"status\"]`, both pages use `formStatusRegion`, and that helper returns the visible line when the hidden node comes first in the form. Refs #28."
+  },
+  {
+    "hash": "2f57cdd",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Keep the visible result status and render every tally state",
+    "details": "The hidden override announcement was the first `[role=\"status\"]` in the result form, so `querySelector('[role=\"status\"]')` returned it and every success or refusal was written to an invisible node. The announcement now uses `aria-live=\"polite\"` without `role=\"status\"`, and both submit handlers target the visible line through `formStatusRegion`, so feedback remains sighted-visible and still announced. Show the computed outcome for a zero-vote ballot instead of claiming it is not computable, which also restores the override field for `Successful` and `Inconclusive`. Add explicit states for unavailable decryption keys and separate unreadable votes, and withhold the form while the tally is defective rather than offering an action the server will refuse. Refs #28."
+  },
+  {
+    "hash": "6b15c26",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Judge each ballot's own close time and keep zero-vote outcomes computable",
+    "details": "Read the addressed ballot's row before the matter so a second, still-open ballot on a closed matter is refused instead of inheriting the matter's closure. The matter fields remain the fallback for legacy ballots with no ballot row. Return the computed outcome for every computable tally, including a zero-vote ballot (still \"unsuccessful\" under D9), so the UI can require an override instead of silently withholding the reason field. Separate a missing key ring from unreadable votes: the display summary now reports `decryption-unavailable` on its own, with unbound votes stated first because that is the cause an officer can act on. Add a tolerant key loader for read-only paths so a broken key ring no longer fails a page that renders no encrypted votes; signed-in list and detail reads use it, while casting and certification stay strict. The result route now reports a clean BALLOT_DECRYPTION_UNAVAILABLE (503) instead of leaking key-configuration detail. Refs #28."
+  },
+  {
+    "hash": "dc9e48a",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the review fixes in the public snapshot"
+  },
+  {
+    "hash": "1c723de",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Warm the route database before asserting on it",
+    "details": "The result-API case resolved the application client only inside the route. A transient connect failure could make the development fallback serve the in-memory database, so the route could not see the fixture and the test failed with a confusing authorisation-style error. Resolve the application client in the test and assert the fixture is visible before exercising the route, so a real connectivity failure fails loudly instead of degrading silently. Refs #28."
+  },
+  {
+    "hash": "27dec58",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Regenerate the public changelog snapshot"
+  },
+  {
+    "hash": "f01ce2a",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Record closed-ballot certification and the bound tally",
+    "details": "Document that certification requires a closed ballot, that unbound votes and unreadable votes are refused, that inconclusive is always an explicit override, and that amendment endorsement ballots remain officer-supplied because O2/D18 are undecided. Correct the failure table so a zero-vote unsuccessful result needs no override, refresh the tracker, known gaps and handover status, and point the agent guide at the corrected Terms section. Refs #28."
+  },
+  {
+    "hash": "59f297a",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "legal",
+    "summary": "Correct the terms to describe computed ballot outcomes",
+    "details": "Terms of Use §9 claimed Engage \"does not calculate or apply a passing threshold\", which is no longer true. Describe the versioned simple-majority-d9-v1 rule, the tie and zero-vote result, the treatment of abstentions, the absence of quorum or turnout, and the explicit, reasoned and audited override. The acceptance gate stays inactive: the document remains owner-authorised with no effective date. The incorrect sentence was in the Terms of Use, not the Privacy Policy, so the Privacy Policy and its version are unchanged. Roll the Terms to version 1.1 and record the correction and the #40 follow-up in the privacy review. Refs #28, #40."
+  },
+  {
+    "hash": "634395c",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Cover closure, the bound set and override integrity",
+    "details": "Close fixtures exactly as the scheduler does before certifying, and pin the override rule in the two pre-existing suites by asserting the refusal when the reason is removed rather than only supplying one. Add replica-set cases for a live ballot that cannot be certified and the changed closed tally that is then certified, a vote on another revision or with no revision, amendment-ballot votes excluded from the matter tally, an unreadable encrypted vote, missing decryption keys, an over-length override reason and a retry that rewrites the recorded reason. Cover the form focus/announcement behaviour and the PDF computed/override rows. Refs #28."
+  },
+  {
+    "hash": "28a034e",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
-    "scope": "policies",
-    "summary": "Branch-scoped registry and changes to adopted policy (#89, #37)",
-    "details": "The registry is now navigable by authority and topic, and adopted policy can change through a proposal instead of being frozen at publication. Registry: - policy addresses become /policies/<branch>/<slug>/; internal IDs stay stable and legacy /policies/<id>/ addresses redirect to the canonical path; - the registry collates by adopting branch, then by the branch's own topics, so 41 Victorian policies are browsable rather than one flat list; - each branch has its own registry page with adoption basis, source and current/past tabs; a search and branch filter remain available; - rows show title, two-line summary, topic, branch and adoption origin; - imported records show their authority, import date and source. Post-ratification lifecycle: - a proposal may declare targetPolicyId and amend/replace/repeal; the target is fixed at creation against the exact published revision; - the policy page shows the proposed changes separately and never implies a draft has changed adopted policy; - ratification of a repeal records the deciding proposal; an amendment or replacement supersedes the predecessor only when the successor is published, so the public registry never shows a gap; - imported and Engage-ratified lineage read together in the same history."
+    "scope": "admin",
+    "summary": "Show the enforced tally and recorded outcomes",
+    "details": "Derive the admin outcome basis from the same bound tally that certification enforces, so a page can no longer show a tally the server will not count. A zero-vote ballot reads \"No votes yet — outcome not yet computable\" instead of \"Unsuccessful\", and an unbound or unreadable tally is named instead of guessed. An open ballot shows when voting closes instead of an unusable result form; once a result exists both admin surfaces render the recorded outcome, computed result, tally and override reason instead of a re-submittable form. Revealing the override field moves focus to it and announces the requirement to assistive technology. Show overridden outcomes in Ballots & decisions with the reason available, and add the computed result, rule basis and override to the proposal PDF report. Refs #28."
   },
   {
-    "hash": "cb08098",
+    "hash": "ca7611f",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
-    "scope": "policies",
-    "summary": "Import adopted branch policy with explicit provenance (#89)",
-    "details": "A branch may already hold policy adopted outside Engage. The import treats that as a provenance operation, not a proposal flow: - reads a branch policy feed and validates every record before writing; - requires an explicit authority basis and fails closed without one; - writes a published, adopted registry record plus an immutable policy_revision holding the exact source document and content hash; - records the source, authority basis, timestamps and provenance lineage; - reports created, unchanged, changed, conflicting, invalid and missing records without overwriting anything; - never republishes a record that was withdrawn, superseded or repealed. Dry-run and re-run are safe: only 'create' entries write, every write is keyed, and a changed source is a review item for the change lifecycle rather than a silent rewrite."
+    "scope": "ballots",
+    "summary": "Certify only a closed ballot from a consistent bound tally",
+    "details": "Refuse certification while a ballot can still accept votes. A result is accepted when the ballot has a closure marker, its close time has passed, or the system has already closed it; a live ballot returns BALLOT_NOT_CLOSED and a ballot with no recorded close is refused rather than assumed closed, because a later vote could contradict an early certification. Tally only votes bound to the ballot and exact revision, and treat the rest as a ballot defect instead of ignoring them: unbound or mismatched-revision votes now return BALLOT_TALLY_UNBOUND_VOTES, unreadable encrypted votes return BALLOT_TALLY_UNREADABLE, and missing or invalid decryption keys return BALLOT_DECRYPTION_UNAVAILABLE (503). The tally query reads only the fields the check needs. Reject an override reason longer than 1000 characters instead of truncating audit evidence, and treat a retry that changes the recorded override reason as a conflict rather than an idempotent success. The refusal message now names the computed outcome and says that any other result, including inconclusive, requires a written reason. Refs #28."
+  },
+  {
+    "hash": "3c5f2d1",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Regenerate the public changelog snapshot"
+  },
+  {
+    "hash": "d60c3f5",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Record computed ballot outcome validation",
+    "details": "Describe the computed Yes-versus-No check, its `simple-majority-d9-v1` basis, the stored tally and the audited override in the lifecycle, API and agent guides. Mark known gap 10 as partly resolved and keep #28/L1 Partial because the abstention denominator (O1), quorum and ranked choice remain undecided."
+  },
+  {
+    "hash": "3f10872",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Cover computed outcomes, overrides and stored evidence",
+    "details": "Add rule-level cases for approval, rejection, a tie, zero votes and abstention-heavy ballots, plus the two admin form behaviours that reveal and require an override reason. Add real-MongoDB replica-set coverage for the parts that prove persistence and the ordered result write: the tally and rule basis stored on the result, rejection of a contradiction without a reason, an audited override, idempotent retries, refused replacement, encrypted-ballot certification through the decryption path, and a historical result that stays readable and unrewritten. The result API is exercised end to end with the dev session. Refs #28."
+  },
+  {
+    "hash": "8f2998a",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballots",
+    "summary": "Validate recorded outcomes against the bound tally",
+    "details": "Record a formal ballot outcome only after comparing the officer's result with the outcome computed from the votes bound to that ballot and immutable revision (#28). The comparison is deliberately limited to what the decision register settles: Yes greater than No approves and a tie does not (D9); abstentions are recorded and excluded rather than given a denominator (D10, O1); no quorum, turnout or minimum-participation threshold applies (D8). The basis is versioned as `simple-majority-d9-v1`. A contradicting result is refused unless the officer supplies a written reason, and is then stored as an explicit override. The result keeps the tally at certification, the rule basis and the computed result; the `decision.recorded` event records the actor, reason, computed result and recorded result alongside the existing atomic result and ballot certification. Identical retries remain idempotent, conflicting replacements are refused, and historical results are returned unchanged and never rewritten. Both admin result forms now show the computed outcome and its tally before submission and require the override reason when the chosen result contradicts it, using the shared Field, Textarea and Badge primitives."
   },
   {
     "hash": "2a52ef4",
@@ -507,157 +676,5 @@
     "scope": "engagement",
     "summary": "Add proposal rankings, ballot deadlines and member reminders",
     "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
-  },
-  {
-    "hash": "0b8b375",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "settings",
-    "summary": "Save the configured source repository URL"
-  },
-  {
-    "hash": "6fad513",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record granular analytics improvements"
-  },
-  {
-    "hash": "2167573",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "analytics",
-    "summary": "Measure Engage navigation and participation outcomes"
-  },
-  {
-    "hash": "e41ac7d",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "analytics",
-    "summary": "Initialize Plausible tracking on production"
-  },
-  {
-    "hash": "71a98bb",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "analytics",
-    "summary": "Install Plausible tracker package"
-  },
-  {
-    "hash": "b98af1d",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "time",
-    "summary": "Display time in user's local timezone"
-  },
-  {
-    "hash": "5de3c91",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "participation",
-    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
-  },
-  {
-    "hash": "46f1b9b",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Fix error on branch pages, and seed branches to database"
-  },
-  {
-    "hash": "c14ee07",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
-  },
-  {
-    "hash": "31e34df",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
-  },
-  {
-    "hash": "ac9bb41",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "deploy",
-    "summary": "Automate production deployment gated on staging health"
-  },
-  {
-    "hash": "c6edce0",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "audit",
-    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
-  },
-  {
-    "hash": "3098b44",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
-  },
-  {
-    "hash": "3512e0a",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "workspaces",
-    "summary": "Overhaul My Engage activity dashboard and Project Detail admin workspaces"
-  },
-  {
-    "hash": "f58e150",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Redesign proposal browse list and detail workspace with immediate next-action banner"
-  },
-  {
-    "hash": "ff1f0a8",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "walkthrough",
-    "summary": "Add 60-second factual walkthrough, public/member matrix, and Docker handover guide"
-  },
-  {
-    "hash": "0a291c4",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "editor",
-    "summary": "Support inline markdown images and Add Image helper in proposal composers"
   }
 ]

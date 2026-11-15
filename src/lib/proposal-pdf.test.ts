@@ -94,12 +94,19 @@ test("buildProposalPdfReport produces a valid PDF distinguishing open vs complet
       result: "successful",
       decisionEventId: "NEC-2026-11",
       recordedAt: new Date("2026-11-12T09:00:00.000Z"),
+      computedResult: "unsuccessful",
+      overrideReason: "Returning Officer upheld the disputed ballots.",
+      ruleBasis: "simple-majority-d9-v1",
     },
   });
 
   const completedText = Buffer.from(completedBytes).toString("latin1");
   assert.ok(completedText.includes("Governance resolution"));
   assert.ok(completedText.includes('outcome recorded as "successful"'));
+  assert.ok(completedText.includes("Computed outcome"));
+  assert.ok(completedText.includes("simple-majority-d9-v1"));
+  assert.ok(completedText.includes("Officer override"));
+  assert.ok(completedText.includes("Returning Officer upheld the disputed ballots."));
   assert.ok(completedText.includes("Implemented by NEC."));
   assert.ok(!completedText.includes("interim totals"));
 });
