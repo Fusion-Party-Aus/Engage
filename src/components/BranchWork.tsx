@@ -203,7 +203,7 @@ export default function BranchWork(props: Props) {
     <div className="grid gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-[70ch] text-sm text-muted-foreground">
-          Followers choose to see a branch’s activity. Verified members are recognised by an authorised administrator.
+          Following gives people branch updates. Branch membership is separate and determines eligibility for branch ballots.
           Following never grants member-only voting rights.
         </p>
         {isAdmin && (
@@ -386,7 +386,7 @@ function BranchesPanel({ branches, mine, setBranches, byId, countsFor, activity,
           <div className="grid gap-5 p-5">
             <div className="grid gap-3 sm:grid-cols-3">
               <Metric value={c.followers} label="Following this branch" hint="People who chose to see its activity" />
-              <Metric value={c.members} label="Verified members" hint="Recognised by an authorised administrator" />
+              <Metric value={c.members} label="Verified members" hint="Active branch memberships" />
               <Metric value={c.administrators} label="Branch administrators" hint="Delegated governance access" />
             </div>
             <section aria-labelledby="branch-activity-heading" className="rounded-lg border px-4 py-3">
@@ -641,7 +641,7 @@ function PeoplePanel({
           <div className="mr-auto">
             <h2 id="people-heading" className="text-base font-semibold">People</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Followers chose to see this branch. Verified members can take part in member-restricted activities.
+              Followers receive branch updates. Active branch membership determines eligibility for branch ballots.
             </p>
           </div>
           <div className="w-full sm:w-56">

@@ -68,10 +68,10 @@ const date=(v:any)=>v ? new Date(v).toLocaleString('en-AU',{timeZone:'Australia/
     <p class="engagement-caption">Each message appears in one current state. Acceptance does not confirm inbox delivery. Rates are unavailable until at least one message is accepted.</p>
    </section>
    <section class="engagement-card" aria-labelledby="participation-heading">
-    <header><h2 id="participation-heading">Voting participation</h2><p>All tracked cohorts with a complete observation window</p></header>
+    <header><h2 id="participation-heading">Voting participation</h2><p>Member groups with the full follow-up period recorded</p></header>
     <dl class="engagement-metrics">
-     <div><dt>Verified → first vote within 7 days</dt><dd>{funnel ? percentage(funnel.sevenDayConverted,funnel.sevenDayEligible) : 'Unavailable'}</dd><small>{funnel ? `${funnel.sevenDayConverted} of ${funnel.sevenDayEligible} mature verified accounts` : 'Data could not be loaded'}</small></div>
-     <div><dt>Returned to vote within 30 days</dt><dd>{funnel ? percentage(funnel.thirtyDayReturned,funnel.thirtyDayEligible) : 'Unavailable'}</dd><small>{funnel ? `${funnel.thirtyDayReturned} of ${funnel.thirtyDayEligible} mature first-time voters` : 'Data could not be loaded'}</small></div>
+     <div><dt>Verified → first vote within 7 days</dt><dd>{funnel ? percentage(funnel.sevenDayConverted,funnel.sevenDayEligible) : 'Unavailable'}</dd><small>{funnel ? `${funnel.sevenDayConverted} of ${funnel.sevenDayEligible} verified accounts with seven days of follow-up` : 'Data could not be loaded'}</small></div>
+     <div><dt>Returned to vote within 30 days</dt><dd>{funnel ? percentage(funnel.thirtyDayReturned,funnel.thirtyDayEligible) : 'Unavailable'}</dd><small>{funnel ? `${funnel.thirtyDayReturned} of ${funnel.thirtyDayEligible} first-time voters with 30 days of follow-up` : 'Data could not be loaded'}</small></div>
     </dl>
     <p class="engagement-caption">A return requires a successful voting day at least 24 hours after the first vote and within 30 days. Opening the site or casting several votes in one session does not count.</p>
     <details class="engagement-availability"><summary>Was there a new ballot to vote on?</summary><p>Historical ballot availability was not recorded for each member. These groups cannot yet be measured reliably:</p><dl class="engagement-metrics"><div><dt>Eligible new ballot available</dt><dd>Unavailable</dd></div><div><dt>No eligible new ballot available</dt><dd>Unavailable</dd></div><div><dt>Availability unknown</dt><dd>{funnel?.thirtyDayEligible ?? 'Unavailable'}</dd></div></dl><p>Do not interpret a missing return as disengagement. The overall return rate includes members whose opportunity to return is unknown.</p></details>

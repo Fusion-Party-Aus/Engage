@@ -7,7 +7,7 @@ Updated 15 November 2026. Source of truth: pushed branch and this document, not 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review`, based on main `20dfa90`.
 - PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
-- Next task: batch 7b, roles/members/branches/reports/settings/migrations/Sense Box/engagement administration. Then batch 8 final API-error/legal/metadata sweep.
+- Next task: batch 8, final API/form-error, legal/privacy, metadata and whole-site terminology sweep. Reconcile latest main and run final checks. Public Sense Box implementation is separately tracked in #101.
 - This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
 
 ## Recovery and scope
@@ -38,7 +38,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 5b | Onboarding/settings, branch preferences, notification controls | Delivered in `9515e90`; remote tree verified |
 | 6 | Email templates/subjects, push/digest messages and unsubscribe flows | Delivered in `6a52a2a`; remote tree verified |
 | 7a | Admin dashboard, proposal registers/detail, ballots and policy ratification/publication | Delivered in `7308475`; remote tree verified |
-| 7b | Roles/members/branches/reports/settings/migrations/Sense Box/engagement admin | Next |
+| 7b | Roles/members/branches/reports/settings/migrations/Sense Box/engagement admin | Validated; publishing checkpoint |
 | 8 | API/form error responses shown to users, legal-copy consistency, metadata, empty/loading states and whole-site terminology sweep | Not reviewed |
 
 A page touched in batch 1 has NOT been reviewed in full. Audit `src/pages`, `src/components`, email libraries, legal/config data and API errors in later batches; do not rewrite policy motion text or imported adopted wording as interface copy.
@@ -58,7 +58,7 @@ Batch 1: `pnpm install --frozen-lockfile`; `pnpm check` passes (324 files, zero 
 
 ## Outstanding questions
 
-- All-public access direction needs an explicit migration/access-policy implementation, including previously restricted/archived records. Sense Box also promises private organiser review in its consent notice and API gates; do not publish previously private submissions or silently rewrite that consent. This PR does not expose them.
+- All-public access direction needs an explicit migration/access-policy implementation, including previously restricted/archived records. Public Sense Box is explicitly confirmed by the maintainer (D36, #101). Current consent/API still promise private organiser review; preserve historical submissions and implement new public consent/listing separately. This PR does not expose them.
 - Reclaim and legacy national provenance are separate (D33); never imply legacy national policies are being re-ratified. The guide now explains that references alone do not establish adoption.
 - Review legal text carefully; do not silently change privacy promises or enable acceptance gates.
 - Production deployment has not been performed.
@@ -97,7 +97,7 @@ Validation: full `pnpm test` passes: 391 passed, 35 skipped (426 total); no real
 
 Reviewed policy index, branch-policy route, shared registry/detail, branch directory and Sense Box (including success/error copy). Adoption explanations allow authorised branch imports, without pretending every record passed an Engage ballot. Branch-registry introduction no longer double-counts Engage-ratified records as executive-adopted policy. Proposed change notices retain the distinction between repeal at ratification and amendment/replacement at publication. Missing source proposal now means “not recorded”, not proof there was no proposal. No adopted policy wording/import data altered.
 
-Sense Box asks “Where does this apply?” because National is a valid destination. Removed guessed completion time. Private-submission/consent promises and authorised organiser gates retained; their conflict with all-public direction is an explicit access-policy question. Public branch-directory counts are described as proposals, not ideas in a particular stage.
+Sense Box asks “Where does this apply?” because National is a valid destination. Removed guessed completion time. Private-submission/consent promises and authorised organiser gates retained; the public-default direction is now explicitly confirmed (D36, #101), with access implementation still pending. Public branch-directory counts are described as proposals, not ideas in a particular stage.
 
 Validation: typecheck and production build pass; focused policy-registry/change/import/Sense Box tests pass (37 passed, none skipped); diff whitespace and raw-control audit pass (hidden history input only). No browser/mobile claim; no controls/CSS changed. PolicyDetail status labels avoid claiming an Implement-stage proposal has necessarily passed or is only awaiting publication; actual decision record remains authoritative.
 
@@ -124,3 +124,11 @@ Validation: focused template/lifecycle/member-notification/PWA/engagement suites
 Reviewed administration dashboard and proposal/ballot/policy registers/detail plus BallotOutcomeBasis. Revised authority and ratification explanations against D13–D20; administrative access is not unrestricted political authority or ballot eligibility. Retained exact wording references, event references, override reasons and consequential confirmations where officers need them. Changed “separate decisions” to separate recorded procedural steps. Registry copy recognises branch imports. Proposal editor labels/examples invite background/evidence rather than design specifications. No certification, binding, override, publication or archive behaviour changed.
 
 Validation: 40 focused ballot-outcome/governance-API/policy-change/classification tests passed, none skipped; typecheck (0 errors/warnings, 20 hints), build and whitespace pass. Raw-control matches are hidden inputs only. Browser limitation remains. Legacy binding controls and their safeguards are deliberately retained; do not infer that the copy authorises reinterpretation of recorded votes.
+
+## Batch 7b handover
+
+Reviewed remaining admin routes, RolesManager, BranchWork, PlatformSettings, AdminMigrations and reporting components. Retained already-clear operational/migration and scope explanations. Simplified membership-review, reports and participation follow-up wording. Corrected settings’ false promise that the inert pulse-poll flag displays a working poll, and removed a claim that documentation cannot drift. Backup/handover defaults no longer imply encryption/recovery guarantees or that secrets are version-controlled. Raw permission-key presentation/native revocation prompt remain existing UX work (#41/#59); this copy review does not redesign authority controls.
+
+Maintainer follow-up explicitly confirms publicly readable Sense Box, not only public intake. Recorded D36 and #101 with public-listing/consent/minimisation tests and protection of historical private submissions. Direction is settled; implementation remains separate from this copy PR. No private submissions exposed.
+
+Validation: 35 focused settings/branch-access/RBAC/admin-reporting/engagement tests passed, none skipped. Typecheck/build, whitespace and raw-control audits pass (hidden role inputs only). No browser claim. No role catalogue, permission checks, reporting formula, migration or feature-switch behaviour changed.

@@ -104,7 +104,7 @@ export default function RolesManager({
   } | null>(null);
   const [savingAssign, setSavingAssign] = useState(false);
 
-  // Effective permissions inspector
+  // Check a member’s access
   const [inspectMemberId, setInspectMemberId] = useState(currentMemberId);
   const [effectivePerms, setEffectivePerms] =
     useState<EffectivePermissionsSnapshot | null>(null);
@@ -333,9 +333,7 @@ export default function RolesManager({
             Role definitions
           </CardTitle>
           <CardDescription>
-            Built-in system roles preserve existing governance authority. Create
-            custom roles to delegate routine tasks without granting full
-            administrator access.
+            Use custom roles to delegate specific administrative tasks. A role does not by itself give a member voting rights.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -671,7 +669,7 @@ export default function RolesManager({
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldAlert className="size-4" aria-hidden="true" />
-            Effective permissions inspector
+            Check a member’s access
           </CardTitle>
           <CardDescription>
             Inspect a member&apos;s combined permissions across legacy roles,

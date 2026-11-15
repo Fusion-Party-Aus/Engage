@@ -74,7 +74,7 @@ const FIELD_LABELS: Record<string, string> = {
   primaryCtaLabel: 'Header button label',
   primaryCtaHref: 'Header button link',
   showPrimaryCtaInHeader: 'Header button shown',
-  publicPulsePollEnabled: 'Public sentiment poll trial',
+  publicPulsePollEnabled: 'Public pulse poll (planned)',
   socialLinks: 'Social channels',
   stateSites: 'Branch directory',
 };
@@ -289,14 +289,14 @@ function FeaturesSection({ config, save, onDirty, ask }: SectionProps) {
   );
   useEffect(() => onDirty(s.dirty), [s.dirty]);
   return (
-    <SectionCard id="features" title="Features" description="Turn optional public features on or off without a new release.">
+    <SectionCard id="features" title="Features" description="Settings reserved for planned public features.">
       <form onSubmit={s.submit} noValidate>
         <div className="p-5">
           <div className="max-w-[40rem]">
             <ToggleRow
               id="publicPulsePollEnabled"
               label="Public sentiment poll (trial)"
-              description="Shows a clearly labelled, non-binding Agree / Disagree indicator for the public next to proposals. It never counts as a member vote, and member ballots are unchanged."
+              description="Reserved for a planned public opinion poll. Saving this setting does not display a poll yet; member ballots are unchanged."
               checked={s.draft.publicPulsePollEnabled}
               onChange={(v) => s.setDraft({ publicPulsePollEnabled: v })}
             />
@@ -500,7 +500,7 @@ function OperationsSection({ config }: SectionProps) {
     <SectionCard id="operations" title="Operations" description="Public transparency about how Engage is run. This is maintained alongside the system itself, so it is shown here but not edited here.">
       <div className="grid gap-4 p-5 text-sm">
         <p className="max-w-[65ch]">
-          The public <a href="/how-it-works/#operations">How it works</a> page describes backups and maintainer handover. That text is written by the maintainers with the deployment, so it cannot drift from what is actually running.
+          The public <a href="/how-it-works/#operations">How it works</a> page explains backups and maintainer handover. Maintainers need to keep it accurate when deployment or recovery procedures change.
         </p>
         <dl className="grid max-w-[40rem] gap-3">
           <div className="grid gap-0.5">
