@@ -38,7 +38,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 5b | Onboarding/settings, branch preferences, notification controls | Delivered in `9515e90`; remote tree verified |
 | 6 | Email templates/subjects, push/digest messages and unsubscribe flows | Delivered in `6a52a2a`; remote tree verified |
 | 7a | Admin dashboard, proposal registers/detail, ballots and policy ratification/publication | Delivered in `7308475`; remote tree verified |
-| 7b | Roles/members/branches/reports/settings/migrations/Sense Box/engagement admin | Validated; publishing checkpoint |
+| 7b | Roles/members/branches/reports/settings/migrations/Sense Box/engagement admin | Delivered in `bd0f204`; remote tree verified |
 | 8 | API/form error responses shown to users, legal-copy consistency, metadata, empty/loading states and whole-site terminology sweep | Not reviewed |
 
 A page touched in batch 1 has NOT been reviewed in full. Audit `src/pages`, `src/components`, email libraries, legal/config data and API errors in later batches; do not rewrite policy motion text or imported adopted wording as interface copy.
