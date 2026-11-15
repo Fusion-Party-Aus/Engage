@@ -1,5 +1,23 @@
 [
   {
+    "hash": "f4d94d0",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "activity",
+    "summary": "Show the comment's net score, not upvotes alone",
+    "details": "Member activity previously labelled a contribution with its upvote count, which is misleading now that comments can be downvoted. Show the net score as points, consistent with the discussion thread, and keep vote identities out of the feed. Refs #57."
+  },
+  {
+    "hash": "6602f6e",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record atomic comment vote updates",
+    "details": "Refs #57."
+  },
+  {
     "hash": "49a4562",
     "date": "2026-11-16",
     "type": "fix",
@@ -660,21 +678,5 @@
     "category": "feature",
     "scope": "analytics",
     "summary": "Measure Engage navigation and participation outcomes"
-  },
-  {
-    "hash": "e41ac7d",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "analytics",
-    "summary": "Initialize Plausible tracking on production"
-  },
-  {
-    "hash": "71a98bb",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "analytics",
-    "summary": "Install Plausible tracker package"
   }
 ]
