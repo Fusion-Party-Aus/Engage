@@ -1,6 +1,7 @@
 import { recordLifecycle, recordParticipation, notePriorParticipation } from "./member-lifecycle.ts";
 import { loadBallotCryptoConfig, loadBallotCryptoConfigForRead } from "./ballot-crypto.ts";
 import { BALLOTS_COLLECTION, FORMAL_DECISIONS_COLLECTION } from "./ballots.ts";
+import { projectCommittedVoteTally } from "./ballot-tallies.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEvent } from "./governance-relationships.ts";
 import { isPolicyChangeType, PolicyChangeError } from "./policy-change.ts";
@@ -396,6 +397,13 @@ export async function listProposals(
      * every other read keeps failing loudly.
      */
     tolerateUnreadableVotes?: boolean;
+    /**
+     * Public list reads set this to false and overlay the display-only
+     * `ballot_tallies` projection instead. The read then never touches
+     * `proposal_votes` and never decrypts a ballot. Defaults to true so every
+     * other caller keeps the authoritative live tally.
+     */
+    includeVoteTallies?: boolean;
   } = {},
 ): Promise<ProposalSummaryView[]> {
   const rawProposals = await db
@@ -418,26 +426,29 @@ export async function listProposals(
   // Read-only path: a broken key ring must not fail a list that renders no
   // encrypted votes. Encrypted votes still fail loudly at decode time.
   const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
+  const includeVoteTallies = options.includeVoteTallies !== false;
   const [allComments, allVotes] = await Promise.all([
     db
       .collection<CommentRecord>("comments")
       .find({})
       .project({ proposalId: 1, policyId: 1 })
       .toArray(),
-    db
-      .collection<VoteRecord>(PROPOSAL_VOTES)
-      .find({})
-      .project({
-        proposalId: 1,
-        policyId: 1,
-        ballotId: 1,
-        revisionId: 1,
-        amendmentRevisionId: 1,
-        choice: 1,
-        voterBlindIndex: 1,
-        voteEnvelope: 1,
-      })
-      .toArray(),
+    includeVoteTallies
+      ? db
+          .collection<VoteRecord>(PROPOSAL_VOTES)
+          .find({})
+          .project({
+            proposalId: 1,
+            policyId: 1,
+            ballotId: 1,
+            revisionId: 1,
+            amendmentRevisionId: 1,
+            choice: 1,
+            voterBlindIndex: 1,
+            voteEnvelope: 1,
+          })
+          .toArray()
+      : Promise.resolve([] as Array<Record<string, any>>),
   ]);
 
   const commentCounts = new Map<string, number>();
@@ -2735,10 +2746,16 @@ async function upsertStoredVote(
     reason: string;
   },
   session?: ClientSession,
-): Promise<VoteTally> {
+): Promise<{
+  votes: VoteTally;
+  hadPreviousVote: boolean;
+  previousChoice: VoteChoice | null;
+}> {
   const sessionOpts = session ? { session } : undefined;
   const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
   const now = new Date();
+  let hadPreviousVote = false;
+  let previousChoice: VoteChoice | null = null;
   if (cryptoConfig?.mode === "encrypt") {
     const encryptedFields = buildEncryptedVoteFields(cryptoConfig, {
       ...input,
@@ -2760,6 +2777,17 @@ async function upsertStoredVote(
       sessionOpts,
     )) as (VoteRecord & { _id?: ObjectId }) | null;
     if (existing?._id) {
+      hadPreviousVote = true;
+      try {
+        previousChoice = decodeStoredVote(
+          existing as Record<string, any>,
+          cryptoConfig,
+        ).choice;
+      } catch {
+        // The prior choice cannot be read. The projection falls back to a full
+        // recount instead of guessing a delta.
+        previousChoice = null;
+      }
       await votesCol.updateOne(
         { _id: existing._id } as any,
         {
@@ -2779,7 +2807,7 @@ async function upsertStoredVote(
       );
     }
   } else {
-    await votesCol.updateOne(
+    const before = (await votesCol.findOneAndUpdate(
       { ballotId: input.ballotId, memberId: input.memberId },
       {
         $set: {
@@ -2797,8 +2825,17 @@ async function upsertStoredVote(
           updatedAt: now,
         },
       },
-      { upsert: true, ...(sessionOpts ?? {}) },
-    );
+      { upsert: true, returnDocument: "before", ...(sessionOpts ?? {}) },
+    )) as (VoteRecord & { _id?: ObjectId }) | null;
+    if (before) {
+      hadPreviousVote = true;
+      previousChoice =
+        before.choice === "approve" ||
+        before.choice === "abstain" ||
+        before.choice === "reject"
+          ? before.choice
+          : null;
+    }
   }
 
   const allVotes = await votesCol
@@ -2812,7 +2849,7 @@ async function upsertStoredVote(
     else votes.reject += 1;
     votes.total += 1;
   }
-  return votes;
+  return { votes, hadPreviousVote, previousChoice };
 }
 
 export async function castVote(
@@ -2894,7 +2931,7 @@ export async function castVote(
       typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
     const votes = await runInTransaction(db, async (session) => {
       await notePriorParticipation(db, user.memberId, session);
-      const tally = await upsertStoredVote(
+      const stored = await upsertStoredVote(
         db,
         cryptoConfig,
         {
@@ -2911,9 +2948,19 @@ export async function castVote(
         session,
       );
       await recordParticipation(db, user.memberId, new Date(), session);
-      return tally;
+      return stored;
     });
-    return { choice, votes, amendmentId };
+    // The vote has committed. The display projection is written afterwards and
+    // can never fail, delay or alter it.
+    await projectCommittedVoteTally(db, {
+      ballotId,
+      revisionId: amendment.ballotRevisionId,
+      choice,
+      hadPreviousVote: votes.hadPreviousVote,
+      previousChoice: votes.previousChoice,
+      cryptoConfig,
+    });
+    return { choice, votes: votes.votes, amendmentId };
   }
   if (proposal.stage !== "decide") {
     throw new Error("This proposal is not currently in the Decide stage.");
@@ -3001,7 +3048,7 @@ export async function castVote(
     throw new Error("A proposal revision is required before voting can begin.");
   }
   const initialBallotRevisionId = ballotRevisionId;
-  const votes = await runInTransaction(db, async (session) => {
+  const committed = await runInTransaction(db, async (session) => {
     const sessionOpts = session ? { session } : undefined;
     let resolvedRevisionId = initialBallotRevisionId;
     if (lazyBindRevision) {
@@ -3025,7 +3072,7 @@ export async function castVote(
     }
 
     await notePriorParticipation(db, user.memberId, session);
-    const tally = await upsertStoredVote(
+    const stored = await upsertStoredVote(
       db,
       cryptoConfig,
       {
@@ -3052,9 +3099,19 @@ export async function castVote(
       );
 
     await recordParticipation(db, user.memberId, new Date(), session);
-    return tally;
+    return { ...stored, revisionId: resolvedRevisionId };
   });
-  return { choice, votes };
+  // The vote has committed. The display projection is written afterwards and
+  // can never fail, delay or alter it.
+  await projectCommittedVoteTally(db, {
+    ballotId: proposalBallotId(proposal.proposalId),
+    revisionId: committed.revisionId,
+    choice,
+    hadPreviousVote: committed.hadPreviousVote,
+    previousChoice: committed.previousChoice,
+    cryptoConfig,
+  });
+  return { choice, votes: committed.votes };
 }
 
 export async function savePendingVotePreference(

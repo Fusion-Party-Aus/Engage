@@ -1,4 +1,5 @@
 import { ensureDigestCohort } from "./digest-preferences.ts";
+import { ensureBallotTallyIndexes } from "./ballot-tallies.ts";
 import { ensureVoteStorage, PROPOSAL_VOTES } from "./vote-storage.ts";
 import { MongoClient, ObjectId, type ClientSession, type Db } from "mongodb";
 import { createHash } from "node:crypto";
@@ -233,6 +234,7 @@ export async function initializeDatabase(db: Db): Promise<void> {
   ]);
   try {
     await ensureVoteStorage(db);
+    await ensureBallotTallyIndexes(db);
     await Promise.all([
       db
         .collection("proposals")
