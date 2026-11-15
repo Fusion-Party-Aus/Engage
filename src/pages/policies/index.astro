@@ -55,7 +55,7 @@ const tabHref = (history: boolean) => {
   const query = params.toString();
   return query ? `/policies/?${query}` : '/policies/';
 };
-const clearHref = branchFilter ? `/policies/?branch=${encodeURIComponent(branchFilter)}` : '/policies/';
+const clearHref = '/policies/';
 const scopeName = branchFilter
   ? branches.find((branch: any) => branch.branchId === branchFilter)?.name ?? 'Selected branch'
   : null;
