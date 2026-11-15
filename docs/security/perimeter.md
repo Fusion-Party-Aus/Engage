@@ -34,9 +34,9 @@ HSTS is sent **only** when all of the following are true:
    (`PUBLIC_ORIGIN`, falling back to `BETTER_AUTH_URL`) is HTTPS.
 
 A development, test or preview server never sends it, and a production server
-reached over plain HTTP without HTTPS evidence does not either. This avoids
-pinning a localhost or plain-HTTP host for a year. `includeSubDomains` is
-included; `preload` is deliberately not submitted.
+whose request, forwarded protocol and configured public origin are all HTTP
+does not either. This avoids pinning a localhost or plain-HTTP host for a year.
+`includeSubDomains` is included; `preload` is deliberately not submitted.
 
 ## Content Security Policy
 
@@ -115,20 +115,22 @@ is the deployment shape.
 ### What Astro already covers
 
 `astro.config.mjs` keeps `security.checkOrigin: true`. Astro's middleware runs
-before user middleware and refuses a request only when **all** of these hold:
+before user middleware and refuses a form-like, unsafe request when any of
+these hold:
 
-- the method is not `GET`, `HEAD` or `OPTIONS`;
-- the content type is form-like (`application/x-www-form-urlencoded`,
-  `multipart/form-data`, `text/plain`) or absent;
-- `Sec-Fetch-Site` is neither `same-origin` nor `none`;
-- either `Origin` differs from the request URL origin, or `Origin` is absent.
+- `Sec-Fetch-Site` has a value other than `same-origin` or `none` (so
+  `cross-site` and `same-site` are refused regardless of `Origin`), or
+  `Sec-Fetch-Site` is absent and `Origin` differs from the request URL origin.
 
-It deliberately exempts JSON and other content types because a browser
-preflights those, and it allows a request with no `Origin`. It compares against
-the **request URL** origin, which behind a TLS-terminating proxy is localhost
-unless `security.allowedDomains` matches the public host. The configuration now
-trusts `engage.fusionparty.org.au` over HTTPS so that form posts are compared
-against the real public origin in production.
+`GET`, `HEAD` and `OPTIONS` are skipped, and so is any content type that is not
+form-like (`application/x-www-form-urlencoded`, `multipart/form-data`,
+`text/plain`). It deliberately exempts JSON and other content types because a
+browser preflights those, and it allows a request with no `Origin` when
+`Sec-Fetch-Site` is absent. It compares against the **request URL** origin,
+which behind a TLS-terminating proxy is localhost unless
+`security.allowedDomains` matches the public host. The configuration now trusts
+`engage.fusionparty.org.au` over HTTPS so that form posts are compared against
+the real public origin in production.
 
 ### What the middleware adds
 
@@ -194,7 +196,7 @@ script and frame requests and the Plausible script and event requests reached
 the network layer; JSON API headers and the non-document policy were present;
 same-origin fetch returned 200 and a native same-origin form post returned 303;
 a browser cross-origin POST returned 403; a JSON cross-origin POST and an
-absent-Origin request with a session cookie each returned 403; a server-to-server
+absent-Origin request with a dev session cookie each returned 403; a server-to-server
 POST returned 200 and a Bearer cron call returned 409 (CRM disabled) rather
 than 403.
 
@@ -226,6 +228,11 @@ than 403.
 - **Hash-based CSP only.** There is no nonce and no `'strict-dynamic'`. If a
   future feature needs runtime-injected inline scripts, it must add a nonce or
   supply hashes; do not add `'unsafe-inline'` to `script-src`.
+- **Production requires a configured origin.** If `PUBLIC_ORIGIN` and
+  `BETTER_AUTH_URL` are missing or non-HTTPS in production, the fallback is
+  the request origin, which behind the proxy is localhost; state-changing
+  browser requests would then be refused. Set the public origin as part of the
+  deployment.
 - **No reporting endpoint.** There is no `report-uri`, `report-to` or
   `Reporting-Endpoints` configuration, so violations are visible only in a
   developer console or browser telemetry.
@@ -233,9 +240,10 @@ than 403.
   the only way to tighten `style-src-attr`.
 - **`img-src https:` is broad** because proposal attachments may be external.
   Restrict it to `'self'` if attachments become same-origin only.
-- **HSTS `includeSubDomains` and no preload.** Confirm every
-  `*.fusionparty.org.au` host is HTTPS before relying on it; preload is a
-  separate decision and is not requested here.
+- **HSTS `includeSubDomains` and no preload.** It applies to subdomains of
+  `engage.fusionparty.org.au` (there are none today) and does not broaden to
+  `fusionparty.org.au`. Preload is a separate decision and is not requested
+  here.
 - **Production headers were not observed** through Cloudflare/Coolify in this
   slice. The build and standalone server were verified; the proxy path remains
   a deployment check.
