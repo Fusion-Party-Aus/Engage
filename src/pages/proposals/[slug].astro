@@ -438,6 +438,9 @@ const initialsFor = (name: string) =>
               <span class:list={['stage-badge', `stage-badge--${proposal.stage}`]}>
                 {stagePillLabel(proposal.stage)}
               </span>
+              <Button href={`/proposals/${proposal.slug}/record/`} variant="outline" size="sm">
+                Decision record
+              </Button>
             </div>
           </div>
 

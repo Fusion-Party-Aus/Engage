@@ -1,6 +1,6 @@
 # API and authorisation
 
-**Status:** Current · **Verified:** 13 November 2026
+**Status:** Current · **Verified:** 15 November 2026
 
 ## Surface map
 
@@ -139,6 +139,50 @@ Session resolution:
 
 Service functions must re-check consequential actions. A route-level check is not sufficient if another caller can invoke the service.
 
+## Governance command layer
+
+Extracted governance acts are typed commands in `src/lib/governance-commands.ts`. A command declares one consequential act and calls the existing domain function rather than reimplementing it:
+
+```ts
+interface GovernanceCommand<TInput, TSubject> {
+  id: GovernanceCommandId;              // e.g. "ballot.record_result"
+  requiredPermission: PermissionKey;     // the one permission the act needs
+  preconditions: readonly string[];      // documented; enforced by the delegated domain function
+  effects: readonly string[];            // what succeeds changes
+  events: readonly string[];             // audit events emitted
+  fallbackMessage: string;
+  scopeDeniedMessage: string;
+  parse(body): InputParse<TInput>;                     // 400 on invalid input
+  loadSubject(db, input): Promise<SubjectLookup<TSubject>>; // 404/409 precondition failures
+  resolveScope(subject): GovernanceScope;              // branch authority + ballot facts
+  execute({ db, env, actor, input, subject, scope }): Promise<CommandOutcome>;
+}
+```
+
+The actor is always the resolved session member (`actor.memberId`), never a client-supplied identity.
+
+`preconditions` and `effects` are declarative documentation for readers. `loadSubject` checks that the proposal is in the `decide` stage and, for result recording, has a bound revision before `execute` runs, while `bindBallotToRevision` and `recordFormalDecision` enforce the domain rules and raise the domain errors the route maps.
+
+### Central route policy
+
+`src/lib/route-policy.ts` is the single declaration of which command a governance route runs and which permission it requires. The table's `permission` mirrors the command's `requiredPermission`; the route enforces the command's value and a test fails if the two differ.
+
+| Route | Command | Permission |
+|---|---|---|
+| `POST /api/admin/ballots/bind` | `ballot.bind` | `ballots.bind` |
+| `POST /api/admin/ballots/result` | `ballot.record_result` | `ballots.record_result` |
+
+`authoriseGovernanceCommand(user, commandId, scope?)` performs both authorisation stages:
+
+1. **Role gate** (no `scope`): national administrator, branch administrator or permission holder. Ordinary moderators fail here.
+2. **Scope gate** (resolved `scope`): `hasPermission(user, permission, branchScope)` plus `canManageBranchBallot` over the ballot's governance authority and jurisdiction. A branch grant never exceeds its branch. A national permission holder satisfies the permission check; the ballot rule still requires a national grant or a matching branch.
+
+Each route applies the coarse role gate (`authoriseGovernanceRouteRole`) before reading the body, so an unauthorised caller receives 403 rather than a 400 for malformed input. `runGovernanceRoute(route, { env, user, getDb }, body)` validates input, resolves the governing record and scope, applies the scope gate, then executes. It repeats the coarse gate deliberately so a caller that skips the route-level check still cannot reach a command. `governanceRouteError(route, error)` maps only the route's original domain error class to its status and message; anything else stays a 400. Routes resolve the database lazily after validation so an invalid body still reports 400.
+
+Route files carry no permission literals, no `hasPermission` calls and no role checks. `src/lib/route-policy.test.ts` walks `GOVERNED_ROUTE_DIRECTORIES` recursively (`.ts`, `.js`, `.mjs`), derives route keys from the path under `src/pages/api`, and fails if a route has no declaration, if a declared permission differs from the command's `requiredPermission`, or if a route file reintroduces an inline ballot permission.
+
+Extraction is incremental (#53). Only the ballot lifecycle is migrated so far; proposals, amendments and membership still authorise inside their routes. Add a directory to `GOVERNED_ROUTE_DIRECTORIES` as each domain moves.
+
 ## Permission catalogue
 
 The catalogue has 24 keys at national or branch scope.
@@ -172,8 +216,8 @@ System role bundles:
 | `POST /api/admin/amendments/open-ballot` | `amendments.manage_ballot` | Matching authority/jurisdiction, matter in Decide, base revision match |
 | `POST /api/admin/amendments/close-ballot` | `amendments.manage_ballot` | Officer-supplied result |
 | `POST /api/admin/amendments/accept` | `amendments.manage_ballot` | Amendment `endorsed`, revisions match |
-| `POST /api/admin/ballots/bind` | `ballots.bind` | Matter in Decide, matching authority/jurisdiction |
-| `POST /api/admin/ballots/result` | `ballots.record_result` | Matter in Decide, bound revision, matching authority/jurisdiction |
+| `POST /api/admin/ballots/bind` | `ballots.bind` (declared via `ballot.bind`) | Matter in Decide, matching authority/jurisdiction |
+| `POST /api/admin/ballots/result` | `ballots.record_result` (declared via `ballot.record_result`) | Matter in Decide, bound revision, matching authority/jurisdiction |
 | `POST /api/admin/policies/ratify` | `policies.ratify` | Implement stage, successful exact revision, matching decision event, non-resolution, idempotency |
 | `POST /api/admin/policies/publish` | `policies.publish` | Adopted + ratification event, non-resolution, idempotency |
 | `POST /api/admin/policies/withdraw` | `policies.publish` | Published, reason, idempotency |

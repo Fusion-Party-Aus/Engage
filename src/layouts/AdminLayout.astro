@@ -12,6 +12,7 @@ import {
   Home,
   LayoutDashboard,
   LifeBuoy,
+  ListChecks,
   LogOut,
   Mail,
   PanelLeft,
@@ -24,11 +25,13 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../lib/auth.ts';
 import { PLATFORM_ROLE_LABELS, hasPermission } from '../lib/rbac.ts';
+import { viewerHasResponsibility } from '../lib/responsibility-permissions.ts';
 import { runtimeEnv } from '../lib/db.ts';
 import '../styles/admin.css';
 
 export type AdminSection =
   | 'overview'
+  | 'responsibilities'
   | 'proposals'
   | 'ballots'
   | 'policies'
@@ -56,8 +59,11 @@ const canAccessAdmin = isAdmin || isBranchAdmin;
 const canViewMembers = hasPermission(user, 'members.view');
 const canManageRoles = hasPermission(user, 'roles.manage');
 
+const canViewResponsibilities = canAccessAdmin || viewerHasResponsibility(user);
+
 const workspaceItems = [
   { key: 'overview', href: '/admin/', label: 'Overview', icon: LayoutDashboard, show: true },
+  { key: 'responsibilities', href: '/admin/responsibilities/', label: 'Responsibilities', icon: ListChecks, show: canViewResponsibilities },
   { key: 'proposals', href: canAccessAdmin ? '/admin/proposals/' : '/admin/', label: 'Proposals & motions', icon: FileText, show: canAccessAdmin },
   { key: 'ballots', href: '/admin/ballots/', label: 'Ballots & decisions', icon: Gavel, show: canAccessAdmin },
   { key: 'policies', href: '/admin/policies/', label: 'Policy registry', icon: BookOpen, show: isAdmin },
