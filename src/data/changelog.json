@@ -1,29 +1,84 @@
 [
   {
-    "hash": "8de3f47",
+    "hash": "6d93797",
     "date": "2026-11-16",
     "type": "chore",
     "category": "ops",
     "scope": "changelog",
-    "summary": "Regenerate snapshot for member updates and participation fixes"
+    "summary": "Record the activity score fix",
+    "details": "Refs #57."
   },
   {
-    "hash": "d4acfa1",
+    "hash": "f4d94d0",
     "date": "2026-11-16",
     "type": "fix",
     "category": "fix",
-    "scope": "admin",
-    "summary": "Classify votes as votes in the participation feed",
-    "details": "The panel built vote activities with kind 'vote' but only handled 'votes', so every vote rendered as a proposal submission with the wrong filter and count. Encrypted ballot records carry no member identity, which made the mismatch affect all recent votes. Votes, contributions and proposals now share one classifier and one seven-day window. Vote rows use the recorded timestamp and the existing canViewIdentifiableBallots gate; encrypted records render as 'A member' and choices, reasons, tallies and envelopes are never read. Replayed records collapse by ballot and voter, while separate ballots and voters remain separate rows. The summary strip and tabs are derived from the same rows, and the previously truncated feed now shows the whole window. Refs #56"
+    "scope": "activity",
+    "summary": "Show the comment's net score, not upvotes alone",
+    "details": "Member activity previously labelled a contribution with its upvote count, which is misleading now that comments can be downvoted. Show the net score as points, consistent with the discussion thread, and keep vote identities out of the feed. Refs #57."
   },
   {
-    "hash": "e5d0f2e",
+    "hash": "6602f6e",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record atomic comment vote updates",
+    "details": "Refs #57."
+  },
+  {
+    "hash": "49a4562",
     "date": "2026-11-16",
     "type": "fix",
     "category": "fix",
-    "scope": "member",
-    "summary": "Keep unread updates until the member dismisses them",
-    "details": "My Engage advanced engage_member_last_seen on every page load, so navigating away and back hid updates the member never opened. Reading the page now only resolves the window; the cursor advances only through POST /api/member/updates/dismiss. Adds a 'Mark updates as seen' action to the catch-up digest, a matching status message, a seven-day window for members who have never dismissed updates, and a pure helper so the window, list and counts share one rule. Refs #108"
+    "scope": "discussion",
+    "summary": "Make comment vote writes atomic under concurrency",
+    "details": "Adds a voteVersion compare-and-swap to comment vote updates. A concurrent vote bumps the version, so a stale write is retried against the latest state rather than overwriting it. Covers 25 simultaneous voters and same-member double clicks against both the in-memory database and a real MongoDB replica set. Refs #57."
+  },
+  {
+    "hash": "9fa8fb0",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record threaded discussion and comment voting",
+    "details": "Refreshes the public snapshot after the discussion feature, CI verification and documentation commits. The generator's existing 80-commit window still drops older entries (#96); no history was edited by hand. Refs #57."
+  },
+  {
+    "hash": "be9e23c",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "discussion",
+    "summary": "Document threading, comment votes and Best ranking",
+    "details": "Updates the canonical model, API contract, capability matrix and known gaps. Records that comment votes are display ranking only, that voter identities are never returned, and the residual risks around rate limiting, audit and exact aggregate downvote counts. Refs #57."
+  },
+  {
+    "hash": "0ba7114",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "ci",
+    "summary": "Verify threaded discussion in a real browser",
+    "details": "Runs the isolated Playwright harness after the perimeter check. It proves parent-first nesting, sibling sorting, deep mobile layout, reply/delete interactions and that the comment API returns aggregate signal only. Refs #57."
+  },
+  {
+    "hash": "29f04b3",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discussion",
+    "summary": "Render threaded replies with confidence-weighted voting",
+    "details": "Proposal discussion now stores parentCommentId and depth, renders one recursive comment component instead of a flat list, and keeps replies inside their parent's subtree when sorting. Deleting a comment that still has replies clears the body and keeps a placeholder so the thread does not lose context. Comments take upvotes and downvotes with one active vote per member. Responses return aggregate score, counts and percentage plus the caller's own choice; voter identities are never serialised. The default Best sort applies a Wilson score lower bound to every sibling group, with Top score, Newest and Oldest as alternatives and deterministic tie-breaking. Refs #57."
+  },
+  {
+    "hash": "29c794d",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "member,admin",
+    "summary": "Keep unread updates and label votes correctly (#108, #56) (#109)",
+    "details": "* fix(member): keep unread updates until the member dismisses them My Engage advanced engage_member_last_seen on every page load, so navigating away and back hid updates the member never opened. Reading the page now only resolves the window; the cursor advances only through POST /api/member/updates/dismiss. Adds a 'Mark updates as seen' action to the catch-up digest, a matching status message, a seven-day window for members who have never dismissed updates, and a pure helper so the window, list and counts share one rule. Refs #108 * fix(admin): classify votes as votes in the participation feed The panel built vote activities with kind 'vote' but only handled 'votes', so every vote rendered as a proposal submission with the wrong filter and count. Encrypted ballot records carry no member identity, which made the mismatch affect all recent votes. Votes, contributions and proposals now share one classifier and one seven-day window. Vote rows use the recorded timestamp and the existing canViewIdentifiableBallots gate; encrypted records render as 'A member' and choices, reasons, tallies and envelopes are never read. Replayed records collapse by ballot and voter, while separate ballots and voters remain separate rows. The summary strip and tabs are derived from the same rows, and the previously truncated feed now shows the whole window. Refs #56 * chore(changelog): regenerate snapshot for member updates and participation fixes * chore(changelog): record the member and participation fixes"
   },
   {
     "hash": "d642bfc",
@@ -625,53 +680,5 @@
     "scope": "engagement",
     "summary": "Add proposal rankings, ballot deadlines and member reminders",
     "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
-  },
-  {
-    "hash": "0b8b375",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "settings",
-    "summary": "Save the configured source repository URL"
-  },
-  {
-    "hash": "6fad513",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record granular analytics improvements"
-  },
-  {
-    "hash": "2167573",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "analytics",
-    "summary": "Measure Engage navigation and participation outcomes"
-  },
-  {
-    "hash": "e41ac7d",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "analytics",
-    "summary": "Initialize Plausible tracking on production"
-  },
-  {
-    "hash": "71a98bb",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "analytics",
-    "summary": "Install Plausible tracker package"
-  },
-  {
-    "hash": "b98af1d",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "time",
-    "summary": "Display time in user's local timezone"
   }
 ]
