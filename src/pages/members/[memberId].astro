@@ -210,16 +210,12 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
             </span>
           </a>
           <a class="profile-stat" href={tabHref('comments')}>
-            <span class="profile-stat__label">Comment karma</span>
+            <span class="profile-stat__label">Comment score</span>
             <span class="profile-stat__value tabular">
-              {profile.stats.karma}
+              {profile.stats.commentScore}
             </span>
           </a>
         </div>
-        <p class="profile-karma-note">
-          Karma is the net score across this member’s visible comments. It does
-          not affect voting, permissions or proposal authority.
-        </p>
       </header>
 
       <nav class="profile-tabs" aria-label="Contribution history">
@@ -484,12 +480,6 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
     font-size: 1.15rem;
     font-weight: 700;
     color: var(--horizon-purple-deep);
-  }
-
-  .profile-karma-note {
-    margin: -0.25rem 0 0;
-    font-size: 0.76rem;
-    color: var(--horizon-muted);
   }
 
   .profile-tabs {

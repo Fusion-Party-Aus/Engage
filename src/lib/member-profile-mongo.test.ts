@@ -7,7 +7,7 @@ import { getMemberProfilePage } from "./member-profile.ts";
 /**
  * Real-MongoDB coverage for the profile read model.
  *
- * The in-memory database does not implement `$group`, so the comment-karma
+ * The in-memory database does not implement `$group`, so the comment-score
  * aggregation path is only meaningful against MongoDB. This suite is skipped
  * unless the same test URI used by the voting suite is configured.
  */
@@ -32,7 +32,7 @@ after(async () => {
 });
 
 describe("public profile on MongoDB", { skip: !uri }, () => {
-  it("aggregates karma only across visible, non-deleted comments", async () => {
+  it("aggregates comment score only across visible, non-deleted comments", async () => {
     const testDb = await database();
     const memberId = new ObjectId();
     const otherId = new ObjectId();
@@ -135,7 +135,7 @@ describe("public profile on MongoDB", { skip: !uri }, () => {
     });
     assert.ok(page);
     assert.equal(page.profile.stats.comments, 2);
-    assert.equal(page.profile.stats.karma, 2);
+    assert.equal(page.profile.stats.commentScore, 2);
     assert.deepEqual(
       page.items.map((item) => item.id),
       ["cmt-public-2", "cmt-public-1"],

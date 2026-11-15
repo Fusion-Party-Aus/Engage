@@ -72,14 +72,14 @@ A public profile is a read model over the account and its existing contributions
 The account supplies the display name and an optional plain-text biography (`user.bio`, at most 500 characters, edited by the owner at `/api/member/profile`). Everything else is derived on read from existing records:
 
 - comment, proposal and amendment counts;
-- comment karma: the sum of net scores (`upvotes - downvotes`) across visible, non-deleted comments;
+- comment score: the sum of net scores (`upvotes - downvotes`) across visible, non-deleted comments;
 - geographic affiliation from active `branch_memberships` (national, state or territory; constituent branches are not published).
 
 There is still no separate profile collection. Nothing is duplicated from `comments`, `proposals`, `amendments` or ballots.
 
-Visibility is viewer-relative. A contribution appears only if the viewer could already open its proposal through `canViewProposal`; archived proposals follow the same reviewer rule as the proposal page. Deleted comments and withdrawn amendments are excluded from history and karma. Private or branch-scoped contributions therefore never leak through counts, titles, excerpts or the profile itself. If the account document is gone but a visible contribution remains, the display name comes from the author name stored on that contribution; a name that exists only on a private proposal does not create a profile.
+Visibility is viewer-relative. A contribution appears only if the viewer could already open its proposal through `canViewProposal`; archived proposals follow the same reviewer rule as the proposal page. Deleted comments and withdrawn amendments are excluded from history and comment score. Private or branch-scoped contributions therefore never leak through counts, titles, excerpts or the profile itself. If the account document is gone but a visible contribution remains, the display name comes from the author name stored on that contribution; a name that exists only on a private proposal does not create a profile.
 
-Karma is display-only. It does not affect voting eligibility, comment permissions, ballot weight, proposal authority or any threshold. Engage has no leaderboard, reputation tier or popularity-based privilege.
+The comment score is display-only. It never affects eligibility, permissions, ballot weight or proposal authority. There is no leaderboard or reputation tier.
 
 ### Platform membership
 

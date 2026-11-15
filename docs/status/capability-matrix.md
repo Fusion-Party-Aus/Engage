@@ -44,8 +44,8 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Self-service email change or account deletion | Not implemented | Not in scope today |
 | Public member profile | Implemented | `/members/[memberId]/`; viewer-relative history and statistics, no separate profile store ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)) |
 | Editable public biography | Implemented | Owner-only `POST /api/member/profile`; plain text ≤500 characters |
-| Comment karma | Implemented, display only | Sum of net scores on visible, non-deleted comments; no eligibility, permission or ballot effect |
-| Public leaderboards or karma-weighted privileges | Not implemented, by design | Karma never ranks members or grants authority |
+| Comment score | Implemented, display only | Sum of net scores on visible, non-deleted comments; no eligibility, permission or ballot effect |
+| Public leaderboards or score-weighted privileges | Not implemented, by design | Comment score never ranks members or grants authority |
 | Custom avatar upload | Not implemented | Initials from the display name; no image upload or storage |
 
 ## Branches

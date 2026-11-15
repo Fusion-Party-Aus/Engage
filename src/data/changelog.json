@@ -1,5 +1,32 @@
 [
   {
+    "hash": "04d1156",
+    "date": "2026-11-16",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "profiles",
+    "summary": "Rename comment karma to comment score",
+    "details": "Use the accurate product term for the sum of net scores on visible comments, and remove the always-visible explanatory note. Rename the internal field and function so the old term cannot return through future UI work. Refs #113"
+  },
+  {
+    "hash": "8182a79",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "proposals",
+    "summary": "Guard action-led policy change form wiring",
+    "details": "Assert that the action selector announces the choice, the page updates the title and question from the chosen action, repeal hides commitments, and the form inherits the policy topic while showing existing change proposals. Refs #114"
+  },
+  {
+    "hash": "1d70ff0",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record policy change proposal UX",
+    "details": "Refresh the public snapshot for the action-led policy-change form. Preserve the older entries outside the generator's 80-commit window so the public history is not shortened. Refs #114"
+  },
+  {
     "hash": "ef19ab0",
     "date": "2026-11-16",
     "type": "feat",
