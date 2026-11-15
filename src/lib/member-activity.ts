@@ -59,8 +59,8 @@ const resultLabel = (result: string) =>
             ? "Not endorsed"
             : result.replaceAll("-", " ");
 
-const endorsementLabel = (count: number) =>
-  `${count} endorsement${count === 1 ? "" : "s"}`;
+const commentScoreLabel = (score: number) =>
+  `${score} point${score === 1 || score === -1 ? "" : "s"}`;
 
 export interface MemberActivityInputs {
   votes: Awaited<ReturnType<typeof findAllMemberVotes>>;
@@ -201,9 +201,13 @@ export async function listMemberActivityStream(
   for (const comment of ownComments) {
     const date = asDate(comment.createdAt);
     if (!date) continue;
-    const endorsements = Array.isArray(comment.upvotes)
+    const upvoteCount = Array.isArray(comment.upvotes)
       ? comment.upvotes.length
       : 0;
+    const downvoteCount = Array.isArray(comment.downvotes)
+      ? comment.downvotes.length
+      : 0;
+    const score = upvoteCount - downvoteCount;
     events.push({
       id: `comment-${comment.commentId}`,
       date,
@@ -217,9 +221,7 @@ export async function listMemberActivityStream(
       badge: `Stance: ${comment.stance}`,
       summary: String(comment.body ?? ""),
       details:
-        endorsements > 0
-          ? [{ label: endorsementLabel(endorsements) }]
-          : undefined,
+        score !== 0 ? [{ label: commentScoreLabel(score) }] : undefined,
     });
 
     const history = Array.isArray(comment.feedbackHistory)
