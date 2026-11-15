@@ -32,7 +32,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 2a | Remaining homepage copy, its metadata and shared proposal highlights | Delivered in `8558e05`; remote tree verified |
 | 2b | How-it-works guide, default metadata, shared layout/navigation/footer | Delivered in `17a0fac`; remote tree verified |
 | 3a | Proposal browsing and new-proposal forms, scope/change selectors | Delivered in `0a4a86f`; remote tree verified |
-| 3b | Proposal detail, seconding, comments, amendment and ballot interfaces | Validated; publishing checkpoint |
+| 3b | Proposal detail, seconding, comments, amendment and ballot interfaces | Delivered in `1f4ca17`; remote tree verified |
 | 4 | Policy registry, policy detail, provenance and change proposals; branch journeys and Sense Box | Not reviewed |
 | 5 | Onboarding, membership, My Engage, account, branch preferences, notifications | Not reviewed beyond discussion intent |
 | 6 | Emails, push, digests and unsubscribe flows | Not reviewed |
