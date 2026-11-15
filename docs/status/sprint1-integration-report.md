@@ -102,7 +102,7 @@ The membership branch records provenance for new manual verifications. Existing 
 
 ## Limitations of this verification
 
-- The governance-integrity suite still uses the in-memory database. Transactional atomicity was exercised on real MongoDB only by the voting suite and the new provenance regression. Add replica-set cases for the deletion guard, result atomicity and transition events in Phase 1.
+- The governance-integrity suite uses the in-memory database; the governance writes are now additionally covered against a real MongoDB replica set by `src/lib/governance-integrity-mongo.test.ts` (deletion guard, transition events, result atomicity/idempotency, conditional-write concurrency, closed-ballot certification). Crash/rollback injection mid-transaction is still not tested.
 - No load, capacity or concurrency stress test was run.
 - No deployment, migration rehearsal or rollback drill was performed.
 - Legal and constitutional review is outside this work.

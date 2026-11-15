@@ -20,7 +20,7 @@ Status values:
 | Phase | Scope | State |
 |---|---|---|
 | Integration | Combine Sprint 1 branches, reconcile with decisions, verify | **Integrated** — see [integration report](sprint1-integration-report.md) |
-| 1 | Integrity, deadlines, automatic advancement, outcome correctness | **Integrated** — deadlines, seconding, advancement, closure and computed outcome validation on branches from PR #51 |
+| 1 | Integrity, deadlines, automatic advancement, outcome correctness | **Done** — deadlines, seconding, advancement, closure and computed outcome validation merged to `main`; replica-set governance coverage added |
 | 2 | Command layer, route policy, read models, jobs, Turnstile, notifications | **In progress** — rendering-performance and Turnstile slices integrated; command layer (#53), read models (#54) and notifications (#33) pending |
 | 3 | Decision records, following, admin queues, role UX, Horizon consistency | Planned |
 | 4 | Durable jobs, identity/CRM ports, observability, audit viewer, encryption hardening | Planned |
@@ -34,7 +34,7 @@ Status values:
 | Rendering performance | `feat/rfc0001-sprint1-integration` | #52 | **Integrated** — harness, audit, projections, session reuse, query batching, deferred secondary panels, hydration changes |
 | Turnstile and abuse protection | `feat/rfc0001-sprint1-integration` | #38 (part) | **Integrated** — server verification, protected unauthenticated actions, durable rate limiting. Headers/CSRF remain. |
 | Ballot-results migration safety | `fix/ballot-results-index-migration` | #55 | **Done** — read-only preflight, backup, verified apply, loud failure, recovery report, replica-set tests. See [procedure](../ballot-results-index-migration.md). |
-| Computed ballot outcome validation | `feat/ballot-outcome-validation` | #28 | **Integrated** (branch only; not merged) — Yes-versus-No comparison (D9), no quorum or turnout (D8), abstentions excluded without a denominator (D10/O1), versioned rule basis, stored tally, closed-ballot requirement, bound-set refusal, audited override and legal-text update. Replica-set tests. Abstention denominator, ranked choice and a computed check for amendment endorsement ballots remain open. |
+| Computed ballot outcome validation | `main` (`762f76c`, PR #86) | #28 | **Done for the decided part** — Yes-versus-No comparison (D9), no quorum or turnout (D8), abstentions excluded without a denominator (D10/O1), versioned rule basis, stored tally, closed-ballot requirement, bound-set refusal, audited override and legal-text update. Replica-set tests. Abstention denominator, ranked choice and a computed check for amendment endorsement ballots remain open. |
 | Governance command layer | — | #53 | Planned — next Phase 2 slice |
 | Decision record and responsibility queue | — | #54 | Planned — depends on #53 |
 
@@ -105,7 +105,7 @@ Sprint 1 and the slices above were merged to `main` as `3b36947` (PR #51) on 14 
 1. **Deadline semantics are scheduled, but not yet operated.** The code creates and enforces deadlines and ships a dry-run/apply scheduler. Production cron wiring, alerting on missed runs, and notification fan-out are still required.
 2. **Automatic advancement uses a system actor.** It does not grant `ballots.bind` to the scheduler. A late run past the 60-day ceiling is refused and reported rather than opening an unusable ballot; this needs operational monitoring.
 3. **Index migration is explicit and recoverable.** The `ballot_results` unique index moved from `proposalId` to `ballotId`. Startup now reports a legacy collection instead of reshaping it; `npm run ballots:results-index` performs preflight, backup, verified apply and a recovery report (#55).
-4. **Real-MongoDB coverage of governance writes.** The voting suite runs on MongoDB; the governance-integrity suite uses the in-memory database. Add replica-set cases for the atomic result, deletion guard and transition events in Phase 1.
+4. **Real-MongoDB coverage of governance writes.** Resolved in `src/lib/governance-integrity-mongo.test.ts` (PR #91): the deletion guard, transition-event atomicity, result idempotency/atomicity and conditional-write concurrency now run against a replica set, plus a closed-ballot certification case. Crash/rollback injection mid-transaction remains untested.
 5. **Historical records.** Existing open ballots without deadlines and historical CRM verification reviews are not migrated by this branch. No unique branch-membership index exists yet, so concurrent membership writes still rely on application upserts.
 6. **Performance evidence is local.** The rendering audit measures a production build against synthetic data on one machine. It is indicative, not field or production SLA evidence; server-island work still consumes database time after the response.
 7. **Turnstile is unexercised against Cloudflare.** Siteverify was stubbed in all tests. Production requires both keys or protected routes correctly return 503.
@@ -115,7 +115,7 @@ Sprint 1 and the slices above were merged to `main` as `3b36947` (PR #51) on 14 
 Phase 1, in this order:
 
 1. ~~Proposal lifecycle scheduling~~ — integrated: seconding, deliberation and ballot deadlines, system advancement, automatic closure, idempotent scheduler.
-2. ~~Computed outcome validation (Yes versus No, tie fails) with an audited officer override; do not decide abstentions~~ — integrated on `feat/ballot-outcome-validation` (`simple-majority-d9-v1`). Abstentions remain recorded but outside the comparison, and no denominator is encoded.
-3. Real-MongoDB concurrency and crash-recovery tests for the remaining governance writes (deletion guard, transition events, result atomicity).
+2. ~~Computed outcome validation (Yes versus No, tie fails) with an audited officer override; do not decide abstentions~~ — merged on `main` (`762f76c`, `simple-majority-d9-v1`). Abstentions remain recorded but outside the comparison, and no denominator is encoded.
+3. ~~Real-MongoDB concurrency and crash-recovery tests for the remaining governance writes~~ — deletion guard, transition events, result atomicity and closed-ballot certification now run on a replica set (PR #91). Crash/rollback injection is still untested.
 4. ~~`ballot_results` migration preflight and recovery procedure~~ — done (#55).
 5. Notification outbox foundation, so scheduled transitions produce durable notices.
