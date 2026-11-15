@@ -67,9 +67,9 @@ An account can be disabled. A disabled account cannot obtain or retain a session
 
 ### Public profile
 
-A public profile is a read model over the account and its existing contributions, at `/members/<memberId>/`. The identifier is the Better Auth `user._id`: opaque, stable and already stored on comments, proposals and amendments. It is not an email address or an UndergroundCRM identifier, and the profile page never displays either.
+A public profile is a read model over the account and its existing contributions, at `/members/<memberId>/`. By default the identifier is the Better Auth `user._id`: opaque, stable and already stored on comments, proposals and amendments. It is not an email address. A future CRM seam is available but off by default: with `ENGAGE_PROFILE_CRM_IDENTIFIERS=on`, an active `crm_identity_links` record supplies the CRM person id as the canonical path and legacy member-id paths redirect with 301. A profile request reads the link locally and never calls the CRM.
 
-The account supplies the display name and an optional plain-text biography (`user.bio`, at most 500 characters, edited by the owner at `/api/member/profile`). Everything else is derived on read from existing records:
+The account supplies the display name, an optional plain-text biography (`user.bio`, at most 500 characters) and the profile visibility switch, edited by the owner at `/api/member/profile`. Everything else is derived on read from existing records:
 
 - comment, proposal and amendment counts;
 - comment score: the sum of net scores (`upvotes - downvotes`) across visible, non-deleted comments;
@@ -78,6 +78,8 @@ The account supplies the display name and an optional plain-text biography (`use
 There is still no separate profile collection. Nothing is duplicated from `comments`, `proposals`, `amendments` or ballots.
 
 Visibility is viewer-relative. A contribution appears only if the viewer could already open its proposal through `canViewProposal`; archived proposals follow the same reviewer rule as the proposal page. Deleted comments and withdrawn amendments are excluded from history and comment score. Private or branch-scoped contributions therefore never leak through counts, titles, excerpts or the profile itself. If the account document is gone but a visible contribution remains, the display name comes from the author name stored on that contribution; a name that exists only on a private proposal does not create a profile.
+
+The owner may hide the profile. A hidden profile returns 404 to everyone else and its author links are suppressed; the owner can still preview it from My Engage. A disabled account behaves the same way. There is no self-service account deletion, so historic comments remain in their discussions.
 
 The comment score is display-only. It never affects eligibility, permissions, ballot weight or proposal authority. There is no leaderboard or reputation tier.
 

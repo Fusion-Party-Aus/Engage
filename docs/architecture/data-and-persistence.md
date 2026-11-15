@@ -194,13 +194,16 @@ The Better Auth `user` document carries the public profile fields:
 {
   name,                       // display name, editable through Better Auth
   bio?,                       // plain text, max 500 characters
-  bioUpdatedAt?,              // last owner edit
+  profileVisible?,            // false hides the profile; absent means visible
+  profileUpdatedAt?,          // last owner edit
   createdAt,
   disabled?                   // a disabled account has no public profile
 }
 ```
 
-`src/lib/member-profile.ts` builds the profile and its paginated history on read. It queries `comments` by `memberId`, `proposals` by `authorId` and `amendments` by `authorId`, then filters every proposal through `canViewProposal` and the archived-review rule before exposing a count, title, excerpt or link. Deleted comments and withdrawn amendments are excluded. The profile never copies contribution records into a separate collection, so there is no drift between a profile and the discussion it summarises.
+`src/lib/member-profile.ts` builds the profile and its paginated history on read. It queries `comments` by `memberId`, `proposals` by `authorId` and `amendments` by `authorId`, then filters every proposal through `canViewProposal` and the archived-review rule before exposing a count, title, excerpt or link. Deleted comments and withdrawn amendments are excluded. A profile with `profileVisible: false` is returned only to its owner and is suppressed from author links everywhere else. The profile never copies contribution records into a separate collection, so there is no drift between a profile and the discussion it summarises.
+
+The canonical profile path is the member id by default. With `ENGAGE_PROFILE_CRM_IDENTIFIERS=on`, `resolveMemberProfileRoute` reads an active `crm_identity_links` record and uses `crmPersonId` as the canonical path; a member-id path then redirects with 301. The lookup is local and a profile request never calls the CRM. The flag is off by default.
 
 ## Indexes and uniqueness
 
