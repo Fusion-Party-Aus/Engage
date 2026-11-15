@@ -130,7 +130,9 @@ Manual `saveMember` verification records `updatedBy` and `verifiedAt` but not `v
 
 ### 14. Comment moderation has no record
 
-Comments can be deleted by staff, but there is no moderation state, reason or audit event. `comments.moderate` is declared but unused.
+Comments can be deleted by staff, but there is no moderation state, reason or audit event. `comments.moderate` is declared but unused in the admin UI.
+
+**Threading safeguard (implemented):** deleting a comment that still has replies clears the body, sets `deletedAt`/`deletedBy` and keeps a placeholder so the surviving replies keep their parent. A comment with no replies is still deleted outright. The stored body is never returned to readers once deleted. This is not a moderation record: the actor and time are stored on the placeholder, but there is no reason, review queue or audit event.
 
 **Direction:** Decide whether moderation is deletion or a visible state. Record the actor, reason and time either way.
 
@@ -244,6 +246,19 @@ There are no metrics, traces or alerting. Failures in email, cron or verificatio
 ### 27. No election/returning officer role
 
 The identifiable-ballot boundary is national administrator or a delegated national permission. A dedicated election-officer role is recommended but not modelled.
+
+### 28. Comment ranking and vote privacy have no operational controls
+
+**Implemented:** comments now take upvotes and downvotes, one active vote per member, and the default **Best** order ranks sibling groups by the Wilson score lower bound over up and down votes. Identities are never returned in a DTO; a viewer sees aggregate counts, the upvote percentage and only their own choice ([#57](https://github.com/Fusion-Party-Aus/Engage/issues/57)).
+
+**Residual risks:**
+
+- Comment votes have no dedicated rate limit or audit trail. A member can toggle a vote repeatedly, and a changed vote leaves no audit record. This is different from formal ballots, which have their own integrity controls. Concurrent vote writes are atomic: each comment carries a `voteVersion` and an update only applies when that version is unchanged, so simultaneous votes are retried against the latest state rather than overwriting each other.
+- The API returns aggregate `downvoteCount` to build the client-side ranking. Voter identities are not exposed, but an exact aggregate downvote tally is available to any viewer of the proposal. If the product should behave like Reddit's hidden downvote count, the DTO must expose only score and percentage and the client must rank from those.
+- The Wilson constant (`z = 1.281551565545`), the score tie-break and the age tie-break are product defaults, not governance-approved rules. They are display ranking only and must never be presented as a measure of member support or a ballot signal.
+- Reply depth is capped visually at four levels and stored at 20. That is a usability ceiling, not a moderation rule.
+
+**Evidence:** `CommentRecord.upvotes`/`downvotes`, `voteOnComment`, `toCommentDto`, `src/lib/comment-thread.ts` (`commentConfidence`, `compareComments`), `src/lib/comment-replies.test.ts` and the discussion browser harness.
 
 ## Governance decisions
 

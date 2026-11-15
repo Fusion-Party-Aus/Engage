@@ -27,7 +27,7 @@ the stage at the time of the event. Member pages include `member_view` (`overvie
 | `onboarding_action` | Guide/nudge dismissed or exploration CTA clicked | `action` | Do people use or dismiss onboarding? |
 | `share_copied` | Ballot share link copied successfully | none | Are participants sharing proposals? |
 
-`action`: proposal, deliberation, amendment, ballot, amendment_ballot, endorsement.
+`action`: proposal, deliberation, amendment, ballot, amendment_ballot, comment_vote.
 Contribution outcomes: success, pending_verification, failed. A pending preference is
 never counted as a successfully cast ballot. No stance or ballot direction is recorded.
 Search result counts are buckets: 0, 1–5, 6–20, 21+. Topic/branch/jurisdiction values
