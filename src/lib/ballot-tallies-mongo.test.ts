@@ -8,6 +8,8 @@ import {
   BALLOT_TALLY_INDEX,
   inspectBallotTallyProjection,
   readBallotTallyProjections,
+  rebuildBallotTallyProjection,
+  updateBallotTallyProjection,
 } from "./ballot-tallies.ts";
 import {
   FORMAL_DECISIONS_COLLECTION,
@@ -15,7 +17,7 @@ import {
   upsertMatterBallot,
 } from "./ballots.ts";
 import { castVote, listProposals } from "./store.ts";
-import type { PlatformEnv, SessionUser } from "./types.ts";
+import type { PlatformEnv, SessionUser, VoteChoice } from "./types.ts";
 import {
   PROPOSAL_VOTES,
   ensureVoteStorage,
@@ -71,11 +73,68 @@ async function seedBallot(db: Db, proposalId: string): Promise<string> {
   return proposalBallotId(proposalId);
 }
 
-async function projectionRow(db: Db, ballotId: string) {
-  return db.collection(BALLOT_TALLIES).findOne({
-    ballotId,
-    revisionId: "rev-1",
-  });
+async function projectionRow(
+  db: Db,
+  ballotId: string,
+  revisionId = "rev-1",
+) {
+  return db.collection(BALLOT_TALLIES).findOne({ ballotId, revisionId });
+}
+
+function tallyOf(row: Record<string, any> | null) {
+  return {
+    approve: row?.approve,
+    abstain: row?.abstain,
+    reject: row?.reject,
+    total: row?.total,
+  };
+}
+
+/** The authoritative tally of the plaintext votes in one revision. */
+async function authoritativeTally(
+  db: Db,
+  ballotId: string,
+  revisionId = "rev-1",
+) {
+  const rows = await db
+    .collection(PROPOSAL_VOTES)
+    .find({ ballotId, revisionId })
+    .toArray();
+  const tally = { approve: 0, abstain: 0, reject: 0, total: 0 };
+  for (const row of rows as Array<Record<string, any>>) {
+    tally[row.choice as "approve" | "abstain" | "reject"] += 1;
+    tally.total += 1;
+  }
+  return tally;
+}
+
+async function assertRowMatchesVotes(
+  db: Db,
+  ballotId: string,
+  revisionId = "rev-1",
+) {
+  assert.deepEqual(
+    tallyOf(await projectionRow(db, ballotId, revisionId)),
+    await authoritativeTally(db, ballotId, revisionId),
+  );
+}
+
+async function insertVote(
+  db: Db,
+  input: {
+    ballotId: string;
+    proposalId: string;
+    revisionId: string;
+    memberId: string;
+    choice: "approve" | "abstain" | "reject";
+    updatedAt: Date;
+  },
+) {
+  await db.collection(PROPOSAL_VOTES).updateOne(
+    { ballotId: input.ballotId, memberId: input.memberId },
+    { $set: { ...input } },
+    { upsert: true },
+  );
 }
 
 async function closeBallot(db: Db, proposalId: string): Promise<void> {
@@ -179,41 +238,241 @@ describe(
       );
     });
 
-    it("counts concurrent votes without losing one", async () => {
+    it("counts many concurrent first votes without losing or duplicating one", async () => {
       const proposalId = "PROP-PROJECT-CONCURRENT";
       const ballotId = await seedBallot(db, proposalId);
-      await Promise.all([
-        castVote(db, memberUser("concurrent-1"), {
-          proposalId,
-          choice: "approve",
-        }),
-        castVote(db, memberUser("concurrent-2"), {
-          proposalId,
-          choice: "approve",
-        }),
-        castVote(db, memberUser("concurrent-3"), {
-          proposalId,
-          choice: "reject",
-        }),
-        castVote(db, memberUser("concurrent-4"), {
-          proposalId,
-          choice: "abstain",
-        }),
-      ]);
-      const row = await projectionRow(db, ballotId);
-      assert.deepEqual(
-        {
-          approve: row?.approve,
-          abstain: row?.abstain,
-          reject: row?.reject,
-          total: row?.total,
-        },
-        { approve: 2, abstain: 1, reject: 1, total: 4 },
+      const choices: VoteChoice[] = [
+        "approve",
+        "approve",
+        "approve",
+        "approve",
+        "reject",
+        "reject",
+        "abstain",
+        "abstain",
+      ];
+      await Promise.all(
+        choices.map((choice, index) =>
+          castVote(db, memberUser(`concurrent-${index}`), {
+            proposalId,
+            choice,
+          }),
+        ),
       );
-      const storedVotes = await db
-        .collection(PROPOSAL_VOTES)
-        .countDocuments({ ballotId });
-      assert.equal(storedVotes, 4);
+      assert.deepEqual(await authoritativeTally(db, ballotId), {
+        approve: 4,
+        abstain: 2,
+        reject: 2,
+        total: 8,
+      });
+      await assertRowMatchesVotes(db, ballotId);
+    });
+
+    it("counts concurrent vote changes without losing one", async () => {
+      const proposalId = "PROP-PROJECT-CONCURRENT-CHANGES";
+      const ballotId = await seedBallot(db, proposalId);
+      const first: VoteChoice[] = [
+        "approve",
+        "approve",
+        "approve",
+        "reject",
+        "reject",
+        "abstain",
+      ];
+      const changed: VoteChoice[] = [
+        "reject",
+        "approve",
+        "abstain",
+        "approve",
+        "reject",
+        "abstain",
+      ];
+      await Promise.all(
+        first.map((choice, index) =>
+          castVote(db, memberUser(`changer-${index}`), {
+            proposalId,
+            choice,
+          }),
+        ),
+      );
+      await Promise.all(
+        changed.map((choice, index) =>
+          castVote(db, memberUser(`changer-${index}`), {
+            proposalId,
+            choice,
+          }),
+        ),
+      );
+      assert.deepEqual(await authoritativeTally(db, ballotId), {
+        approve: 2,
+        abstain: 2,
+        reject: 2,
+        total: 6,
+      });
+      await assertRowMatchesVotes(db, ballotId);
+    });
+
+    it("moves counts between revisions while other votes land concurrently", async () => {
+      for (let round = 0; round < 5; round += 1) {
+        const proposalId = `PROP-PROJECT-MOVE-${round}`;
+        const ballotId = `proposal:${proposalId}`;
+        const now = Date.now();
+        const at = (offset: number) => new Date(now - 60_000 + offset);
+        // Two revisions with a truthful baseline.
+        await insertVote(db, {
+          ballotId,
+          proposalId,
+          revisionId: "rev-old",
+          memberId: "mover-a",
+          choice: "approve",
+          updatedAt: at(1),
+        });
+        await insertVote(db, {
+          ballotId,
+          proposalId,
+          revisionId: "rev-old",
+          memberId: "mover-b",
+          choice: "reject",
+          updatedAt: at(2),
+        });
+        await insertVote(db, {
+          ballotId,
+          proposalId,
+          revisionId: "rev-old",
+          memberId: "mover-c",
+          choice: "abstain",
+          updatedAt: at(3),
+        });
+        await insertVote(db, {
+          ballotId,
+          proposalId,
+          revisionId: "rev-1",
+          memberId: "mover-d",
+          choice: "approve",
+          updatedAt: at(4),
+        });
+        await insertVote(db, {
+          ballotId,
+          proposalId,
+          revisionId: "rev-1",
+          memberId: "mover-e",
+          choice: "approve",
+          updatedAt: at(5),
+        });
+        await rebuildBallotTallyProjection(db, {
+          ballotId,
+          revisionId: "rev-old",
+        });
+        await rebuildBallotTallyProjection(db, {
+          ballotId,
+          revisionId: "rev-1",
+        });
+
+        // Two members are re-bound to the new revision; a third new vote lands
+        // at the same time.
+        const movedAt = at(6);
+        await insertVote(db, {
+          ballotId,
+          proposalId,
+          revisionId: "rev-1",
+          memberId: "mover-b",
+          choice: "approve",
+          updatedAt: movedAt,
+        });
+        await insertVote(db, {
+          ballotId,
+          proposalId,
+          revisionId: "rev-1",
+          memberId: "mover-c",
+          choice: "abstain",
+          updatedAt: movedAt,
+        });
+        const newVoteAt = at(7);
+        await insertVote(db, {
+          ballotId,
+          proposalId,
+          revisionId: "rev-1",
+          memberId: "mover-f",
+          choice: "approve",
+          updatedAt: newVoteAt,
+        });
+
+        await Promise.all([
+          updateBallotTallyProjection(db, {
+            ballotId,
+            revisionId: "rev-1",
+            previousRevisionId: "rev-old",
+            previousChoice: "reject",
+            choice: "approve",
+            hadPreviousVote: true,
+            voteUpdatedAt: movedAt,
+          }),
+          updateBallotTallyProjection(db, {
+            ballotId,
+            revisionId: "rev-1",
+            previousRevisionId: "rev-old",
+            previousChoice: "abstain",
+            choice: "abstain",
+            hadPreviousVote: true,
+            voteUpdatedAt: movedAt,
+          }),
+          updateBallotTallyProjection(db, {
+            ballotId,
+            revisionId: "rev-1",
+            choice: "approve",
+            hadPreviousVote: false,
+            voteUpdatedAt: newVoteAt,
+          }),
+        ]);
+
+        await assertRowMatchesVotes(db, ballotId, "rev-old");
+        await assertRowMatchesVotes(db, ballotId, "rev-1");
+      }
+    });
+
+    it("keeps the row equal to the votes when a rebuild races an increment", async () => {
+      for (let round = 0; round < 10; round += 1) {
+        const proposalId = `PROP-PROJECT-RACE-${round}`;
+        const ballotId = `proposal:${proposalId}`;
+        const now = Date.now();
+        for (let index = 0; index < 4; index += 1) {
+          await insertVote(db, {
+            ballotId,
+            proposalId,
+            revisionId: "rev-1",
+            memberId: `race-existing-${index}`,
+            choice: "approve",
+            updatedAt: new Date(now - 60_000 + index),
+          });
+        }
+        // Deliberately missing/drifted row: the rebuild must recreate it while
+        // a new vote's increment arrives.
+        await db.collection(BALLOT_TALLIES).deleteMany({ ballotId });
+        const newVoteAt = new Date(now);
+        await insertVote(db, {
+          ballotId,
+          proposalId,
+          revisionId: "rev-1",
+          memberId: "race-new",
+          choice: "reject",
+          updatedAt: newVoteAt,
+        });
+
+        await Promise.all([
+          rebuildBallotTallyProjection(db, {
+            ballotId,
+            revisionId: "rev-1",
+          }),
+          updateBallotTallyProjection(db, {
+            ballotId,
+            revisionId: "rev-1",
+            choice: "reject",
+            hadPreviousVote: false,
+            voteUpdatedAt: newVoteAt,
+          }),
+        ]);
+        await assertRowMatchesVotes(db, ballotId);
+      }
     });
 
     it("is revision-scoped", async () => {

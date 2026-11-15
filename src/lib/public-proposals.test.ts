@@ -386,6 +386,7 @@ describe("public list tallies", () => {
     await seedDecide(db, "PROP-001");
     await seedDecide(db, "PROP-002");
     await seedDecide(db, "PROP-003");
+    await seedDecide(db, "PROP-004");
     await db.collection(BALLOT_TALLIES).insertOne({
       ballotId: proposalBallotId("PROP-001"),
       revisionId: "rev-1",
@@ -403,6 +404,17 @@ describe("public list tallies", () => {
       reject: 1,
       total: 81,
       updatedAt: new Date(NOW.getTime() - BALLOT_TALLY_STALENESS_MS - 1),
+    });
+    // A fresh timestamp is not enough: an internally inconsistent row is drift
+    // and must read as pending, never as a number.
+    await db.collection(BALLOT_TALLIES).insertOne({
+      ballotId: proposalBallotId("PROP-004"),
+      revisionId: "rev-1",
+      approve: -1,
+      abstain: 0,
+      reject: 1,
+      total: 0,
+      updatedAt: new Date(NOW.getTime() - 1_000),
     });
 
     const candidates = await listPublicProposalCandidates(db, { user: null });
@@ -430,6 +442,9 @@ describe("public list tallies", () => {
       publicTallyLabel(byId.get("PROP-003")!),
       "Voting open — tally updating",
     );
+
+    assert.equal(byId.get("PROP-004")!.tallyState, "pending");
+    assert.equal(byId.get("PROP-004")!.votes.total, 0);
   });
 
   it("prefers the certified result over any projection", async () => {

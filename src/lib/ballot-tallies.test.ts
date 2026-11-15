@@ -14,6 +14,7 @@ import {
   repairBallotTallyProjection,
   updateBallotTallyProjection,
   voteTallyDelta,
+  rebuildBallotTallyProjection,
 } from "./ballot-tallies.ts";
 import { PROPOSAL_VOTES } from "./vote-storage.ts";
 
@@ -130,10 +131,12 @@ describe("ballot tally projection storage", () => {
     const rows = await db.collection(BALLOT_TALLIES).find({}).toArray();
     assert.equal(rows.length, 1);
     const stored = rows[0]!;
-    // No row existed, so the projection rebuilt from the votes it represents.
+    // The row was created by one atomic increment. It does not scan the other
+    // seeded votes, which is the repair CLI's job; that is what keeps the
+    // normal write race-free.
     assert.equal(stored.approve, 1);
-    assert.equal(stored.reject, 1);
-    assert.equal(stored.total, 2);
+    assert.equal(stored.reject, 0);
+    assert.equal(stored.total, 1);
     for (const forbidden of [
       "memberId",
       "choice",
@@ -152,6 +155,7 @@ describe("ballot tally projection storage", () => {
       "revisionId",
       "total",
       "updatedAt",
+      "version",
     ]);
   });
 
@@ -243,7 +247,7 @@ describe("ballot tally projection storage", () => {
     );
   });
 
-  it("rebuilds from votes when the row is missing, scoped to the revision", async () => {
+  it("creates a missing row with one atomic increment, then recounts on demand", async () => {
     const db = createMemoryDb();
     await seedVotes(db, [
       { memberId: "member-a", choice: "approve" },
@@ -259,6 +263,15 @@ describe("ballot tally projection storage", () => {
     const row = (await db.collection(BALLOT_TALLIES).findOne({}))!;
     assert.deepEqual(
       { approve: row.approve, reject: row.reject, total: row.total },
+      { approve: 1, reject: 0, total: 1 },
+    );
+    await rebuildBallotTallyProjection(db, {
+      ballotId: BALLOT_ID,
+      revisionId: REVISION_ID,
+    });
+    const rebuilt = (await db.collection(BALLOT_TALLIES).findOne({}))!;
+    assert.deepEqual(
+      { approve: rebuilt.approve, reject: rebuilt.reject, total: rebuilt.total },
       { approve: 2, reject: 0, total: 2 },
     );
   });
@@ -301,6 +314,86 @@ describe("ballot tally projection storage", () => {
     assert.equal(stale.fresh, false);
     assert.equal(
       result.has(ballotTallyKey(BALLOT_ID, "rev-missing")),
+      false,
+    );
+  });
+
+  it("refuses to trust a non-summing or negative row", async () => {
+    const db = createMemoryDb();
+    const now = new Date("2026-11-16T10:00:00.000Z");
+    await db.collection(BALLOT_TALLIES).insertOne({
+      ballotId: BALLOT_ID,
+      revisionId: REVISION_ID,
+      approve: -1,
+      abstain: 0,
+      reject: 1,
+      total: 0,
+      updatedAt: new Date(now.getTime() - 1_000),
+    });
+    const result = await readBallotTallyProjections(
+      db,
+      [{ ballotId: BALLOT_ID, revisionId: REVISION_ID }],
+      { now },
+    );
+    assert.equal(
+      result.get(ballotTallyKey(BALLOT_ID, REVISION_ID))!.fresh,
+      false,
+    );
+  });
+
+  it("abandons a rebuild at its deadline without writing a stale count", async () => {
+    const db = createMemoryDb();
+    await seedVotes(db, [{ memberId: "member-a", choice: "approve" }]);
+    const slow = new Proxy(db as any, {
+      get(target, property) {
+        if (property === "collection") {
+          return (name: string) => {
+            if (name === PROPOSAL_VOTES) {
+              return {
+                find: () => ({
+                  toArray: async () => {
+                    await new Promise((resolve) => setTimeout(resolve, 80));
+                    return target.collection(name).find({}).toArray();
+                  },
+                }),
+              };
+            }
+            return target.collection(name);
+          };
+        }
+        return (target as any)[property];
+      },
+    }) as Db;
+    const original = console.warn;
+    const logged: string[] = [];
+    console.warn = (value?: unknown) => {
+      logged.push(String(value));
+    };
+    try {
+      await projectCommittedVoteTally(slow, {
+        ballotId: BALLOT_ID,
+        revisionId: REVISION_ID,
+        choice: "approve",
+        hadPreviousVote: true,
+        previousChoice: null,
+        deadlineMs: 20,
+      });
+      // Let the abandoned recount finish; it must not write afterwards.
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    } finally {
+      console.warn = original;
+    }
+    assert.equal(await db.collection(BALLOT_TALLIES).countDocuments(), 0);
+    assert.ok(
+      logged.some(
+        (line) => JSON.parse(line).event === "ballot_tally_projection_timeout",
+      ),
+      logged.join("\n"),
+    );
+    assert.equal(
+      logged.some((line) =>
+        JSON.parse(line).event === "ballot_tally_projection_failed",
+      ),
       false,
     );
   });

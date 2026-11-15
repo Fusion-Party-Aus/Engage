@@ -2977,6 +2977,7 @@ async function upsertStoredVote(
   hadPreviousVote: boolean;
   previousChoice: VoteChoice | null;
   previousRevisionId: string | null;
+  voteUpdatedAt: Date;
 }> {
   const sessionOpts = session ? { session } : undefined;
   const votesCol = db.collection<VoteRecord>(PROPOSAL_VOTES);
@@ -3083,7 +3084,13 @@ async function upsertStoredVote(
     else votes.reject += 1;
     votes.total += 1;
   }
-  return { votes, hadPreviousVote, previousChoice, previousRevisionId };
+  return {
+    votes,
+    hadPreviousVote,
+    previousChoice,
+    previousRevisionId,
+    voteUpdatedAt: now,
+  };
 }
 
 export async function castVote(
@@ -3193,6 +3200,7 @@ export async function castVote(
       hadPreviousVote: votes.hadPreviousVote,
       previousChoice: votes.previousChoice,
       previousRevisionId: votes.previousRevisionId,
+      voteUpdatedAt: votes.voteUpdatedAt,
       cryptoConfig,
     });
     return { choice, votes: votes.votes, amendmentId };
@@ -3345,6 +3353,7 @@ export async function castVote(
     hadPreviousVote: committed.hadPreviousVote,
     previousChoice: committed.previousChoice,
     previousRevisionId: committed.previousRevisionId,
+    voteUpdatedAt: committed.voteUpdatedAt,
     cryptoConfig,
   });
   return { choice, votes: committed.votes };

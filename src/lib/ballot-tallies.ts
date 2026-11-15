@@ -26,6 +26,15 @@ import { PROPOSAL_VOTES, decodeStoredVote } from "./vote-storage.ts";
  *   and never fails, delays or alters that vote.
  * - A missing or stale row is displayed as a neutral "tally updating" state, not
  *   as a number. `npm run ballots:tally-projection` rebuilds and verifies rows.
+ *
+ * Writes are atomic and race-safe:
+ *
+ * - a normal vote is one `$inc` upsert, so a first vote creates and counts its
+ *   row in a single operation; there is no read-then-rebuild for a missing row;
+ * - a revision move is two transactional deltas, so no row is ever half-moved;
+ * - the only recount path (an unreadable prior vote, or the repair CLI) is
+ *   compare-and-set guarded against a concurrent increment, bounded by a
+ *   watermark, and abandoned at its deadline rather than writing a stale count.
  */
 
 export const BALLOT_TALLIES = "ballot_tallies";
@@ -39,9 +48,25 @@ export const BALLOT_TALLY_STALENESS_MS = 10 * 60_000;
 
 /**
  * A committed vote is never held open longer than this waiting for its display
- * projection. The write continues in the background; the response does not.
+ * projection. Work that cannot finish inside the deadline is abandoned rather
+ * than left writing a stale absolute count; the repair CLI picks the row up.
  */
 export const BALLOT_TALLY_WRITE_DEADLINE_MS = 500;
+
+/** Bounded retries when a rebuild races a concurrent increment. */
+export const BALLOT_TALLY_MAX_REBUILD_ATTEMPTS = 3;
+
+/**
+ * Internal fields on a projection row, never displayed:
+ *
+ * - `version` is a compare-and-set token every write increments, so a rebuild
+ *   can refuse to overwrite a row that changed after it was read.
+ * - `appliedThrough` is the newest vote timestamp already reflected by an
+ *   absolute rebuild. An increment whose vote is at or before it has already
+ *   been counted and must not be added again.
+ */
+export const BALLOT_TALLY_VERSION_FIELD = "version";
+export const BALLOT_TALLY_APPLIED_THROUGH_FIELD = "appliedThrough";
 
 export const BALLOT_TALLY_INDEX = "one_tally_projection_per_ballot_revision";
 
@@ -86,6 +111,7 @@ const VOTE_SCAN_PROJECTION = {
   choice: 1,
   voterBlindIndex: 1,
   voteEnvelope: 1,
+  updatedAt: 1,
 } as const;
 
 export function ballotTallyKey(ballotId: string, revisionId: string): string {
@@ -119,6 +145,20 @@ export function isProjectionFresh(
     row.updatedAt instanceof Date ? row.updatedAt : new Date(row.updatedAt);
   if (!Number.isFinite(updatedAt.getTime())) return false;
   return now.getTime() - updatedAt.getTime() <= windowMs;
+}
+
+/**
+ * A row is only shown when its counts are internally consistent. An increment
+ * applied to a missing row (projection drift, not a vote fault) can leave a
+ * negative or non-summing row; that must read as "tally pending", never as a
+ * number.
+ */
+export function isTallyCredible(tally: VoteTally): boolean {
+  const counts = [tally.approve, tally.abstain, tally.reject, tally.total];
+  if (!counts.every((value) => Number.isInteger(value) && value >= 0)) {
+    return false;
+  }
+  return tally.total === tally.approve + tally.abstain + tally.reject;
 }
 
 function asProjection(raw: Record<string, any>): BallotTallyProjection {
@@ -176,7 +216,9 @@ export async function readBallotTallyProjections(
     result.set(key, {
       row,
       tally: projectionToTally(row),
-      fresh: isProjectionFresh(row, now, options.windowMs),
+      fresh:
+        isProjectionFresh(row, now, options.windowMs) &&
+        isTallyCredible(projectionToTally(row)),
     });
   }
   return result;
@@ -197,6 +239,8 @@ interface VoteScanResult {
   /** Votes in this ballot/revision whose choice could not be read. */
   unreadable: number;
   encryptedWithoutKeys: number;
+  /** Newest vote timestamp included in this scan, for the rebuild watermark. */
+  newestVoteAt: Date | null;
 }
 
 async function scanRevisionVotes(
@@ -204,25 +248,42 @@ async function scanRevisionVotes(
   input: BallotTallyKey & {
     cryptoConfig?: BallotCryptoConfig | null;
     session?: ClientSession;
+    /** Rebuild watermark: only votes already present at this instant. */
+    updatedBefore?: Date;
+    maxTimeMS?: number;
   },
 ): Promise<VoteScanResult> {
+  const filter: Record<string, unknown> = {
+    ballotId: input.ballotId,
+    revisionId: input.revisionId,
+  };
+  if (input.updatedBefore) {
+    filter.$or = [
+      { updatedAt: { $lte: input.updatedBefore } },
+      { updatedAt: { $exists: false } },
+    ];
+  }
   const rows = await db
     .collection(PROPOSAL_VOTES)
-    .find(
-      { ballotId: input.ballotId, revisionId: input.revisionId },
-      {
-        projection: VOTE_SCAN_PROJECTION,
-        ...(input.session ? { session: input.session } : {}),
-      },
-    )
+    .find(filter, {
+      projection: VOTE_SCAN_PROJECTION,
+      ...(input.session ? { session: input.session } : {}),
+      ...(input.maxTimeMS ? { maxTimeMS: Math.max(1, Math.floor(input.maxTimeMS)) } : {}),
+    } as Record<string, unknown>)
     .toArray();
   const outcome: VoteScanResult = {
     tally: emptyVoteTally(),
     unreadable: 0,
     encryptedWithoutKeys: 0,
+    newestVoteAt: null,
   };
   for (const raw of rows as Array<Record<string, any>>) {
     const row = raw as Record<string, any>;
+    if (row.updatedAt instanceof Date) {
+      if (!outcome.newestVoteAt || row.updatedAt > outcome.newestVoteAt) {
+        outcome.newestVoteAt = row.updatedAt;
+      }
+    }
     if (row.voteEnvelope && !input.cryptoConfig) {
       outcome.encryptedWithoutKeys += 1;
       continue;
@@ -257,11 +318,29 @@ export class BallotTallyProjectionError extends Error {
   }
 }
 
+function assertProjectionTime(deadlineAt: number | undefined): void {
+  if (deadlineAt !== undefined && Date.now() >= deadlineAt) {
+    throw new BallotTallyProjectionError(
+      "The display projection did not finish inside its write deadline.",
+      "BALLOT_TALLY_PROJECTION_DEADLINE",
+    );
+  }
+}
+
 /**
- * Recount one ballot/revision pair from its votes and write the row. This is the
- * repair path: it is used when a delta cannot be derived (no prior row, an
- * unreadable prior vote) and by the CLI. It refuses to write a partial count
- * when a vote cannot be read.
+ * Recount one ballot/revision pair from its votes and write the row.
+ *
+ * Rebuilds are only used when a delta cannot be derived (an unreadable prior
+ * vote) and by the repair CLI. They are guarded twice so a concurrent increment
+ * can neither be lost nor double counted:
+ *
+ * - the write requires the row's `version` token to be unchanged since it was
+ *   read, so an increment that landed first forces a fresh recount;
+ * - the recount is bounded by a watermark and records it in `appliedThrough`,
+ *   so an increment for a vote the recount already included is skipped.
+ *
+ * A conflict retries with a new watermark. If the deadline passes, the row is
+ * left untouched for the repair CLI rather than written from a stale count.
  */
 export async function rebuildBallotTallyProjection(
   db: Db,
@@ -269,42 +348,108 @@ export async function rebuildBallotTallyProjection(
     cryptoConfig?: BallotCryptoConfig | null;
     now?: Date;
     session?: ClientSession;
+    deadlineAt?: number;
+    attempts?: number;
   },
 ): Promise<BallotTallyProjection> {
-  const scan = await scanRevisionVotes(db, input);
-  if (scan.encryptedWithoutKeys > 0) {
-    throw new BallotTallyProjectionError(
-      "Encrypted votes exist but ballot decryption keys are not configured.",
-      "BALLOT_TALLY_KEYS_UNAVAILABLE",
-    );
+  const attempts = input.attempts ?? BALLOT_TALLY_MAX_REBUILD_ATTEMPTS;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    assertProjectionTime(input.deadlineAt);
+    const watermark = input.now ?? new Date();
+    const existing = await db
+      .collection(BALLOT_TALLIES)
+      .findOne(
+        { ballotId: input.ballotId, revisionId: input.revisionId },
+        {
+          projection: {
+            _id: 0,
+            [BALLOT_TALLY_VERSION_FIELD]: 1,
+          },
+          ...(input.session ? { session: input.session } : {}),
+        },
+      );
+    const remaining = input.deadlineAt
+      ? input.deadlineAt - Date.now()
+      : undefined;
+    const scan = await scanRevisionVotes(db, {
+      ballotId: input.ballotId,
+      revisionId: input.revisionId,
+      cryptoConfig: input.cryptoConfig,
+      session: input.session,
+      updatedBefore: watermark,
+      ...(remaining !== undefined ? { maxTimeMS: remaining } : {}),
+    });
+    if (scan.encryptedWithoutKeys > 0) {
+      throw new BallotTallyProjectionError(
+        "Encrypted votes exist but ballot decryption keys are not configured.",
+        "BALLOT_TALLY_KEYS_UNAVAILABLE",
+      );
+    }
+    if (scan.unreadable > 0) {
+      throw new BallotTallyProjectionError(
+        "Some votes bound to this revision could not be read.",
+        "BALLOT_TALLY_UNREADABLE",
+      );
+    }
+    assertProjectionTime(input.deadlineAt);
+
+    const version =
+      existing && typeof existing[BALLOT_TALLY_VERSION_FIELD] === "number"
+        ? (existing[BALLOT_TALLY_VERSION_FIELD] as number)
+        : null;
+    const filter = existing
+      ? version === null
+        ? {
+            ballotId: input.ballotId,
+            revisionId: input.revisionId,
+            [BALLOT_TALLY_VERSION_FIELD]: { $exists: false },
+          }
+        : {
+            ballotId: input.ballotId,
+            revisionId: input.revisionId,
+            [BALLOT_TALLY_VERSION_FIELD]: version,
+          }
+      : { ballotId: input.ballotId, revisionId: input.revisionId };
+    const row: BallotTallyProjection = {
+      ballotId: input.ballotId,
+      revisionId: input.revisionId,
+      ...scan.tally,
+      updatedAt: watermark,
+    };
+    // Guard increments only against the newest vote this recount actually
+    // included. Using the wall clock here would skip a vote whose transaction
+    // was already open at the watermark but committed just after it.
+    const appliedThrough = scan.newestVoteAt ?? watermark;
+    try {
+      const result = await db.collection(BALLOT_TALLIES).updateOne(
+        filter,
+        {
+          $set: {
+            approve: row.approve,
+            abstain: row.abstain,
+            reject: row.reject,
+            total: row.total,
+            updatedAt: row.updatedAt,
+            [BALLOT_TALLY_APPLIED_THROUGH_FIELD]: appliedThrough,
+          },
+          $inc: { [BALLOT_TALLY_VERSION_FIELD]: 1 },
+        },
+        {
+          ...(existing ? {} : { upsert: true }),
+          ...(input.session ? { session: input.session } : {}),
+        },
+      );
+      if ((result.matchedCount ?? 0) > 0 || result.upsertedId) return row;
+    } catch (error) {
+      // A concurrent first write may have created the row between the read and
+      // the insert. Retry with a fresh watermark.
+      if ((error as { code?: number }).code !== 11000) throw error;
+    }
   }
-  if (scan.unreadable > 0) {
-    throw new BallotTallyProjectionError(
-      "Some votes bound to this revision could not be read.",
-      "BALLOT_TALLY_UNREADABLE",
-    );
-  }
-  const now = input.now ?? new Date();
-  const row: BallotTallyProjection = {
-    ballotId: input.ballotId,
-    revisionId: input.revisionId,
-    ...scan.tally,
-    updatedAt: now,
-  };
-  await db.collection(BALLOT_TALLIES).updateOne(
-    { ballotId: input.ballotId, revisionId: input.revisionId },
-    {
-      $set: {
-        approve: row.approve,
-        abstain: row.abstain,
-        reject: row.reject,
-        total: row.total,
-        updatedAt: row.updatedAt,
-      },
-    },
-    { upsert: true, ...(input.session ? { session: input.session } : {}) },
+  throw new BallotTallyProjectionError(
+    "The display projection changed while it was being rebuilt.",
+    "BALLOT_TALLY_PROJECTION_CONFLICT",
   );
-  return row;
 }
 
 /**
@@ -330,9 +475,24 @@ export function voteTallyDelta(input: {
   return tally;
 }
 
+function tallyIncrements(delta: VoteTally): Record<string, number> {
+  const increments: Record<string, number> = {};
+  if (delta.approve !== 0) increments.approve = delta.approve;
+  if (delta.abstain !== 0) increments.abstain = delta.abstain;
+  if (delta.reject !== 0) increments.reject = delta.reject;
+  if (delta.total !== 0) increments.total = delta.total;
+  return increments;
+}
+
 /**
  * Apply a committed vote to the display projection. Called only after the vote
  * transaction commits, so no projection write can be rolled into the vote.
+ *
+ * The normal path is one atomic upsert increment, so a first vote creates and
+ * counts its row in a single operation and no read-then-rebuild is involved. A
+ * rebuild records the newest vote it counted in `appliedThrough`; an increment
+ * for a vote at or before that point is skipped instead of added twice. The
+ * revision move is transactional, not a recount.
  */
 export async function updateBallotTallyProjection(
   db: Db,
@@ -342,62 +502,171 @@ export async function updateBallotTallyProjection(
     previousChoice?: VoteChoice | null;
     /** Revision the member's previous vote was bound to, when it changed. */
     previousRevisionId?: string | null;
+    /** When the committed vote was written, used for the rebuild watermark. */
+    voteUpdatedAt?: Date;
     cryptoConfig?: BallotCryptoConfig | null;
     now?: Date;
+    deadlineAt?: number;
   },
 ): Promise<void> {
   const now = input.now ?? new Date();
+  const deadlineAt =
+    input.deadlineAt ?? now.getTime() + BALLOT_TALLY_WRITE_DEADLINE_MS;
+  assertProjectionTime(deadlineAt);
+
   if (
     input.hadPreviousVote &&
     input.previousChoice &&
     input.previousRevisionId &&
     input.previousRevisionId !== input.revisionId
   ) {
-    // An amendment ballot can be re-bound to a newer revision. The member's
-    // old count belongs to the old row, so recount both rows from their votes
-    // instead of moving a count inside the new revision.
-    await rebuildBallotTallyProjection(db, {
+    // An amendment ballot can be re-bound to a newer revision. The member's old
+    // count belongs to the old row, so move it with transactional deltas on
+    // both rows instead of recounting and racing other increments.
+    await moveBallotTallyToRevision(db, {
       ballotId: input.ballotId,
-      revisionId: input.previousRevisionId,
-      cryptoConfig: input.cryptoConfig,
-      now,
-    });
-    await rebuildBallotTallyProjection(db, {
-      ballotId: input.ballotId,
+      previousRevisionId: input.previousRevisionId,
+      previousChoice: input.previousChoice,
       revisionId: input.revisionId,
-      cryptoConfig: input.cryptoConfig,
+      choice: input.choice,
       now,
     });
     return;
   }
+
   const delta = voteTallyDelta(input);
-  if (delta) {
-    const increments: Record<string, number> = {};
-    if (delta.approve !== 0) increments.approve = delta.approve;
-    if (delta.abstain !== 0) increments.abstain = delta.abstain;
-    if (delta.reject !== 0) increments.reject = delta.reject;
-    if (delta.total !== 0) increments.total = delta.total;
-    try {
-      const result = await db.collection(BALLOT_TALLIES).updateOne(
-        { ballotId: input.ballotId, revisionId: input.revisionId },
-        {
-          ...(Object.keys(increments).length ? { $inc: increments } : {}),
-          $set: { updatedAt: now },
-        },
-        { upsert: false },
-      );
-      if ((result.matchedCount ?? 0) > 0) return;
-    } catch (error) {
-      // A concurrent first vote may have created the row between the read and
-      // the upsert. Falling through to the rebuild produces the correct row.
-      if ((error as { code?: number }).code !== 11000) throw error;
-    }
+  if (!delta) {
+    // A genuinely unreadable prior vote cannot be turned into a delta. Rebuild
+    // under the compare-and-set guard; if it cannot finish in time, leave the
+    // row for the repair CLI rather than writing a stale absolute count.
+    await rebuildBallotTallyProjection(db, {
+      ballotId: input.ballotId,
+      revisionId: input.revisionId,
+      cryptoConfig: input.cryptoConfig,
+      deadlineAt,
+    });
+    return;
   }
-  await rebuildBallotTallyProjection(db, {
+
+  const increments = tallyIncrements(delta);
+  const voteUpdatedAt = input.voteUpdatedAt;
+  // `$inc` only creates the fields it increments, so seed the untouched ones on
+  // insert. Setting them with `$set` would race the increment; `$setOnInsert`
+  // applies once, atomically with it.
+  const setOnInsert: Record<string, number> = {};
+  for (const field of ["approve", "abstain", "reject", "total"] as const) {
+    if (!(field in increments)) setOnInsert[field] = 0;
+  }
+  const filter: Record<string, unknown> = {
     ballotId: input.ballotId,
     revisionId: input.revisionId,
-    cryptoConfig: input.cryptoConfig,
-    now,
+    ...(voteUpdatedAt
+      ? {
+          $or: [
+            { [BALLOT_TALLY_APPLIED_THROUGH_FIELD]: { $exists: false } },
+            { [BALLOT_TALLY_APPLIED_THROUGH_FIELD]: { $lt: voteUpdatedAt } },
+          ],
+        }
+      : {}),
+  };
+  const update: Record<string, unknown> = {
+    $set: { updatedAt: now },
+    $inc: {
+      ...increments,
+      [BALLOT_TALLY_VERSION_FIELD]: 1,
+    },
+    ...(Object.keys(setOnInsert).length ? { $setOnInsert: setOnInsert } : {}),
+  };
+  const applyIncrement = async () => {
+    try {
+      const result = await db
+        .collection(BALLOT_TALLIES)
+        .updateOne(filter, update, {
+          // A same-choice re-cast has no counts to add. If its row is missing,
+          // leave it missing for the repair CLI rather than creating a false
+          // zero row.
+          upsert: Object.keys(increments).length > 0,
+        });
+      return (result.matchedCount ?? 0) > 0 || Boolean(result.upsertedId);
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000) throw error;
+      // Another first vote created the row between the filter and the upsert.
+      // Retrying without upsert applies this vote on top of it.
+      const retry = await db
+        .collection(BALLOT_TALLIES)
+        .updateOne(filter, update, { upsert: false });
+      // Zero matches here means a rebuild counted this vote meanwhile.
+      return (retry.matchedCount ?? 0) > 0;
+    }
+  };
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await applyIncrement();
+      return;
+    } catch (error) {
+      // A transactional revision move can hold this row briefly. Retry a
+      // write conflict within the deadline; otherwise leave it to repair.
+      if (
+        (error as { code?: number }).code === 112 &&
+        attempt < 2 &&
+        Date.now() < deadlineAt
+      ) {
+        await new Promise((resolve) => {
+          const timer = setTimeout(resolve, 5 * (attempt + 1));
+          timer.unref?.();
+        });
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+/**
+ * Move a member's count from the previous revision's row to the current one.
+ * Both deltas commit in one transaction, so a concurrent increment cannot see
+ * half a move. The old row is never created; the new row is.
+ */
+async function moveBallotTallyToRevision(
+  db: Db,
+  input: {
+    ballotId: string;
+    previousRevisionId: string;
+    previousChoice: VoteChoice;
+    revisionId: string;
+    choice: VoteChoice;
+    now: Date;
+  },
+): Promise<void> {
+  // Imported lazily: db.ts owns the tally index setup, so a static import would
+  // create a module cycle.
+  const { runInTransaction } = await import("./db.ts");
+  await runInTransaction(db, async (session) => {
+    const sessionOpts = session ? { session } : undefined;
+    await db.collection(BALLOT_TALLIES).updateOne(
+      { ballotId: input.ballotId, revisionId: input.previousRevisionId },
+      {
+        $inc: {
+          [input.previousChoice]: -1,
+          total: -1,
+          [BALLOT_TALLY_VERSION_FIELD]: 1,
+        },
+        $set: { updatedAt: input.now },
+      },
+      sessionOpts,
+    );
+    await db.collection(BALLOT_TALLIES).updateOne(
+      { ballotId: input.ballotId, revisionId: input.revisionId },
+      {
+        $inc: {
+          [input.choice]: 1,
+          total: 1,
+          [BALLOT_TALLY_VERSION_FIELD]: 1,
+        },
+        $set: { updatedAt: input.now },
+      },
+      { upsert: true, ...(sessionOpts ?? {}) },
+    );
   });
 }
 
@@ -434,10 +703,12 @@ function settleWithin(
 /**
  * Best-effort projection update for a vote that has already committed.
  *
- * It never throws and never holds the response past `deadlineMs`. Failures and
- * timeouts are operational events; they do not change the vote, the ballot
- * binding, eligibility or the certified result. The repair CLI reports and
- * rebuilds any row this leaves behind.
+ * It never throws and never holds the response past `deadlineMs`. The work is
+ * also bounded internally: a rebuild checks the deadline before every write and
+ * uses `maxTimeMS` for its recount, so a timeout leaves the row for the repair
+ * CLI instead of writing a stale absolute count. Failures and timeouts are
+ * operational events; they do not change the vote, the ballot binding,
+ * eligibility or the certified result.
  */
 export async function projectCommittedVoteTally(
   db: Db,
@@ -446,28 +717,54 @@ export async function projectCommittedVoteTally(
     hadPreviousVote: boolean;
     previousChoice?: VoteChoice | null;
     previousRevisionId?: string | null;
+    voteUpdatedAt?: Date;
     cryptoConfig?: BallotCryptoConfig | null;
     now?: Date;
     deadlineMs?: number;
   },
 ): Promise<void> {
-  const work = updateBallotTallyProjection(db, input).catch((error: unknown) => {
-    logOperationalEvent("error", "ballot_tally_projection_failed", {
-      ballotId: input.ballotId,
-      revisionId: input.revisionId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  });
-  await settleWithin(
-    work,
-    input.deadlineMs ?? BALLOT_TALLY_WRITE_DEADLINE_MS,
-    () =>
-      logOperationalEvent("warn", "ballot_tally_projection_timeout", {
+  const deadlineMs = input.deadlineMs ?? BALLOT_TALLY_WRITE_DEADLINE_MS;
+  const deadlineAt = Date.now() + deadlineMs;
+  let timedOut = false;
+  const work = updateBallotTallyProjection(db, { ...input, deadlineAt }).catch(
+    (error: unknown) => {
+      if (timedOut) return;
+      if (
+        error instanceof BallotTallyProjectionError &&
+        error.code === "BALLOT_TALLY_PROJECTION_DEADLINE"
+      ) {
+        logOperationalEvent("warn", "ballot_tally_projection_timeout", {
+          ballotId: input.ballotId,
+          revisionId: input.revisionId,
+          deadlineMs,
+        });
+        return;
+      }
+      if (
+        error instanceof BallotTallyProjectionError &&
+        error.code === "BALLOT_TALLY_PROJECTION_CONFLICT"
+      ) {
+        logOperationalEvent("warn", "ballot_tally_projection_conflict", {
+          ballotId: input.ballotId,
+          revisionId: input.revisionId,
+        });
+        return;
+      }
+      logOperationalEvent("error", "ballot_tally_projection_failed", {
         ballotId: input.ballotId,
         revisionId: input.revisionId,
-        deadlineMs: input.deadlineMs ?? BALLOT_TALLY_WRITE_DEADLINE_MS,
-      }),
+        error: error instanceof Error ? error.message : String(error),
+      });
+    },
   );
+  await settleWithin(work, deadlineMs, () => {
+    timedOut = true;
+    logOperationalEvent("warn", "ballot_tally_projection_timeout", {
+      ballotId: input.ballotId,
+      revisionId: input.revisionId,
+      deadlineMs,
+    });
+  });
 }
 
 export interface BallotTallyRepairRow {
@@ -667,59 +964,71 @@ export async function repairBallotTallyProjection(
       continue;
     }
     if (row.status === "match") continue;
-    await db.collection(BALLOT_TALLIES).updateOne(
-      { ballotId: row.ballotId, revisionId: row.revisionId },
-      {
-        $set: {
-          approve: row.expected.approve,
-          abstain: row.expected.abstain,
-          reject: row.expected.reject,
-          total: row.expected.total,
-          updatedAt: now,
-        },
-      },
-      { upsert: true },
-    );
-    written += 1;
+    try {
+      // Reuse the guarded rebuild so a repair running against a live database
+      // cannot overwrite a concurrent increment with a stale recount.
+      await rebuildBallotTallyProjection(db, {
+        ballotId: row.ballotId,
+        revisionId: row.revisionId,
+        cryptoConfig: options.cryptoConfig,
+      });
+      written += 1;
+    } catch (error) {
+      if (error instanceof BallotTallyProjectionError) {
+        skipped += 1;
+        continue;
+      }
+      throw error;
+    }
   }
   if (report.orphanRows > 0) {
     const orphans = await db
       .collection(BALLOT_TALLIES)
-      .find({}, { projection: { ballotId: 1, revisionId: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            _id: 0,
+            ballotId: 1,
+            revisionId: 1,
+            [BALLOT_TALLY_VERSION_FIELD]: 1,
+          },
+        },
+      )
       .toArray();
-    const groups = new Set(report.rows.map((row) => ballotTallyKey(row.ballotId, row.revisionId)));
+    const groups = new Set(
+      report.rows.map((row) => ballotTallyKey(row.ballotId, row.revisionId)),
+    );
     for (const raw of orphans as Array<Record<string, any>>) {
       const ballotId = String(raw.ballotId ?? "");
       const revisionId = String(raw.revisionId ?? "");
       if (!ballotId || !revisionId) continue;
       if (groups.has(ballotTallyKey(ballotId, revisionId))) continue;
-      const current = (await db
-        .collection(BALLOT_TALLIES)
-        .findOne({ ballotId, revisionId })) as Record<string, any> | null;
-      if (!current) continue;
-      if (
-        isZeroTally({
-          approve: Number(current.approve ?? 0),
-          abstain: Number(current.abstain ?? 0),
-          reject: Number(current.reject ?? 0),
-          total: Number(current.total ?? 0),
-        })
-      ) {
-        continue;
-      }
-      await db.collection(BALLOT_TALLIES).updateOne(
-        { ballotId, revisionId },
-        {
-          $set: {
-            approve: 0,
-            abstain: 0,
-            reject: 0,
-            total: 0,
-            updatedAt: now,
-          },
+      const version =
+        typeof raw[BALLOT_TALLY_VERSION_FIELD] === "number"
+          ? (raw[BALLOT_TALLY_VERSION_FIELD] as number)
+          : null;
+      const filter =
+        version === null
+          ? {
+              ballotId,
+              revisionId,
+              [BALLOT_TALLY_VERSION_FIELD]: { $exists: false },
+            }
+          : { ballotId, revisionId, [BALLOT_TALLY_VERSION_FIELD]: version };
+      const result = await db.collection(BALLOT_TALLIES).updateOne(filter, {
+        $set: {
+          approve: 0,
+          abstain: 0,
+          reject: 0,
+          total: 0,
+          updatedAt: now,
+          [BALLOT_TALLY_APPLIED_THROUGH_FIELD]: now,
         },
-      );
-      zeroed += 1;
+        $inc: { [BALLOT_TALLY_VERSION_FIELD]: 1 },
+      });
+      if ((result.matchedCount ?? 0) > 0) zeroed += 1;
+      else skipped += 1;
     }
   }
   return { report: { ...report, dryRun: false }, written, zeroed, skipped };
