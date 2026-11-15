@@ -23,6 +23,7 @@
     "governance:migration-report": "node --experimental-strip-types scripts/report-governance-deadline-migration.ts",
     "ballots:encrypt-migrate": "node --experimental-strip-types scripts/migrate-encrypted-votes.ts",
     "branches:migrate": "node --experimental-strip-types scripts/seed-branches.ts",
+    "policies:import-branch": "node --experimental-strip-types scripts/import-branch-policies.ts",
     "branches:participation-migrate": "node --experimental-strip-types scripts/migrate-branch-participation.ts",
     "membership:verify": "node --experimental-strip-types scripts/membership-verification.ts"
   },

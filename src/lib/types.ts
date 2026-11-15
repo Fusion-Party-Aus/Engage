@@ -1,6 +1,14 @@
 export type ProposalStage =
   "propose" | "deliberate" | "decide" | "implement" | "archived";
 export type ProposalKind = "policy" | "resolution";
+/** How a proposal changes an already adopted policy. */
+export type PolicyChangeType = "amend" | "repeal" | "replace";
+export type PolicyPublicationStatus =
+  | "unpublished"
+  | "published"
+  | "withdrawn"
+  | "superseded"
+  | "repealed";
 export type VoteChoice = "approve" | "abstain" | "reject";
 export type CommentStance = "support" | "concern" | "amendment" | "comment";
 export type UserRole = "member" | "moderator" | "administrator";
@@ -29,6 +37,43 @@ export interface ProposalRevision {
   };
   contentHash: string;
   provenance?: PolicyProvenance;
+}
+
+/**
+ * An immutable revision of an adopted policy that did not come from an Engage
+ * ballot, for example an imported branch policy. Engage-ratified policy keeps
+ * using `proposal_revisions`.
+ */
+export interface PolicyRevisionRecord {
+  revisionId: string;
+  policyId: string;
+  revisionType: "imported-policy" | "policy-change";
+  parentRevisionId: string | null;
+  authorId: string;
+  createdAt: Date;
+  snapshot: {
+    title: string;
+    summary: string;
+    outcomes: string[];
+    details: string;
+    /** The exact source document, preserved verbatim. */
+    document?: Record<string, unknown>;
+  };
+  contentHash: string;
+  provenance?: PolicyProvenance;
+}
+
+/** Lineage recorded when a proposal changes an adopted policy. */
+export interface PolicyChangeLineage {
+  changeType: PolicyChangeType;
+  targetPolicyId: string;
+  targetRevisionId: string | null;
+  proposalId: string;
+  revisionId: string;
+  decisionEventId: string;
+  authorityBranchId: string;
+  recordedAt: Date;
+  recordedBy: string;
 }
 
 export interface PlatformEnv {
@@ -211,6 +256,13 @@ export interface ProposalRecord {
   deliberationEndsAt?: Date;
   supersededByProposalId?: string;
   supersededByNote?: string;
+  /**
+   * Set when this proposal changes an adopted policy. The target must be a
+   * published policy record; drafts cannot claim to have changed it.
+   */
+  targetPolicyId?: string;
+  targetPolicyRevisionId?: string;
+  changeType?: PolicyChangeType;
 
   // Backwards compatibility aliases
   policyId?: string;
