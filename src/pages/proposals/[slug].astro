@@ -211,7 +211,7 @@ const stageGuideText = (stage: ProposalStage) => {
     return 'Voting is open.';
   }
   if (stage === 'deliberate') {
-    return 'Open for member discussion, scrutiny, and formal wording amendments before a ballot is opened.';
+    return 'Read the discussion, raise a concern, or suggest a wording change before voting begins.';
   }
   if (stage === 'implement') {
     return isResolution
@@ -909,7 +909,7 @@ const initialsFor = (name: string) =>
                 </div>
               ) : (
                 <p class="rail-muted">
-                  Formal voting has not opened yet. Join the member discussion or propose a wording amendment while this proposal is in deliberation.
+                  Formal voting has not opened yet. Join the discussion or propose a wording amendment while this proposal is in deliberation.
                 </p>
               )}
 
@@ -1030,7 +1030,7 @@ const initialsFor = (name: string) =>
                   <summary>+ Propose a formal wording amendment</summary>
                   <div class="amendment-compose__body">
                     <p>
-                      Records a formal amendment against the latest saved revision (<code>{String(revisions[0]?.revisionId ?? 'initial').slice(0, 8)}</code>). For general feedback, use the Member discussion section below.
+                      Records a formal amendment against the latest saved revision (<code>{String(revisions[0]?.revisionId ?? 'initial').slice(0, 8)}</code>). For general feedback, use the Discussion section below.
                     </p>
                     <form id="amendment-form" class="grid gap-3" data-proposal-id={proposal.proposalId} data-revision-id={revisions[0]?.revisionId ?? ''}>
                       <Field label="Proposed title (optional)" htmlFor="amendment-title">
@@ -1054,7 +1054,7 @@ const initialsFor = (name: string) =>
               <div class="doc-section__header">
                 <div>
                   <div class="doc-title-row">
-                    <h2 id="deliberate-heading">Member discussion</h2>
+                    <h2 id="deliberate-heading">Discussion</h2>
                     <span class="doc-count tabular">{comments.length} {comments.length === 1 ? 'contribution' : 'contributions'}</span>
                   </div>
                   <p class="doc-section__sub">

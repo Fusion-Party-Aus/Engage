@@ -265,15 +265,15 @@ const stageVariant = (s: ProposalStage) => {
               <li><strong>1. Propose:</strong> Member submits an idea and rationale.</li>
               <li><strong>2. Deliberate:</strong> Members debate and file amendments.</li>
               <li><strong>3. Decide:</strong> Eligible members vote on frozen wording.</li>
-              <li><strong>4. Implement:</strong> Ratified and published to the registry.</li>
+              <li><strong>4. Implement:</strong> Adopted wording is recorded and published.</li>
             </ol>
-            <a href="/how-it-works/" class="rail-link">Read the full 1-page guide →</a>
+            <a href="/how-it-works/" class="rail-link">How it works →</a>
           </div>
 
           <div class="rail-box">
             <h2>Your workspaces</h2>
             <ul class="rail-nav-list">
-              <li><a href="/member/">My Engage activity &amp; log →</a></li>
+              <li><a href="/member/">My Engage →</a></li>
               <li><a href="/sense-box/">Sense Box · Local priorities →</a></li>
               <li><a href="/branches/">Branches &amp; state sites →</a></li>
               <li><a href="/policies/">Official policy registry →</a></li>
@@ -289,7 +289,7 @@ const stageVariant = (s: ProposalStage) => {
           <div class="visitor-hero__content">
             <h1>Help shape what Fusion does next.</h1>
             <p>
-              Engage is where Fusion members propose ideas, deliberate on policy wording, and vote on bound revisions. Anyone can inspect every proposal, revision, and ballot tally publicly.
+              Bring an idea, help improve a policy, or vote on what Fusion should do next. You can read public proposals and discussions without an account. Verified members can contribute and vote where eligible.
             </p>
             <div class="visitor-hero__actions">
               <Button href={primaryCtaHref} size="lg" className="hero-star-btn">
@@ -321,7 +321,7 @@ const stageVariant = (s: ProposalStage) => {
           <div class="pipeline-overview__head">
             <div>
               <h2 id="pipeline-heading">How an idea becomes policy</h2>
-              <p>Every proposal follows four stages from initial idea to party adoption.</p>
+              <p>Follow an idea through discussion, voting and, if adopted, publication.</p>
             </div>
             <a href="/how-it-works/" class="home-block__link">More Detail →</a>
           </div>
@@ -351,7 +351,7 @@ const stageVariant = (s: ProposalStage) => {
                 <strong class="home-pipeline-cell__value tabular">{votes.length} open</strong>
                 <span class="home-pipeline-cell__hint">Member ballots</span>
               </div>
-              <p class="home-pipeline-cell__desc">Eligible verified members vote on an immutable bound wording snapshot.</p>
+              <p class="home-pipeline-cell__desc">Eligible members vote on the exact wording shown on the ballot.</p>
             </a>
 
             <a href="/policies/" class="home-pipeline-cell">
@@ -360,7 +360,7 @@ const stageVariant = (s: ProposalStage) => {
                 <strong class="home-pipeline-cell__value tabular">{implementing.length} processing</strong>
                 <span class="home-pipeline-cell__hint">{registryAvailable ? `${publishedPolicyCount} published` : 'Policy registry'}</span>
               </div>
-              <p class="home-pipeline-cell__desc">Successful ballots proceed to formal party ratification and registry publication.</p>
+              <p class="home-pipeline-cell__desc">Members decide the policy. Officers certify the process and publish the adopted wording.</p>
             </a>
           </div>
         </section>
@@ -372,7 +372,7 @@ const stageVariant = (s: ProposalStage) => {
             <div class="home-block__head">
               <div>
                 <h2 id="active-proposals-heading">Active proposals &amp; open ballots</h2>
-                <p>Inspect live proposals, read member deliberations, and examine revision histories.</p>
+                <p>See what’s being discussed, read the contributions, and follow how the wording has changed.</p>
               </div>
               <Button href="/proposals/" variant="outline" size="sm">
                 View all {proposals.length} proposals <ArrowRight className="size-3.5" aria-hidden="true" />
