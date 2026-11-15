@@ -5,7 +5,7 @@ Updated 15 November 2026. Resume from the pushed repository and GitHub, not conv
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review` (started from main `20dfa90`).
 - Single review PR: https://github.com/Fusion-Party-Aus/Engage/pull/98
-- Next concrete task: confirm batch 8 is remotely visible, integrate latest main if needed, run final checks and update PR/#97. Do not repeat completed journeys. Do not close #97 before final delivery is verified.
+- Next concrete task: confirm the final integration/checkpoint is remotely visible and PR #98 is ready for review. Editorial coverage is complete; review/merge and release follow-up remain. Do not repeat completed journeys. Do not close #97 before final delivery is verified.
 
 ## Editorial principles and decisions
 
@@ -34,7 +34,7 @@ A touched page was not assumed reviewed in full until its journey batch below. A
 | 6 | Six email renderers (subjects/HTML/plain text), sign-in/verification notices, push/digest messages, preferences/unsubscribe | `6a52a2a` |
 | 7a | Admin dashboard, proposal registers/detail, ballot certification and policy ratification/publication | `7308475` |
 | 7b | Roles/members/branches/reports/settings/migrations/Sense Box/engagement admin; shared operational components | `bd0f204` |
-| 8 | Final legal/privacy, API/form-error, metadata, error/changelog pages, shared-helper and terminology sweep | Validated; publishing checkpoint |
+| 8 | Final legal/privacy, API/form-error, metadata, error/changelog pages, shared-helper and terminology sweep | Delivered in `95913e6`; remote tree verified |
 
 No journey area remains unreviewed once batch 8 is verified remotely. Already-clear strings were retained, including standard primitive labels, auth messages, source/API references and actionable validation. Protocol field names and diagnostic identifiers remain where integrators/officers need them. Existing independent product/UX issues are not solved by copy changes.
 
@@ -59,9 +59,9 @@ Legal drafts advance to version 1.2, still **owner-authorised/publication pendin
 
 ## Validation
 
-- Latest full suite before final integration: **391 passed, 35 skipped, 426 total**; no failures. Skipped suites require optional persistence infrastructure. Focused batch suites also passed (policy/Sense Box 37; member shell/auth 27 + 3 skipped; preferences 15; email 40 + 1 skipped; governance admin 40; remaining admin 35).
-- `pnpm check`: 324 files, zero errors/warnings, 20 existing hints. Production build passes.
-- `pnpm docs:check-links`: 183 relative links in 80 files, zero broken. `git diff --check` passes.
+- Latest full suite after main integration: **451 passed, 44 skipped, 495 total**; no failures. Skipped suites require optional persistence infrastructure. Focused batch suites also passed (policy/Sense Box 37; member shell/auth 27 + 3 skipped; preferences 15; email 40 + 1 skipped; governance admin 40; remaining admin 35).
+- `pnpm check`: 341 files, zero errors/warnings, 20 existing hints. Production build passes.
+- `pnpm docs:check-links`: 198 relative links in 81 files, zero broken. `git diff --check` passes.
 - Existing source assertions pinned to old accessible labels/CTA/legal wording were updated without removing behavioural checks. Legal acceptance tests confirm publication gating remains inactive for these drafts.
 - Raw-control audit: ordinary changed pages use primitives/hidden inputs. Deliberately retained existing Share button in ProposalBallot, standalone unsubscribe confirmation button and email HTML presentation tables; this copy PR preserves those interactions/email compatibility. Native confirmation/revocation/image/link prompts remain separate UX work.
 - No CSS/palette/design-system changes. No payload, permission, ranking/reporting formula, consent category, migration, delivery or governance-command changes. Closed-ballot header/caption now reflects the existing deadline check; SSR fallback deadline correctly labels Melbourne time before browser localisation.
@@ -72,6 +72,10 @@ Legal drafts advance to version 1.2, still **owner-authorised/publication pendin
 
 - Public Sense Box after review: #101. Current form/consent/API remain private; do not falsely describe a shipped public listing or expose historical private entries.
 - Private/branch-scoped/archived proposal gates and unpublished policy records still restrict reads; D36 describes direction, not shipped access behaviour. Historical #2’s member-only deliberation requirement conflicts with the new direction.
-- Automatic ratification and competing-amendment rules remain incomplete (#27/#34); template capability is not completed notification fan-out (#33).
+- Automatic ratification and competing-amendment rules remain incomplete (#27/#34); main `78c07c0` adds durable ballot-open/closing-soon notification delivery (#33/#102). Other event categories remain separate capabilities; do not infer full fan-out.
 - Existing raw permission-key UI/native prompts remain #41/#59. No account/authority redesign here.
 - Legal publication/effective dates and operational recovery/key-custody questions remain release-owner work (#40); acceptance was not enabled.
+
+## Main integration checkpoint
+
+Integrated main through `78c07c0` (operations #99, security perimeter #100, ballot notification outbox #102). Only changelog conflicted; preserved real entries from both sides. Reviewed new notification message/health/security response strings. Combined-tree full suite: 451 passed, 44 skipped, no failures; typecheck: 341 files, zero errors/warnings and 20 hints; 198 relative documentation links checked in 81 files, zero broken. Production build passed with Git and in a tracked-source copy containing no Git metadata. The latter used direct Node commands because pnpm refused a shared dependency symlink; the changelog fallback kept the existing snapshot. New ballot notification messages were aligned with optional participation wording; their existing source assertion was updated. No upstream delivery/security/health logic was changed.

@@ -2,6 +2,9 @@ import type { Db } from "mongodb";
 import { BALLOTS_COLLECTION } from "./ballots.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEventOnce } from "./governance-relationships.ts";
+import { jobErrorMessage, withJobRun } from "./job-runs.ts";
+import { enqueueGovernanceNotifications } from "./notification-outbox.ts";
+import { logOperationalEvent } from "./resilience.ts";
 import {
   LIFECYCLE_SYSTEM_ACTOR,
   amendmentBlocksScheduledAdvancement,
@@ -546,6 +549,11 @@ export async function closeDueBallots(
 /**
  * One scheduler run: advance due deliberations, then record due ballot closures.
  * Pass `dryRun` to compute the same report without writing anything.
+ *
+ * Every completed run — apply or dry-run — also records one entry in the
+ * `job_runs` ledger. The ledger is observability only: it cannot change the
+ * report, scheduling, conditional writes or governance events, and a ledger
+ * failure never fails the run.
  */
 export async function runGovernanceScheduler(
   db: Db,
@@ -553,25 +561,66 @@ export async function runGovernanceScheduler(
 ): Promise<GovernanceSchedulerReport> {
   const now = options.now ?? new Date();
   const dryRun = options.dryRun === true;
-  const advancement = await advanceDueDeliberations(db, { now, dryRun });
-  const closure = await closeDueBallots(db, { now, dryRun });
-  const skipped = [...advancement.skipped, ...closure.skipped];
-  const errors = [...advancement.errors, ...closure.errors];
-  return {
-    mode: dryRun ? "dry-run" : "apply",
-    actorId: LIFECYCLE_SYSTEM_ACTOR,
-    now: now.toISOString(),
-    counts: {
-      advanced: advancement.advanced.length,
-      skipped: skipped.length,
-      closed: closure.closed.length,
-      blockers: advancement.blockers.length,
-      errors: errors.length,
+  return withJobRun(
+    db,
+    "governance-scheduler",
+    async () => {
+      const advancement = await advanceDueDeliberations(db, { now, dryRun });
+      const closure = await closeDueBallots(db, { now, dryRun });
+      // Notification fan-out runs after the committed transitions. It is
+      // deliberately outside the transaction and outside the report: a
+      // notification problem can never fail, block or alter a governance
+      // transition (#33). Enqueue is idempotent and the next run repairs an
+      // enqueue lost to a crash.
+      if (!dryRun) {
+        try {
+          const enqueued = await enqueueGovernanceNotifications(db, {
+            now,
+            advanced: advancement.advanced,
+          });
+          for (const report of enqueued) {
+            if (report.errors.length === 0) continue;
+            logOperationalEvent("error", "governance_notification_enqueue_failed", {
+              event: report.event,
+              errors: report.errors.map((entry) => jobErrorMessage(entry.message)),
+            });
+          }
+        } catch (error) {
+          logOperationalEvent("error", "governance_notification_enqueue_failed", {
+            message: jobErrorMessage(error),
+          });
+        }
+      }
+      const skipped = [...advancement.skipped, ...closure.skipped];
+      const errors = [...advancement.errors, ...closure.errors];
+      return {
+        mode: dryRun ? "dry-run" : "apply",
+        actorId: LIFECYCLE_SYSTEM_ACTOR,
+        now: now.toISOString(),
+        counts: {
+          advanced: advancement.advanced.length,
+          skipped: skipped.length,
+          closed: closure.closed.length,
+          blockers: advancement.blockers.length,
+          errors: errors.length,
+        },
+        advanced: advancement.advanced,
+        skipped,
+        closed: closure.closed,
+        blockers: advancement.blockers,
+        errors,
+      } satisfies GovernanceSchedulerReport;
     },
-    advanced: advancement.advanced,
-    skipped,
-    closed: closure.closed,
-    blockers: advancement.blockers,
-    errors,
-  };
+    {
+      now,
+      mode: dryRun ? "dry-run" : "apply",
+      summarise: (report) => ({
+        advanced: report.counts.advanced,
+        closed: report.counts.closed,
+        skipped: report.counts.skipped,
+        blockers: report.counts.blockers,
+        errors: report.counts.errors,
+      }),
+    },
+  );
 }

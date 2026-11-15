@@ -72,13 +72,17 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 **Direction:** Apply the same source guard to self-service and add a test.
 
-### 7. Notification fan-out is built but unwired
+### 7. Notification fan-out is partly wired
 
-**Impact:** Opening a ballot or recording an outcome does not create in-app notifications or push messages, despite the notification model and preferences implying it might. Only membership verification and digest email send today.
+**Impact:** Opening a ballot did not create in-app notifications or push messages, despite the notification model and preferences implying it might. Only membership verification and digest email sent.
 
-**Evidence:** `dispatchMemberNotification` in `src/lib/notifications.ts` has no production caller.
+**Addressed on `feat/notification-outbox` (#33):** a durable `notification_outbox` (unique dedupe key, claim lease, bounded retry with backoff, retention TTL) is written after a committed governance transition and drained by `npm run notifications:drain` (dry-run by default, `--apply`). Two events are wired: a ballot opened by the lifecycle scheduler (`new_ballots`) and an open ballot inside the approved seven-day window (`closing_deadlines`). The audience is the voting electorate: candidates are confirmed with `getProposalEligibility` and `canViewProposal`, and eligibility is re-checked at drain, so a revoked membership is suppressed rather than notified. In-app is the baseline channel; Web Push remains strictly opt-in; the general-communications switch and email suppression do not hide a formal ballot notice.
 
-**Direction:** Wire chosen governance events with dedupe, preferences and a delivery record. Decide which events are essential versus engagement.
+**Still open:** `governance_outcomes` is not wired because the result route is being refactored elsewhere, and `contribution_responses` needs a product decision. Email fan-out from the outbox is deferred (the digest already emails outstanding ballots). No production scheduler is configured, so no notification is delivered there yet (item 21).
+
+**Evidence:** `src/lib/notification-outbox.ts`, `scripts/drain-notification-outbox.ts`, `notification-outbox.test.ts`, `notification-outbox-mongo.test.ts`; [notifications and jobs](../architecture/notifications-and-jobs.md#governance-notification-events).
+
+**Direction:** wire the remaining events when the result route and the comment-outcome decision land. Do not tell members that every governance event produces a notification.
 
 ### 8. Public supersession can link to an unpublished policy
 
@@ -128,11 +132,31 @@ Comments can be deleted by staff, but there is no moderation state, reason or au
 
 ### 15. Perimeter security is incomplete
 
-No CSP, HSTS, `X-Frame-Options` or `X-Content-Type-Options`; no general API rate limiting; CSRF/Origin checks are partial. Cookies rely on `SameSite=Lax` for many routes.
+**Addressed on `feat/security-headers-csrf` (issue #38), pending merge.** A
+perimeter middleware now sets `X-Content-Type-Options`, `Referrer-Policy`,
+`X-Frame-Options`, a minimal `Permissions-Policy`, conditional HSTS and a
+hash-based Content Security Policy. Astro's form-post origin check is kept and
+extended for every state-changing method: cross-site `Sec-Fetch-Site`, a
+mismatched `Origin`, and an absent `Origin` with a session cookie are refused.
+A real-browser check covers the home, proposal, sign-in and Sense Box pages,
+Turnstile, Plausible, same-origin writes and cross-origin rejection. See
+[security/perimeter.md](../security/perimeter.md).
 
-Cloudflare Turnstile and a shared MongoDB fixed-window limiter now protect the abuse-prone unauthenticated actions (Sense Box submission and magic-link sign-in) — see [security/turnstile.md](../security/turnstile.md). Authenticated voting is deliberately not challenged. General API rate limiting, the security headers and complete CSRF coverage remain.
+Before this slice, the application had no CSP, HSTS, frame or content-type
+headers, CSRF/Origin coverage was partial, and many routes relied on
+`SameSite=Lax` cookies. Cloudflare Turnstile and a shared MongoDB fixed-window
+limiter protect the abuse-prone unauthenticated actions (Sense Box submission
+and magic-link sign-in) — see [security/turnstile.md](../security/turnstile.md).
 
-**Direction:** Add headers at the reverse proxy or app boundary, then extend origin checks to every state-changing route. Document residual risk.
+**Still missing:** general API rate limiting, per-request CSRF tokens, a CSP
+violation reporting endpoint, and perimeter headers on static assets (served by
+the Node adapter before middleware) and on Astro's own early cross-site 403. The
+reverse proxy should add the same headers. Production headers have not been
+observed through Cloudflare/Coolify.
+
+**Direction:** Keep the unit tests and the browser script as the regression
+evidence. Add proxy headers for static assets, decide whether to add CSRF tokens
+for same-origin script compromise, and verify the deployed header set.
 
 ### 16. The legal acceptance gate is inactive
 
@@ -167,6 +191,10 @@ Projections and indexes are no-ops and there are no transactions. Development an
 ### 21. No scheduled jobs are enabled in Coolify production
 
 Digest and CRM verification endpoints exist, but no scheduler is configured. No email digest or verification cycle runs by default.
+
+**Partially resolved (operational observability slice, #39):** authorised runs now record a durable `job_runs` ledger entry (90-day TTL) for the governance scheduler, digest and CRM verification, including failures, with no secrets or member data. `npm run ops:health` evaluates governance scheduling, ballot deadlines, digest cadence, verification backlog, recent email delivery and Turnstile, with named thresholds and exit codes `0` healthy, `2` degraded, `1` failing. `/api/health` publishes coarse `governanceScheduler` and `jobs` states and stays 200 when only a job is degraded.
+
+**Still missing:** the external scheduler itself is not configured in Coolify production, no run has been observed in production, there is no metrics/tracing backend, no alert delivery and no admin health page. `ops:health` is the input an external monitor would alert on.
 
 **Direction:** Configure and monitor an external scheduler. Treat missing jobs as an operational incident.
 

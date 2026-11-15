@@ -127,7 +127,8 @@ const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organ
 
     {!workspace && <SiteFooter user={user} siteConfig={siteConfig} />}
   </body>
-  <script is:inline>
+  <script>
+    // Processed by Astro so the inline registration is hashed by the CSP.
     if ('serviceWorker' in navigator && window.isSecureContext) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});

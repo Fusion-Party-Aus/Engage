@@ -76,6 +76,7 @@
 | `push_subscriptions` | Web Push endpoints and keys |
 | `member_notifications` | In-app inbox items |
 | `notification_deliveries` | Dedupe and delivery state |
+| `notification_outbox` | Durable governance notification queue (unique dedupe key, claim lease, retry state, retention TTL) |
 | `sense_submissions` | Public Sense Box concerns |
 | `rate_limits` | Shared fixed-window counters for unauthenticated abuse protection (hashed subject, TTL) |
 | `site_settings`, `site_settings_events` | Public configuration and its audit |
