@@ -71,7 +71,7 @@ function context(req: Request) {
   } as never;
 }
 
-describe("public profile biography route", () => {
+describe("public profile settings route", () => {
   it("requires a session", async () => {
     const response = await postProfile(context(request({ bio: "Hello" })));
     assert.equal(response.status, 401);
@@ -96,6 +96,7 @@ describe("public profile biography route", () => {
     assert.deepEqual(await response.json(), {
       ok: true,
       bio: "Transparent process matters.",
+      profileVisible: true,
     });
 
     const own = await db
@@ -106,6 +107,37 @@ describe("public profile biography route", () => {
       .findOne({ _id: "other-profile-account" as any });
     assert.equal(own?.bio, "Transparent process matters.");
     assert.equal(other?.bio, "Leave me alone.");
+  });
+
+  it("toggles profile visibility", async () => {
+    const response = await postProfile(
+      context(
+        request(
+          { bio: "Still here.", profileVisible: false },
+          { cookie },
+        ),
+      ),
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      bio: "Still here.",
+      profileVisible: false,
+    });
+    const own = await db
+      .collection("user")
+      .findOne({ _id: "dev-member-01" as any });
+    assert.equal(own?.profileVisible, false);
+  });
+
+  it("rejects an invalid visibility value", async () => {
+    const response = await postProfile(
+      context(request({ profileVisible: "yes" }, { cookie })),
+    );
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "Profile visibility must be on or off.",
+    });
   });
 
   it("rejects an overlong biography and leaves the stored value unchanged", async () => {
@@ -124,14 +156,22 @@ describe("public profile biography route", () => {
     assert.equal(account?.bio, undefined);
   });
 
-  it("returns the owner's biography and never an email address", async () => {
+  it("returns the owner's profile settings and never an email address", async () => {
     await postProfile(
-      context(request({ bio: "Public biography." }, { cookie })),
+      context(
+        request(
+          { bio: "Public biography.", profileVisible: false },
+          { cookie },
+        ),
+      ),
     );
     const response = await getProfile(context(request({}, { cookie })));
     assert.equal(response.status, 200);
     const payload = await response.json();
-    assert.deepEqual(payload, { bio: "Public biography." });
+    assert.deepEqual(payload, {
+      bio: "Public biography.",
+      profileVisible: false,
+    });
     assert.equal(JSON.stringify(payload).includes("member@local.test"), false);
   });
 });

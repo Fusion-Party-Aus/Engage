@@ -3,8 +3,8 @@ import { getSessionUser } from "../../../lib/auth.ts";
 import { privateJson } from "../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import {
-  getMemberBioSettings,
-  saveMemberBio,
+  getMemberProfileSettings,
+  saveMemberProfile,
 } from "../../../lib/member-profile.ts";
 import { resolvePublicOrigin } from "../../../lib/public-origin.ts";
 
@@ -16,7 +16,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   if (!user) return privateJson({ error: "Sign in required." }, { status: 401 });
 
   const db = await getDatabase(env);
-  return privateJson({ bio: await getMemberBioSettings(db, user.memberId) });
+  return privateJson(await getMemberProfileSettings(db, user.memberId));
 };
 
 export const POST: APIRoute = async ({ request, locals, url }) => {
@@ -40,18 +40,22 @@ export const POST: APIRoute = async ({ request, locals, url }) => {
 
   try {
     const db = await getDatabase(env);
-    const bio = await saveMemberBio(db, user, body.bio);
-    return privateJson({ ok: true, bio });
+    const profile = await saveMemberProfile(db, user, body);
+    return privateJson({ ok: true, ...profile });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "Account record not found.") {
       return privateJson({ error: message }, { status: 404 });
     }
-    if (message.startsWith("Biography")) {
+    if (
+      message.startsWith("Biography") ||
+      message.startsWith("Profile") ||
+      message === "No profile changes provided."
+    ) {
       return privateJson({ error: message }, { status: 400 });
     }
     return privateJson(
-      { error: "Could not save biography. Try again." },
+      { error: "Could not save profile. Try again." },
       { status: 400 },
     );
   }
