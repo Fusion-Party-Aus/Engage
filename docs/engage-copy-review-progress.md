@@ -7,7 +7,7 @@ Updated 15 November 2026. Source of truth: pushed branch and this document, not 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review`, based on main `20dfa90`.
 - PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
-- Next task: batch 5b, MemberOnboarding, MemberSettings, BranchChooser/BranchMemberships and notification interfaces. Sign-in and dashboard shell/queues are reviewed; email/admin/error/legal sweeps remain.
+- Next task: batch 6, email HTML/text/subjects, push/in-app notification messages and unsubscribe flows. Administration and final error/legal/metadata sweep remain.
 - This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
 
 ## Recovery and scope
@@ -35,7 +35,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 3b | Proposal detail, seconding, comments, amendment and ballot interfaces | Delivered in `1f4ca17`; remote tree verified |
 | 4 | Public policy registry/detail, provenance/change notices, branch directory and Sense Box | Delivered in `7314b06`; remote tree verified |
 | 5a | Sign-in, My Engage shell/queues/activity and lifecycle guidance | Delivered in `515cf47`; validation checkpoint includes the label-assertion update |
-| 5b | Onboarding/settings, branch preferences, notifications | Next |
+| 5b | Onboarding/settings, branch preferences, notification controls | Validated; publishing checkpoint |
 | 6 | Emails, push, digests and unsubscribe flows | Not reviewed |
 | 7 | Administration, roles, membership, governance, moderation, integrations and operational errors | Not reviewed |
 | 8 | API/form error responses shown to users, legal-copy consistency, metadata, empty/loading states and whole-site terminology sweep | Not reviewed |
@@ -105,3 +105,9 @@ Validation: typecheck and production build pass; focused policy-registry/change/
 Sign-in and dashboard shell/queues/activity prose reviewed. Replaced speed claims with practical sign-in explanations, clarified membership/branch eligibility and optional email defaults. Public browsing wording respects current visibility limits. Queues describe votes cast rather than tasks completed; pending-choice language reflects eligibility, deadline and revision conditions. CatchUpDigest reviewed and retained; governance log description simplified. Dev-only sign-in remains explicitly labelled, and authentication handling/return destinations unchanged.
 
 Validation: `pnpm check`, production build, diff whitespace and raw-control audit pass (no matches). First focused run found an assertion pinned to the old membership-status link label. Updated it; rerun passed (27 passed, 3 optional suites skipped). No browser claim. Automatic membership-verification promises removed from public copy; no CRM or auth behaviour changed.
+
+## Batch 5b handover
+
+Reviewed MemberOnboarding, MemberSettings, BranchChooser/BranchMemberships and NotificationCenter; notification bell reviewed and retained. Removed guessed setup times and instant/one-tap promises. Branch-following actions now say follow rather than suggesting membership. Membership changes explicitly affect the next vote cast/updated, including open ballots (D2). Profile explanation distinguishes public contribution names from private ballot records. Notification controls use discussion/response language and avoid implying closed-browser delivery is guaranteed. Onboarding guide remains optional; no passkey/participation prerequisite introduced.
+
+Validation: `pnpm check` (0 errors/warnings, 20 hints), production build, diff whitespace and raw-control audit pass (existing hidden category input only). Focused branch membership/participation/member-notification tests: 15 passed, none skipped. No browser claim. Payloads, enrolment, consent and notification delivery unchanged.

@@ -381,11 +381,11 @@ export default function BranchChooser(props: Props) {
               <Sparkles aria-hidden="true" className="size-3.5" /> One-time invitation
             </span>
             <h2 id="branch-invite-heading" className="font-heading text-xl font-semibold text-[var(--horizon-purple-deep)]">
-              Add your state branch
+              Follow your state or territory branch
             </h2>
             <p className="mt-1 max-w-[65ch] text-sm text-[var(--horizon-muted)]">
               Choose your state or territory so relevant proposals and discussions appear in My Engage.
-              You can add local branches any time from My branches. Manage membership separately in My branches.
+              You can follow other branches or manage branch membership separately in My branches.
             </p>
           </div>
           <Button type="button" variant="ghost" size="sm" onClick={skipSelection}>
@@ -411,7 +411,7 @@ export default function BranchChooser(props: Props) {
             <StatusLine feedback={feedback} className="mr-auto" />
             <a className="text-xs font-semibold underline" href="/member/?view=branches">See local branches</a>
             <Button type="button" size="sm" disabled={saving} onClick={saveSelection}>
-              {saving ? 'Saving…' : 'Save my state branch'}
+              {saving ? 'Saving…' : 'Save following preferences'}
             </Button>
           </div>
         </div>
@@ -426,10 +426,10 @@ export default function BranchChooser(props: Props) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--horizon-purple)]">
-              <MapPin aria-hidden="true" className="size-3.5" /> Optional · 20 seconds
+              <MapPin aria-hidden="true" className="size-3.5" /> Optional
             </span>
             <h3 id="onboarding-branches-heading" className="mt-1 font-heading text-xl font-semibold text-[var(--horizon-purple-deep)]">
-              Your branches
+              Branches you follow or belong to
             </h3>
             <p className="mt-1 max-w-[65ch] text-sm text-[var(--horizon-muted)]">
               Follow the branches you care about to discover local proposals and participate in discussions.
@@ -452,7 +452,7 @@ export default function BranchChooser(props: Props) {
               Skip for now
             </Button>
             <Button type="button" size="sm" disabled={saving} onClick={saveSelection}>
-              {saving ? 'Saving…' : selected.size ? `Save ${selected.size === 1 ? 'branch' : `${selected.size} branches`}` : 'Save branches'}
+              {saving ? 'Saving…' : selected.size ? `Save ${selected.size === 1 ? 'branch' : `${selected.size} branches`}` : 'Save following preferences'}
             </Button>
           </div>
         </div>
@@ -466,7 +466,7 @@ export default function BranchChooser(props: Props) {
         <section aria-labelledby="my-branches-list-heading" className="min-w-0 rounded-xl border border-[var(--horizon-line)] bg-white">
           <header className="border-b border-[var(--horizon-line)] px-5 py-4">
             <h2 id="my-branches-list-heading" className="font-heading text-xl font-semibold text-[var(--horizon-purple-deep)]">
-              Your branches
+              Branches you follow or belong to
             </h2>
             <p className="mt-1 text-sm text-[var(--horizon-muted)]">
               Fusion National is included for every Engage user. A verified membership is separate from following.
