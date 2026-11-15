@@ -282,6 +282,10 @@ export interface ProposalRecord {
   targetPolicyId?: string;
   targetPolicyRevisionId?: string;
   changeType?: PolicyChangeType;
+  /** The commitment or section an amendment proposes to change. */
+  targetSection?: string;
+  /** Replacement wording offered with a replacement proposal. */
+  proposedWording?: string;
 
   // Backwards compatibility aliases
   policyId?: string;

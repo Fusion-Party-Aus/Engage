@@ -783,6 +783,9 @@ const initialsFor = (name: string) =>
                 Key commitments <span class="nav-count tabular">{proposal.outcomes.length}</span>
               </a>
             )}
+            {proposal.proposedWording && (
+              <a href="#proposed-wording-heading">Proposed wording</a>
+            )}
             {(proposal.details || proposal.detailHtml) && (
               <a href="#details-heading">Rationale</a>
             )}
@@ -863,8 +866,32 @@ const initialsFor = (name: string) =>
               </section>
             )}
 
-            <!-- Key Commitments -->
+            <!-- Policy change wording and key commitments -->
             <section id="proposal-decision" class="decision-content" aria-label="Proposal summary and commitments">
+
+            {proposal.targetSection && (
+              <section aria-labelledby="target-section-heading">
+                <div class="doc-section__header">
+                  <div>
+                    <h2 id="target-section-heading">Part of the policy to change</h2>
+                  </div>
+                </div>
+                <p>{proposal.targetSection}</p>
+              </section>
+            )}
+
+            {proposal.proposedWording && (
+              <section aria-labelledby="proposed-wording-heading">
+                <div class="doc-section__header">
+                  <div>
+                    <h2 id="proposed-wording-heading">Proposed wording</h2>
+                  </div>
+                </div>
+                <div class="prose-content">
+                  <PortableText value={proposal.proposedWording} />
+                </div>
+              </section>
+            )}
 
             {proposal.outcomes.length > 0 && (
               <section aria-labelledby="outcomes-heading">

@@ -95,7 +95,7 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Apply as new proposal revision | Implemented | `apply.ts` |
 | Inter-amendment conflict detection | Not implemented | Two amendments may edit the same field |
 | Preferential amendment resolution | Not implemented | — |
-| Amend/repeal from a policy page | Not implemented | No `targetPolicyId`/change type |
+| Amend/repeal from a policy page | Implemented | `/proposals/new/?targetPolicyId=…`; action-specific form (D35) |
 
 ## Ballots and decisions
 
