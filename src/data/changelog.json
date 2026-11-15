@@ -1,5 +1,21 @@
 [
   {
+    "hash": "9515e90",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "copy",
+    "summary": "Explain member setup, branch following and notifications (#97)"
+  },
+  {
+    "hash": "59c2745",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "copy",
+    "summary": "Align membership label assertion and checkpoint progress (#97)"
+  },
+  {
     "hash": "515cf47",
     "date": "2026-11-15",
     "type": "fix",
