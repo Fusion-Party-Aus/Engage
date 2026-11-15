@@ -400,6 +400,14 @@ test(
       });
 
       const recordedAt = new Date("2026-11-15T00:00:00.000Z");
+      // Certification requires a closed ballot (#28). Close it exactly as the
+      // scheduler does rather than certifying a ballot that could still change.
+      await db
+        .collection("proposals")
+        .updateOne(
+          { proposalId: opened.proposalId },
+          { $set: { ballotClosedAt: new Date(recordedAt.getTime() - 1) } },
+        );
       const payload = {
         matterId: opened.proposalId,
         revisionId,
@@ -408,6 +416,11 @@ test(
         authorityBranchId: "branch-nat",
         recordedBy: adminUser.memberId,
         now: recordedAt,
+        // No votes were cast, so the votes compute "unsuccessful" (D9). This
+        // case proves certification mechanics, so the recording is an explicit
+        // override rather than a change to the outcome rule.
+        overrideReason:
+          "Coverage fixture: certification mechanics with no cast votes.",
       };
       const first = await recordFormalDecision(db, payload);
       assert.equal(first.result, "successful");
@@ -553,6 +566,10 @@ test(
         revisionId,
         status: "open",
       });
+      await db.collection("proposals").updateOne(
+        { proposalId: opened.proposalId },
+        { $set: { ballotClosedAt: new Date(Date.now() - 1000) } },
+      );
       const sameDecision = {
         matterId: opened.proposalId,
         revisionId,
@@ -560,6 +577,8 @@ test(
         decisionEventId: "dec-evt-concurrent",
         authorityBranchId: "branch-nat",
         recordedBy: adminUser.memberId,
+        overrideReason:
+          "Coverage fixture: certification mechanics with no cast votes.",
       };
       const decisions = await Promise.allSettled([
         recordFormalDecision(db, sameDecision),
@@ -632,6 +651,71 @@ test(
         }),
         1,
         "exactly one deletion event",
+      );
+    });
+  },
+);
+
+test(
+  "real MongoDB: certification is refused while the ballot is open and succeeds after closure",
+  { skip: !uri },
+  async () => {
+    await withDatabase(async (db) => {
+      const opened = await saveProposal(db, adminUser, {
+        title: "Closure before certification",
+        space: "Governance",
+        summary: "An open ballot must not be certified.",
+        stage: "decide",
+        ballotClosesAt: futureClose(),
+      });
+      const revisionId = opened.ballotRevisionId!;
+      const ballotId = proposalBallotId(opened.proposalId);
+      await upsertMatterBallot(db, {
+        matterId: opened.proposalId,
+        revisionId,
+        status: "open",
+      });
+
+      await assert.rejects(
+        recordFormalDecision(db, {
+          matterId: opened.proposalId,
+          revisionId,
+          result: "unsuccessful",
+          decisionEventId: "dec-not-closed",
+          recordedBy: adminUser.memberId,
+        }),
+        (error) =>
+          error instanceof BallotDomainError &&
+          error.code === "BALLOT_NOT_CLOSED",
+        "a ballot that can still accept votes must not be certified",
+      );
+      assert.equal(
+        await db.collection("ballot_results").countDocuments({ ballotId }),
+        0,
+        "the refused certification writes no result",
+      );
+
+      // Close it as the scheduler does, then certify. Zero votes compute
+      // "unsuccessful", so this needs no override.
+      await db
+        .collection("proposals")
+        .updateOne(
+          { proposalId: opened.proposalId },
+          { $set: { ballotClosedAt: new Date() } },
+        );
+      const recorded = await recordFormalDecision(db, {
+        matterId: opened.proposalId,
+        revisionId,
+        result: "unsuccessful",
+        decisionEventId: "dec-after-close",
+        recordedBy: adminUser.memberId,
+      });
+      assert.equal(recorded.result, "unsuccessful");
+      assert.equal(recorded.computedResult, "unsuccessful");
+      assert.equal(recorded.tally?.total, 0);
+      assert.equal(
+        (await db.collection("ballots").findOne({ ballotId }))?.status,
+        "certified",
       );
     });
   },
