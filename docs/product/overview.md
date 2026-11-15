@@ -62,7 +62,7 @@ A member follows branches for updates and may join one geographic branch and one
 
 On a proposal in Propose or Deliberate, a verified member can comment with a stance (`support`, `concern`, `amendment` or `comment`), reply to another member's comment in a nested thread, upvote or downvote comments, and propose a structured wording amendment against the current revision. Replies are associated with their parent comment on the server; the top-level sort never flattens them.
 
-Author names and avatars link to a public member profile at `/members/<memberId>/`. The profile aggregates the member's visible comments, proposals and amendments, shows an optional biography and geographic affiliation, and displays a display-only comment score: the net score across visible comments. It never exposes ballot choices, account status, email addresses, CRM identifiers or other members' comment votes. The comment score has no effect on eligibility, permissions or proposal authority.
+Author names and avatars link to a public member profile at `/members/<memberId>/`. The profile aggregates the member's visible comments, proposals and amendments, shows an optional biography and geographic affiliation, and displays a display-only comment score: the net score across visible comments. The owner can hide the profile, which removes it and its author links from public view. It never exposes ballot choices, account status, email addresses or other members' comment votes. The comment score has no effect on eligibility, permissions or proposal authority.
 
 ### 5. Decide
 
