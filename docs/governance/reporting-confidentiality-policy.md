@@ -1,6 +1,12 @@
 # Reporting Privacy & Confidentiality Model
 
-Status: **Confidentiality policy & threat model** (PR #23). Scope and archive enforcement fixes in CSV/PDF/admin reporting are implemented alongside this document. Quantitative small-cell suppression thresholds are documented here as a policy proposal requiring governance sign-off before altering tally visibility.
+> **Document status: Current** for the confidentiality model and threat model.
+> The small-electorate suppression rules in section 4 remain **Design-only**
+> pending governance approval. The "Controls implemented in PR #23" section is a
+> historical record of that change. The canonical API and permission boundary is
+> [architecture/api-and-authorisation.md](../architecture/api-and-authorisation.md).
+
+Status: **Confidentiality policy & threat model** (PR #23). Scope and archive enforcement fixes in CSV/PDF/admin reporting were implemented alongside this document. Quantitative small-cell suppression thresholds are documented here as a policy proposal requiring governance sign-off before altering tally visibility.
 
 ## 1. Current confidentiality model
 
@@ -8,9 +14,9 @@ Engage operates a **role-restricted confidentiality model**, not cryptographic o
 
 - **Identifiable ballot records (`votes` / `proposal_votes`):**
   - Stored with `memberId`, `authorName`, `choice`, `reason`, `revisionId`, and `updatedAt` so verified members can review and update their own ballot while voting is open, and so audit/migration integrity checks can verify eligibility.
-  - Access is governed by `canViewIdentifiableBallots(user)` in `src/lib/auth.ts`, which is restricted strictly to national administrators (`user.isAdmin`).
-  - `ballotRecordsForViewer(votes, user)` in `src/lib/ballot-privacy.ts` strips all other members' records (and strips `memberId` / `authorName` from the viewer's own returned record) for non-admin viewers on `/api/proposals/[proposalId]`.
-  - Moderators (`isStaff && !isAdmin`) and branch administrators (`isBranchAdmin && !isAdmin`) **must not** receive identifiable ballot choices.
+  - Access is governed by `canViewIdentifiableBallots(user)` in `src/lib/auth.ts`: `true` only for a national administrator (`user.isAdmin`) or a holder of the national-scope `ballots.view_identifiable` permission. No branch-scoped grant conveys it.
+  - `ballotRecordsForViewer(votes, user)` in `src/lib/ballot-privacy.ts` strips all other members' records (and strips `memberId` / `authorName` from the viewer's own returned record) for viewers without that boundary on `/api/proposals/[proposalId]`.
+  - Moderators (`isStaff && !isAdmin`) and branch administrators (`isBranchAdmin && !isAdmin`) **must not** receive identifiable ballot choices unless they also hold the national permission. The permission must not be delegated at branch scope.
 - **Aggregate reporting surfaces:**
   - **Admin overview (`/admin/`):** Recent vote activity feed is gated on `canViewIdentifiableBallots(user)`; branch admins and moderators see only aggregate counts and non-ballot deliberation/proposal activity.
   - **Admin ballots (`/admin/ballots/`) & reports (`/admin/reports/`):** Display aggregate `approve`, `abstain`, `reject`, and `total` counts.
@@ -28,7 +34,9 @@ Aggregate counts are **not automatically anonymous**. Even without member names 
 4. **Overlapping filter differencing:** Filtering reports by narrow criteria (e.g. `stage` + `branch` + search query) or cross-referencing total votes against `verifiedMembers` in branch summaries can isolate a single voter.
 5. **Activity-feed correlation:** A non-admin who sees "Member X participated" in a feed at timestamp `T` and sees `approve` increment by 1 in an open ballot can correlate identity with choice.
 
-## 3. Controls implemented in PR #23
+## 3. Controls introduced in PR #23 (historical)
+
+Reporting access has since moved to the permission catalogue: the CSV export requires `reports.export` (`branchesWithPermission`), scopes rows through `canIncludeProposalInAdminReport` (`src/lib/admin-reporting.ts`) and shows aggregate counts only. Treat the role-flag descriptions below as the state at that change.
 
 1. **Consistent branch-admin scope across all reporting surfaces:**
    - Branch administrators (`!isStaff && !isAdmin`) are restricted to proposals where `originatingBranchId` is in `user.branchAdminIds`, matching `canManageBranchProposal` and `proposal-pdf.ts`, and `canViewProposal` + `canReviewArchivedProposal` are enforced consistently across `admin/index.astro`, `admin/ballots/index.astro`, `admin/reports/index.astro`, `proposals.csv.ts`, and `proposal-pdf.ts`.

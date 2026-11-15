@@ -49,6 +49,8 @@ jobs:
           } finally { await client.close(); }
           JS
       - run: pnpm check
+      - name: Documentation link check
+        run: pnpm docs:check-links
       - name: Confirm isolated MongoDB test configuration
         run: |
           test -n "${VOTING_TEST_MONGODB_URI:-}"

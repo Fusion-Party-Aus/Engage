@@ -1,6 +1,12 @@
 # Engage journeys and verification
 
-This document records the implemented entry points and what remains to be validated. It does not treat a successful build as evidence of usability.
+> **Document status: Historical.** This is a dated UX verification record. Its
+> test counts and per-journey verification states describe the pass in which they
+> were written; they are not maintained. Current capability status is in
+> [status/capability-matrix.md](status/capability-matrix.md), and current
+> workflows are described in [product/overview.md](product/overview.md).
+
+This document records the implemented entry points and what remained to be validated at that date. It does not treat a successful build as evidence of usability.
 
 | Journey | Entry point | Main task | Detail kept available | Verification status |
 | --- | --- | --- | --- | --- |
@@ -24,7 +30,7 @@ The interface uses plain language at entry points. Exact revision IDs, provenanc
 
 ## Validation limits
 
-- `pnpm check`, `pnpm build` and `pnpm test` pass after the current changes. The test run reports 51 passing and 8 skipped tests.
+- At the time of this pass, `pnpm check`, `pnpm build` and `pnpm test` passed. The test run reported 51 passing and 8 skipped tests; that count is not current.
 - The skipped tests include real MongoDB startup, transactions and legacy vote migration. Those paths are not verified by the unit test run.
 - The member overview and proposal index were checked in an isolated browser at 390, 820 and 1440 CSS pixels in the previous pass. The browser host is unavailable for a fresh capture in this pass; the supplied admin screenshot remains the visual evidence for the row-collapse defect.
 - The current admin row fix and member branch activity addition are build-checked, not browser-verified. Full contributor, ballot, branch officer, ratification and publication workflows still need end-to-end review.

@@ -1,5 +1,11 @@
 # ADR 0003: Reclaim MVP on Astro Node, Docker and MongoDB
 
+> **Document status:** Current for the technology decision (Astro Node, Docker,
+> MongoDB). **Design-only** for the ballot-admission protocol described below: the
+> implementation does not follow it. See [Implementation
+> divergence](#implementation-divergence-verified-15-november-2026) and
+> [architecture/data-and-persistence.md](../architecture/data-and-persistence.md).
+
 ## Status
 
 Accepted for M1 by the MVP prefactor brief, 2026-10-24. Supersedes the Astro/Workers/D1 architecture referenced as ADR 0002 (`docs/adr/0002-astro-workers-d1.md`) in [EPIC #1's accepted-decision comment](https://github.com/Fusion-Party-Aus/Engage/issues/1#issuecomment-6127974214).
@@ -31,6 +37,19 @@ The preview fake serializes these same callbacks and rolls failed writes back; i
 Compose retains the existing volume and scoped database user, adds a persistent internal replica key, and initialises a single voting primary. Use `directConnection=true` when accessing its published local port; the replica advertises `mongo:27017` inside Compose. This adds transaction capability, **not high availability**. Host/disk recovery still requires encrypted off-host backups. Production remains a separate database with separate credentials and no preview identities.
 
 Before upgrading an existing volume: back it up, stop the old application, start the replica-enabled MongoDB, verify primary status and a transaction with the scoped application user, and rehearse application/container restart and recovery. Do not roll back to a writer that lacks admission transactions after accepting real votes. No production deployment or binding activation is authorised by this ADR.
+
+## Implementation divergence (verified 15 November 2026)
+
+The vote-admission protocol in *Vote admission and deployment consequences* is a design proposal. It was not implemented, and the current behaviour differs in the following verified ways:
+
+- **No conditional ballot write.** `castVote` (`src/lib/store.ts`) does not write the `proposals` ballot document with MongoDB's clock (`$NOW`), does not record a database admission instant, and does not write an admission ID. It checks `ballotExpired` (`src/lib/ballot-deadline.ts`) against application time before writing, then writes the vote and participation record inside `runInTransaction` (`src/lib/db.ts`).
+- **Uniqueness, not ballot serialisation, protects one vote per member.** `ensureProposalVoteIndex` (`src/lib/vote-storage.ts`) maintains a partial unique index on `(ballotId, memberId)` for plaintext votes and on `(ballotId, voterBlindIndex)` for encrypted votes. There is no shared ballot-document write to order admission against closure.
+- **No choice-free audit event in the vote transaction.** The transaction writes the vote and participation state only.
+- **Closure is separate.** There is no `finalizeBallot` and no closure-written authoritative tally. `closeDueBallots` (`src/lib/governance-scheduler.ts`) conditionally sets `ballotClosedAt` and records one `ballot.closed` event in a transaction. It does not change the stage, calculate a tally or certify an outcome. An officer records the result separately through `recordFormalDecision` (`POST /api/admin/ballots/result`).
+- **The admission interval is enforced before the transaction, not inside it.** A vote that passes the deadline check can commit after the cutoff. The ADR's guarantee that the database admission instant precedes cutoff is therefore not established by the code. This divergence is not recorded as a separate known gap; treat it as an open correctness question rather than approved behaviour.
+- **The replica set requirement still holds**, because vote writes, proposal writes and lifecycle transitions use transactions when the driver supports sessions.
+
+The remedy is either to implement the described protocol or to amend this ADR to the unique-index/expiry model. Do not cite this ADR as evidence of the current admission guarantees.
 
 ## Sources
 
