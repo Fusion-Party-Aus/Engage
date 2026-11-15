@@ -71,7 +71,7 @@ describe("responsive & accessible Engage email templates", () => {
       unsub,
     );
     assert.match(midPeriod.subject, /1 open ballot awaiting your review/);
-    assert.match(midPeriod.html, /Inspect ballot/);
+    assert.match(midPeriod.html, /Read ballot/);
 
     const reengage = renderReengagementEmail(
       "Ethan",
@@ -100,7 +100,7 @@ describe("responsive & accessible Engage email templates", () => {
       origin,
       unsub,
     );
-    assert.match(contrib.subject, /Response recorded/);
+    assert.match(contrib.subject, /A response to your contribution/);
     assert.match(contrib.html, /incorporated/i);
 
     const membership = renderMembershipNotificationEmail(

@@ -7,7 +7,7 @@ Updated 15 November 2026. Source of truth: pushed branch and this document, not 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review`, based on main `20dfa90`.
 - PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
-- Next task: batch 6, email HTML/text/subjects, push/in-app notification messages and unsubscribe flows. Administration and final error/legal/metadata sweep remain.
+- Next task: batch 7a, administration dashboard, proposal/ballot/policy review interfaces. Then 7b roles/members/branches/reports/settings/migrations/Sense Box admin, and batch 8 final API-error/legal/metadata sweep.
 - This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
 
 ## Recovery and scope
@@ -36,7 +36,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 4 | Public policy registry/detail, provenance/change notices, branch directory and Sense Box | Delivered in `7314b06`; remote tree verified |
 | 5a | Sign-in, My Engage shell/queues/activity and lifecycle guidance | Delivered in `515cf47`; validation checkpoint includes the label-assertion update |
 | 5b | Onboarding/settings, branch preferences, notification controls | Delivered in `9515e90`; remote tree verified |
-| 6 | Emails, push, digests and unsubscribe flows | Not reviewed |
+| 6 | Email templates/subjects, push/digest messages and unsubscribe flows | Validated; publishing checkpoint |
 | 7 | Administration, roles, membership, governance, moderation, integrations and operational errors | Not reviewed |
 | 8 | API/form error responses shown to users, legal-copy consistency, metadata, empty/loading states and whole-site terminology sweep | Not reviewed |
 
@@ -111,3 +111,9 @@ Validation: `pnpm check`, production build, diff whitespace and raw-control audi
 Reviewed MemberOnboarding, MemberSettings, BranchChooser/BranchMemberships and NotificationCenter; notification bell reviewed and retained. Removed guessed setup times and instant/one-tap promises. Branch-following actions now say follow rather than suggesting membership. Membership changes explicitly affect the next vote cast/updated, including open ballots (D2). Profile explanation distinguishes public contribution names from private ballot records. Notification controls use discussion/response language and avoid implying closed-browser delivery is guaranteed. Onboarding guide remains optional; no passkey/participation prerequisite introduced.
 
 Validation: `pnpm check` (0 errors/warnings, 20 hints), production build, diff whitespace and raw-control audit pass (existing hidden category input only). Focused branch membership/participation/member-notification tests: 15 passed, none skipped. No browser claim. Payloads, enrolment, consent and notification delivery unchanged.
+
+## Batch 6 handover
+
+Reviewed all six shared email renderers in HTML/plain text, sign-in/verification messages, test-digest substitution, push confidentiality fallback, delivery preference handlers and unsubscribe confirmation. Simplified eligible-ballot reminders and contribution responses; “Inspect ballot” becomes “Read ballot”. Undated re-engagement items no longer claim they are open for discussion (they may be ballots). Unsubscribe confirmation explains exactly which category changes; invalid link explains recovery. Existing rendering/escaping, destinations, consent categories and delivery logic preserved. Several email types are template capability only: do not claim event fan-out has been implemented (#33).
+
+Validation: focused template/lifecycle/member-notification/PWA/engagement suites: 40 passed, 1 skipped. Existing template assertions updated for new response/CTA wording. Source contract caught missing explicit notification-category wording in onboarding; restored the precise category names and unsubscribe statement, rerun passed. Typecheck/build and diff whitespace pass. Email HTML presentation tables and existing standalone unsubscribe button retained for email-client/confirmation compatibility; no new raw controls or CSS. No sent emails or live inbox rendering claimed.

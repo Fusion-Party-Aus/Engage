@@ -373,14 +373,14 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
         <h3 className="font-heading text-lg font-semibold">Stay on top of ballot deadlines</h3>
         <p className="my-2 text-sm leading-relaxed">Engage can email you a digest of eligible ballots closing within seven days that you haven’t voted on. Each ballot is reminded once, and reminders stop once you’ve voted. Sign-in emails are separate.</p>
         <p className="my-2 text-sm">{props.digestExistingMember
-          ? 'Reminder emails were enabled for existing accounts. You can turn them off below or unsubscribe from any digest.'
+          ? 'Reminder emails were enabled for existing Engage accounts. You can turn them off below or unsubscribe from any digest.'
           : 'For new Engage accounts, reminders stay off until you opt in. This is optional and does not affect voting or membership.'}</p>
         {props.digestSuppressed ? <p className="text-sm">Reminder delivery is paused after a bounce or spam complaint. Contact an administrator to resolve delivery.</p> :
           <form method="post" action="/api/email/preferences" className="flex flex-wrap items-center gap-3 py-2">
             <label className="flex items-center gap-2 text-sm"><input type="hidden" name="category" value="engage" /><Checkbox name="digestEnabled" value="true" defaultChecked={props.digestEnabled === true} /> Send me ballot reminder emails</label>
             <Button type="submit" size="sm" variant="outline">Save reminder preference</Button>
           </form>}
-        <p className="text-xs text-[var(--horizon-muted)]">Change your account notifications, Engage digests and general party communications separately in My Engage → Notifications. Every digest includes an unsubscribe link.</p>
+        <p className="text-xs text-[var(--horizon-muted)]">Change essential account notifications, Engage digests and general communications separately in My Engage → Notifications. Every digest has an unsubscribe link.</p>
       </div>
 
       {/* Post-Sign-In 1-Tap Passkey Upgrade Nudge (Peak-End & Friction Removal) */}
