@@ -109,7 +109,7 @@ const ballotRevisionLabel = proposal?.ballotRevisionId
       revisionId: String(proposal.ballotRevisionId),
       createdAt: ballotRevision?.createdAt ?? proposal.createdAt,
     })
-  : 'Draft wording (not yet bound)';
+  : 'Draft wording (no ballot yet)';
 
 const allAmendmentRevisions = amendmentRows.length
   ? await db
@@ -193,7 +193,7 @@ const topConcernComment = [...comments]
 const stagePillLabel = (stage: ProposalStage) => {
   if (stage === 'propose') return 'New idea';
   if (stage === 'deliberate') return 'In discussion';
-  if (stage === 'decide') return 'Open vote';
+  if (stage === 'decide') return proposal && ballotExpired(proposal) ? 'Voting closed' : 'Open vote';
   if (stage === 'implement') return 'Implementation';
   return 'Archived';
 };
@@ -208,17 +208,17 @@ const stageStepLabel = (stage: ProposalStage) => {
 
 const stageGuideText = (stage: ProposalStage) => {
   if (stage === 'decide') {
-    return 'Voting is open.';
+    return proposal && ballotExpired(proposal) ? 'Voting has closed. Read the totals and recorded outcome.' : 'Voting is open.';
   }
   if (stage === 'deliberate') {
-    return 'Open for member discussion, scrutiny, and formal wording amendments before a ballot is opened.';
+    return 'Read the discussion, raise a concern, or suggest a wording change before voting begins.';
   }
   if (stage === 'implement') {
     return isResolution
-      ? 'Ballot has closed. Recorded governance decisions are documented and implemented by the relevant branch or committee.'
-      : 'Ballot has closed. Recorded decisions undergo constitutional ratification before publication in the Policy Registry.';
+      ? 'The ballot has closed. The relevant branch or committee records the outcome and carries out the decision.'
+      : 'The ballot has closed. Officers certify the result, record the adopted wording and publish the policy.';
   }
-  return 'Initial idea stage. Open for early feedback and refinement before advancing to formal deliberation.';
+  return 'Read the idea and share feedback. A seconder is needed before deliberation begins.';
 };
 
 const isImageAttachment = Boolean(
@@ -277,7 +277,7 @@ const ballotResultLabel = ballotResult
 
 const decisionChain = proposal
   ? [
-      { label: 'Workflow stage', value: stageStepLabel(proposal.stage), href: '#proposal-brief', state: 'done' },
+      { label: 'Stage', value: stageStepLabel(proposal.stage), href: '#proposal-brief', state: 'done' },
       { label: 'Ballot wording', value: proposal.ballotRevisionId ? ballotRevisionLabel : 'Wording not yet locked', href: proposal.ballotRevisionId ? `#revision-${encodeURIComponent(String(proposal.ballotRevisionId))}` : '#proposal-vote', state: proposal.ballotRevisionId ? 'done' : proposal.stage === 'decide' ? 'current' : 'pending' },
       { label: 'Returning officer result', value: ballotResultLabel, href: ballotResult ? '#proposal-vote' : undefined, state: ballotResult ? 'done' : 'pending' },
       isResolution
@@ -356,7 +356,7 @@ const initialsFor = (name: string) =>
 ---
 <SiteLayout
   title={proposal ? `${proposal.title} · Engage` : 'Proposal not found · Engage'}
-  description={proposal?.summary ?? 'Participatory proposal details, member deliberation, and voting.'}
+  description={proposal?.summary ?? 'Read the proposal, follow the discussion and check the ballot.'}
   canonical={proposal ? `/proposals/${proposal.slug}/` : undefined}
   image={proposalSocialImage}
   imageAlt={proposal ? `${proposal.title} · Engage proposal` : undefined}
@@ -367,8 +367,8 @@ const initialsFor = (name: string) =>
       <Card className="not-found-box">
         <CardContent className="grid justify-items-start gap-3 py-10">
           <h1>Proposal not found</h1>
-          <p>That proposal could not be found or has been archived.</p>
-          <Button href="/proposals/">Return to Proposals</Button>
+          <p>We couldn’t find that proposal, or it isn’t available to this account.</p>
+          <Button href="/proposals/">Browse proposals</Button>
         </CardContent>
       </Card>
     ) : (
@@ -430,10 +430,10 @@ const initialsFor = (name: string) =>
                 <span class="personal-vote-chip is-voted">✓ You have voted</span>
               )}
               {proposal.stage === 'decide' && !myVote && myPendingVote && (
-                <a href="#proposal-vote" class="personal-vote-chip is-action">Queued pending verification →</a>
+                <a href="#proposal-vote" class="personal-vote-chip is-action">Choice saved pending verification →</a>
               )}
               {proposal.stage === 'decide' && !myVote && canVoteOnProposal && (
-                <a href="#proposal-vote" class="personal-vote-chip is-action">Your ballot: Unrecorded →</a>
+                <a href="#proposal-vote" class="personal-vote-chip is-action">You haven’t voted yet →</a>
               )}
               <span class:list={['stage-badge', `stage-badge--${proposal.stage}`]}>
                 {stagePillLabel(proposal.stage)}
@@ -454,7 +454,7 @@ const initialsFor = (name: string) =>
               {targetPolicyForChange
                 ? <a href={policyCanonicalPath(targetPolicyForChange)}>{targetPolicyForChange.title}</a>
                 : proposal.targetPolicyId}
-              <span> The published policy is unchanged unless this proposal is successful and ratified.</span>
+              <span> Submitting this proposal leaves the published policy unchanged. An adopted amendment or replacement takes effect when published; a repeal takes effect at ratification.</span>
             </div>
           )}
           {proposal.stage === 'archived' && (
@@ -483,29 +483,29 @@ const initialsFor = (name: string) =>
           <div class:list={[
             'next-action-bar',
             proposal.stage === 'decide' && myVote ? 'is-complete' : proposal.stage === 'decide' ? 'is-vote' : 'is-deliberate',
-          ]} role="region" aria-label="Your immediate next action">
+          ]} role="region" aria-label="Taking part">
             <div class="next-action-bar__copy">
               <span class="next-action-bar__kicker">
                 {proposal.stage === 'decide' && ballotExpired(proposal)
                   ? 'Voting has closed. Review the tally and recorded decision.'
                   : proposal.stage === 'decide'
                   ? myVote
-                    ? 'Review or change · ~30 seconds'
+                    ? 'Your recorded vote'
                     : myPendingVote
-                      ? '✓ Queued pending verification'
+                      ? 'Choice saved pending verification'
                       : canVoteOnProposal
-                        ? 'Review & vote · About 2 minutes'
+                        ? 'Read the ballot'
                         : !user
-                          ? 'Your immediate action · Takes ~1 minute'
+                          ? 'Taking part'
                           : eligibility?.level === 'follower'
-                            ? 'Follower access · You can follow this proposal'
+                            ? 'Following this branch'
                             : eligibility?.level === 'not-connected'
-                              ? 'Branch ballot · Verified members only'
-                              : 'Save your ballot · Takes ~30 seconds'
+                              ? 'Branch membership required to vote'
+                              : 'Check your voting eligibility'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
                     ? awaitingSeconder
                       ? 'One more member is needed to open deliberation.'
-                      : 'Your immediate action · Takes ~1 minute'
+                      : 'Taking part'
                     : 'Stage 4 · Implementation'}
               </span>
               <strong class="next-action-bar__title">
@@ -515,13 +515,13 @@ const initialsFor = (name: string) =>
                   ? myVote
                     ? `Your vote: ${myVote[0]!.toUpperCase() + myVote.slice(1)}. You can change it until voting closes.`
                     : myPendingVote
-                      ? `Your "${myPendingVote[0]!.toUpperCase() + myPendingVote.slice(1)}" choice is saved on ${ballotRevisionLabel} and will be formally recorded once an administrator verifies your membership.`
+                      ? `Your "${myPendingVote[0]!.toUpperCase() + myPendingVote.slice(1)}" choice is saved on ${ballotRevisionLabel}. It can count after verification only if you are eligible, voting is still open and the ballot wording still matches.`
                       : canVoteOnProposal
                         ? 'Review the proposal and cast your vote.'
                         : !user
                           ? 'Sign in to save your vote.'
                           : user.status === 'pending'
-                            ? `Save your ballot choice on ${ballotRevisionLabel} now—it will be stored pending membership verification by an administrator.`
+                            ? `You can save a choice on ${ballotRevisionLabel} while your membership is checked. It is not a recorded vote yet.`
                             : eligibility?.level === 'follower' || eligibility?.level === 'not-connected'
                               ? eligibility.reason
                               : 'Verify your membership or branch eligibility to vote in this ballot.'
@@ -536,17 +536,17 @@ const initialsFor = (name: string) =>
                             : 'Verify your membership to second this proposal.'
                       : user?.canParticipate
                         ? 'Join the discussion or suggest a wording change.'
-                        : 'Sign in as a verified member to post a discussion stance or propose a wording amendment.'
+                        : 'Verified members can comment or propose an amendment. Sign in to take part.'
                     : policyRecord
-                      ? `Adopted into the Policy Registry (${String(policyRecord.policyId)}). Inspect the official policy record.`
-                      : 'Ballot has closed. Review the recorded vote breakdown and ratification status.'}
+                      ? `A policy record is available (${String(policyRecord.policyId)}). Check its adoption and publication status.`
+                      : 'Read the ballot totals and check whether the outcome has been ratified.'}
               </strong>
             </div>
             <div class="next-action-bar__actions">
               {proposal.stage === 'decide' && ballotExpired(proposal) ? <a href="#proposal-vote" class="next-action-btn is-primary">Review ballot &amp; decision →</a> : proposal.stage === 'decide' ? (
                 canVoteOnProposal ? (
                   <a href="#proposal-vote" class="next-action-btn is-primary">
-                    {myVote ? 'Review or update vote →' : 'Cast your vote now →'}
+                    {myVote ? 'Review or update vote →' : 'Read and vote →'}
                   </a>
                 ) : !user ? (
                   <a
@@ -699,7 +699,7 @@ const initialsFor = (name: string) =>
 
         {canVoteOnProposal && proposal.stage === 'decide' && (
           <nav class="proposal-progression" aria-label="Proposal progression">
-            <span data-outstanding-after-vote={remainingBallots.length}>{remainingBallots.length + (myVote ? 0 : 1)} need your vote</span>
+            <span data-outstanding-after-vote={remainingBallots.length}>{remainingBallots.length + (myVote ? 0 : 1)} you haven’t voted on</span>
             {nextBallotInfo && <a href={`/proposals/${nextBallotInfo.slug}/`}>Skip for now →</a>}
             <a href="/proposals/?stage=decide&focus=all">All ballots</a>
           </nav>
@@ -751,9 +751,9 @@ const initialsFor = (name: string) =>
                   <div class="attachment-card__info">
                     <div class="attachment-card__title">
                       <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
-                      <strong>{isImageAttachment ? 'Supporting visual specification' : 'Supporting reference document'}</strong>
+                      <strong>{isImageAttachment ? 'Supporting image' : 'Reference document'}</strong>
                     </div>
-                    <p>{proposal.attachmentDescription || 'Reference specification and documentation attached to this proposal record.'}</p>
+                    <p>{proposal.attachmentDescription || 'Supporting material for this proposal.'}</p>
                   </div>
                   <Button href={proposal.attachmentUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
                     {isImageAttachment ? 'Open full image ↗' : 'Open document ↗'}
@@ -766,23 +766,23 @@ const initialsFor = (name: string) =>
               <section class="doc-card implementation-banner" aria-labelledby="impl-heading">
                 <div class="implementation-banner__head">
                   <Badge variant="info">Stage 4 · Implementation</Badge>
-                  <h2 id="impl-heading">Decision processing &amp; ratification status</h2>
+                  <h2 id="impl-heading">Decision and implementation</h2>
                 </div>
                 <p>
                   {proposal.implementationNote || (policyRecord
                     ? `This wording was formally adopted by ${branchNameFor(policyRecord.ratification?.authorityBranchId)} and is recorded in the official policy registry.`
-                    : 'The decision is being processed. Required authorisation and publication steps have not been recorded, so this wording is not yet published as official policy.')}
+                    : 'No implementation update has been recorded yet. Check the decision record for the ballot outcome and any ratification or publication.')}
                 </p>
                 {user?.isStaff && (
                   <details class="impl-edit-details">
-                    <summary>Update implementation &amp; ratification note</summary>
+                    <summary>Update the progress note</summary>
                     <form id="impl-note-form" data-proposal-id={proposal.proposalId}>
                       <Textarea
                         id="impl-note-text"
                         name="implementationNote"
                         rows={2}
                         defaultValue={proposal.implementationNote || ''}
-                        placeholder="Record authorisation, publication or rollout progress..."
+                        placeholder="Explain what has happened since the decision."
                       />
                       <div class="impl-note-actions">
                         <Button type="submit" size="sm" id="impl-note-btn">Save note</Button>
@@ -872,8 +872,8 @@ const initialsFor = (name: string) =>
                     <div class="rail-notice__row">
                       <p>
                         {myPendingVote
-                          ? 'Your ballot choice is saved and will be recorded once an administrator verifies your membership.'
-                          : 'Your membership is awaiting verification. You can save your ballot choice below now and it will be recorded once verified.'}
+                          ? 'Your choice is saved pending verification. It can count only if you are eligible before voting closes and the ballot wording still matches.'
+                          : 'This account cannot vote yet. If your membership is pending, you can save a choice below. It will count only after verification, if you are eligible and voting is still open on the same wording.'}
                       </p>
                       <Button href="/member/" variant="outline" size="sm">Account</Button>
                     </div>
@@ -881,8 +881,8 @@ const initialsFor = (name: string) =>
                     <div class="rail-notice__row">
                       <p>
                         {votes.total > 0
-                          ? `Join ${votes.total} verified ${votes.total === 1 ? 'vote' : 'votes'} on this revision—choose your option below or sign in to record your ballot.`
-                          : 'Choose your option below to preview your ballot, or sign in with your passkey or email link to vote.'}
+                          ? `${votes.total} ${votes.total === 1 ? 'vote has' : 'votes have'} been recorded. Sign in to vote if you are eligible.`
+                          : 'Read the wording and choose an option below. Sign in to vote if you are eligible.'}
                       </p>
                     </div>
                   )}
@@ -912,7 +912,7 @@ const initialsFor = (name: string) =>
                 </div>
               ) : (
                 <p class="rail-muted">
-                  Formal voting has not opened yet. Join the member discussion or propose a wording amendment while this proposal is in deliberation.
+                  Formal voting has not opened yet. Join the discussion or propose a wording amendment while this proposal is in deliberation.
                 </p>
               )}
 
@@ -928,7 +928,7 @@ const initialsFor = (name: string) =>
                     <span class="doc-count tabular">{amendmentRows.length}</span>
                   </div>
                   <p class="doc-section__sub">
-                    Structured wording changes recorded against a specific revision. Amendment endorsements do not cast your final proposal ballot.
+                    Amendments propose exact changes to the text. Voting on an amendment is separate from voting on the main proposal.
                   </p>
                 </div>
               </div>
@@ -950,7 +950,7 @@ const initialsFor = (name: string) =>
                           <div class="amendment-card__title">
                             <span class="amendment-badge tabular">Amendment #{index + 1}</span>
                             <div>
-                              <strong>{amendment.changes?.title ?? 'Proposed wording revision'}</strong>
+                              <strong>{amendment.changes?.title ?? 'Proposed wording change'}</strong>
                               <p class="amendment-meta">
                                 Base revision <code>{String(amendment.baseRevisionId).slice(0, 8)}</code> · snapshot <code>{String(amendment.currentRevisionId ?? 'legacy').slice(0, 8)}</code>
                                 {amendment.rebasedFromRevisionId ? ` · rebased from ${String(amendment.rebasedFromRevisionId).slice(0, 8)}` : ''}
@@ -977,7 +977,7 @@ const initialsFor = (name: string) =>
                               <summary>Compare proposed change to <code>{field}</code></summary>
                               <div class="amendment-diff">
                                 <div class="diff-pane diff-pane--before">
-                                  <span class="diff-label">Current base wording</span>
+                                  <span class="diff-label">Original wording</span>
                                   <pre>{Array.isArray(base?.snapshot?.[field]) ? base.snapshot[field].join('\n') : String(base?.snapshot?.[field] ?? '')}</pre>
                                 </div>
                                 <div class="diff-pane diff-pane--after">
@@ -990,7 +990,7 @@ const initialsFor = (name: string) =>
 
                           {amendment.revisionHistory?.length > 1 && (
                             <details class="diff-drawer">
-                              <summary>Amendment revision log ({amendment.revisionHistory.length} snapshots)</summary>
+                              <summary>Amendment history ({amendment.revisionHistory.length} snapshots)</summary>
                               <ol class="amendment-history-list">
                                 {amendment.revisionHistory.map((row: any) => (
                                   <li>
@@ -1004,8 +1004,8 @@ const initialsFor = (name: string) =>
                           {amendment.status === 'voting' && canVoteOnProposal && (
                             <form class="amendment-vote-form" data-amendment-id={amendment.amendmentId} data-proposal-id={proposal.proposalId}>
                               <div class="amendment-vote-form__info">
-                                <strong>Endorse or reject this amendment</strong>
-                                <p>Records support for adopting this wording revision. Separate from the main proposal ballot.</p>
+                                <strong>Vote on this amendment</strong>
+                                <p>This ballot is about the amendment only. Your vote on the main proposal is separate.</p>
                               </div>
                               <div class="amendment-vote-buttons">
                                 {['approve', 'abstain', 'reject'].map((choice) => (
@@ -1024,7 +1024,7 @@ const initialsFor = (name: string) =>
                 </div>
               ) : (
                 <div class="empty-box">
-                  <p>No formal wording amendments have been filed against this proposal.</p>
+                  <p>No formal amendments have been proposed yet.</p>
                 </div>
               )}
 
@@ -1033,14 +1033,14 @@ const initialsFor = (name: string) =>
                   <summary>+ Propose a formal wording amendment</summary>
                   <div class="amendment-compose__body">
                     <p>
-                      Records a formal amendment against the latest saved revision (<code>{String(revisions[0]?.revisionId ?? 'initial').slice(0, 8)}</code>). For general feedback, use the Member discussion section below.
+                      Propose a change to the latest saved wording (<code>{String(revisions[0]?.revisionId ?? 'initial').slice(0, 8)}</code>). For general feedback, use the Discussion section below.
                     </p>
                     <form id="amendment-form" class="grid gap-3" data-proposal-id={proposal.proposalId} data-revision-id={revisions[0]?.revisionId ?? ''}>
                       <Field label="Proposed title (optional)" htmlFor="amendment-title">
                         <Input id="amendment-title" name="title" maxLength={200} placeholder="Leave blank to keep current title" />
                       </Field>
                       <Field label="Replacement summary" hint="At least 10 characters" htmlFor="amendment-summary">
-                        <Textarea id="amendment-summary" name="summary" rows={3} minLength={10} maxLength={2000} placeholder="Draft the exact replacement summary wording..." required />
+                        <Textarea id="amendment-summary" name="summary" rows={3} minLength={10} maxLength={2000} placeholder="Write the replacement summary exactly as you want it to appear." required />
                       </Field>
                       <div class="form-actions">
                         <Button type="submit" size="sm">Submit formal amendment</Button>
@@ -1057,11 +1057,11 @@ const initialsFor = (name: string) =>
               <div class="doc-section__header">
                 <div>
                   <div class="doc-title-row">
-                    <h2 id="deliberate-heading">Member discussion</h2>
+                    <h2 id="deliberate-heading">Discussion</h2>
                     <span class="doc-count tabular">{comments.length} {comments.length === 1 ? 'contribution' : 'contributions'}</span>
                   </div>
                   <p class="doc-section__sub">
-                    Deliberative perspectives from verified members. Discussion stances inform refinement and do not count as formal ballots.
+                    Share evidence, ask a question or suggest an improvement. Comments and endorsements do not count as ballot votes.
                   </p>
                 </div>
 
@@ -1135,7 +1135,7 @@ const initialsFor = (name: string) =>
                       minLength={5}
                       maxLength={4000}
                       rows={3}
-                      placeholder="Join the conversation — share support, raise an implementation concern, or suggest wording..."
+                      placeholder="What would you like other members to consider?"
                       className="focus-visible:ring-0"
                     />
 
@@ -1172,7 +1172,7 @@ const initialsFor = (name: string) =>
                       data-starter-stance="concern"
                       data-starter-placeholder="What unintended consequence, cost, or implementation risk should members consider?"
                     >
-                      Implementation concern…
+                      I’m concerned about…
                     </Button>
                     <Button
                       type="button"
@@ -1182,7 +1182,7 @@ const initialsFor = (name: string) =>
                       data-starter-stance="amendment"
                       data-starter-placeholder="Which sentence or commitment should be clarified, and what wording do you suggest?"
                     >
-                      Suggested wording tweak…
+                      I suggest changing…
                     </Button>
                     <Button
                       type="button"
@@ -1199,8 +1199,8 @@ const initialsFor = (name: string) =>
               ) : user ? (
                 <div class="participation-notice">
                   <div>
-                    <strong>Membership verification pending</strong>
-                    <p>Your account is awaiting membership verification before posting contributions.</p>
+                    <strong>Check your membership status</strong>
+                    <p>This account cannot post contributions yet. Check your membership status in My Engage.</p>
                   </div>
                   <Button href="/member/" variant="outline" size="sm">Check status</Button>
                 </div>
@@ -1210,8 +1210,8 @@ const initialsFor = (name: string) =>
                     <strong>Have a perspective on this proposal?</strong>
                     <p>
                       {comments.length > 0
-                        ? `Join ${comments.length} member ${comments.length === 1 ? 'contribution' : 'contributions'}—sign in with a passkey or 1-click email link to add your stance or endorse feedback.`
-                        : 'Sign in with a passkey or 1-click email link to share the first member perspective on this proposal.'}
+                        ? `Read the ${comments.length} ${comments.length === 1 ? 'contribution' : 'contributions'} below. Verified members can sign in to comment or endorse a contribution.`
+                        : 'Verified members can sign in to start the discussion.'}
                     </p>
                   </div>
                   <Button
@@ -1227,7 +1227,7 @@ const initialsFor = (name: string) =>
               <div id="comments-list" class="comments-thread">
                 {comments.length === 0 ? (
                   <div class="empty-box">
-                    <p>No member contributions yet. Share the first perspective below.</p>
+                    <p>No contributions yet. Verified members can start the discussion using the form above.</p>
                   </div>
                 ) : (
                   comments.map((c) => {
@@ -1438,11 +1438,11 @@ const initialsFor = (name: string) =>
               <div class="doc-section__header">
                 <div>
                   <div class="doc-title-row">
-                    <h2 id="revision-history-heading">Wording revision history &amp; provenance</h2>
+                    <h2 id="revision-history-heading">Wording history and sources</h2>
                     <span class="doc-count tabular">{revisions.length} {revisions.length === 1 ? 'snapshot' : 'snapshots'}</span>
                   </div>
                   <p class="doc-section__sub">
-                    Immutable snapshots of proposal wording and constitutional lineage. Every formal ballot is bound to a single revision ID.
+                    See how the wording has changed and which version was put to a ballot. References below provide background; they do not by themselves establish prior adoption.
                   </p>
                 </div>
               </div>
@@ -1463,15 +1463,15 @@ const initialsFor = (name: string) =>
                             <strong>{revisionDisplayLabel({ revisionId: String(revision.revisionId), createdAt: revision.createdAt, ordinal: revisions.length - index })}</strong>
                             <code title={String(revision.revisionId)}>{String(revision.revisionId).slice(0, 8)}</code>
                             {index === 0 && <Badge variant="muted">Latest</Badge>}
-                            {revision.revisionId === proposal.ballotRevisionId && <Badge variant="info">Bound ballot wording</Badge>}
+                            {revision.revisionId === proposal.ballotRevisionId && <Badge variant="info">Ballot wording</Badge>}
                           </div>
                           <span class="revision-row__meta tabular">
-                            {new Date(revision.createdAt).toLocaleDateString('en-AU', { dateStyle: 'medium' })} · {changed.length ? `${changed.length} changed ${changed.length === 1 ? 'field' : 'fields'}` : parent ? 'No wording changes' : 'Initial wording snapshot'}
+                            {new Date(revision.createdAt).toLocaleDateString('en-AU', { dateStyle: 'medium' })} · {changed.length ? `${changed.length} changed ${changed.length === 1 ? 'field' : 'fields'}` : parent ? 'No wording changes' : 'Initial wording'}
                           </span>
                         </div>
                         {changed.length > 0 && (
                           <details class="diff-drawer">
-                            <summary>Inspect wording diff</summary>
+                            <summary>Compare wording</summary>
                             {changed.map((change) => (
                               <div class="amendment-diff">
                                 <div class="diff-pane diff-pane--before">
@@ -1497,12 +1497,12 @@ const initialsFor = (name: string) =>
                   <div class="provenance-box__head">
                     <div>
                       <h3>
-                        {isResolution ? 'Resolution Context & Constitutional Authority' : 'Policy Provenance & Prior Approval'}
+                        {isResolution ? 'Resolution background and authority' : 'Policy background and sources'}
                       </h3>
                       <p class="provenance-box__sub">
                         {isResolution
-                          ? 'Constitutional authority, organizational precedents, and scrutiny notes from party records.'
-                          : 'Lineage and scrutiny details from party archives and published platform versions.'}
+                          ? 'Recorded authority, earlier decisions and notes about their limitations.'
+                          : 'References to earlier policy and notes about what is known of its history.'}
                       </p>
                     </div>
                     <Badge variant="outline">{proposal.provenance.label}</Badge>
@@ -1559,7 +1559,7 @@ const initialsFor = (name: string) =>
             <!-- 2. Decision & Ratification Chain -->
             <section class="rail-card">
               <div class="rail-card__head">
-                <h3>Decision &amp; Ratification Chain</h3>
+                <h3>Decision record</h3>
                 <a class="rail-head__link" href="#revision-history-heading">Full log</a>
               </div>
 
@@ -1579,7 +1579,7 @@ const initialsFor = (name: string) =>
               </ol>
 
               <div class="rail-subhead">
-                <h4>Recent record activity</h4>
+                <h4>Recent activity</h4>
               </div>
               <ol class="rail-activity-list">
                 {activityEvents.map((ev) => (
@@ -1654,11 +1654,11 @@ const initialsFor = (name: string) =>
     const title = document.querySelector('.next-action-bar__title');
     if (title) title.textContent = `Your vote: ${choice}. You can change it until voting closes.`;
     const outstanding = document.querySelector<HTMLElement>('[data-outstanding-after-vote]');
-    if (outstanding) outstanding.textContent = `${outstanding.dataset.outstandingAfterVote} need your vote`;
+    if (outstanding) outstanding.textContent = `${outstanding.dataset.outstandingAfterVote} you haven’t voted on`;
     const bar = document.querySelector('.next-action-bar');
     bar?.classList.add('is-complete');
     const kicker = document.querySelector('.next-action-bar__kicker');
-    if (kicker) kicker.textContent = 'Vote saved · Review or change · ~30 seconds';
+    if (kicker) kicker.textContent = 'Vote recorded · You can change it until voting closes';
     const chip = document.querySelector('.personal-vote-chip');
     if (chip) {
       chip.textContent = `Your vote: ${choice}`;
@@ -1685,7 +1685,7 @@ const initialsFor = (name: string) =>
       if (stage === 'decide') {
         confirmMsg = `Open voting (Stage 3: Voting)? Once voting begins, substantive proposal content will be locked to protect ballot integrity.`;
       } else if (currentStage === 'decide' && voteCount > 0) {
-        confirmMsg = `This ballot currently has ${voteCount} member vote(s). Moving to "${stage}" will conclude or pause active voting. All cast votes will remain safely preserved. Proceed?`;
+        confirmMsg = `This ballot currently has ${voteCount} member vote(s). Moving to "${stage}" will conclude or pause active voting. Recorded votes are retained. Continue?`;
       } else if (stage === 'implement') {
         confirmMsg = `Advance this proposal to Stage 4 (Implementation)?`;
       } else if (stage === 'archived') {
@@ -1707,10 +1707,10 @@ const initialsFor = (name: string) =>
           body: JSON.stringify({ stage }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Failed to update stage');
+        if (!res.ok) throw new Error(data.error || 'Could not change the stage.');
         location.reload();
       } catch (err: any) {
-        stageMsg.textContent = err.message || 'Error';
+        stageMsg.textContent = err.message || 'Could not change the stage. Try again.';
         stageSelect.value = currentStage;
         stageSelect.disabled = false;
       }
@@ -1736,11 +1736,11 @@ const initialsFor = (name: string) =>
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ implementationNote }),
         });
-        if (!res.ok) throw new Error('Failed to save');
-        implStatus.textContent = 'Saved!';
+        if (!res.ok) throw new Error('Could not save the progress note.');
+        implStatus.textContent = 'Saved.';
         implBtn.disabled = false;
       } catch (err: any) {
-        implStatus.textContent = err.message || 'Error';
+        implStatus.textContent = err.message || 'Could not save the progress note. Try again.';
         implBtn.disabled = false;
       }
     });
@@ -1891,7 +1891,7 @@ const initialsFor = (name: string) =>
           body: JSON.stringify({ proposalId, stance, body }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to post');
+        if (!res.ok) throw new Error(data.error || 'Could not post your contribution. Try again.');
         trackEngage('contribution_result', { action: 'deliberation', outcome: 'success' });
 
         const created = data.comment ?? {
@@ -1940,10 +1940,10 @@ const initialsFor = (name: string) =>
           textarea.value = '';
           textarea.dispatchEvent(new Event('input'));
         }
-        commentStatusMsg.textContent = 'Contribution posted!';
+        commentStatusMsg.textContent = 'Contribution posted.';
       } catch (err: any) {
         trackEngage('contribution_result', { action: 'deliberation', outcome: 'failed' });
-        commentStatusMsg.textContent = err.message || 'Error';
+        commentStatusMsg.textContent = err.message || 'Could not post your contribution. Try again.';
       } finally {
         commentSubmitBtn.disabled = false;
       }
@@ -2134,7 +2134,7 @@ const initialsFor = (name: string) =>
         const res = await fetch(`/api/comments?commentId=${encodeURIComponent(commentId ?? '')}`, {
           method: 'DELETE',
         });
-        if (!res.ok) throw new Error('Failed to delete');
+        if (!res.ok) throw new Error('Could not delete this contribution. Try again.');
         const card = document.querySelector(`[data-comment-id="${commentId}"]`);
         card?.remove();
       } catch {

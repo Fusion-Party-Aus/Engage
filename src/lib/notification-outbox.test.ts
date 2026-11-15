@@ -458,5 +458,5 @@ test("payload builders never embed wording and keep the ballot link", () => {
     publicationScope: "branch",
   });
   assert.equal(closing.isConfidential, true);
-  assert.match(closing.body, /Vote before the deadline/);
+  assert.match(closing.body, /Read the ballot before voting closes/);
 });

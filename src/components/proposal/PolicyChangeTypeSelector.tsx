@@ -72,7 +72,7 @@ export default function PolicyChangeTypeSelector({
       </Select>
       <FieldDescription id="policy-change-hint">
         {hint ??
-          'The current policy stays in force unless this proposal is successful, ratified and published.'}
+          'Submitting leaves the current policy unchanged. An adopted amendment or replacement takes effect when published; a repeal takes effect at ratification.'}
       </FieldDescription>
     </FieldSet>
   );

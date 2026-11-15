@@ -244,7 +244,7 @@ const nextAction = (() => {
     return {
       variant: 'info' as const,
       title: 'Next step: Formal ratification',
-      description: 'This policy proposal passed its ballot. Complete formal ratification in the Policy Registry before publication.',
+      description: 'This policy proposal passed its ballot. Verify the process and record the adopted wording in the policy registry before publication.',
       href: user.isAdmin ? '/admin/policies/' : undefined,
       cta: 'Open policy registry',
     };
@@ -599,7 +599,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 
             <!-- Linked Governance Artifacts Cards (Project Files grid pattern) -->
             <div class="project-files-section">
-              <h3 class="project-subhead">Governance records &amp; snapshots</h3>
+              <h3 class="project-subhead">Wording and decision records</h3>
               <div class="project-files-grid">
                 <a href={`${publicUrl}#revision-history-heading`} class="project-file-card">
                   <span class="project-file-card__icon"><FileText aria-hidden="true" /></span>
@@ -660,8 +660,8 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
           <section id="record-decision" class="admin-record-section" aria-labelledby="record-decision-heading">
             <div class="project-panel-head">
               <div>
-                <h2 id="record-decision-heading">Decision chain &amp; ballot administration</h2>
-                <p>Ballot wording binding, outcome recording, ratification, and publication are separate auditable actions.</p>
+                <h2 id="record-decision-heading">Ballot and decision record</h2>
+                <p>Confirm the ballot wording, record the outcome, then complete any ratification and publication. Each action has its own record.</p>
               </div>
               <Badge variant={ballotResult ? (ballotResult.result === 'successful' ? 'success' : 'warning') : proposal.stage === 'decide' ? 'info' : 'muted'}>
                 {ballotResult ? String(ballotResult.result) : ballotState}
@@ -1056,8 +1056,8 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
           <section id="record-discussion" class="admin-record-section" aria-labelledby="record-discussion-heading">
             <div class="project-panel-head">
               <div>
-                <h2 id="record-discussion-heading">Member deliberation log</h2>
-                <p>Informal stances and wording suggestions posted by verified members. Record how feedback was addressed.</p>
+                <h2 id="record-discussion-heading">Member discussion</h2>
+                <p>Read members’ comments and wording suggestions, and record how their feedback was addressed.</p>
               </div>
               <Button href={`${publicUrl}#deliberation`} variant="outline" size="sm"><MessageSquare />Open public thread</Button>
             </div>
@@ -1191,7 +1191,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
             <div class="project-panel-head">
               <div>
                 <h2 id="record-activity-heading">Activity &amp; audit timeline</h2>
-                <p>Chronological log of persisted proposal, revision, amendment, ballot, and policy events.</p>
+                <p>Follow the proposal’s wording changes, amendments, ballots and policy outcomes in date order.</p>
               </div>
               <Badge variant="muted" className="tabular">{activityEvents.length}</Badge>
             </div>
@@ -1391,10 +1391,10 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
           body: JSON.stringify({ stage: newStage }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Failed to update stage');
+        if (!res.ok) throw new Error(data.error || 'Could not change the stage.');
         location.reload();
       } catch (err: any) {
-        alert(err.message || 'Failed to update stage');
+        alert(err.message || 'Could not change the stage.');
         select.value = currentStage;
       } finally {
         select.disabled = false;

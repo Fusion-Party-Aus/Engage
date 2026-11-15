@@ -82,7 +82,7 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
           <CardHeader class="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
             <div class="grid gap-1">
               <CardTitle class="text-base">Verification reviews</CardTitle>
-              <CardDescription>Accounts whose CRM membership or geographic branch could not be resolved automatically.</CardDescription>
+              <CardDescription>Accounts whose membership or geographic branch needs a manual check.</CardDescription>
             </div>
             <Badge variant="warning">{verificationReviews.length}</Badge>
           </CardHeader>
@@ -337,7 +337,7 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
           body: JSON.stringify(payload),
         });
         const responseBody = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(responseBody.error || 'Failed');
+        if (!res.ok) throw new Error(responseBody.error || 'Could not update this member.');
         msg.textContent = responseBody.notification === 'failed'
           ? 'Saved. Verification email could not be sent; please notify the member.'
           : responseBody.notification === 'sent' ? 'Saved. Verification email sent.' : 'Saved';

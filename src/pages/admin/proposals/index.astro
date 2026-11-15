@@ -236,7 +236,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
     <Alert variant="destructive">
       <ShieldAlert />
       <AlertTitle>Access required</AlertTitle>
-      <AlertDescription>Moderator or Administrator access is required to view this workspace.</AlertDescription>
+      <AlertDescription>You don’t have access to this administration area.</AlertDescription>
     </Alert>
   ) : (
     <div class="admin-stack">
@@ -266,7 +266,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
             {isRevision && (
               <Alert class="mb-4" variant="info">
                 <GitBranch />
-                <AlertTitle>Substantive revision mode</AlertTitle>
+                <AlertTitle>Create a revised proposal</AlertTitle>
                 <AlertDescription>
                   Creating a revised motion based on <strong>{revisingProposal?.proposalId}</strong> ({revisingProposal?.title}).
                   The original proposal and its {revisingVoteCount} vote(s) remain untouched in the archives.
@@ -277,10 +277,10 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
             {isLocked && (
               <Alert class="mb-4" variant="warning">
                 <Lock />
-                <AlertTitle>Substantive motion text locked</AlertTitle>
+                <AlertTitle>Ballot wording is locked</AlertTitle>
                 <AlertDescription>
                   <p class="m-0">This proposal is {editingProposal?.stage === 'decide' ? 'currently active in the Decide (voting) stage' : `in the ${editingProposal?.stage} stage`} with <strong>{voteCount} member vote{voteCount === 1 ? '' : 's'}</strong> cast. To protect ballot integrity, the title, summary, commitments, rationale, classification, and attachments cannot be altered. Lifecycle stage, topic space, provenance metadata, and implementation notes remain editable.</p>
-                  <Button className="mt-3" href={`/admin/proposals/?revise=${encodeURIComponent(editingProposal!.proposalId)}#create-policy`} variant="outline" size="sm">Branch / revise as new proposal</Button>
+                  <Button className="mt-3" href={`/admin/proposals/?revise=${encodeURIComponent(editingProposal!.proposalId)}#create-policy`} variant="outline" size="sm">Create a revised proposal</Button>
                 </AlertDescription>
               </Alert>
             )}
@@ -412,11 +412,11 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                   label={isLocked ? 'Attachment description (optional · locked)' : 'Attachment description (optional)'}
                   htmlFor="editor-attachment-description"
                 >
-                  <Input id="editor-attachment-description" name="attachmentDescription" defaultValue={initialAttachmentDescription} readOnly={isLocked} className={isLocked ? 'admin-locked' : undefined} placeholder="e.g. Official Horizon identity emblem: vector marks and palette tokens" />
+                  <Input id="editor-attachment-description" name="attachmentDescription" defaultValue={initialAttachmentDescription} readOnly={isLocked} className={isLocked ? 'admin-locked' : undefined} placeholder="Describe what the image or document shows" />
                 </Field>
 
                 <Field label="Decision-processing note (for Stage 4)" htmlFor="editor-implementation-note">
-                  <Input id="editor-implementation-note" name="implementationNote" defaultValue={initialImplementationNote} placeholder="e.g. Ratification scheduled; publication completed; rollout milestone recorded." />
+                  <Input id="editor-implementation-note" name="implementationNote" defaultValue={initialImplementationNote} placeholder="What has happened since the decision?" />
                 </Field>
               </div>
 
@@ -449,7 +449,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                   </Field>
 
                   <Field label="What is still uncertain / scrutiny notes" htmlFor="prov-uncertainty">
-                    <Input id="prov-uncertainty" name="provUncertainty" defaultValue={initialProvenance?.uncertaintyNote ?? ''} placeholder="e.g. Specific clause or operational wording comparison notes." />
+                    <Input id="prov-uncertainty" name="provUncertainty" defaultValue={initialProvenance?.uncertaintyNote ?? ''} placeholder="What is uncertain about the source or its adoption?" />
                   </Field>
 
                   <Field label={isResolution ? 'Preceding documents & authorities (format: Title | URL | Description)' : 'Prior policy predecessors (format: Title | URL | Description)'} htmlFor="prov-lineage">
@@ -535,7 +535,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
             <Field label="Search proposals" htmlFor="proposal-search">
               <div class="relative">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="proposal-search" type="search" name="q" defaultValue={query} placeholder="Filter by title, ID (GOV-002), or topic space" className="pl-9" />
+                <Input id="proposal-search" type="search" name="q" defaultValue={query} placeholder="Search by title, proposal ID or topic" className="pl-9" />
               </div>
             </Field>
 
@@ -1239,12 +1239,12 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(data.error || 'Failed to update stage');
+          throw new Error(data.error || 'Could not change the stage.');
         }
         select.dataset.currentStage = newStage;
         location.reload();
       } catch (err: any) {
-        alert(err.message || 'Failed to update stage');
+        alert(err.message || 'Could not change the stage.');
         select.value = currentStage;
       } finally {
         select.disabled = false;

@@ -223,7 +223,7 @@ export function getDefaultSiteConfig(env: PlatformEnv = {}): SiteConfig {
     tagline:
       "Explore ideas, join discussions, and vote on the decisions that shape Fusion.",
     defaultDescription:
-      "Browse proposals, join discussions, vote when eligible, and explore the policy registry from Fusion Party Australia.",
+      "Read what Fusion is discussing, help shape an idea and vote on the party’s decisions when eligible.",
     defaultOgImage: ogImage,
     allowPublicIndexing,
     publicPulsePollEnabled,
@@ -238,9 +238,9 @@ export function getDefaultSiteConfig(env: PlatformEnv = {}): SiteConfig {
         : "https://github.com/Fusion-Party-Aus/Engage"),
     docsUrl: "/how-it-works/#operations",
     backupSummary:
-      "Engage runs as a self-contained Docker Compose stack (Astro Node server + single-node MongoDB 8 replica set with a persistent mongo_data volume). Routine encrypted mongodump archives can be exported to off-host storage and verified into an isolated restore-drill database without downtime.",
+      "Back up the database, uploaded files and security keys. Keep protected copies away from the application host and test recovery in an isolated environment. See the operating guide for deployment-specific procedures.",
     handoverSummary:
-      "Everything required to run or transfer Engage is version-controlled in the repository: Dockerfiles, Compose stacks, .env.example configuration template, deterministic ballot-migration scripts, and operational runbooks in /docs.",
+      "The repository contains deployment instructions and configuration examples. A handover also requires authorised access to hosting, backups and security keys, which are not stored in the repository.",
   };
 }
 

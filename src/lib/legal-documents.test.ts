@@ -170,8 +170,8 @@ test("terms cover participation, content, voting, records and disputes", () => {
   assert.match(text, /Dispute Resolution/);
   assert.match(text, /voting is not anonymous/i);
   assert.match(text, /national administrators can identify/i);
-  assert.match(text, /Seconding formal motions is not yet implemented/i);
-  assert.match(text, /A successful vote is not adoption/i);
+  assert.match(text, /policy proposal needs another verified member to second it/i);
+  assert.match(text, /successful policy decisions do not require a discretionary executive approval/i);
   assert.match(text, /cannot be edited or deleted through the application/i);
   assert.match(text, /Do not coerce, buy or trade votes/i);
   assert.match(text, /laws of Victoria, Australia/i);
@@ -218,7 +218,7 @@ test("terms do not treat public browsing as affirmative acceptance", () => {
 test("terms describe ballot intervention capabilities without inventing a contingency policy", () => {
   const text = textOf(termsOfUse);
 
-  assert.match(text, /technical controls that can close a ballot or change its stage/i);
+  assert.match(text, /Authorised officers can change a proposal’s stage/i);
   assert.match(text, /not a complete contingency policy/i);
   assert.match(
     text,

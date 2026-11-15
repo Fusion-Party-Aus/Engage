@@ -165,13 +165,13 @@ function ProfileSection({ name, email, onSaved }: { name: string; email: string;
   return (
     <form onSubmit={save} noValidate>
       <SettingsSection
-        description="How your name appears on ideas, comments and votes you record."
+        description="Your name appears on public ideas and comments. It is also attached to your private ballot record."
         title="Profile"
       >
         <CardContent className="flex-1 px-0 py-(--card-spacing)">
           <FieldGroup className="gap-5">
             <SettingField
-              description="Shown to other members and administrators."
+              description="Shown with your public contributions."
               htmlFor="member-display-name"
               label="Display name"
             >
@@ -226,7 +226,7 @@ function AccessSection({ role, canParticipate, branches }: Pick<MemberSettingsPr
             <span className="text-sm">{canParticipate ? 'Comment, suggest and vote' : 'Read and explore only'}</span>
           </InfoRow>
           <FieldSeparator />
-          <InfoRow description="Following a branch shows its proposals. Verified membership is decided by the branch." label="Branches you follow">
+          <InfoRow description="Following gives you updates. Membership and voting eligibility are managed separately in My branches." label="Branches you follow">
             {branches.length ? (
               <ul className="flex flex-col gap-1 text-sm">
                 {branches.map((branch) => (
@@ -423,7 +423,7 @@ function PasskeysSection() {
           setMessage(result.error.message || 'Could not register passkey on this device.');
         }
       } else {
-        setMessage('Passkey added. You can now sign in with one tap using this passkey.');
+        setMessage('Passkey added. You can use it next time you sign in.');
         try {
           localStorage.setItem('engage_passkey_enrolled', 'true');
         } catch {
@@ -460,7 +460,7 @@ function PasskeysSection() {
 
   return (
     <SettingsSection
-      description="Sign in with Face ID, Touch ID, Windows Hello, or a hardware security key—no email wait required."
+      description="Use your device or password manager to sign in with a passkey."
       id="passkeys"
       title="Passkeys & biometric sign-in"
     >
@@ -472,7 +472,7 @@ function PasskeysSection() {
                 <Fingerprint className="mt-0.5 size-5 shrink-0 text-[var(--horizon-purple)]" aria-hidden="true" />
                 <div className="grid gap-0.5">
                   <p className="text-sm font-semibold text-[var(--horizon-purple-deep)]">
-                    Phishing-resistant, instant sign-in
+                    Sign in with a passkey
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Passkeys stay in your device or password manager (iCloud Keychain, Google Password Manager, 1Password, Bitwarden) and never expose biometrics to Engage.

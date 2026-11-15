@@ -97,7 +97,7 @@ const stageVariant = (s: ProposalStage) => {
 ---
 <SiteLayout
   title="Engage · Fusion Party Australia"
-  description="Explore Fusion's ideas, suggest proposals, join member deliberations, and follow bound ballots and official policy."
+  description="Help shape Fusion's policies. Put forward an idea, join the discussion, and vote when you're eligible."
   canonical="/"
 >
   {user ? (
@@ -105,7 +105,7 @@ const stageVariant = (s: ProposalStage) => {
       <header class="member-welcome-bar">
         <div class="member-welcome-bar__copy">
           <h1>Welcome back{user.name ? `, ${user.name.split(' ')[0]}` : ''}.</h1>
-          <p>Put forward a new idea, weigh in on active deliberations, or cast your ballot on open decisions.</p>
+          <p>Share an idea, join a discussion, or vote on the decisions open to you.</p>
         </div>
         <div class="member-welcome-bar__actions">
           <Button href={primaryCtaHref}>
@@ -119,9 +119,9 @@ const stageVariant = (s: ProposalStage) => {
 
       {!user.canParticipate && (
         <Alert variant="warning">
-          <AlertTitle>Your membership is being verified</AlertTitle>
+          <AlertTitle>Check your membership status</AlertTitle>
           <AlertDescription>
-            You can read every public proposal and revision now. Suggesting ideas, posting stances, and voting unlock once your Fusion membership is verified. <a href="/member/">View account status →</a>
+            You can read public proposals now. To contribute or vote, you need a verified Fusion membership and must be eligible for the ballot. <a href="/member/">View account status →</a>
           </AlertDescription>
         </Alert>
       )}
@@ -132,7 +132,7 @@ const stageVariant = (s: ProposalStage) => {
           <span class="home-pipeline-cell__label"><Plus className="size-3.5" aria-hidden="true" />Have an idea?</span>
           <div class="home-pipeline-cell__bottom">
             <strong class="home-pipeline-cell__value">{primaryCtaLabel}</strong>
-            <span class="home-pipeline-cell__hint">Start Stage 1</span>
+            <span class="home-pipeline-cell__hint">Put it forward</span>
           </div>
         </a>
         <a href="/proposals/?stage=decide" class="home-pipeline-cell">
@@ -153,7 +153,7 @@ const stageVariant = (s: ProposalStage) => {
           <span class="home-pipeline-cell__label"><MessageSquare className="size-3.5" aria-hidden="true" />In discussion</span>
           <div class="home-pipeline-cell__bottom">
             <strong class="home-pipeline-cell__value tabular">{discussions.length}</strong>
-            <span class="home-pipeline-cell__hint">Open for stances</span>
+            <span class="home-pipeline-cell__hint">Join the discussion</span>
           </div>
         </a>
         <a href={user.activeBranchIds?.[0] ? `/proposals/?branch=${encodeURIComponent(user.activeBranchIds[0])}` : '/branches/'} class="home-pipeline-cell">
@@ -175,8 +175,8 @@ const stageVariant = (s: ProposalStage) => {
                 <h2 id="your-votes">Open ballots for you</h2>
                 <p>
                   {totalEligibleOpenVotesCount > 0
-                    ? `${completedOpenVotesCount} of ${totalEligibleOpenVotesCount} eligible ballots completed (${homeProgressPct}%). Each ballot is bound to an exact wording revision.`
-                    : 'Ballots you are eligible to vote on, bound to an exact wording revision.'}
+                    ? `${completedOpenVotesCount} of ${totalEligibleOpenVotesCount} ballots voted on (${homeProgressPct}%). You can change your vote while a ballot is open.`
+                    : 'Read the wording of each proposal before you vote.'}
                 </p>
               </div>
               <a href="/proposals/?stage=decide" class="home-block__link">All {votes.length} open votes →</a>
@@ -202,7 +202,7 @@ const stageVariant = (s: ProposalStage) => {
               </div>
             ) : (
               <div class="home-empty-note">
-                <p>You have no outstanding ballots requiring your vote right now.</p>
+                <p>There are no ballots awaiting your vote. Check your account status if you expected to see one.</p>
                 <div class="home-empty-actions">
                   {discussions.length > 0 && (
                     <a href="#discussions">Join {discussions.length} open {discussions.length === 1 ? 'deliberation' : 'deliberations'} →</a>
@@ -222,8 +222,8 @@ const stageVariant = (s: ProposalStage) => {
           <section class="home-block" aria-labelledby="discussions">
             <div class="home-block__head">
               <div>
-                <h2 id="discussions">Open for deliberation &amp; amendments</h2>
-                <p>Share support, raise implementation concerns, or propose wording changes before a ballot opens.</p>
+                <h2 id="discussions">Help shape these ideas</h2>
+                <p>Say what you support, raise a concern, or suggest how the wording could improve.</p>
               </div>
               <a href="/proposals/?stage=deliberate" class="home-block__link">All {discussions.length} discussions →</a>
             </div>
@@ -235,7 +235,7 @@ const stageVariant = (s: ProposalStage) => {
                       <span class="tabular home-issue-id">{p.proposalId}</span>
                       <Badge variant="secondary">2. Deliberate</Badge>
                       <span class="home-topic-chip">{p.space}</span>
-                      <span class="tabular home-stat-inline">{p.commentCount} stances</span>
+                      <span class="tabular home-stat-inline">{p.commentCount} discussion posts</span>
                     </div>
                     <h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3>
                     <p>{p.summary}</p>
@@ -251,8 +251,8 @@ const stageVariant = (s: ProposalStage) => {
 
         <aside class="home-workspace-rail" aria-label="Quick navigation and governance guide">
           <div class="rail-box is-featured">
-            <h2>Put an idea on the record</h2>
-            <p>Start with the change you want to see, the topic space, and key commitments. Members will help refine the wording during deliberation.</p>
+            <h2>What would you like to change?</h2>
+            <p>Explain the change you want Fusion to support and why it matters. Other members can help develop the idea.</p>
             <Button href={primaryCtaHref} className="w-full justify-center">
               <Plus className="size-4" aria-hidden="true" />
               {primaryCtaLabel}
@@ -260,20 +260,20 @@ const stageVariant = (s: ProposalStage) => {
           </div>
 
           <div class="rail-box">
-            <h2>60-second walkthrough</h2>
+            <h2>How it works</h2>
             <ol class="rail-steps">
-              <li><strong>1. Propose:</strong> Member submits an idea and rationale.</li>
-              <li><strong>2. Deliberate:</strong> Members debate and file amendments.</li>
-              <li><strong>3. Decide:</strong> Eligible members vote on frozen wording.</li>
-              <li><strong>4. Implement:</strong> Ratified and published to the registry.</li>
+              <li><strong>1. Propose:</strong> Explain your idea and why it matters.</li>
+              <li><strong>2. Deliberate:</strong> A seconder brings the idea into discussion. Members debate it and propose amendments.</li>
+              <li><strong>3. Decide:</strong> Eligible members vote on the proposal. The wording stays fixed while voting is open.</li>
+              <li><strong>4. Implement:</strong> The result is recorded. Successful policy proposals can then be ratified and published.</li>
             </ol>
-            <a href="/how-it-works/" class="rail-link">Read the full 1-page guide →</a>
+            <a href="/how-it-works/" class="rail-link">How it works →</a>
           </div>
 
           <div class="rail-box">
-            <h2>Your workspaces</h2>
+            <h2>Keep up with Fusion</h2>
             <ul class="rail-nav-list">
-              <li><a href="/member/">My Engage activity &amp; log →</a></li>
+              <li><a href="/member/">My Engage →</a></li>
               <li><a href="/sense-box/">Sense Box · Local priorities →</a></li>
               <li><a href="/branches/">Branches &amp; state sites →</a></li>
               <li><a href="/policies/">Official policy registry →</a></li>
@@ -289,7 +289,7 @@ const stageVariant = (s: ProposalStage) => {
           <div class="visitor-hero__content">
             <h1>Help shape what Fusion does next.</h1>
             <p>
-              Engage is where Fusion members propose ideas, deliberate on policy wording, and vote on bound revisions. Anyone can inspect every proposal, revision, and ballot tally publicly.
+              Bring an idea, help improve a policy, or vote on what Fusion should do next. You can read public proposals and discussions without an account. Verified members can contribute and vote where eligible.
             </p>
             <div class="visitor-hero__actions">
               <Button href={primaryCtaHref} size="lg" className="hero-star-btn">
@@ -300,7 +300,7 @@ const stageVariant = (s: ProposalStage) => {
                 Browse {proposals.length} proposals
               </Button>
               <Button href="/how-it-works/" size="lg" variant="ghost" className="hero-ghost-btn">
-                60-second walkthrough →
+                How it works →
               </Button>
             </div>
           </div>
@@ -321,9 +321,9 @@ const stageVariant = (s: ProposalStage) => {
           <div class="pipeline-overview__head">
             <div>
               <h2 id="pipeline-heading">How an idea becomes policy</h2>
-              <p>Every proposal follows four stages from initial idea to party adoption.</p>
+              <p>Follow an idea through discussion, voting and, if adopted, publication.</p>
             </div>
-            <a href="/how-it-works/" class="home-block__link">More Detail →</a>
+            <a href="/how-it-works/" class="home-block__link">Read the guide →</a>
           </div>
 
           <div class="home-pipeline-strip">
@@ -333,7 +333,7 @@ const stageVariant = (s: ProposalStage) => {
                 <strong class="home-pipeline-cell__value">{primaryCtaLabel}</strong>
                 <span class="home-pipeline-cell__hint tabular">{ideas.length} draft ideas</span>
               </div>
-              <p class="home-pipeline-cell__desc">Members put forward an idea, key commitments, and supporting evidence.</p>
+              <p class="home-pipeline-cell__desc">Explain what you want to change and why. Another eligible member can second your proposal to start deliberation.</p>
             </a>
 
             <a href="/proposals/?stage=deliberate" class="home-pipeline-cell">
@@ -342,7 +342,7 @@ const stageVariant = (s: ProposalStage) => {
                 <strong class="home-pipeline-cell__value tabular">{discussions.length} active</strong>
                 <span class="home-pipeline-cell__hint">In discussion</span>
               </div>
-              <p class="home-pipeline-cell__desc">Members post support, concerns, wording suggestions, and formal amendments.</p>
+              <p class="home-pipeline-cell__desc">Discuss the idea, test the arguments, and propose amendments to improve the wording.</p>
             </a>
 
             <a href="/proposals/?stage=decide" class="home-pipeline-cell">
@@ -351,16 +351,16 @@ const stageVariant = (s: ProposalStage) => {
                 <strong class="home-pipeline-cell__value tabular">{votes.length} open</strong>
                 <span class="home-pipeline-cell__hint">Member ballots</span>
               </div>
-              <p class="home-pipeline-cell__desc">Eligible verified members vote on an immutable bound wording snapshot.</p>
+              <p class="home-pipeline-cell__desc">Eligible members vote on the exact wording shown on the ballot.</p>
             </a>
 
             <a href="/policies/" class="home-pipeline-cell">
               <span class="home-pipeline-cell__label"><BookOpen className="size-3.5" aria-hidden="true" />Stage 4 · Implement</span>
               <div class="home-pipeline-cell__bottom">
-                <strong class="home-pipeline-cell__value tabular">{implementing.length} processing</strong>
+                <strong class="home-pipeline-cell__value tabular">{implementing.length} in Implement</strong>
                 <span class="home-pipeline-cell__hint">{registryAvailable ? `${publishedPolicyCount} published` : 'Policy registry'}</span>
               </div>
-              <p class="home-pipeline-cell__desc">Successful ballots proceed to formal party ratification and registry publication.</p>
+              <p class="home-pipeline-cell__desc">Members decide the policy. Officers certify the process and publish the adopted wording.</p>
             </a>
           </div>
         </section>
@@ -372,7 +372,7 @@ const stageVariant = (s: ProposalStage) => {
             <div class="home-block__head">
               <div>
                 <h2 id="active-proposals-heading">Active proposals &amp; open ballots</h2>
-                <p>Inspect live proposals, read member deliberations, and examine revision histories.</p>
+                <p>See what’s being discussed, read the contributions, and follow how the wording has changed.</p>
               </div>
               <Button href="/proposals/" variant="outline" size="sm">
                 View all {proposals.length} proposals <ArrowRight className="size-3.5" aria-hidden="true" />
@@ -388,14 +388,14 @@ const stageVariant = (s: ProposalStage) => {
                       <Badge variant={stageVariant(item.stage)}>{stageLabel(item.stage)}</Badge>
                       <a class="home-topic-chip" href={`/proposals/?space=${encodeURIComponent(item.space)}`}>{item.space}</a>
                       <span class="tabular home-stat-inline">
-                        {item.commentCount} {item.commentCount === 1 ? 'stance' : 'stances'} · {item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'}
+                        {item.commentCount} {item.commentCount === 1 ? 'discussion post' : 'discussion posts'} · {item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'}
                       </span>
                     </div>
                     <h3><a href={`/proposals/${item.slug}/`}>{item.title}</a></h3>
                     <p>{item.summary}</p>
                   </div>
                   <a class="home-issue-cta" href={`/proposals/${item.slug}/`}>
-                    {item.stage === 'decide' ? 'Inspect ballot →' : 'Read record →'}
+                    {item.stage === 'decide' ? 'Read the ballot →' : 'Read the proposal →'}
                   </a>
                 </article>
               ))}
@@ -405,7 +405,7 @@ const stageVariant = (s: ProposalStage) => {
           <aside class="home-workspace-rail" aria-label="Public access and membership summary">
             <div class="rail-box is-featured">
               <h2>Have an idea for Fusion?</h2>
-              <p>Put a policy proposal or governance motion on the record for members to deliberate and refine.</p>
+              <p>Suggest a policy or a change to how Fusion works. Explain your idea so other members can discuss it.</p>
               <Button href={primaryCtaHref} className="w-full justify-center">
                 <Plus className="size-4" aria-hidden="true" />
                 {primaryCtaLabel}
@@ -419,24 +419,24 @@ const stageVariant = (s: ProposalStage) => {
             </div>
 
             <div class="rail-box">
-              <h2>What is public vs. member-only?</h2>
+              <h2>Who can take part?</h2>
               <ul class="access-summary-list">
                 <li>
                   <Compass className="size-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
-                    <strong>Publicly accessible</strong>
-                    <span>All public proposals, deliberation threads, revision diffs, ballot tallies, branches, and the JSON API (<code>/api/v1/policies</code>).</span>
+                    <strong>Anyone can read</strong>
+                    <span>Public proposals, their discussions and voting totals, published policies, and the branch directory.</span>
                   </div>
                 </li>
                 <li>
                   <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
                     <strong>Verified members</strong>
-                    <span>Suggest new ideas, post deliberation stances, endorse contributions, file formal amendments, and vote in eligible ballots.</span>
+                    <span>Put forward ideas, join discussions, endorse contributions, and propose amendments. Voting also depends on your eligibility for each ballot.</span>
                   </div>
                 </li>
               </ul>
-              <a href="/how-it-works/#access-matrix" class="rail-link">Full access &amp; source guide →</a>
+              <a href="/how-it-works/#access-matrix" class="rail-link">More about taking part →</a>
             </div>
           </aside>
         </div>

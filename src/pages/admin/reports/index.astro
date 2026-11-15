@@ -97,7 +97,7 @@ const activeBallots = proposals.filter((p) => p.stage === 'decide').length;
     <Alert variant="destructive">
       <ShieldAlert />
       <AlertTitle>Access required</AlertTitle>
-      <AlertDescription>Moderator or Administrator access is required to view reports.</AlertDescription>
+      <AlertDescription>You don’t have access to these reports.</AlertDescription>
     </Alert>
   ) : (
     <div class="admin-stack">
@@ -135,7 +135,7 @@ const activeBallots = proposals.filter((p) => p.stage === 'decide').length;
       <Card class="gap-0">
         <CardHeader>
           <CardTitle class="text-base">Aggregate exports</CardTitle>
-          <CardDescription>Download spreadsheets for committee packs or open engagement delivery metrics.</CardDescription>
+          <CardDescription>Download summaries for committee papers or check email delivery and participation.</CardDescription>
           <CardAction>
             <div class="flex flex-wrap gap-2">
               <Button href="/api/admin/reports/proposals.csv" variant="outline" size="sm">

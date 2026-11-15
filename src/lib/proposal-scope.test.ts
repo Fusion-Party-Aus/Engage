@@ -535,7 +535,7 @@ describe("proposal scope selector regression", () => {
     assert.doesNotMatch(component, /ToggleGroup/);
     assert.doesNotMatch(component, /role="radio"/);
     assert.match(component, /type="hidden"/);
-    assert.match(component, /aria-label="Proposal scope"/);
+    assert.match(component, /aria-label="Who should consider this idea\?"/);
     assert.match(component, /aria-describedby="proposal-scope-hint"/);
   });
 

@@ -176,7 +176,7 @@ export function buildBallotOpenedPayload(
     : "";
   return {
     title: `Ballot open: ${proposal.title}`,
-    body: `${deadline.trim()} Open the ballot to read the motion and vote.`.trim(),
+    body: `${deadline.trim()} Read the ballot wording before deciding whether to vote.`.trim(),
     href: proposalHref(proposal),
     isConfidential: isConfidentialMatter(proposal),
   };
@@ -190,7 +190,7 @@ export function buildClosingSoonPayload(
     : " Voting is closing soon.";
   return {
     title: `Closing soon: ${proposal.title}`,
-    body: `${deadline.trim()} Vote before the deadline.`.trim(),
+    body: `${deadline.trim()} Read the ballot before voting closes.`.trim(),
     href: proposalHref(proposal),
     isConfidential: isConfidentialMatter(proposal),
   };

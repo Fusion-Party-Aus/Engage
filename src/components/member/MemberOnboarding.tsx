@@ -140,7 +140,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
           trackEngage('passkey_enrollment', { mode: 'automatic', outcome: autoRes && !autoRes.error ? 'success' : 'failed' });
           if (autoRes && !autoRes.error) {
             setHasPasskey(true);
-            setPasskeyFeedback('Passkey automatically saved for 1-tap sign-in next time.');
+            setPasskeyFeedback('A passkey has been saved for your next sign-in.');
             try {
               localStorage.setItem(PASSKEY_STORAGE_KEY, 'true');
             } catch {
@@ -170,7 +170,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
     {
       id: 'account',
       done: true,
-      title: 'Signed in to your Engage member profile',
+      title: 'You’re signed in',
       description: `Connected as ${props.name || props.email} (${props.email}).`,
       time: 'Completed',
     },
@@ -178,23 +178,23 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
       id: 'passkey',
       done: hasPasskey,
       title: hasPasskey
-        ? 'Passkey saved for 1-tap biometric sign-in'
-        : 'Add a passkey for instant next-visit sign-in',
+        ? 'Passkey saved'
+        : 'Add a passkey for next time',
       description: hasPasskey
         ? 'Your device passkey is ready whenever you return.'
         : 'Use Face ID, Touch ID, Windows Hello, or your password manager instead of waiting for email links.',
-      time: '15 sec',
+      time: 'Optional',
     },
     {
       id: 'verification',
       done: verifiedDone,
       title: verifiedDone
         ? `Fusion membership verified${props.branches.length ? ` · ${props.branches.map((b) => b.name).join(', ')}` : ''}`
-        : 'Membership verification in progress',
+        : 'Membership not yet verified',
       description: verifiedDone
-        ? 'You can suggest ideas, post deliberation stances, propose amendments, and vote in eligible ballots.'
-        : 'An administrator cross-checks your name and email against the Fusion roll. You can explore every public proposal while you wait.',
-      time: verifiedDone ? 'Verified' : 'Automatic notice',
+        ? 'You can suggest ideas, comment, propose amendments and vote where eligible.'
+        : 'Your account details need to be matched to your Fusion membership. You can read public proposals while your membership is checked.',
+      time: verifiedDone ? 'Verified' : 'Pending',
     },
     {
       id: 'branches',
@@ -207,28 +207,28 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
       description: branchesDone
         ? 'Fusion National is included. You can change which branches you follow at any time in My Engage.'
         : 'Follow state or local branches to discover their proposals. Following does not make you a verified member or change your voting rights.',
-      time: '20 sec',
+      time: 'Optional',
     },
     {
       id: 'first-action',
       done: participatedDone,
       title:
         props.totalContributions > 0
-          ? 'First governance contribution recorded'
+          ? 'Your first contribution is recorded'
           : props.canParticipate && props.openBallotsCount > 0
             ? `Cast your first vote (${props.openBallotsCount} open ${props.openBallotsCount === 1 ? 'ballot' : 'ballots'})`
             : props.canParticipate && props.deliberationsCount > 0
-              ? `Join an active deliberation (${props.deliberationsCount} open)`
-              : 'Explore live proposals & the 60-second walkthrough',
+              ? `Join a discussion (${props.deliberationsCount} open)`
+              : 'Browse proposals and read the guide',
       description:
         props.totalContributions > 0
-          ? 'Your votes, deliberation stances, and ideas are tracked in your personal log.'
+          ? 'Revisit your votes, comments and ideas in Your activity.'
           : props.canParticipate && props.firstBallotTitle
-            ? `Up next: "${props.firstBallotTitle}" — bound to an immutable wording snapshot.`
+            ? `Read "${props.firstBallotTitle}" and the exact wording on its ballot.`
             : props.canParticipate && props.firstDeliberationTitle
-              ? `Up next: "${props.firstDeliberationTitle}" — share Support, a Concern, or a Wording suggestion.`
-              : 'See how ideas move from Propose and Deliberate to Decide and the Official Policy Registry.',
-      time: '2 min',
+              ? `Read "${props.firstDeliberationTitle}" and share a question, concern or wording suggestion.`
+              : 'See how members discuss ideas, decide policy and follow the recorded outcome.',
+      time: 'Explore',
     },
   ];
 
@@ -262,7 +262,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
         }
       } else {
         setHasPasskey(true);
-        setPasskeyFeedback('Passkey saved! Next time, click "Sign in with a passkey" for instant access.');
+        setPasskeyFeedback('Passkey saved. Next time, choose “Sign in with a passkey”.');
         try {
           localStorage.setItem(PASSKEY_STORAGE_KEY, 'true');
         } catch {
@@ -338,7 +338,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
             id="member-onboarding-heading"
             className="m-0 font-heading text-lg font-semibold text-[var(--horizon-purple-deep)]"
           >
-            Your path to participating in Engage
+            Ways to get started
           </h2>
           <span className="text-xs font-semibold text-[var(--horizon-muted)] tabular-nums">
             {completedCount} of {steps.length} complete ({progressPercent}%)
@@ -373,14 +373,14 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
         <h3 className="font-heading text-lg font-semibold">Stay on top of ballot deadlines</h3>
         <p className="my-2 text-sm leading-relaxed">Engage can email you a digest of eligible ballots closing within seven days that you haven’t voted on. Each ballot is reminded once, and reminders stop once you’ve voted. Sign-in emails are separate.</p>
         <p className="my-2 text-sm">{props.digestExistingMember
-          ? 'Reminders were enabled for existing Engage accounts so you don’t miss the new feature. You can opt out below or unsubscribe in any digest.'
+          ? 'Reminder emails were enabled for existing Engage accounts. You can turn them off below or unsubscribe from any digest.'
           : 'For new Engage accounts, reminders stay off until you opt in. This is optional and does not affect voting or membership.'}</p>
         {props.digestSuppressed ? <p className="text-sm">Reminder delivery is paused after a bounce or spam complaint. Contact an administrator to resolve delivery.</p> :
           <form method="post" action="/api/email/preferences" className="flex flex-wrap items-center gap-3 py-2">
             <label className="flex items-center gap-2 text-sm"><input type="hidden" name="category" value="engage" /><Checkbox name="digestEnabled" value="true" defaultChecked={props.digestEnabled === true} /> Send me ballot reminder emails</label>
             <Button type="submit" size="sm" variant="outline">Save reminder preference</Button>
           </form>}
-        <p className="text-xs text-[var(--horizon-muted)]">My Engage → Notifications has separate settings for essential account notifications, Engage digests, and general communications such as newsletters and campaigns. Every digest has an unsubscribe link. Delivery, bounce and unsubscribe reporting help keep emails reliable.</p>
+        <p className="text-xs text-[var(--horizon-muted)]">Change essential account notifications, Engage digests and general communications separately in My Engage → Notifications. Every digest has an unsubscribe link.</p>
       </div>
 
       {/* Post-Sign-In 1-Tap Passkey Upgrade Nudge (Peak-End & Friction Removal) */}
@@ -401,7 +401,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
               className="text-xs"
             >
               <Fingerprint className="size-3.5" aria-hidden="true" />
-              {enrollingPasskey ? 'Waiting for device…' : 'Enable 1-tap passkey'}
+              {enrollingPasskey ? 'Waiting for device…' : 'Add a passkey'}
             </Button>
             <Button
               type="button"
@@ -559,7 +559,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
             className="text-xs"
           >
             <Compass className="size-3.5" aria-hidden="true" />
-            60-second guide
+            How it works
           </Button>
           {props.canParticipate && props.openBallotsCount > 0 ? (
             <Button href={primaryActionHref} size="sm" className="text-xs">
@@ -569,7 +569,7 @@ export default function MemberOnboarding(props: MemberOnboardingProps) {
           ) : props.canParticipate && props.deliberationsCount > 0 ? (
             <Button href={primaryActionHref} size="sm" className="text-xs">
               <MessageSquare className="size-3.5" aria-hidden="true" />
-              Join deliberation ({props.deliberationsCount})
+              Join discussion ({props.deliberationsCount})
             </Button>
           ) : (
             <Button

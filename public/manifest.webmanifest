@@ -1,7 +1,7 @@
 {
   "name": "Fusion Engage",
   "short_name": "Engage",
-  "description": "Explore proposals, join member discussions, vote when eligible, and review adopted policy.",
+  "description": "Read what Fusion is discussing, contribute an idea and vote on decisions when eligible.",
   "start_url": "/member/",
   "scope": "/",
   "display": "standalone",

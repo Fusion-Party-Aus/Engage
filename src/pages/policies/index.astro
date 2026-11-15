@@ -67,8 +67,8 @@ const scopeName = branchFilter
       <p>{showHistory
         ? 'Withdrawn, superseded and repealed records. They remain public for the record but are not current policy.'
         : hasRegistryRecords
-          ? `Policy Fusion has formally adopted${scopeName ? ` in ${scopeName}` : ''}. Proposals are not policy until members decide them and the result is ratified and published.`
-          : 'Engage does not yet hold the authoritative records of Fusion’s adopted policies. Their absence here does not mean Fusion has no adopted policy.'}</p>
+          ? `Policy Fusion has formally adopted${scopeName ? ` in ${scopeName}` : ''}. Each record explains how it was adopted, whether through Engage or an authorised branch decision.`
+          : 'No adopted policy has been added to this registry yet. You can still read Fusion’s policies through the party’s official channels.'}</p>
       <nav class="registry-tabs" aria-label="Policy status">
         <Button href={tabHref(false)} variant={!showHistory ? 'default' : 'ghost'} size="sm">Current policy <span class="tabular">{currentCount}</span></Button>
         <Button href={tabHref(true)} variant={showHistory ? 'default' : 'ghost'} size="sm">Past records <span class="tabular">{pastCount}</span></Button>
@@ -95,11 +95,11 @@ const scopeName = branchFilter
     ) : (
       <Card>
         <CardContent className="grid justify-items-start gap-3 py-10">
-          <h2>{showHistory ? 'No past policy records in Engage yet' : 'No official policy records in Engage yet'}</h2>
+          <h2>{showHistory ? 'No past policy records in Engage yet' : 'No adopted policy in this registry yet'}</h2>
           <p>Policies remain available through the party’s official channels. Proposals in Engage are not ratified policy.</p>
           <div class="flex flex-wrap items-center gap-3">
             <Button href="https://www.fusionparty.org.au/policy/" target="_blank" rel="noreferrer noopener">
-              Read official policies on fusionparty.org.au ↗
+              Read Fusion’s policies ↗
             </Button>
             <Button href="/proposals/" variant="outline">Browse Engage proposals</Button>
           </div>

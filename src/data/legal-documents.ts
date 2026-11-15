@@ -79,7 +79,7 @@ export const privacyPolicy: LegalDocument = {
   shortTitle: "Privacy Policy",
   description:
     "How Fusion Party Australia collects, uses, shares and retains personal information in Engage.",
-  version: "1.1 (analytics update; publication pending)",
+  version: "1.2 (workflow and access wording; publication pending)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -89,7 +89,7 @@ export const privacyPolicy: LegalDocument = {
   registeredPartyAbbreviation: "votefusion.org",
   address: "254 McLeod Lane, Mansfield VIC 3722",
   contact: "contact@fusionparty.org.au",
-  lastUpdated: "8 November 2026",
+  lastUpdated: "15 November 2026",
   sections: [
     {
       id: "about",
@@ -158,7 +158,7 @@ export const privacyPolicy: LegalDocument = {
         { type: "subheading", text: "Membership verification and branches" },
         {
           type: "paragraph",
-          text: `Fusion verifies membership manually. An administrator compares the name and email on your account with Fusion's membership records and sets your membership status. Engage does not currently connect to an external membership database or verify membership automatically. Administrators also assign branch memberships and may delegate branch administrator access. These changes are recorded with the actor and time.`,
+          text: `Fusion membership may be checked by an administrator or through the Underground CRM connection when it is enabled. Engage uses membership and geographic information from that connection to assess verification and branch assignment; records that cannot be resolved automatically need a manual check. Verified members can manage their branch memberships and following preferences within Engage’s eligibility rules. Authorised administrators can also manage branch records and delegated access.`,
         },
         { type: "subheading", text: "Participation records" },
         {
@@ -215,7 +215,7 @@ export const privacyPolicy: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `Your individual vote and optional reason are not displayed publicly. They are available to you in My Engage and to national administrators through Engage's administrative functions. National administrators can identify how you voted, including your member identifier, display name, choice and reason. A branch administrator who is not also a national administrator does not receive identifiable ballot records through Engage, and moderators do not receive them. We do not describe voting as anonymous or secret.`,
+          text: `Your individual vote and optional reason are not displayed publicly. They are available to you in My Engage, to national administrators and to people granted the national permission to view identifiable ballot records. National administrators can identify how you voted, including your member identifier, display name, choice and reason. Branch administration or moderation alone does not grant identifiable-ballot access. We do not describe voting as anonymous or secret.`,
         },
         {
           type: "callout",
@@ -272,7 +272,7 @@ export const privacyPolicy: LegalDocument = {
         { type: "subheading", text: "Branch administrators" },
         {
           type: "paragraph",
-          text: `Branch administrators can see and manage membership and proposal workflow for the branches explicitly assigned to them. A branch administrator who is not also a national administrator does not receive identifiable ballot records through Engage.`,
+          text: `Branch administrators can see and manage membership and proposal workflow for the branches explicitly assigned to them. A branch administrator does not receive identifiable ballots through that role alone; access requires national administrator status or the national permission to view identifiable ballots.`,
         },
         { type: "subheading", text: "Moderators and national administrators" },
         {
@@ -314,7 +314,7 @@ export const privacyPolicy: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `Access within Engage is limited to the roles described in this policy and to authorised administrators who need it. A branch administrator who is not also a national administrator sees membership and branch information for their assigned branches, not identifiable ballots. Personnel who administer the database or hosting infrastructure may also have technical access to stored records. That access is restricted to authorised operators and should be subject to confidentiality and least-privilege controls.`,
+          text: `Access within Engage is limited to the roles described in this policy and to authorised administrators who need it. Branch administrators see membership and branch information for their assigned branches. That role alone does not grant access to identifiable ballots; such access requires national administrator status or a specific national permission. Personnel who administer the database or hosting infrastructure may also have technical access to stored records. That access is restricted to authorised operators and should be subject to confidentiality and least-privilege controls.`,
         },
         {
           type: "paragraph",
@@ -548,7 +548,7 @@ export const termsOfUse: LegalDocument = {
   shortTitle: "Terms of Use",
   description:
     "The rules for browsing and taking part in Engage, Fusion Party Australia's member participation and governance platform.",
-  version: "1.1 (ballot outcome validation; publication pending)",
+  version: "1.2 (workflow and access wording; publication pending)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -630,7 +630,7 @@ export const termsOfUse: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `Fusion verifies membership manually. Verification can take time. A pending or suspended account can browse but cannot participate.`,
+          text: `Fusion membership may be verified manually or through the Underground CRM connection when enabled. Verification can take time. Pending or suspended accounts can read public records but cannot take part in formal decisions. A pending account may save a ballot preference; it does not count as a vote unless verification, ballot eligibility, matching wording and the closing deadline permit it to be recorded.`,
         },
         {
           type: "paragraph",
@@ -724,7 +724,7 @@ export const termsOfUse: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `A wording suggestion is informal. A formal amendment is a recorded change against a specific revision. Seconding formal motions is not yet implemented. The How It Works page describes the current limits, and you should not assume that a seconding process is available.`,
+          text: `A wording suggestion is an informal comment. A formal amendment proposes exact changes to a saved version of the text and is considered separately from the main proposal. A policy proposal needs another verified member to second it before deliberation begins.`,
         },
         {
           type: "paragraph",
@@ -755,7 +755,7 @@ export const termsOfUse: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `Your vote and optional reason are stored with your member identifier and display name. They are not shown publicly, but national administrators can identify them. Voting is not anonymous. A branch administrator who is not also a national administrator does not receive identifiable ballot records through Engage, and moderators do not receive them.`,
+          text: `Your vote and optional reason are stored with your member identifier and display name. They are not shown publicly, but national administrators and people granted the national permission to view identifiable ballots can identify them. Voting is not anonymous. Branch administration or moderation alone does not grant this access.`,
         },
         {
           type: "callout",
@@ -769,11 +769,11 @@ export const termsOfUse: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `Administrators with the relevant role and branch scope have technical controls that can close a ballot or change its stage, and can review how a ballot is bound to wording. These controls exist to preserve ballot integrity. They are not a complete contingency policy: the grounds, approval requirements, member notice and escalation steps for using them have not yet been adopted. Fusion must establish and publish those rules before relying on them for a contested ballot. This is an outstanding governance decision for Fusion.`,
+          text: `Authorised officers can change a proposal’s stage and review how a ballot is bound to wording within their permitted scope. Voting deadlines and scheduled closure are handled separately. These controls exist to preserve ballot integrity. They are not a complete contingency policy: the grounds, approval requirements, member notice and escalation steps for using them have not yet been adopted. Fusion must establish and publish those rules before relying on them for a contested ballot. This is an outstanding governance decision for Fusion.`,
         },
         {
           type: "paragraph",
-          text: `A successful vote is not adoption. See section 9.`,
+          text: `Members decide policy. Recording the adopted wording and publishing it are separate procedural steps. See section 9.`,
         },
       ],
     },
@@ -788,11 +788,11 @@ export const termsOfUse: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `A recorded successful result is not adopted policy. Formal ratification by an authorised Fusion authority and authorised publication are separate steps.`,
+          text: `Members’ successful policy decisions do not require a discretionary executive approval. Officers certify the process and record the exact adopted wording through ratification; publication is a separate recorded step. Automatic ratification is not yet complete, so a successful ballot may still await these procedural records. Unresolved or conflicting amendments must be handled before the adopted wording can be established.`,
         },
         {
           type: "paragraph",
-          text: `Only published policy in the Policy Registry is presented as official adopted wording. Proposals, ballot results and implementation notes are not official policy.`,
+          text: `The Policy Registry presents published adopted wording and records how it was adopted. It also includes authorised imports of policy adopted by a branch outside Engage. A proposal or implementation note does not by itself establish adopted policy.`,
         },
         {
           type: "paragraph",
@@ -820,7 +820,7 @@ export const termsOfUse: LegalDocument = {
             `restrict or disable an account;`,
             `suspend or revoke membership or branch access;`,
             `change a proposal's stage, archive it or delete it;`,
-            `close a ballot or change its stage using the available administrative controls;`,
+            `close an amendment ballot or change a proposal’s stage using authorised administrative controls;`,
             `record, review or decline to record a ballot result;`,
             `decline to progress a proposal or amendment.`,
           ],
@@ -854,7 +854,7 @@ export const termsOfUse: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `Some records cannot be edited or deleted through the application, including vote records, ballot results, ratification and publication events, audit events and legal acceptance records. This is intentional.`,
+          text: `Some records cannot be edited or deleted through the application, including recorded ballot results, ratification and publication events, audit events and legal acceptance records. While a ballot is open, you may change your vote as described in section 8.`,
         },
         {
           type: "paragraph",
@@ -942,7 +942,7 @@ export const termsOfUse: LegalDocument = {
         },
         {
           type: "paragraph",
-          text: `Seconding, automatic ratification, timed ballots and other proposed features are not implemented unless the How It Works page says they are available.`,
+          text: `A policy proposal requires another verified member to second it before deliberation begins. Deliberation and voting ordinarily each last 30 days; check the proposal for its actual dates. Automatic ratification and rules for resolving competing amendments are still being developed. The How It Works page explains the current process.`,
         },
       ],
     },

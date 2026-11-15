@@ -142,17 +142,17 @@ const formatDateHeading = (isoDate: string) => {
 
 <SiteLayout
   title="Changelog · Engage"
-  description="Live platform changelog generated directly from Engage git commit history: features, UX improvements, governance safeguards, and bug fixes."
+  description="Follow changes to Engage, including new features, fixes and improvements to participation."
   canonical="/changelog/"
 >
   <div class="page-wrap section-space changelog-page">
     <header class="changelog-hero">
       <div class="changelog-hero__top">
         <div>
-          <span class="changelog-eyebrow">Platform transparency · Git-backed release log</span>
+          <span class="changelog-eyebrow">Changes to Engage</span>
           <h1>Changelog</h1>
           <p class="changelog-lead">
-            Every change to Engage is tracked in version control and automatically published here. Filter by feature, UX/performance improvement, or governance fix.
+            Read recent changes to Engage, from new features to fixes and improvements. The source repository holds the full development history.
           </p>
         </div>
         <div class="changelog-hero__actions">
@@ -170,10 +170,10 @@ const formatDateHeading = (isoDate: string) => {
         {[
           { id: 'all', label: 'All commits', count: counts.all },
           { id: 'feature', label: 'Features', count: counts.feature },
-          { id: 'improvement', label: 'UX & Performance', count: counts.improvement },
+          { id: 'improvement', label: 'Improvements', count: counts.improvement },
           { id: 'fix', label: 'Fixes & Security', count: counts.fix },
-          { id: 'docs', label: 'Docs & Release', count: counts.docs },
-          { id: 'ops', label: 'Ops & Deployment', count: counts.ops },
+          { id: 'docs', label: 'Documentation', count: counts.docs },
+          { id: 'ops', label: 'Maintenance', count: counts.ops },
         ].map((tab) => {
           const isCurrent = activeCategory === tab.id;
           const href = tab.id === 'all' ? '/changelog/' : `/changelog/?category=${tab.id}`;

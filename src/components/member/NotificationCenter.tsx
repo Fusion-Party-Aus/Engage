@@ -57,7 +57,7 @@ const TOPICS: TopicMeta[] = [
   {
     key: "contribution_responses",
     label: "Contribution responses",
-    description: "When an officer records an outcome on your deliberation comment.",
+    description: "When a response is recorded on your contribution.",
   },
   {
     key: "governance_outcomes",
@@ -220,7 +220,7 @@ export function NotificationCenter({
 
   async function enablePushOnDevice() {
     if (!pushConfigured || !vapidPublicKey) {
-      setErrorMessage("Push notifications are not configured on this server.");
+      setErrorMessage("Device notifications are not available right now.");
       return;
     }
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -321,7 +321,7 @@ export function NotificationCenter({
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
           <div>
             <CardTitle>Notification inbox</CardTitle>
-            <CardDescription>Recent ballot, deliberation, and account updates.</CardDescription>
+            <CardDescription>Recent ballot, discussion and account updates.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={unreadCount > 0 ? "info" : "muted"}>
@@ -441,7 +441,7 @@ export function NotificationCenter({
             <div className="grid gap-0.5">
               <span className="font-medium text-sm">Fusion updates &amp; events</span>
               <span className="text-xs text-muted-foreground">
-                General party communications outside formal Engage ballots.
+                News, events and other party updates.
               </span>
             </div>
             <Switch
@@ -461,7 +461,7 @@ export function NotificationCenter({
           <div>
             <CardTitle>Browser push on this device</CardTitle>
             <CardDescription>
-              Receive ballot deadline and response alerts even when Engage is closed.
+              Allow ballot reminders and response notifications on this device.
             </CardDescription>
           </div>
           {pushConfigured ? (

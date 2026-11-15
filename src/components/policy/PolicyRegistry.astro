@@ -132,8 +132,8 @@ const GroupHeading = scoped ? 'h2' : 'h3';
         {hasFilter
           ? 'Try a different search or branch.'
           : showHistory
-            ? 'Withdrawn, superseded and repealed policies appear here when they occur.'
-            : 'Adopted policy appears here once it is ratified and published. Ideas under discussion stay in proposals.'}
+            ? 'Policies that have been withdrawn, replaced or repealed appear here.'
+            : 'Published adopted policy appears here, including authorised branch imports. Ideas still being discussed are listed under proposals.'}
       </p>
       {hasFilter ? (
         <Button href={clearHref} variant="outline" size="sm">Clear search</Button>

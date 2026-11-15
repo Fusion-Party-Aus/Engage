@@ -46,7 +46,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   const user = await getSessionUser(request, env);
   if (!user)
     return privateJson(
-      { error: "Please sign in to endorse points." },
+      { error: "Sign in to endorse a contribution." },
       { status: 401 },
     );
 

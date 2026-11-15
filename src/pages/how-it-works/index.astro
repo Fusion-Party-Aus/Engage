@@ -4,19 +4,16 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import {
   ArrowRight,
-  BookOpen,
   CheckCircle2,
   Clock,
   Code2,
   Compass,
   Database,
-  FileText,
   Gavel,
   GitBranch,
   HardDrive,
   Layers,
   Lock,
-  MessageSquare,
   Plus,
   Server,
   ShieldCheck,
@@ -25,7 +22,7 @@ import {
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { listProposals } from '../../lib/store.ts';
-import { getSiteConfig, getDefaultSiteConfig } from '../../lib/site-config.ts';
+import { getSiteConfig } from '../../lib/site-config.ts';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -54,178 +51,72 @@ const primaryCtaHref = siteConfig.primaryCtaHref || '/proposals/new/';
 
 const walkthroughSteps = [
   {
-    step: '01',
-    stage: '1. Propose',
-    duration: '15 sec',
-    who: 'Verified members submit · Anyone can read',
-    title: 'An idea is placed on the public record',
-    body: 'A member submits a clear title, summary, topic space, key commitments, and supporting rationale or images. Engage saves an immutable starting wording revision.',
-    href: '/proposals/?stage=propose',
-    linkLabel: 'Browse new ideas',
+    step: '01', stage: '1. Propose', duration: 'Start here',
+    who: 'Verified members', title: 'What would you like to change?',
+    body: 'Put forward an idea, explain why it matters and set out what you want Fusion to do. Another verified member must second your proposal before it moves into deliberation.',
+    href: '/proposals/?stage=propose', linkLabel: 'Browse new ideas',
   },
   {
-    step: '02',
-    stage: '2. Deliberate',
-    duration: '15 sec',
-    who: 'Verified members contribute · Publicly readable',
-    title: 'Members debate and file wording amendments',
-    body: 'Members post structured stances (Support, Concern, Wording suggestion, or Comment), endorse constructive feedback, or file formal amendments against a specific base revision.',
-    href: '/proposals/?stage=deliberate',
-    linkLabel: `Join ${discussions.length} active discussions`,
+    step: '02', stage: '2. Deliberate', duration: 'Usually 30 days',
+    who: 'Members discuss', title: 'Work through the idea together',
+    body: 'Ask questions, raise concerns and suggest improvements. For a specific change to the text, submit a formal amendment so members can consider the wording separately.',
+    href: '/proposals/?stage=deliberate', linkLabel: `See ${discussions.length} discussions`,
   },
   {
-    step: '03',
-    stage: '3. Decide',
-    duration: '15 sec',
-    who: 'Eligible verified members vote',
-    title: 'A ballot opens on a frozen wording snapshot',
-    body: 'When a ballot opens, it is cryptographically bound to a specific wording revision ID. Later edits cannot alter what voters saw. Proposal ballots and amendment ballots are decided separately.',
-    href: '/proposals/?stage=decide',
-    linkLabel: `See ${openVotes.length} open ballots`,
+    step: '03', stage: '3. Decide', duration: 'Usually 30 days',
+    who: 'Eligible members vote', title: 'Have your say on the wording',
+    body: 'Read the ballot text before voting. That wording stays fixed for the ballot, and you can change your vote until it closes. An amendment ballot is separate from the vote on the main proposal.',
+    href: '/proposals/?stage=decide', linkLabel: `See ${openVotes.length} proposals at Decide`,
   },
   {
-    step: '04',
-    stage: '4. Implement & Ratify',
-    duration: '15 sec',
-    who: 'Authorised party governance · Public registry',
-    title: 'Formal ratification and authorised policy publication',
-    body: 'A successful member ballot does not automatically publish policy. An authorised party body records formal ratification, and a national administrator authorises publication into the Policy Registry.',
-    href: '/policies/',
-    linkLabel: 'Open Policy Registry',
+    step: '04', stage: '4. Implement', duration: 'After the decision',
+    who: 'Officers record the outcome', title: 'Put the decision into practice',
+    body: 'Members decide the policy. Officers certify the process, record the adopted wording and publish it in the policy registry. Certification checks the process; it does not give officers a veto over members’ policy choices.',
+    href: '/policies/', linkLabel: 'Read adopted policy',
   },
 ];
 
 const publicAccessItems = [
-  {
-    title: 'Proposal register & full wording',
-    detail: `Browse all ${recentProposals.length} public proposals across every stage, including summaries, commitments, and rationales.`,
-    href: '/proposals/',
-  },
-  {
-    title: 'Deliberation threads & stances',
-    detail: 'Read member support, implementation concerns, and informal wording suggestions on public proposals.',
-    href: '/proposals/?stage=deliberate',
-  },
-  {
-    title: 'Immutable wording revisions & diffs',
-    detail: 'Inspect every saved wording snapshot, SHA-256 content hash, and side-by-side formal amendment comparison.',
-    href: '/proposals/',
-  },
-  {
-    title: 'Aggregate ballot tallies & outcomes',
-    detail: 'See approve, abstain, and reject totals plus recorded returning-officer outcomes (individual member ballot choices are never public).',
-    href: '/proposals/?stage=decide',
-  },
-  {
-    title: 'Official Policy Registry & Branch directory',
-    detail: 'Examine formally ratified and published party policies, provenance lineage, and recognised branches.',
-    href: '/policies/',
-  },
-  {
-    title: 'Public JSON API v1 & OpenAPI 3.1 schema',
-    detail: 'Machine-readable endpoints for policies, versions, categories, and branches.',
-    href: '/api/v1/policies',
-  },
+  { title: 'Ideas and proposals', detail: 'Read public proposals, the changes they call for and the reasons behind them.', href: '/proposals/' },
+  { title: 'Discussion', detail: 'Read what members support, the concerns they raise and the changes they suggest on public proposals.', href: '/proposals/?stage=deliberate' },
+  { title: 'Changes to the wording', detail: 'Follow saved revisions and compare formal amendments on public proposal pages.', href: '/proposals/' },
+  { title: 'Ballot totals and outcomes', detail: 'See Approve, Abstain and Reject totals and recorded outcomes. Individual members’ votes are not public.', href: '/proposals/?stage=decide' },
+  { title: 'Adopted policy', detail: 'Read published policies and the recorded basis for their adoption.', href: '/policies/' },
+  { title: 'Policy data', detail: 'Use the public API to read published policies, versions, categories and branches.', href: '/api/v1/policies' },
 ];
 
 const memberAccessItems = [
-  {
-    title: 'Suggest a new policy idea or resolution',
-    detail: 'Submit a new proposal into Stage 1 (Propose) with commitments, rationale, and supporting attachments.',
-  },
-  {
-    title: 'Post deliberation stances & endorse feedback',
-    detail: 'Contribute Support, Concern, Wording suggestions, or Comments, and endorse helpful member contributions.',
-  },
-  {
-    title: 'Propose formal wording amendments',
-    detail: 'Submit a structured replacement diff against the current proposal revision during Propose or Deliberate.',
-  },
-  {
-    title: 'Vote in eligible party-wide & branch ballots',
-    detail: 'Cast or update your Approve, Abstain, or Reject ballot when verified and eligible for the ballot’s jurisdiction.',
-  },
-  {
-    title: 'My Engage personal governance dashboard',
-    detail: 'Track your outstanding ballots, catch-up digest since your last visit, and personal voting & contribution log.',
-  },
+  { title: 'Put forward an idea', detail: 'Explain what you want to change and why. You can also second another member’s proposal to start deliberation.' },
+  { title: 'Join the discussion', detail: 'Ask a question, share evidence, raise a concern or endorse a useful contribution.' },
+  { title: 'Propose an amendment', detail: 'Suggest exact replacement wording while the proposal is in Propose or Deliberate.' },
+  { title: 'Vote on a decision', detail: 'Vote in national ballots and branch ballots you are eligible for. You can change your vote while the ballot is open.' },
+  { title: 'Follow your contributions', detail: 'Use My Engage to find relevant ballots and revisit your votes, ideas and comments.' },
 ];
 
 const underDevelopmentItems = [
-  {
-    status: 'Under development',
-    title: 'Independent seconder workflow for formal motions',
-    detail: 'Under the upcoming governance lifecycle, formal policy proposals, substantive amendments, and repeal motions will require one independent eligible seconder before advancing (authors cannot second their own motion).',
-  },
-  {
-    status: siteConfig.publicPulsePollEnabled ? 'Enabled (30-day evaluation)' : 'Planned after member review',
-    title: 'Public pulse poll vs. binding member ballot',
-    detail: 'Following the initial member review period, Engage will trial a non-binding public Agree/Disagree pulse indicator alongside the binding verified-member ballot so the party can compare general public sentiment with formal member decisions.',
-  },
-  {
-    status: 'Intentional release state',
-    title: 'Official Policy Registry population',
-    detail: publishedPolicies.length > 0
-      ? `${publishedPolicies.length} ratified policy record(s) published in the registry.`
-      : 'Engage’s Policy Registry holds only wording formally ratified and authorised for publication inside Engage. Existing party policies remain on fusionparty.org.au until formally migrated.',
-  },
-  {
-    status: 'Roadmap',
-    title: 'Scheduled ballot windows & privacy-preserving traffic analytics',
-    detail: 'Automated opening/closing timestamps for ballots and aggregate, cookie-free page traffic reporting for governance organisers.',
-  },
+  { status: 'In use', title: 'Seconding and deadlines', detail: 'Seconding starts the usual 30-day deliberation period, followed by a 30-day ballot. Scheduled transitions still depend on the lifecycle job running. Check each proposal for its actual dates, including any extended first-round timetable.' },
+  { status: 'Still being developed', title: 'Handling successful amendments', detail: 'Successful member decisions are intended to take effect without a separate executive approval. Automatic ratification and the rules for resolving competing amendments are not yet complete.' },
+  { status: 'Not available yet', title: 'Public pulse poll', detail: 'An informal public poll is planned but is not available yet. It would be separate from the formal member ballot.' },
+  { status: 'Policy record', title: 'What the registry includes', detail: publishedPolicies.length > 0 ? 'The registry contains published policy. Each record explains the basis for its adoption, including authorised branch imports where applicable.' : 'No policy has been published in this registry yet. Proposals are not adopted policy. Existing national policies have not been imported here.' },
 ];
 
 const sourceMaterialLinks = [
-  {
-    label: 'Live Proposal Register & Provenance Records',
-    description: 'Every seeded proposal cites its prior policy predecessor, constitutional authority, or working-group lineage.',
-    href: '/proposals/',
-    cta: 'Inspect proposals →',
-  },
-  {
-    label: 'Public Governance API v1 (/api/v1/policies)',
-    description: 'Read-only JSON feed of published policies, version histories, and branch records with canonical Link headers.',
-    href: '/api/v1/policies',
-    cta: 'Open JSON endpoint →',
-  },
-  {
-    label: 'OpenAPI 3.1 Specification (/api/v1/openapi.json)',
-    description: 'Complete machine-readable contract for external verifiers, researchers, and civic tech integrations.',
-    href: '/api/v1/openapi.json',
-    cta: 'View OpenAPI spec →',
-  },
-  {
-    label: 'Engage Source Repository & Architecture Docs',
-    description: 'Container definitions, database schemas, deterministic ballot migration scripts, and governance ADRs.',
-    href: siteConfig.repoUrl || 'https://github.com/Fusion-Party-Aus/Engage',
-    cta: 'Examine source repository ↗',
-    external: true,
-  },
+  { label: 'Proposals and their history', description: 'Read the reasons, references and saved wording supplied for each proposal. A reference to an earlier policy does not establish how that policy was adopted.', href: '/proposals/', cta: 'Browse proposals →' },
+  { label: 'Published policy data', description: 'A read-only feed for anyone using published Fusion policy in another website or research project.', href: '/api/v1/policies', cta: 'Open policy data →' },
+  { label: 'API reference', description: 'Technical documentation for developers using the public policy API.', href: '/api/v1/openapi.json', cta: 'Read the API specification →' },
+  { label: 'Source code and documentation', description: 'See how Engage works, review its documented limitations or contribute an improvement.', href: siteConfig.repoUrl || 'https://github.com/Fusion-Party-Aus/Engage', cta: 'Visit the repository ↗', external: true },
 ];
 
 const governanceRules = [
-  {
-    title: 'Wording suggestions vs. formal amendments vs. amendment ballots',
-    body: 'A wording suggestion is an informal comment posted during deliberation and needs no seconder. A formal amendment is a structured diff recorded against a specific base revision ID. An amendment ballot is a separate vote on whether to endorse that amendment revision; it does not cast your vote on the main proposal.',
-  },
-  {
-    title: 'Ballot wording is frozen to an immutable revision',
-    body: 'When a ballot enters Stage 3 (Decide), it is bound to a single immutable wording revision (`ballotRevisionId`). Substantive text is locked once voting begins or votes are cast. Earlier revisions remain visible in the revision log so anyone can audit what changed.',
-  },
-  {
-    title: 'A successful ballot is not automatic policy adoption',
-    body: 'Engage separates member voting from constitutional ratification and publication. After a successful ballot is recorded by the returning officer, the wording moves to Stage 4 (Implement) and only appears in the Policy Registry after formal ratification and administrator publication.',
-  },
-  {
-    title: 'Branch jurisdiction and electorate eligibility',
-    body: 'Every proposal records its originating branch, governance authority, and jurisdiction separately. Branch-scoped ballots check active membership in that recognised branch electorate; party-wide ballots are open to all verified Fusion members.',
-  },
+  { title: 'Suggestions, amendments and votes', body: 'A comment can suggest a change without creating a formal amendment. A formal amendment proposes exact changes to a saved version of the text. Voting on an amendment does not cast your vote on the main proposal, and a successful amendment cannot turn a failed main proposal into adopted policy.' },
+  { title: 'The wording you vote on', body: 'Each ballot refers to one saved version of the proposal. Later edits cannot change what your vote means. Earlier wording remains available in the proposal’s revision history.' },
+  { title: 'How the result becomes published policy', body: 'Members decide the policy; officers certify that the process and result are valid. Ratification records the adopted wording, including successful amendments, and publication puts it in the registry. These are separate steps. Automatic ratification is not yet complete, so a successful ballot may still await those recorded steps.' },
+  { title: 'Who can vote', body: 'National ballots are open to verified Fusion members. Branch ballots require active membership of the branch concerned. Eligibility is checked when you vote. Following a branch or holding an administrative role does not by itself give you a vote in its ballots.' },
 ];
 ---
 <SiteLayout
-  title="How Engage works · 60-Second Guide & Governance Reference"
-  description="A 60-second factual walkthrough of Engage, backed by a one-page explanation of what is publicly accessible, what requires membership, what remains under development, source material links, and Docker backup & handover continuity."
+  title="How Engage works · Fusion Party Australia"
+  description="How to suggest an idea, discuss policy and vote on Fusion’s decisions. Read about membership, amendments and how decisions become published policy."
   canonical="/how-it-works/"
 >
   <div class="page-wrap section-space how-workspace">
@@ -233,12 +124,12 @@ const governanceRules = [
     <header class="how-header">
       <div class="how-header__main">
         <div class="how-header__badges">
-          <Badge variant="info">60-Second Walkthrough</Badge>
-          <Badge variant="outline">One-Page Governance &amp; Operations Reference</Badge>
+          <Badge variant="info">Getting involved</Badge>
+          <Badge variant="outline">From idea to decision</Badge>
         </div>
         <h1>How Engage works.</h1>
         <p class="how-header__lead">
-          Engage is Fusion Party Australia’s participatory governance platform. Ideas are proposed by members, refined through transparent deliberation and formal amendments, voted on against frozen wording revisions, and ratified into official policy.
+          Engage is where Fusion members work on ideas and decide what the party should do. Bring a proposal, help improve someone else’s idea, or read the discussion before casting your vote.
         </p>
         <div class="how-header__actions">
           <Button href={primaryCtaHref}>
@@ -255,34 +146,34 @@ const governanceRules = [
       </div>
 
       <aside class="how-summary-box" aria-label="At a glance">
-        <h2>In 3 sentences</h2>
+        <h2>At a glance</h2>
         <ol>
-          <li><strong>Anyone</strong> can read public proposals, deliberation threads, revision histories, ballot tallies, and the JSON API without an account.</li>
-          <li><strong>Verified members</strong> can suggest ideas, post deliberation stances, file formal amendments, and vote in ballots they qualify for.</li>
-          <li><strong>No vote auto-publishes policy:</strong> every ballot is bound to an immutable wording revision and requires formal ratification before entering the Policy Registry.</li>
+          <li><strong>Read along:</strong> public proposals, discussions and ballot totals are available without an account.</li>
+          <li><strong>Take part:</strong> verified members can propose ideas, contribute to discussions and vote where eligible.</li>
+          <li><strong>Follow the outcome:</strong> members decide policy, then officers record the adopted wording and publish it.</li>
         </ol>
       </aside>
     </header>
 
     <!-- Sticky Jump Bar -->
     <nav class="how-jump-nav" aria-label="On this page">
-      <a href="#walkthrough">1. 60-Second Walkthrough</a>
-      <a href="#access-matrix">2. Public vs. Member Access</a>
-      <a href="#roadmap">3. Under Development</a>
-      <a href="#source-material">4. Source Material &amp; API</a>
-      <a href="#operations">5. Backup &amp; Handover Strategy</a>
-      <a href="#rules">6. Exact Governance Rules</a>
+      <a href="#walkthrough">1. From idea to decision</a>
+      <a href="#access-matrix">2. Reading and taking part</a>
+      <a href="#roadmap">3. Current progress</a>
+      <a href="#source-material">4. Sources and records</a>
+      <a href="#operations">5. Keeping Engage running</a>
+      <a href="#rules">6. Decision rules</a>
     </nav>
 
     <!-- SECTION 1: 60-Second Factual Walkthrough -->
     <section id="walkthrough" class="how-section" aria-labelledby="walkthrough-heading">
       <div class="section-bar">
         <div>
-          <span class="section-kicker"><Clock className="size-3.5" aria-hidden="true" /> Part 1 · 60-Second Factual Walkthrough</span>
-          <h2 id="walkthrough-heading">Four stages, one auditable record.</h2>
+          <span class="section-kicker"><Clock className="size-3.5" aria-hidden="true" /> Part 1 · The process</span>
+          <h2 id="walkthrough-heading">From an idea to a decision</h2>
         </div>
         <p class="section-bar__note">
-          Every proposal moves through the same four stages. Wording snapshots and decision events are preserved at each step.
+          Policy proposals move through Propose, Deliberate, Decide and Implement. Some ideas are withdrawn or archived along the way.
         </p>
       </div>
 
@@ -309,11 +200,11 @@ const governanceRules = [
     <section id="access-matrix" class="how-section" aria-labelledby="access-heading">
       <div class="section-bar">
         <div>
-          <span class="section-kicker"><ShieldCheck className="size-3.5" aria-hidden="true" /> Part 2 · Access &amp; Permissions Matrix</span>
-          <h2 id="access-heading">What is publicly accessible vs. what requires membership.</h2>
+          <span class="section-kicker"><ShieldCheck className="size-3.5" aria-hidden="true" /> Part 2 · Taking part</span>
+          <h2 id="access-heading">Read along or join in</h2>
         </div>
         <p class="section-bar__note">
-          Engage defaults to public transparency for governance records while restricting participation and voting to verified Fusion members.
+          You can read public discussions without signing in. To contribute or vote, sign in and have your Fusion membership verified.
         </p>
       </div>
 
@@ -322,7 +213,7 @@ const governanceRules = [
           <div class="matrix-panel__head">
             <div class="matrix-panel__title">
               <Compass className="size-5 text-primary" aria-hidden="true" />
-              <h3>Publicly accessible (No account required)</h3>
+              <h3>Read without an account</h3>
             </div>
             <Badge variant="success">Open to everyone</Badge>
           </div>
@@ -343,7 +234,7 @@ const governanceRules = [
           <div class="matrix-panel__head">
             <div class="matrix-panel__title">
               <Vote className="size-5 text-primary" aria-hidden="true" />
-              <h3>Requires verified Fusion membership</h3>
+              <h3>Take part as a verified member</h3>
             </div>
             <Badge variant="info">Verified members</Badge>
           </div>
@@ -375,8 +266,8 @@ const governanceRules = [
       <section id="roadmap" class="how-section" aria-labelledby="roadmap-heading">
         <div class="section-bar is-compact">
           <div>
-            <span class="section-kicker"><Layers className="size-3.5" aria-hidden="true" /> Part 3 · Roadmap &amp; Scope</span>
-            <h2 id="roadmap-heading">What remains under development.</h2>
+            <span class="section-kicker"><Layers className="size-3.5" aria-hidden="true" /> Part 3 · Current progress</span>
+            <h2 id="roadmap-heading">What works now, and what’s still being built</h2>
           </div>
         </div>
 
@@ -396,8 +287,8 @@ const governanceRules = [
       <section id="source-material" class="how-section" aria-labelledby="source-heading">
         <div class="section-bar is-compact">
           <div>
-            <span class="section-kicker"><Code2 className="size-3.5" aria-hidden="true" /> Part 4 · Verifiable Source Material</span>
-            <h2 id="source-heading">Where to examine the source material.</h2>
+            <span class="section-kicker"><Code2 className="size-3.5" aria-hidden="true" /> Part 4 · Sources and records</span>
+            <h2 id="source-heading">Follow the evidence</h2>
           </div>
         </div>
 
@@ -434,11 +325,11 @@ const governanceRules = [
     <section id="operations" class="how-section" aria-labelledby="operations-heading">
       <div class="section-bar">
         <div>
-          <span class="section-kicker"><Server className="size-3.5" aria-hidden="true" /> Part 5 · Operational Continuity, Backups &amp; Handover</span>
-          <h2 id="operations-heading">How Engage is backed up and handed over if a maintainer leaves.</h2>
+          <span class="section-kicker"><Server className="size-3.5" aria-hidden="true" /> Part 5 · Keeping Engage running</span>
+          <h2 id="operations-heading">Looking after the party’s records</h2>
         </div>
         <p class="section-bar__note">
-          Engage is engineered with zero proprietary lock-in so any party system administrator can back up, restore, or transfer the platform in minutes.
+          Engage’s source code and operating instructions are available for future maintainers. Backups, access and recovery still need people to look after them.
         </p>
       </div>
 
@@ -446,43 +337,24 @@ const governanceRules = [
         <article class="ops-card">
           <div class="ops-card__head">
             <HardDrive className="size-5 text-primary" aria-hidden="true" />
-            <h3>1. Self-contained Docker architecture</h3>
+            <h3>Keep the records safe</h3>
           </div>
-          <p>{getDefaultSiteConfig().backupSummary}</p>
-          <ul class="ops-checklist">
-            <li><strong>Application container:</strong> Stateless Astro standalone Node server built from the root <code>Dockerfile</code>.</li>
-            <li><strong>Database container:</strong> Single-node MongoDB 8.0 replica set (required for multi-document ACID vote transactions) persisted in the <code>mongo_data</code> volume.</li>
-            <li><strong>No external lock-in:</strong> Runs on any Linux host, VPS, NUC, or Coolify instance with Docker Compose.</li>
-          </ul>
+          <p>A working copy of Engage needs its database, uploaded files and security keys as well as the application code. Keeping the code alone is not a backup of members’ contributions or votes.</p>
         </article>
-
         <article class="ops-card">
           <div class="ops-card__head">
             <Database className="size-5 text-primary" aria-hidden="true" />
-            <h3>2. Automated backup &amp; restore drill</h3>
+            <h3>Check that recovery works</h3>
           </div>
-          <p>
-            Logical database backups use <code>mongodump --archive --gzip</code> and can be verified into an isolated restore-drill database without touching production records:
-          </p>
-          <pre class="ops-code"><code># 1. Create compressed backup archive + SHA-256 checksum
-mongodump --uri="$MONGODB_URI" --db=engage_production \
-  --archive=/backups/engage-$(date +%F).archive.gz --gzip
-
-# 2. Verify restore into an isolated drill database
-scripts/restore-preview.sh /backups/engage-YYYY-MM-DD.archive.gz</code></pre>
+          <p>A backup needs a tested way to restore it. Maintainers must check recovery in an isolated environment and protect the keys needed to read encrypted ballots.</p>
         </article>
-
         <article class="ops-card">
           <div class="ops-card__head">
             <GitBranch className="size-5 text-primary" aria-hidden="true" />
-            <h3>3. Maintainer handover checklist</h3>
+            <h3>Support the next maintainer</h3>
           </div>
-          <p>{getDefaultSiteConfig().handoverSummary}</p>
-          <ol class="ops-steps">
-            <li><strong>Repository &amp; docs:</strong> Clone <code>Fusion-Party-Aus/Engage</code>; review <code>docs/operations.md</code> and <code>docs/engage-release-handover-2026-11-08.md</code>.</li>
-            <li><strong>Environment secrets:</strong> Transfer the <code>.env</code> secrets (<code>MONGODB_URI</code>, <code>SESSION_SECRET</code>, <code>BETTER_AUTH_SECRET</code>, OAuth/Resend keys) via the party’s password manager.</li>
-            <li><strong>Admin role delegation:</strong> Grant the incoming maintainer’s verified account the <code>administrator</code> role in <a href="/admin/members/">/admin/members/</a> and update platform settings in <a href="/admin/settings/">/admin/settings/</a>.</li>
-          </ol>
+          <p>The repository contains deployment and handover instructions. Taking over also requires authorised access to hosting, backups and security keys; an Engage account alone is not enough.</p>
+          <a href="https://github.com/Fusion-Party-Aus/Engage/blob/main/docs/architecture/build-deploy-operations.md">Read the operating guide →</a>
         </article>
       </div>
     </section>
@@ -491,11 +363,11 @@ scripts/restore-preview.sh /backups/engage-YYYY-MM-DD.archive.gz</code></pre>
     <section id="rules" class="how-section" aria-labelledby="rules-heading">
       <div class="section-bar">
         <div>
-          <span class="section-kicker"><Gavel className="size-3.5" aria-hidden="true" /> Part 6 · Governance Safeguards</span>
-          <h2 id="rules-heading">When you need the exact rule.</h2>
+          <span class="section-kicker"><Gavel className="size-3.5" aria-hidden="true" /> Part 6 · Decision rules</span>
+          <h2 id="rules-heading">Before you vote</h2>
         </div>
         <p class="section-bar__note">
-          These safeguards keep proposal wording, member ballots, and the official policy registry distinct and auditable.
+          Check the wording, who is eligible and the closing date on each ballot. Discussion and informal endorsements are separate from a formal vote.
         </p>
       </div>
 
