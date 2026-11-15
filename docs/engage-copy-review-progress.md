@@ -7,7 +7,7 @@ Updated 15 November 2026. Source of truth: pushed branch and this document, not 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review`, based on main `20dfa90`.
 - PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
-- Next task: batch 2, rewrite `/how-it-works/` against the decision register and current lifecycle. Seconding and scheduling are implemented, not future features. D13–D20 distinguish member authority from officer certification; automatic ratification remains incomplete. Check the first-round exception before publishing dates. Do not repeat batch 1.
+- Next task: batch 2b, rewrite `/how-it-works/` against the decision register and current lifecycle. Seconding and scheduling are implemented, not future features. D13–D20 distinguish member authority from officer certification; automatic ratification remains incomplete. Check the first-round exception before publishing dates. Do not repeat batches 1 or 2a.
 - This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
 
 ## Recovery and scope
@@ -29,7 +29,8 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | Batch | Area | State |
 |---|---|---|
 | 1 | Homepage introduction/lifecycle wording; discussion heading and cross-references; sign-in discussion intent | Delivered in `2d25398`; validated and published in PR #98 |
-| 2 | How-it-works guide, public metadata, shared layout/navigation/footer and remaining homepage copy | Next |
+| 2a | Remaining homepage copy, its metadata and shared proposal highlights | Validated; delivery commit is the commit containing this row (confirm remote before continuing) |
+| 2b | How-it-works guide, remaining public metadata, shared layout/navigation/footer | Next |
 | 3 | Proposal browse/create/detail, seconding, comments, forms, amendment and ballot interfaces | Not reviewed beyond batch 1 strings |
 | 4 | Policy registry, policy detail, provenance and change proposals; branch journeys and Sense Box | Not reviewed |
 | 5 | Onboarding, membership, My Engage, account, branch preferences, notifications | Not reviewed beyond discussion intent |
@@ -58,3 +59,13 @@ Batch 1: `pnpm install --frozen-lockfile`; `pnpm check` passes (324 files, zero 
 - Guide has stale procedural, provenance and roadmap claims: inspect each against code, not old copy. Do not describe the existing national platform as being re-ratified; Reclaim and legacy national provenance are separate (D33).
 - Review legal text carefully; do not silently change privacy promises or enable acceptance gates.
 - Production deployment has not been performed.
+
+## Batch 2a handover
+
+Homepage member queues now invite discussion, explain vote changes and avoid implying voting is compulsory. The membership warning no longer assumes every non-participating account is awaiting verification (the condition also includes suspended accounts). The stage summary introduces seconding and separates ratification/publication from the vote. Proposal highlights call individual choices “votes”, and label the approval statistic as a share rather than an adopted result. Data, ranking formula, controls, CSS and permissions are unchanged.
+
+Examples: “Open for stances” → “Join the discussion”; “Put an idea on the record” → “What would you like to change?”; “Most approved proposal” → “Highest approval share”.
+
+Evidence checked: `getProposalDetail`, `secondProposal`, `listOutstandingDecisions` in `src/lib/store.ts`; `proposalMetrics`/`rankProposals`; decision register D3, D11, D13–D20. Public discussion is readable only after proposal visibility/archive gates. Earlier product docs contain stale claims; use code and decision register.
+
+Validation: `pnpm check` passes, 324 files, zero errors/warnings, 23 existing hints. `pnpm build` passes. `git diff --check` and changed-file raw-control audit pass. No live signed-in/browser/mobile checks. Changelog regeneration exposed the known truncation in #96; preserve earlier entries when recording this batch rather than fixing the generator here.

@@ -2,16 +2,16 @@
 import { rankProposals, proposalMetrics } from '../lib/proposal-metrics.ts';
 import type { ProposalSummaryView, } from '../lib/types.ts';
 const { proposals } = Astro.props as { proposals: ProposalSummaryView[] };
-const cards = ([['divisive', 'Most divisive proposal'], ['approved', 'Most approved proposal'], ['active', 'Most active proposal']] as const).map(([key, label]) => ({key, label, proposal: rankProposals(proposals, key)[0]}));
+const cards = ([['divisive', 'Most divisive proposal'], ['approved', 'Highest approval share'], ['active', 'Most active proposal']] as const).map(([key, label]) => ({key, label, proposal: rankProposals(proposals, key)[0]}));
 ---
 <section class="proposal-highlights" aria-label="Proposal highlights">
   {cards.map(({key, label, proposal: p}) => <article>
     <h2>{label}</h2>
     {p ? <>
       <h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3>
-      <p>{key === 'active' ? `${proposalMetrics(p).activity} contributions · ${p.votes.total} ballots + ${p.commentCount} discussion posts` : `${Math.round((proposalMetrics(p).approval ?? 0) * 100)}% approval · ${p.votes.approve} approve / ${p.votes.reject} reject / ${p.votes.abstain} abstain`}</p>
-    </> : <p>{key === 'active' ? 'No activity yet.' : 'Needs at least five approve/reject votes.'}</p>}
-    <small>{key === 'divisive' ? 'Closest approve/reject split; at least five decisive votes.' : key === 'approved' ? 'Highest approve share of approve/reject votes; at least five decisive votes. This is not an adoption result.' : 'All-time ballots plus discussion posts. Amendment ballots excluded.'}</small>
+      <p>{key === 'active' ? `${proposalMetrics(p).activity} contributions · ${p.votes.total} votes + ${p.commentCount} discussion posts` : `${Math.round((proposalMetrics(p).approval ?? 0) * 100)}% approval · ${p.votes.approve} approve / ${p.votes.reject} reject / ${p.votes.abstain} abstain`}</p>
+    </> : <p>{key === 'active' ? 'No activity yet.' : 'Shown once a proposal has at least five Approve or Reject votes.'}</p>}
+    <small>{key === 'divisive' ? 'The closest split between Approve and Reject, with at least five votes across those two choices.' : key === 'approved' ? 'The largest Approve share of Approve and Reject votes, with at least five votes across those two choices. Approval here does not mean the policy has been adopted.' : 'Total proposal votes and discussion posts so far. Votes on amendments are counted separately.'}</small>
   </article>)}
 </section>
 <style>
