@@ -223,6 +223,22 @@ describe("responsibility queue read model", () => {
     assert.equal(queue.groups[1]?.key, "ballot-closing");
   });
 
+  it("does not invent a close date when a closed ballot has none", async () => {
+    const db = createMemoryDb();
+    await seedMatter(db, {
+      proposalId: "PROP-NO-DATE",
+      title: "Legacy closed ballot",
+      ballotClosesAt: undefined,
+    });
+    await seedBallot(db, "PROP-NO-DATE", {
+      status: "closed",
+      closesAt: undefined,
+    });
+    const queue = await buildResponsibilityQueue(db, nationalAdmin, { now });
+    const outcome = group(queue, "ballot-outcome");
+    assert.equal(outcome?.items[0]?.reason, "Closed with no outcome recorded.");
+  });
+
   it("asks for wording binding only while a Decide matter has no bound revision", async () => {
     const db = createMemoryDb();
     await seedMatter(db, {

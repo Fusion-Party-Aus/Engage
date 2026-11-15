@@ -471,14 +471,15 @@ async function loadBallotGroups(
       state.status !== "cancelled" &&
       canActOnMatterBallot(viewer, matter, "ballots.record_result")
     ) {
-      const closedAt =
-        state.closesAt ?? matter.ballotClosedAt ?? now;
+      const closedAt = state.closesAt ?? matter.ballotClosedAt;
       outcomeItems.push({
-        sortAt: closedAt.getTime(),
+        sortAt: (closedAt ?? now).getTime(),
         item: {
           id: `ballot-outcome:${state.ballotId}`,
           title: matter.title,
-          reason: `Closed ${dateLabel(closedAt)} with no outcome recorded.`,
+          reason: closedAt
+            ? `Closed ${dateLabel(closedAt)} with no outcome recorded.`
+            : "Closed with no outcome recorded.",
           actionLabel: "Record outcome",
           href: `/admin/proposals/${matter.slug}/#record-outcome`,
           permission: "ballots.record_result",
