@@ -1,38 +1,20 @@
 [
   {
-    "hash": "277576c",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "admin",
-    "summary": "Never imply a ballot close date that was not recorded",
-    "details": "A legacy closed ballot with no close time now says only that it closed, instead of presenting the current date as the close date."
-  },
-  {
-    "hash": "e22253a",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh the snapshot for the responsibility queue"
-  },
-  {
-    "hash": "29d849d",
-    "date": "2026-11-15",
-    "type": "docs",
-    "category": "docs",
-    "scope": "status",
-    "summary": "Record the administrator responsibility queue (#54)",
-    "details": "The queue is built and tested; multi-amendment derivation, collision review and role legibility remain outstanding. Note that publication failures have no durable failed state to queue."
-  },
-  {
-    "hash": "41ade2f",
+    "hash": "b2fd65a",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
     "scope": "admin",
-    "summary": "Add the administrator responsibility queue (#54)",
-    "details": "Group ballot outcomes, closing ballots, unbound wording, overdue advancement, amendment decisions, member verification and publication into one queue. Every item names the authority that makes it actionable and is filtered server-side by permission and branch scope. A failed source degrades to one short message for its group."
+    "summary": "Administrator responsibility queue (#54) (#106)",
+    "details": "* feat(admin): add the administrator responsibility queue (#54) Group ballot outcomes, closing ballots, unbound wording, overdue advancement, amendment decisions, member verification and publication into one queue. Every item names the authority that makes it actionable and is filtered server-side by permission and branch scope. A failed source degrades to one short message for its group. * docs(status): record the administrator responsibility queue (#54) The queue is built and tested; multi-amendment derivation, collision review and role legibility remain outstanding. Note that publication failures have no durable failed state to queue. * chore(changelog): refresh the snapshot for the responsibility queue * fix(admin): never imply a ballot close date that was not recorded A legacy closed ballot with no close time now says only that it closed, instead of presenting the current date as the close date. * chore(changelog): refresh the snapshot for the queue close-date fix"
+  },
+  {
+    "hash": "7d017e6",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the register pagination after merging main"
   },
   {
     "hash": "be5f523",
@@ -44,6 +26,14 @@
     "details": "* feat(proposals): add member-facing decision record Compose one matter's immutable voted wording, revision history, amendment outcomes, certified ballot result and publication state in a permission-aware read model. Derive adopted wording under D15 (zero applied amendments) and D16 (one applied amendment), with explicit review states for two or more applied amendments (D17-D18), approved-but-unapplied amendments and mismatched result wording. No individual votes, voter or author identifiers cross the read-model boundary. Add /proposals/[slug]/record/ and link it from the proposal page. * docs(governance): record the decision-record read model Document the member-facing decision record, the D15/D16 derivation, the explicit D17-D18 collision-review seam and the outstanding administrator queue. Mark S2/#54 partial and note the reporting limit on inter-amendment gaps. * chore(changelog): refresh the snapshot for the decision record"
   },
   {
+    "hash": "77b8f3a",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the register pagination after merging main"
+  },
+  {
     "hash": "9478783",
     "date": "2026-11-15",
     "type": "feat",
@@ -51,6 +41,42 @@
     "scope": "ci",
     "summary": "Run the perimeter browser harness on every pull request (#38) (#104)",
     "details": "* fix(security): bound the perimeter browser harness and always clean up The harness now has a hard 180-second deadline (ENGAGE_PERIMETER_TIMEOUT_MS) that stops the run and fails instead of hanging, signals the preview server before any await, escalates to SIGKILL, bounds Chromium shutdown, and kills the child from a process exit handler as a last resort. A page error, failed request or CSP violation that appears after a page's own check also fails the run. Adds 'perimeter:browser' for local use; a build and ENGAGE_PLAYWRIGHT_MODULE are still required. * feat(ci): run the perimeter browser harness on every pull request Runs scripts/security-perimeter-browser.mjs after the build and after the existing Playwright 1.57.0 install, reusing the same ENGAGE_PLAYWRIGHT_MODULE path rather than installing a second copy. Extends src/lib/ci-workflow.test.ts to compare step positions, so it fails if the step disappears, moves before the build or the Playwright install, installs its own Playwright, or if 'perimeter:browser' and the harness file drift apart. * docs(security): record that the perimeter harness runs in CI States what the CI step proves, how it is made safe to run unattended, and the remaining gap: the production build against the in-memory seed, not Cloudflare/Coolify, a real MongoDB or the real providers. * chore(changelog): refresh the snapshot for the perimeter CI step"
+  },
+  {
+    "hash": "7e967e0",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for register pagination",
+    "details": "Regenerates the public changelog from this branch's history: the register pagination, the legacy-record fix and the audit/status updates appear as the newest entries. Side effect of the generator's fixed 80-commit window: the oldest entries fall out of the snapshot. That truncation is the pre-existing generator defect tracked in #96, not a decision in this slice."
+  },
+  {
+    "hash": "d62ddc8",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "status",
+    "summary": "Record register pagination and the tally-free list read",
+    "details": "Adds the before/after harness snapshots for `/admin/proposals/` (base `78c07c0`, after `c1f72c0`) and records what the register now reads and shows: one 25-row projected page, no `proposal_votes` access, certified tallies from `ballot_results`, and links instead of live counts for uncertified ballots. Records the trade-offs honestly: inline outcome recording moved to the workspace, \"Open amendments\" counts the whole register rather than the filtered subset, and search moved into MongoDB while still matching rationale. Updates I12/#52 without claiming the member-facing vote scans are done, and notes the small in-memory database fidelity improvements from this slice."
+  },
+  {
+    "hash": "c1f72c0",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Keep legacy register records keyed by policyId and status",
+    "details": "Legacy proposal documents store the identifier, stage and topic space under `policyId`, `status` and `category`. The register's narrow projection only asked for the current field names, so the shared normaliser would have seen an empty identifier and defaulted the stage to Deliberate. Project the alias fields too (still excluding rationale and ballot data), and match the stage filter against a stored `status` when a document has no `stage`. Adds a regression case for a legacy-shaped record: it keeps its identifier, its normalised stage, its space, and remains searchable by rationale without returning it. Refs #52."
+  },
+  {
+    "hash": "b12e812",
+    "date": "2026-11-15",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "admin",
+    "summary": "Paginate the proposal register and stop reading ballots",
+    "details": "The proposals register loaded every proposal, including its rationale, and decrypted every vote for the rows in Decide so it could show live tallies. It sent ~1 MB of HTML and did per-vote work on a list read. The register now reads a bounded page of 25 rows from MongoDB, ordered by proposal id, with search, stage and branch filters applied server-side and the viewer's branch scope preserved. Page links keep the active filters; changing a filter starts at page 1; invalid or out-of-range pages clamp. Pagination uses the existing Button primitive with previous/next, the current page and a status region announcing the visible range. `listProposalRegister` projects the register fields only (no `details` or `detailHtml`) and never touches `proposal_votes`, so no ballot is decrypted on a list read. For a certified ballot it shows the tally, computed result and rule basis stored on `ballot_results` at certification. An open ballot shows \"Open — view ballot\" instead of live counts, and a closed but uncertified ballot links to the workspace to record the outcome. The detail workspace keeps the live bound tally and the result form unchanged; recording from the list would require decrypting every vote. Editing, revising and creating still resolve their full record, including rationale, from any page, with the same scope and lock checks. Measured with `npm run perf:render` (78 synthetic proposals, 1200 votes, 3 runs, administrator): HTML 938,422 B → 283,915 B (−69.7%); document DB commands 19 → 16; document DB time 28.7 ms → 16.0 ms; TTFB 103.1 ms → 57.6 ms. A MongoDB profiler window shows the register request reads proposals, comments, ballot_results, ballots, amendments and revisions, and no `proposal_votes`. Refs #52."
   },
   {
     "hash": "78c07c0",
@@ -646,29 +672,5 @@
     "category": "feature",
     "scope": "participation",
     "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
-  },
-  {
-    "hash": "46f1b9b",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Fix error on branch pages, and seed branches to database"
-  },
-  {
-    "hash": "c14ee07",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
-  },
-  {
-    "hash": "31e34df",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
   }
 ]
