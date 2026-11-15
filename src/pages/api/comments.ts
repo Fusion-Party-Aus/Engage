@@ -8,6 +8,7 @@ import {
   deleteComment,
   setCommentFeedback,
   voteOnComment,
+  type CommentVoteAction,
 } from "../../lib/store.ts";
 
 export const prerender = false;
@@ -53,7 +54,9 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const commentId = String(body.commentId ?? "");
-    const action = body.action === "downvote" ? "downvote" : "upvote";
+    const action = (
+      body.action === undefined ? "upvote" : body.action
+    ) as CommentVoteAction;
     const db = await getDatabase(env);
     const gate = await requireLegalAcceptance(db, user, env);
     if (gate) return gate;

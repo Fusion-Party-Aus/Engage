@@ -226,11 +226,11 @@ const nextBallotInfo = remainingBallots[0]
   : null;
 
 const topSupportComment = [...discussionComments]
-  .filter((c) => c.stance === 'support')
+  .filter((c) => !c.deleted && c.stance === 'support')
   .sort((a, b) => compareComments(a, b, 'best'))[0] ?? null;
 
 const topConcernComment = [...discussionComments]
-  .filter((c) => c.stance === 'concern')
+  .filter((c) => !c.deleted && c.stance === 'concern')
   .sort((a, b) => compareComments(a, b, 'best'))[0] ?? null;
 
 const stagePillLabel = (stage: ProposalStage) => {

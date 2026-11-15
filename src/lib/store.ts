@@ -2231,6 +2231,9 @@ export async function addComment(
         "The comment you are replying to is no longer available.",
       );
     }
+    if (parent.deletedAt) {
+      throw new Error("You cannot reply to a deleted contribution.");
+    }
     const parentDepth = Number.isFinite(parent.depth)
       ? Number(parent.depth)
       : 0;
@@ -2305,6 +2308,9 @@ export async function voteOnComment(
   const col = db.collection<CommentRecord>("comments");
   const visible = await col.findOne({ commentId: id });
   if (!visible) throw new Error("Comment not found.");
+  if (visible.deletedAt) {
+    throw new Error("Deleted contributions cannot be voted on.");
+  }
 
   const proposal = await db
     .collection<ProposalRecord>("proposals")
@@ -2318,6 +2324,9 @@ export async function voteOnComment(
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const existing = await col.findOne({ commentId: id });
     if (!existing) throw new Error("Comment not found.");
+    if (existing.deletedAt) {
+      throw new Error("Deleted contributions cannot be voted on.");
+    }
     const upvotes = Array.isArray(existing.upvotes) ? [...existing.upvotes] : [];
     const downvotes = Array.isArray(existing.downvotes)
       ? [...existing.downvotes]
@@ -2436,7 +2445,12 @@ export async function deleteComment(
   db: Db,
   user: SessionUser,
   commentId: string,
-): Promise<{ deleted: boolean; tombstoned: boolean; replyCount: number }> {
+): Promise<{
+  deleted: boolean;
+  tombstoned: boolean;
+  replyCount: number;
+  prunedIds: string[];
+}> {
   const id = commentId.trim();
   if (!id) throw new Error("Comment ID is required.");
   const col = db.collection<CommentRecord>("comments");
@@ -2470,10 +2484,11 @@ export async function deleteComment(
         },
       },
     );
-    return { deleted: false, tombstoned: true, replyCount };
+    return { deleted: false, tombstoned: true, replyCount, prunedIds: [] };
   }
 
   await col.deleteOne({ commentId: id });
+  const prunedIds = [id];
 
   // Remove any chain of empty placeholders that no longer has replies to
   // preserve. A placeholder is only kept while a surviving reply depends on it.
@@ -2489,13 +2504,14 @@ export async function deleteComment(
     });
     if (remainingReplies > 0) break;
     await col.deleteOne({ commentId: parent.commentId });
+    prunedIds.push(parent.commentId);
     parentId =
       typeof parent.parentCommentId === "string"
         ? parent.parentCommentId
         : "";
   }
 
-  return { deleted: true, tombstoned: false, replyCount: 0 };
+  return { deleted: true, tombstoned: false, replyCount: 0, prunedIds };
 }
 
 const VALID_FEEDBACK_STATUSES: ContributionFeedbackStatus[] = [

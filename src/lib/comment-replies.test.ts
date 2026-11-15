@@ -214,7 +214,22 @@ describe("threaded deliberation comments", () => {
       deleted: false,
       tombstoned: true,
       replyCount: 1,
+      prunedIds: [],
     });
+
+    await assert.rejects(
+      () => voteOnComment(db, responder, parent.commentId, "upvote"),
+      /deleted contributions cannot be voted on/i,
+    );
+    await assert.rejects(
+      () =>
+        addComment(db, responder, {
+          proposalId: proposal.proposalId,
+          parentCommentId: parent.commentId,
+          body: "Should not attach to deleted placeholder.",
+        }),
+      /cannot reply to a deleted contribution/i,
+    );
 
     const detail = await getProposalDetail(db, proposal.slug, responder);
     assert.ok(detail);
@@ -238,6 +253,7 @@ describe("threaded deliberation comments", () => {
       deleted: true,
       tombstoned: false,
       replyCount: 0,
+      prunedIds: [reply.commentId, parent.commentId],
     });
     const after = await getProposalDetail(db, proposal.slug, responder);
     assert.ok(

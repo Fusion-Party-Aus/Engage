@@ -1,5 +1,21 @@
 [
   {
+    "hash": "308a5d4",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discussion",
+    "summary": "Guard tombstoned comments, empty menus, and vote actions"
+  },
+  {
+    "hash": "b9c3c7e",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Regenerate after merging main"
+  },
+  {
     "hash": "6d93797",
     "date": "2026-11-16",
     "type": "chore",
@@ -662,23 +678,5 @@
     "scope": "notifications",
     "summary": "Separate email preferences and explain rollout defaults",
     "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
-  },
-  {
-    "hash": "7a56a95",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "engagement",
-    "summary": "Add proposal rankings, ballot deadlines and member reminders",
-    "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
   }
 ]

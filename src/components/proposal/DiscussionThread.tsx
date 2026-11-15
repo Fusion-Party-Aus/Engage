@@ -416,10 +416,13 @@ export default function DiscussionThread({
         throw new Error(String(data.error ?? 'Could not delete contribution.'));
       }
       if (data.deleted) {
+        const removedIds = new Set<string>(
+          Array.isArray(data.prunedIds) && data.prunedIds.length > 0
+            ? data.prunedIds.map(String)
+            : [deleteTarget.commentId],
+        );
         setComments((current) =>
-          current.filter(
-            (comment) => comment.commentId !== deleteTarget.commentId,
-          ),
+          current.filter((comment) => !removedIds.has(comment.commentId)),
         );
         setAnnouncement('Contribution deleted.');
       } else {
@@ -795,6 +798,12 @@ function CommentItem({
   const deeplyNested = node.depth >= MAX_VISUAL_DEPTH + 2;
   const showChildren = hasChildren && !collapsed;
   const canRemove = canDelete(comment);
+  const hasHistory = Boolean(
+    comment.feedbackHistory && comment.feedbackHistory.length > 0,
+  );
+  const canRecordFeedback = canRespondToFeedback && !comment.deleted;
+  const canDeleteItem = canRemove && !comment.deleted;
+  const hasMenuItems = hasHistory || canRecordFeedback || canDeleteItem;
 
   const handleVote = async (action: 'upvote' | 'downvote') => {
     setVoting(action);
@@ -988,7 +997,7 @@ function CommentItem({
                 </div>
               )}
 
-              {canParticipate && (
+              {canParticipate && !comment.deleted && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -1024,22 +1033,22 @@ function CommentItem({
                 </Button>
               )}
 
-              <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="comment__action comment__action--overflow"
-                    aria-label={`More actions for ${comment.authorName}'s comment`}
-                  >
-                    <MoreHorizontal aria-hidden="true" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="comment__menu">
-                  <div className="comment__menu-list">
-                    {comment.feedbackHistory &&
-                      comment.feedbackHistory.length > 0 && (
+              {hasMenuItems && (
+                <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="comment__action comment__action--overflow"
+                      aria-label={`More actions for ${comment.authorName}'s comment`}
+                    >
+                      <MoreHorizontal aria-hidden="true" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="comment__menu">
+                    <div className="comment__menu-list">
+                      {hasHistory && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -1052,42 +1061,43 @@ function CommentItem({
                         >
                           <History aria-hidden="true" />
                           {showHistory ? 'Hide' : 'Show'} response history (
-                          {comment.feedbackHistory.length})
+                          {comment.feedbackHistory!.length})
                         </Button>
                       )}
-                    {canRespondToFeedback && !comment.deleted && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="comment__menu-item"
-                        onClick={() => {
-                          setShowFeedbackForm((current) => !current);
-                          setMenuOpen(false);
-                        }}
-                      >
-                        <ClipboardCheck aria-hidden="true" />
-                        {comment.feedback ? 'Update response' : 'Record response'}
-                      </Button>
-                    )}
-                    {canRemove && !comment.deleted && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="comment__menu-item comment__menu-item--danger"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onRequestDelete(comment);
-                        }}
-                      >
-                        <Trash2 aria-hidden="true" />
-                        Delete
-                      </Button>
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
+                      {canRecordFeedback && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="comment__menu-item"
+                          onClick={() => {
+                            setShowFeedbackForm((current) => !current);
+                            setMenuOpen(false);
+                          }}
+                        >
+                          <ClipboardCheck aria-hidden="true" />
+                          {comment.feedback ? 'Update response' : 'Record response'}
+                        </Button>
+                      )}
+                      {canDeleteItem && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="comment__menu-item comment__menu-item--danger"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            onRequestDelete(comment);
+                          }}
+                        >
+                          <Trash2 aria-hidden="true" />
+                          Delete
+                        </Button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
 
             {deleteTargetId === comment.commentId && (
@@ -1143,7 +1153,7 @@ function CommentItem({
               </p>
             )}
 
-            {replying && canParticipate && (
+            {replying && canParticipate && !comment.deleted && (
               <ReplyComposer
                 authorName={comment.authorName}
                 onCancel={() => setReplying(false)}
