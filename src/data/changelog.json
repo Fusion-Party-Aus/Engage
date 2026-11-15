@@ -1,12 +1,48 @@
 [
   {
-    "hash": "a95f505",
+    "hash": "175df5d",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
+    "scope": "policies",
+    "summary": "Branch-scoped registry and changes to adopted policy (#89, #37)",
+    "details": "The registry is now navigable by authority and topic, and adopted policy can change through a proposal instead of being frozen at publication. Registry: - policy addresses become /policies/<branch>/<slug>/; internal IDs stay stable and legacy /policies/<id>/ addresses redirect to the canonical path; - the registry collates by adopting branch, then by the branch's own topics, so 41 Victorian policies are browsable rather than one flat list; - each branch has its own registry page with adoption basis, source and current/past tabs; a search and branch filter remain available; - rows show title, two-line summary, topic, branch and adoption origin; - imported records show their authority, import date and source. Post-ratification lifecycle: - a proposal may declare targetPolicyId and amend/replace/repeal; the target is fixed at creation against the exact published revision; - the policy page shows the proposed changes separately and never implies a draft has changed adopted policy; - ratification of a repeal records the deciding proposal; an amendment or replacement supersedes the predecessor only when the successor is published, so the public registry never shows a gap; - imported and Engage-ratified lineage read together in the same history."
+  },
+  {
+    "hash": "cb08098",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "policies",
+    "summary": "Import adopted branch policy with explicit provenance (#89)",
+    "details": "A branch may already hold policy adopted outside Engage. The import treats that as a provenance operation, not a proposal flow: - reads a branch policy feed and validates every record before writing; - requires an explicit authority basis and fails closed without one; - writes a published, adopted registry record plus an immutable policy_revision holding the exact source document and content hash; - records the source, authority basis, timestamps and provenance lineage; - reports created, unchanged, changed, conflicting, invalid and missing records without overwriting anything; - never republishes a record that was withdrawn, superseded or repealed. Dry-run and re-run are safe: only 'create' entries write, every write is keyed, and a changed source is a review item for the change lifecycle rather than a silent rewrite."
+  },
+  {
+    "hash": "2a52ef4",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "docs",
+    "summary": "Check documentation links in CI (#44) (#85)",
+    "details": "* fix(docs): repair broken relative links Point the deployment verification record at the canonical known-gaps page instead of the removed mvp-roadmap, and drop the link to the uncommitted UI-refinement screenshot directory. * docs(guides): point agents at document status labels Replace the stale-page list with a reference to docs/README.md, which defines the document status labels and canonical replacements, and list the new link check among the verification commands. * feat(docs): check documentation links in CI Add a dependency-free script that resolves relative links in docs/, README.md and AGENTS.md, ignoring external, anchor-only, template and fenced-code links. Wire it into the existing application check job as docs:check-links."
+  },
+  {
+    "hash": "6fd5562",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "platform",
+    "summary": "Reconcile stale historical documentation with the canonical set (#44) (#84)",
+    "details": "* docs(operations): correct removed endpoints, scripts and ballot closure model - Mark the page Superseded and link the canonical build/deploy guide. - Replace the removed /api/ballots check with /api/health and the removed seed-preview, backup-preview and restore-preview instructions with the behaviour that exists (startup seeding, host backup procedure). - Replace the ADR 0003 vote-admission and finalizeBallot description with the implemented deadline check, unique vote indexes and scheduler closure. - Correct the membership audit claim: no memberships.auditHistory or auditVersion exists. - Fix the missing release-gates link and stale preview/cookie statements. * docs(adr): record ballot-admission divergence in ADR 0003 Label the technology decision Current and the admission protocol Design-only, then record the verified implementation: castVote checks the deadline in application code before the transaction, uniqueness comes from the partial vote indexes, and closure writes ballotClosedAt without a tally. Notes that a vote passing the pre-check can commit after the cutoff. * docs(deploy): mark the Coolify deployment record historical Replace the 2026-11-08 cutover banner with a dated historical scope, point to the canonical deployment page, and correct the claim that no CI exists. * docs(engagement): correct the ballot deadline and label the UX record Replace the superseded 24 December 2026 deadline with the approved 30-day ballot period and the 2027-01-14 one-off expiry migration, and describe what the migration actually writes. Mark the dated UX journey record Historical so its old test counts are not read as current. * docs(governance): correct identifiable-ballot boundary and authority fields Identifiable ballots are limited to a national administrator or a holder of the national ballots.view_identifiable permission, not isAdmin alone. Record the ballots.bind and ballots.record_result gates, the current admin navigation, and mark the older governance API page Superseded. * docs(legal): reconcile the 2026-11-08 privacy review with shipped work Label the review Historical and correct the statements overtaken since: Plausible analytics, CRM membership verification, seconding and scheduled ballot closure are implemented, and the legal-acceptance enforcement and ballot privacy notice are applied. Record the delegated identifiable-ballot boundary and define the Current/Historical/Superseded/Design-only vocabulary in the index."
+  },
+  {
+    "hash": "15f7ac5",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
     "scope": "ballots",
-    "summary": "Make the ballot_results index migration explicit and recoverable",
-    "details": "Startup no longer creates or drops the ballot_results indexes as a silent side effect. A legacy collection is reported and left untouched; a fresh one still receives the indexes; an already-migrated one is a no-op. `npm run ballots:results-index` adds preflight, dry-run, apply, verify and recovery commands. Apply backs up the index definitions and documents before change, proves the unique partial ballotId index before dropping the legacy unique proposalId index, verifies the final state, and records the actor and backup in data_migrations. Failures are recorded and re-raised instead of being swallowed. Duplicate results are reported for human reconciliation; nothing deletes or rewrites ballot results to make an index fit. Tests: eight replica-set cases cover a fresh install, legacy startup, duplicate blockers, dry run, full apply, partial apply, re-run, loud failure and recovery reporting. The Sprint 1 integrity test now asserts the explicit contract rather than the old startup upgrade. Also records PR #51 as merged to main and the resolved migration risk (#55). Closes #55"
+    "summary": "Make the ballot_results index migration preflighted and recoverable (#55) (#83)",
+    "details": "* feat(ballots): make the ballot_results index migration explicit and recoverable Startup no longer creates or drops the ballot_results indexes as a silent side effect. A legacy collection is reported and left untouched; a fresh one still receives the indexes; an already-migrated one is a no-op. `npm run ballots:results-index` adds preflight, dry-run, apply, verify and recovery commands. Apply backs up the index definitions and documents before change, proves the unique partial ballotId index before dropping the legacy unique proposalId index, verifies the final state, and records the actor and backup in data_migrations. Failures are recorded and re-raised instead of being swallowed. Duplicate results are reported for human reconciliation; nothing deletes or rewrites ballot results to make an index fit. Tests: eight replica-set cases cover a fresh install, legacy startup, duplicate blockers, dry run, full apply, partial apply, re-run, loud failure and recovery reporting. The Sprint 1 integrity test now asserts the explicit contract rather than the old startup upgrade. Also records PR #51 as merged to main and the resolved migration risk (#55). Closes #55 * chore(changelog): record the ballot-results index migration * docs(security): record Turnstile as merged to main"
   },
   {
     "hash": "3b36947",
@@ -625,41 +661,5 @@
     "scope": "release",
     "summary": "Record member ballot refinement verification",
     "details": "Record the approved ballot hierarchy: segmented control, single results block, zero-vote empty state, compact privacy line, full-width action and 390px browser validation. Full route matrix 109/109 and dedicated ballot checks 14/14."
-  },
-  {
-    "hash": "2b85970",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ui",
-    "summary": "Refine member ballot hierarchy and voting control",
-    "details": "Replace the tall three-card radio composition with a single-row shadcn/Radix segmented control for Approve, Abstain and Reject. The primary action is full-width with a matching radius, uses a neutral disabled treatment and reserves the Horizon accent for an enabled vote. Move results into one compact block, show a simple empty state for zero-vote ballots, reduce the privacy disclosure to a persistent one-line notice, and move revision metadata into a small readable line. Keep selected state, keyboard navigation, existing votes and closed-ballot read-only behaviour."
-  },
-  {
-    "hash": "153e909",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Integrate Coolify cutover evidence and final verification record",
-    "details": "Merge the deployment workstream documentation with the release: storage and prebuilt-image verification, no-rebuild deployment path, quiescent backup helper, staging verification, rollback procedure and approval-gated cutover checklist. Distinguish the 2026-11-08 rehearsal image from the final release identity so the artifact cannot be mistaken for the approved cutover image. Add the production-readiness audit, application handover and final integrated verification record. Ignore the preserved research corpus."
-  },
-  {
-    "hash": "33cc170",
-    "date": "2026-11-08",
-    "type": "feat",
-    "category": "feature",
-    "scope": "legal",
-    "summary": "Integrate Privacy Policy, Terms of Use and acceptance controls",
-    "details": "Add owner-authorised legal documents at /privacy/ and /terms/ with the confirmed operator, ABN, registered party name, contact and correspondence address. The documents are explicit about identifiable ballots, national administrator access, small-ballot re-identification risk, retention limits, third-party processors and administrative ballot controls, and remain noindex while publication is pending. Add a server-side acceptance record, API and member gate, and enforce the gate on vote, comment, endorsement, proposal and amendment writes. Activation is interlocked: the gate remains inactive until both documents are published with real effective dates and LEGAL_ACCEPTANCE_ENABLED is set. Add the ballot-context privacy notice, footer and sign-in legal links, and regression tests."
-  },
-  {
-    "hash": "0dff758",
-    "date": "2026-11-08",
-    "type": "fix",
-    "category": "fix",
-    "scope": "app",
-    "summary": "Complete release-candidate remediation and Horizon UI integration",
-    "details": "- make startup seeding insert-only so restarts do not rewrite updatedAt - remove Astro experimental React children to stop double-escaped entities and SSR attribute warnings - use a trusted public origin for canonicals and public API Link headers - show human-readable revision labels to members while retaining exact IDs in audit views - make the empty policy registry an explicit, accurate state and relabel navigation and calls to action - complete the shared header, footer, feature grid and member settings workspace on the Horizon/shadcn foundation"
   }
 ]
