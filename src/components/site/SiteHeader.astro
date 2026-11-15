@@ -1,6 +1,6 @@
 ---
 import { Button } from '../ui/button';
-import NotificationBell from './NotificationBell.tsx';
+import { Badge } from '../ui/badge';
 import type { SessionUser } from '../../lib/types.ts';
 import type { SiteConfig } from '../../lib/site-config.ts';
 
@@ -93,7 +93,54 @@ if (isStaff) {
     <div class:list={{ 'site-actions': true, 'site-actions--signed-in': Boolean(user) }}>
       {user ? (
         <>
-          <NotificationBell client:idle />
+          <details class="site-notifications" data-notifications>
+            <summary
+              class="site-notifications__trigger"
+              aria-label="Notifications"
+              data-notifications-summary
+            >
+              <a
+                class="site-notifications__bell"
+                href="/member/?view=notifications"
+                aria-label="Notifications"
+                data-notifications-link
+              >
+                <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <use href="#icon-bell" />
+                </svg>
+                <Badge
+                  variant="secondary"
+                  aria-hidden="true"
+                  data-notifications-count
+                  hidden
+                  className="site-notifications__count absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-[0.625rem] leading-none tabular"
+                />
+              </a>
+            </summary>
+
+            <div class="site-notifications__panel">
+              <div class="site-notifications__head">
+                <p class="site-notifications__heading">Notifications</p>
+                <Badge variant="info" data-notifications-unread hidden />
+              </div>
+
+              <div class="site-notifications__body">
+                <p class="site-notifications__message" data-notifications-loading hidden>Loading notifications…</p>
+                <div class="site-notifications__error" data-notifications-error hidden>
+                  <p class="site-notifications__message">Couldn't load notifications.</p>
+                  <Button type="button" variant="outline" size="sm" data-notifications-retry>Try again</Button>
+                </div>
+                <p class="site-notifications__message" data-notifications-empty hidden>No notifications yet</p>
+                <ul class="m-0 grid list-none divide-y divide-border p-0" data-notifications-list hidden></ul>
+              </div>
+
+              <div class="site-notifications__footer">
+                <Button href="/member/?view=notifications" variant="ghost" size="sm" className="w-full">
+                  View all notifications
+                </Button>
+              </div>
+            </div>
+          </details>
           <div class="site-actions__account">
             <Button href="/member/" size="sm" variant="outline" className="h-9 px-3.5 text-sm">My Engage</Button>
             <Button className="site-signout" type="button" variant="ghost" size="sm" data-signout>Sign out</Button>
@@ -150,6 +197,17 @@ if (isStaff) {
 </header>
 
 <script>
+  type InboxNotification = {
+    notificationId?: string;
+    title?: string;
+    href?: string;
+    readAt?: string | null;
+    createdAt?: string;
+  };
+
+  const INBOX_HREF = '/member/?view=notifications';
+  const RECENT_LIMIT = 5;
+
   const header = document.querySelector<HTMLElement>('[data-site-header]');
   const syncScrolled = () => {
     if (header) header.dataset.scrolled = String(window.scrollY > 8);
@@ -159,24 +217,194 @@ if (isStaff) {
   window.addEventListener('scroll', syncScrolled, { passive: true });
 
   const menu = document.querySelector<HTMLDetailsElement>('[data-responsive-menu]');
+  const notifications = document.querySelector<HTMLDetailsElement>('[data-notifications]');
+
   const closeMenu = () => {
     if (menu) menu.open = false;
   };
+  const closeNotifications = () => {
+    if (notifications) notifications.open = false;
+  };
 
   document.addEventListener('click', (event) => {
-    if (!menu?.open) return;
     const target = event.target;
-    if (target instanceof Node && !menu.contains(target)) closeMenu();
+    if (!(target instanceof Node)) return;
+    if (menu?.open && !menu.contains(target)) closeMenu();
+    if (notifications?.open && !notifications.contains(target)) closeNotifications();
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeMenu();
+    if (event.key !== 'Escape') return;
+    if (notifications?.open) {
+      closeNotifications();
+      notifications.querySelector<HTMLElement>('[data-notifications-summary]')?.focus();
+      return;
+    }
+    closeMenu();
+  });
+
+  menu?.addEventListener('toggle', () => {
+    if (menu.open) closeNotifications();
   });
 
   menu?.addEventListener('click', (event) => {
     const target = event.target;
     if (target instanceof Element && target.closest('a')) closeMenu();
   });
+
+  function formatWhen(iso?: string): string {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    const minutes = Math.round((Date.now() - date.getTime()) / 60_000);
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+    const days = Math.round(hours / 24);
+    if (days < 7) return days === 1 ? 'Yesterday' : `${days} days ago`;
+    return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  }
+
+  function notificationHref(value?: string): string {
+    if (!value) return INBOX_HREF;
+    try {
+      const url = new URL(value, window.location.origin);
+      return url.origin === window.location.origin ? `${url.pathname}${url.search}${url.hash}` : INBOX_HREF;
+    } catch {
+      return INBOX_HREF;
+    }
+  }
+
+  if (notifications) {
+    const summary = notifications.querySelector<HTMLElement>('[data-notifications-summary]');
+    const fallbackLink = notifications.querySelector<HTMLAnchorElement>('[data-notifications-link]');
+    const count = notifications.querySelector<HTMLElement>('[data-notifications-count]');
+    const unreadBadge = notifications.querySelector<HTMLElement>('[data-notifications-unread]');
+    const loading = notifications.querySelector<HTMLElement>('[data-notifications-loading]');
+    const error = notifications.querySelector<HTMLElement>('[data-notifications-error]');
+    const empty = notifications.querySelector<HTMLElement>('[data-notifications-empty]');
+    const list = notifications.querySelector<HTMLUListElement>('[data-notifications-list]');
+    const retry = notifications.querySelector<HTMLButtonElement>('[data-notifications-retry]');
+
+    // The bell is a disclosure when the script runs; without JavaScript the
+    // anchor inside the summary still opens the notification centre.
+    fallbackLink?.removeAttribute('href');
+
+    const states = [loading, error, empty, list];
+    const show = (visible: HTMLElement | null) => {
+      for (const node of states) if (node) node.hidden = node !== visible;
+    };
+
+    let started = false;
+
+    const paintSummary = (unread: number) => {
+      summary?.setAttribute(
+        'aria-label',
+        unread > 0 ? `Notifications, ${unread} unread` : 'Notifications',
+      );
+      if (count) {
+        count.textContent = unread > 0 ? (unread > 9 ? '9+' : String(unread)) : '';
+        count.hidden = unread === 0;
+      }
+      if (unreadBadge) {
+        unreadBadge.textContent = unread > 0 ? `${unread} unread` : '';
+        unreadBadge.hidden = unread === 0;
+      }
+    };
+
+    const paintItems = (items: InboxNotification[]) => {
+      if (!list) return;
+      list.replaceChildren();
+      for (const entry of items) {
+        const row = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = notificationHref(entry.href);
+        link.className =
+          'flex gap-3 px-4 py-3 no-underline transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-inset';
+
+        const dot = document.createElement('span');
+        dot.setAttribute('aria-hidden', 'true');
+        dot.className = entry.readAt
+          ? 'mt-1.5 size-2 shrink-0 rounded-full bg-transparent'
+          : 'mt-1.5 size-2 shrink-0 rounded-full bg-secondary';
+
+        const text = document.createElement('span');
+        text.className = 'grid min-w-0 gap-0.5';
+
+        const title = document.createElement('span');
+        title.className = entry.readAt
+          ? 'text-sm font-medium text-foreground'
+          : 'text-sm font-semibold text-foreground';
+        if (!entry.readAt) {
+          const unreadLabel = document.createElement('span');
+          unreadLabel.className = 'sr-only';
+          unreadLabel.textContent = 'Unread: ';
+          title.append(unreadLabel);
+        }
+        title.append(document.createTextNode(entry.title || 'Notification'));
+
+        const time = document.createElement('time');
+        time.className = 'text-xs text-muted-foreground';
+        time.dateTime = entry.createdAt || '';
+        time.textContent = formatWhen(entry.createdAt);
+
+        text.append(title, time);
+        link.append(dot, text);
+        row.append(link);
+        list.append(row);
+      }
+    };
+
+    const load = async () => {
+      if (started) return;
+      started = true;
+      show(loading);
+      try {
+        const response = await fetch(`/api/notifications/inbox?limit=${RECENT_LIMIT}`, {
+          cache: 'no-store',
+          headers: { accept: 'application/json' },
+        });
+        if (!response.ok) throw new Error('Inbox request failed');
+        const data = (await response.json()) as {
+          unreadCount?: number;
+          notifications?: InboxNotification[];
+        };
+        const items = Array.isArray(data.notifications) ? data.notifications.slice(0, RECENT_LIMIT) : [];
+        const unread =
+          typeof data.unreadCount === 'number'
+            ? data.unreadCount
+            : items.filter((entry) => !entry.readAt).length;
+        paintSummary(unread);
+        paintItems(items);
+        show(items.length ? list : empty);
+      } catch {
+        started = false;
+        show(error);
+      }
+    };
+
+    notifications.addEventListener('toggle', () => {
+      if (!notifications.open) return;
+      closeMenu();
+      void load();
+    });
+
+    retry?.addEventListener('click', () => {
+      started = false;
+      void load();
+    });
+
+    // Keep the unread badge current without holding up first paint. The inbox
+    // is read-only here; marking notifications as read stays in the member
+    // notification centre.
+    const requestIdle: typeof window.requestIdleCallback | undefined = window.requestIdleCallback;
+    if (requestIdle) {
+      requestIdle(() => void load(), { timeout: 2_500 });
+    } else {
+      window.setTimeout(() => void load(), 2_000);
+    }
+  }
 </script>
 
 <style>
@@ -296,6 +524,7 @@ if (isStaff) {
   }
 
   .site-actions {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -308,6 +537,116 @@ if (isStaff) {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+  }
+
+  .site-notifications {
+    flex: 0 0 auto;
+  }
+
+  .site-notifications :global([hidden]) {
+    display: none !important;
+  }
+
+  .site-notifications__trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    background: var(--horizon-white);
+    border: 1px solid var(--horizon-line);
+    border-radius: 50%;
+    color: var(--horizon-purple-deep);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .site-notifications__trigger::-webkit-details-marker {
+    display: none;
+  }
+
+  .site-notifications__trigger:hover {
+    background: var(--horizon-lavender-soft);
+    border-color: var(--horizon-line-strong);
+  }
+
+  .site-notifications[open] .site-notifications__trigger {
+    background: var(--horizon-lavender);
+    border-color: var(--horizon-line-strong);
+  }
+
+  .site-notifications__bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .site-notifications__bell .nav-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+  .site-notifications__panel {
+    position: absolute;
+    top: calc(100% + 1rem);
+    right: 0;
+    z-index: 1;
+    width: min(23rem, calc(100vw - 3rem));
+    overflow: hidden;
+    background: var(--horizon-white);
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.85rem;
+    box-shadow: 0 26px 42px -30px rgba(38, 11, 89, 0.6);
+  }
+
+  .site-notifications__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .site-notifications__heading {
+    margin: 0;
+    color: var(--horizon-purple-deep);
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .site-notifications__body {
+    max-height: min(22rem, calc(100vh - 12rem));
+    overflow-y: auto;
+  }
+
+  .site-notifications__message {
+    margin: 0;
+    padding: 1.25rem 1rem;
+    color: var(--horizon-muted);
+    font-size: 0.85rem;
+  }
+
+  .site-notifications__error {
+    display: grid;
+    gap: 0.75rem;
+    justify-items: start;
+    padding: 1.25rem 1rem;
+  }
+
+  .site-notifications__error .site-notifications__message {
+    padding: 0;
+  }
+
+  .site-notifications__footer {
+    padding: 0.35rem;
+    border-top: 1px solid var(--horizon-line);
   }
 
   .site-signout {
@@ -474,6 +813,14 @@ if (isStaff) {
     .site-header__inner {
       width: calc(100% - 2rem);
       gap: 0.75rem;
+    }
+
+    .site-notifications__panel {
+      position: fixed;
+      top: 4.1rem;
+      left: 0.75rem;
+      right: 0.75rem;
+      width: auto;
     }
 
     .brand img {
