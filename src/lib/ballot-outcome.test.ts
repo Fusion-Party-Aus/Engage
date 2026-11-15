@@ -176,19 +176,21 @@ test("the workspace result form keeps the announcement out of the status lookup"
   assert.match(workspace, /const status = formStatusRegion\(form\);/);
 });
 
-test("the register delegates outcome recording to the workspace", () => {
-  // The register is a vote-free list read: it shows the certified tally from
-  // ballot_results and links to the workspace, which owns the live tally and the
-  // result form. Recording from the list would require decrypting every ballot.
+test("the register keeps the list read vote-free and loads tallies on demand for inline outcome recording", () => {
+  // The register list read remains vote-free (no readBoundBallotTallies on SSR);
+  // opening a row's inline outcome disclosure fetches /api/admin/proposals/ballot-tally
+  // on demand before revealing the ballot-result-form.
   const register = readFileSync(
     new URL("../pages/admin/proposals/index.astro", import.meta.url),
     "utf8",
   );
 
-  assert.doesNotMatch(register, /class="ballot-result-form/);
   assert.doesNotMatch(register, /readBoundBallotTallies/);
   assert.match(register, /listProposalRegister/);
-  assert.match(register, /ballot\.href/);
+  assert.match(register, /class="ballot-result-form/);
+  assert.match(register, /\/api\/admin\/proposals\/ballot-tally/);
+  assert.match(register, /data-override-announcement aria-live="polite"/);
+  assert.doesNotMatch(register, /data-override-announcement role="status"/);
 });
 
 test("display key loading degrades to null instead of throwing", () => {

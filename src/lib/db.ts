@@ -595,7 +595,13 @@ export function createMemoryDb(): Db {
         !(cond instanceof RegExp)
       ) {
         if ("$in" in cond && Array.isArray(cond.$in)) {
-          if (!cond.$in.some((item: any) => String(item) === String(val)))
+          if (
+            !cond.$in.some((item: any) =>
+              item instanceof RegExp
+                ? item.test(String(val ?? ""))
+                : String(item) === String(val),
+            )
+          )
             return false;
           continue;
         }
@@ -800,6 +806,59 @@ export function createMemoryDb(): Db {
           store.push(...kept);
           return { deletedCount: before - kept.length, acknowledged: true };
         },
+        aggregate: (pipeline: Array<Record<string, any>>) => ({
+          toArray: async () => {
+            let results = store.map((d) => ({ ...d }));
+            for (const stage of pipeline) {
+              if (stage.$match) {
+                results = results.filter((doc) => matchesFilter(doc, stage.$match));
+              } else if (stage.$addFields) {
+                results = results.map((doc) => {
+                  const next = { ...doc };
+                  for (const [field, expr] of Object.entries(stage.$addFields)) {
+                    if (expr && typeof expr === "object" && Array.isArray((expr as any).$ifNull)) {
+                      const [a, b] = (expr as any).$ifNull as [string, string];
+                      const readField = (ref: string) =>
+                        ref.startsWith("$") ? next[ref.slice(1)] : ref;
+                      next[field] = readField(a) ?? readField(b);
+                    }
+                  }
+                  return next;
+                });
+              } else if (stage.$sort) {
+                const entries = Object.entries(stage.$sort as Record<string, 1 | -1>);
+                results.sort((a, b) => {
+                  for (const [field, dir] of entries) {
+                    const av = field === "_id" ? String(a[field]) : a[field];
+                    const bv = field === "_id" ? String(b[field]) : b[field];
+                    if (av < bv) return -1 * dir;
+                    if (av > bv) return 1 * dir;
+                  }
+                  return 0;
+                });
+              } else if (typeof stage.$skip === "number") {
+                results = results.slice(stage.$skip);
+              } else if (typeof stage.$limit === "number") {
+                results = results.slice(0, stage.$limit);
+              } else if (stage.$project) {
+                const proj = stage.$project as Record<string, 0 | 1>;
+                const includes = Object.entries(proj)
+                  .filter(([, v]) => v === 1)
+                  .map(([k]) => k);
+                if (includes.length > 0) {
+                  results = results.map((doc) => {
+                    const out: Record<string, any> = {};
+                    for (const k of includes) {
+                      if (k in doc) out[k] = doc[k];
+                    }
+                    return out;
+                  });
+                }
+              }
+            }
+            return results;
+          },
+        }),
       };
     },
   } as unknown as Db;

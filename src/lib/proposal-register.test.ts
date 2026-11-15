@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createMemoryDb } from "./db.ts";
+import { createMemoryDb, getDatabase } from "./db.ts";
+import { GET as getBallotTally } from "../pages/api/admin/proposals/ballot-tally.ts";
 import type { Db } from "mongodb";
 import {
   PROPOSAL_REGISTER_PAGE_SIZE,
@@ -86,6 +87,13 @@ function spyDb(db: Db) {
                 return (filter?: Record<string, unknown>, options?: { projection?: Record<string, unknown> }) => {
                   if (options?.projection) record.projection = options.projection;
                   return source.find(filter ?? {}, options);
+                };
+              }
+              if (key === "aggregate") {
+                return (pipeline: Array<Record<string, any>>) => {
+                  const projectStage = pipeline.find((stage) => stage.$project);
+                  if (projectStage?.$project) record.projection = projectStage.$project;
+                  return source.aggregate(pipeline);
                 };
               }
               const value = (source as any)[key];
@@ -459,5 +467,125 @@ describe("admin proposal register ballot display", () => {
       "Simple majority (D9)",
     );
     assert.equal(registerRuleBasisLabel(undefined), undefined);
+  });
+
+  it("matches legacy policyId and category in search and normalises whitespace/case in legacy status", async () => {
+    const db = createMemoryDb();
+    await db.collection("proposals").insertOne({
+      policyId: "LEG-101",
+      slug: "leg-101",
+      title: "Legacy Transport Charter",
+      category: "Infrastructure",
+      status: " Voting ",
+      summary: "Legacy summary.",
+    });
+    await db.collection("proposals").insertOne({
+      proposalId: "POL-202",
+      slug: "pol-202",
+      title: "Modern Education Motion",
+      space: "Education",
+      stage: "propose",
+      summary: "Modern summary.",
+    });
+
+    const byPolicyId = await listProposalRegister(db, { search: "LEG-101" });
+    assert.equal(byPolicyId.total, 1);
+    assert.equal(byPolicyId.entries[0]?.row.proposalId, "LEG-101");
+
+    const byCategory = await listProposalRegister(db, { search: "Infrastructure" });
+    assert.equal(byCategory.total, 1);
+    assert.equal(byCategory.entries[0]?.row.proposalId, "LEG-101");
+
+    const decide = await listProposalRegister(db, { stage: "decide" });
+    assert.equal(decide.total, 1);
+    assert.equal(decide.stageCounts.decide, 1);
+    assert.equal(decide.entries[0]?.row.proposalId, "LEG-101");
+  });
+
+  it("orders multiple legacy policyId records deterministically across page boundaries", async () => {
+    const db = createMemoryDb();
+    await db.collection("proposals").insertOne({ policyId: "LEG-003", slug: "leg-003", title: "Third", category: "General", status: "draft" });
+    await db.collection("proposals").insertOne({ policyId: "LEG-001", slug: "leg-001", title: "First", category: "General", status: "draft" });
+    await db.collection("proposals").insertOne({ policyId: "LEG-002", slug: "leg-002", title: "Second", category: "General", status: "draft" });
+    await db.collection("proposals").insertOne({ proposalId: "POL-004", slug: "pol-004", title: "Fourth", space: "General", stage: "propose" });
+
+    const page1 = await listProposalRegister(db, { page: 1, pageSize: 2 });
+    const page2 = await listProposalRegister(db, { page: 2, pageSize: 2 });
+    assert.deepEqual(
+      page1.entries.map((entry) => entry.row.proposalId),
+      ["LEG-001", "LEG-002"],
+    );
+    assert.deepEqual(
+      page2.entries.map((entry) => entry.row.proposalId),
+      ["LEG-003", "POL-004"],
+    );
+  });
+});
+
+describe("on-demand ballot tally endpoint", () => {
+  const devEnv = { APP_MODE: "development" };
+  const callTally = (url: string, cookie?: string) =>
+    getBallotTally({
+      request: new Request(url, {
+        headers: cookie ? { cookie } : {},
+      }),
+      url: new URL(url),
+      locals: { runtime: { env: devEnv } },
+    } as any);
+
+  it("enforces auth, validates input, and returns the bound tally only on demand", async () => {
+    const db = await getDatabase(devEnv);
+    const id = `TALLY-${crypto.randomUUID().slice(0, 8)}`;
+    await db.collection("proposals").insertOne({
+      proposalId: id,
+      slug: id.toLowerCase(),
+      title: "On-demand tally proposal",
+      space: "Governance",
+      stage: "decide",
+      kind: "policy",
+      ballotRevisionId: "rev-tally-1",
+      ballotClosesAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    await db.collection(PROPOSAL_VOTES).insertOne({
+      ballotId: proposalBallotId(id),
+      proposalId: id,
+      memberId: "voter-1",
+      choice: "approve",
+      revisionId: "rev-tally-1",
+      createdAt: new Date(),
+    });
+
+    const unauth = await callTally(`https://engage.test/api/admin/proposals/ballot-tally?proposalId=${id}`);
+    assert.equal(unauth.status, 401);
+
+    const memberRes = await callTally(
+      `https://engage.test/api/admin/proposals/ballot-tally?proposalId=${id}`,
+      "engage_dev_user=member",
+    );
+    assert.equal(memberRes.status, 403);
+
+    const missingId = await callTally(
+      "https://engage.test/api/admin/proposals/ballot-tally",
+      "engage_dev_user=administrator",
+    );
+    assert.equal(missingId.status, 400);
+
+    const notFound = await callTally(
+      "https://engage.test/api/admin/proposals/ballot-tally?proposalId=DOES-NOT-EXIST",
+      "engage_dev_user=administrator",
+    );
+    assert.equal(notFound.status, 404);
+
+    const okRes = await callTally(
+      `https://engage.test/api/admin/proposals/ballot-tally?proposalId=${id}`,
+      "engage_dev_user=administrator",
+    );
+    assert.equal(okRes.status, 200);
+    assert.equal(okRes.headers.get("cache-control"), "private, no-store");
+    const body = (await okRes.json()) as any;
+    assert.equal(body.proposalId, id);
+    assert.equal(body.closed, true);
+    assert.equal(body.computedLabel, "Successful");
+    assert.deepEqual(body.summary.tally, { approve: 1, abstain: 0, reject: 0, total: 1 });
   });
 });

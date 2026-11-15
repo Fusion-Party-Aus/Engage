@@ -337,8 +337,10 @@ function registerMatchFilter(options: {
     clauses.push({
       $or: [
         { proposalId: pattern },
+        { policyId: pattern },
         { title: pattern },
         { space: pattern },
+        { category: pattern },
         { summary: pattern },
         { details: pattern },
       ],
@@ -346,7 +348,9 @@ function registerMatchFilter(options: {
   }
   const stage = parseRegisterStage(options.stage);
   if (stage) {
-    const values = STAGE_STORAGE_VALUES[stage];
+    const values = STAGE_STORAGE_VALUES[stage].map(
+      (value) => new RegExp(`^\\s*${escapeRegex(value)}\\s*$`, "i"),
+    );
     clauses.push({
       $or: [
         { stage: { $in: values } },
@@ -504,10 +508,18 @@ export async function listProposalRegister(
 
   const rawRows = await db
     .collection<ProposalRecord>("proposals")
-    .find(where, { projection: REGISTER_PROJECTION })
-    .sort({ proposalId: 1 })
-    .skip(skip)
-    .limit(pageSize)
+    .aggregate([
+      { $match: where },
+      {
+        $addFields: {
+          _effectiveProposalId: { $ifNull: ["$proposalId", "$policyId"] },
+        },
+      },
+      { $sort: { _effectiveProposalId: 1, _id: 1 } },
+      { $skip: skip },
+      { $limit: pageSize },
+      { $project: REGISTER_PROJECTION },
+    ])
     .toArray();
   const pageIds = rawRows.map((row) =>
     String((row as any).proposalId ?? (row as any).policyId ?? ""),

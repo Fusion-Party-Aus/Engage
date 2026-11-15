@@ -1,5 +1,30 @@
 [
   {
+    "hash": "1225ac0",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add on-demand inline outcome recording and address register review findings"
+  },
+  {
+    "hash": "c94e3f9",
+    "date": "2026-11-15",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "governance",
+    "summary": "Typed ballot commands and central route policy (#53) (#94)",
+    "details": "* refactor(governance): add typed ballot commands and central route policy Extract ballot.bind and ballot.record_result into typed commands that call the existing domain functions, and declare both routes in one policy table. Routes now validate input, run the command and map errors; no permission literals or role checks remain in the route files. No governance behaviour changes. * test(governance): prove ballot command and route policy equivalence Cover policy-table drift, the authorisation matrix for both commands, route authentication, bind idempotency and record_result preconditions against a real MongoDB replica set. Existing route suites continue to exercise the same behaviour. * docs(governance): document the command contract and mark #53 partial Describe the typed command contract, the central route policy table and the two-stage authorisation rule. Record that the ballot lifecycle is extracted while proposals, amendments and membership remain route-local. * chore(changelog): refresh the snapshot for the ballot command layer * fix(governance): preserve bind route error mapping and harden route drift guard Map domain errors per route so a BallotDomainError escaping bind still returns the generic 400, while result keeps its 409. Discover governed routes recursively across .ts, .js and .mjs with all handler export forms. Rename the route-level helper to authoriseGovernanceRouteRole and document the deliberate coarse-gate repeat. Correct the precondition wording: the delegated domain function enforces it. * test(governance): cover bind conflict status, route scope denial and recursive discovery Prove the bind route still returns 400 with one binding event for a conflicting ballot revision, prove an out-of-branch result request is denied with no write, and prove each declared audit event is written. Add temporary-directory fixtures for nested, index, JavaScript and re-exported routes, plus a malformed-body ordering check. * docs(governance): correct command preconditions and route policy scope Preconditions and effects are documentation enforced by the delegated domain function, not re-checked by the command layer. Describe the coarse role gate, its defensive repetition, per-route error mapping and recursive route discovery. * chore(changelog): refresh the snapshot after the PR review fixes * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * fix(governance): inspect multi-binding route exports and clarify command preconditions"
+  },
+  {
+    "hash": "79a9b0d",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the register pagination after merging main"
+  },
+  {
     "hash": "b2fd65a",
     "date": "2026-11-15",
     "type": "feat",
@@ -648,29 +673,5 @@
     "category": "fix",
     "scope": "analytics",
     "summary": "Initialize Plausible tracking on production"
-  },
-  {
-    "hash": "71a98bb",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "analytics",
-    "summary": "Install Plausible tracker package"
-  },
-  {
-    "hash": "b98af1d",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "time",
-    "summary": "Display time in user's local timezone"
-  },
-  {
-    "hash": "5de3c91",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "participation",
-    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
   }
 ]
