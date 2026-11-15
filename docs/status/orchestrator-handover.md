@@ -138,7 +138,7 @@ implementation, then update the decision register or open a decision.
 | Observability (#39) | No metrics, traces or alerting. Scheduler and Turnstile failures are visible only in logs. |
 | Command layer (#53) | No typed governance commands or central route policy. `store.ts` is still a god module. |
 | Decision record (#54) | No complete member-facing lineage view or administrator responsibility queue. |
-| Rendering performance (#52) | Admin register is still ~1 MB HTML; per-vote decryption and full vote scans remain on list reads; React remains on the signed-in header path. |
+| Rendering performance (#52) | Per-vote decryption and full vote scans remain on list reads; React remains on member settings, admin timelines and the proposal ballot islands, but no longer on the signed-in header. |
 | Membership (#32) | No unique `(branchId, memberId)` index or duplicate-resolving migration. |
 | Legacy lifecycle records | Proposals already in Deliberate without `secondedAt` never auto-advance. They are reported, not rewritten. A human decision is needed. |
 
@@ -189,7 +189,7 @@ its own branch, tests, docs and PR sized for review.
 7. **Notification outbox (#33) and durable job runner.** Scheduled transitions, ballot closure and outcomes should produce durable in-app/email notices with dedupe, preferences and a delivery record. Decide what is essential versus engagement.
 8. **Observability and scheduler operations (#39).** Metrics and alerts for missed scheduler runs, Turnstile misconfiguration/unavailability, failed email and queue depth. Wire the scheduler to a monitored cron.
 9. **Remaining perimeter work (#38).** CSP/HSTS/frame/content-type headers, general API rate limiting, complete CSRF/Origin coverage.
-10. **Performance follow-ups (from the audit).** Remove React from the signed-in header path; tally read model; short-TTL caching for stable public reads only. Never cache member or ballot state.
+10. **Performance follow-ups (from the audit).** Tally read model; short-TTL caching for stable public reads only. Never cache member or ballot state.
 
 ### Stage 4 — product and governance capabilities
 
