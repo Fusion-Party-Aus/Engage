@@ -5,7 +5,7 @@ Updated 15 November 2026. Resume from the pushed repository and GitHub, not conv
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review` (started from main `20dfa90`).
 - Single review PR: https://github.com/Fusion-Party-Aus/Engage/pull/98
-- Next concrete task: confirm the final integration/checkpoint is remotely visible and PR #98 is ready for review. Editorial coverage is complete; review/merge and release follow-up remain. Do not repeat completed journeys. Do not close #97 before final delivery is verified.
+- Next concrete task: review PR #98 and its CI result, then address review feedback. Editorial implementation and main integration (`840f8ec`) are complete; do not repeat the journey review. Keep #97 open until review/merge. Release and public-visibility follow-up remain separate. Do not repeat completed journeys. Do not close #97 before final delivery is verified.
 
 ## Editorial principles and decisions
 
@@ -76,6 +76,8 @@ Legal drafts advance to version 1.2, still **owner-authorised/publication pendin
 - Existing raw permission-key UI/native prompts remain #41/#59. No account/authority redesign here.
 - Legal publication/effective dates and operational recovery/key-custody questions remain release-owner work (#40); acceptance was not enabled.
 
-## Main integration checkpoint
+## Final integration and handover
 
 Integrated main through `78c07c0` (operations #99, security perimeter #100, ballot notification outbox #102). Only changelog conflicted; preserved real entries from both sides. Reviewed new notification message/health/security response strings. Combined-tree full suite: 451 passed, 44 skipped, no failures; typecheck: 341 files, zero errors/warnings and 20 hints; 198 relative documentation links checked in 81 files, zero broken. Production build passed with Git and in a tracked-source copy containing no Git metadata. The latter used direct Node commands because pnpm refused a shared dependency symlink; the changelog fallback kept the existing snapshot. New ballot notification messages were aligned with optional participation wording; their existing source assertion was updated. No upstream delivery/security/health logic was changed.
+
+The remote merge commit `840f8ec` has both editorial and main ancestry, and its tree was verified against the local result. Local working branch is `copy/97-editorial-review` tracking the same remote branch. GitHub Application checks were running when the final handover was prepared; inspect the current PR checks rather than assuming a CI conclusion. No production merge/deployment performed.
