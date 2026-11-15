@@ -1,11 +1,65 @@
 [
   {
+    "hash": "4248e94",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "profiles",
+    "summary": "Cover the MongoDB karma aggregation",
+    "details": "Exercise the profile read model against MongoDB so the database-side karma sum is verified, not only the in-memory fallback. The suite skips when VOTING_TEST_MONGODB_URI is not configured and uses a unique database name. Refs #113"
+  },
+  {
+    "hash": "402a1da",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "profiles",
+    "summary": "Document public profiles, visibility and display-only karma",
+    "details": "Record the profile read model, owner biography field, viewer-relative filtering, profile indexes, biography route, browser harness, capability rows and the remaining privacy limits. Explicitly state that karma never affects eligibility, permissions or proposal authority. Refs #113"
+  },
+  {
+    "hash": "2ffe4ee",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "profiles",
+    "summary": "Cover visibility, privacy, pagination and deep links",
+    "details": "Add in-memory read-model tests for private, branch and archived visibility, deleted comments, withdrawn amendments, legacy policyId comments, karma, deterministic pagination, disabled accounts, historic authors and owner-only biography writes. Add route checks for session and origin enforcement. Add a Chromium harness that follows an author link from a discussion, checks profile tabs and statistics, follows a comment deep link, verifies empty tabs and the 404 page on desktop and mobile, and wire it into CI after the production build. Refs #113"
+  },
+  {
+    "hash": "2958b1d",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discussion",
+    "summary": "Link authors to public member profiles",
+    "details": "Comment names and avatars, the proposal author and amendment authors now link to the public profile when a member id establishes authorship. Disabled accounts render as plain text and truncated historic records without a displayable name are not linked, so the interface never invents an author or offers a dead profile link. Top support and concern takeaways use the same link, and the proposal activity timeline targets the exact amendment anchor. Refs #113"
+  },
+  {
+    "hash": "459bbf7",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "profiles",
+    "summary": "Add public member profiles and editable biography",
+    "details": "Build a viewer-relative profile read model over existing accounts, comments, proposals, amendments and branch memberships. Profile pages show an initials avatar, optional biography, geographic affiliation, contribution statistics and display-only comment karma, with paginated Comments, Proposals and Amendments tabs and deep links to the exact discussion anchor. Deleted comments, withdrawn amendments and proposals the viewer cannot open are excluded from history, counts and karma. Owners edit a plain-text biography through an origin-checked member route; no separate profile or contribution collection is introduced. Adds profile lookup indexes for comments and amendments. Refs #113"
+  },
+  {
     "hash": "ca28f84",
     "date": "2026-11-16",
     "type": "fix",
     "category": "fix",
     "scope": "discussion",
     "summary": "Guard tombstoned comments, empty menus, and vote actions"
+  },
+  {
+    "hash": "57402f0",
+    "date": "2026-11-16",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "header",
+    "summary": "Replace the notification React island with a native disclosure (#52) (#111)",
+    "details": "* perf(header): replace the notification React island with a native disclosure The signed-in header fetched unread notifications from a React island hydrated with client:idle, which shipped the React runtime (~330 KB) on every signed-in page for one small bell. The bell is now a native <details>/<summary> disclosure backed by a small vanilla module. It reads the same read-only inbox endpoint without caching, only after idle or first open, and renders the latest five notifications. Escape closes it and restores summary focus, outside clicks close it, and only one header panel stays open. Without JavaScript the summary's anchor still opens the notification centre. Marking notifications as read remains in the member notification centre. Refs #52 * fix(header): match the notification panel to the established header shadow * docs(perf): record the React-free header measurements and remaining #52 scope The audit now reports the signed-in header before/after harness snapshots, the pages that no longer ship React, the unchanged database command counts and the inline-script trade-off on anonymous pages. The tracker's I12 line records the header slice as done while leaving the tally read model and member-list pagination as the remaining #52 work. Refs #52 * chore(changelog): refresh the snapshot for the header performance work * fix(header): keep a retry from issuing duplicate inbox reads * chore(changelog): refresh the snapshot for the header retry guard * chore(changelog): record the header performance work after merging main"
   },
   {
     "hash": "b9c3c7e",
