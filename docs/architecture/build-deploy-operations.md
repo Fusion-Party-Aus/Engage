@@ -28,7 +28,7 @@ Configuration is read through `runtimeEnv(locals)` and typed as `PlatformEnv`. `
 | Auth | `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 | Email | `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, `RESEND_WEBHOOK_SECRET` |
 | Jobs | `ENGAGE_CRON_SECRET`, `ENGAGE_EMAIL_SECRET`, `ENGAGE_DIGEST_ENABLED` |
-| Operations | `GOVERNANCE_SCHEDULER_STALE_HOURS`, `DIGEST_STALE_HOURS`, `MEMBERSHIP_VERIFICATION_STALE_HOURS`, `BALLOT_CLOSURE_GRACE_HOURS`, `EMAIL_DELIVERY_WINDOW_HOURS` (optional; defaults in the health section) |
+| Operations | `GOVERNANCE_SCHEDULER_WARN_HOURS`, `GOVERNANCE_SCHEDULER_STALE_HOURS`, `DIGEST_WARN_HOURS`, `DIGEST_STALE_HOURS`, `MEMBERSHIP_VERIFICATION_WARN_HOURS`, `MEMBERSHIP_VERIFICATION_STALE_HOURS`, `BALLOT_CLOSURE_GRACE_HOURS`, `EMAIL_DELIVERY_WINDOW_HOURS` (optional; defaults in the health section) |
 | CRM | `ENGAGE_CRM_*` (base URL, token, membership types, verification flag) |
 | Ballots | `BALLOT_ENCRYPTION_MODE`, `BALLOT_ENCRYPTION_KEYS`, active key ID, blind-index key |
 | Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
@@ -161,15 +161,22 @@ Rules:
 
 ### Job cadence
 
-Cadence means how often the external scheduler should call the job. The stale threshold is when `ops:health` stops reporting the job as current. A job that never ran reports failing, because the absence of evidence is the operational problem.
+Cadence means how often the external scheduler should call the job. Each job has two recency thresholds:
 
-| Job | Invocation | Documented cadence | Stale threshold (default) |
-|---|---|---|---|
-| Governance scheduler | `npm run governance:scheduler -- --apply` from cron or a Coolify job | Every 15 minutes is safe; hourly is the practical minimum for deadline accuracy | 26 hours (`GOVERNANCE_SCHEDULER_STALE_HOURS`) |
-| Ballot digest | `POST /api/email/digest` with `Authorization: Bearer $ENGAGE_CRON_SECRET` | Every 15 minutes while `ENGAGE_DIGEST_ENABLED=true` | 24 hours (`DIGEST_STALE_HOURS`) |
-| Membership verification | `POST /api/cron/membership-verification` with `Authorization: Bearer $ENGAGE_CRM_VERIFICATION_CRON_SECRET` | Every 15 minutes while CRM verification is enabled | 24 hours (`MEMBERSHIP_VERIFICATION_STALE_HOURS`) |
+- **Warn** — the job has missed several expected ticks. `ops:health` reports `degraded` and exits `2`.
+- **Fail** — the job's guarantee has definitely not been met. `ops:health` reports `failing` and exits `1`.
 
-Stale thresholds are deliberately looser than cadence: one missed tick is not an incident, a day without a run is.
+A job that has never run reports `failing`, because the absence of evidence is the operational problem.
+
+| Job | Invocation | Documented cadence | Warn (default) | Fail (default) |
+|---|---|---|---|---|
+| Governance scheduler | `npm run governance:scheduler -- --apply` from cron or a Coolify job | Every 15 minutes is safe; hourly is the practical minimum for deadline accuracy | 2 hours (`GOVERNANCE_SCHEDULER_WARN_HOURS`) | 26 hours (`GOVERNANCE_SCHEDULER_STALE_HOURS`) |
+| Ballot digest | `POST /api/email/digest` with `Authorization: Bearer $ENGAGE_CRON_SECRET` | Every 15 minutes while `ENGAGE_DIGEST_ENABLED=true` | 1 hour (`DIGEST_WARN_HOURS`) | 24 hours (`DIGEST_STALE_HOURS`) |
+| Membership verification | `POST /api/cron/membership-verification` with `Authorization: Bearer $ENGAGE_CRM_VERIFICATION_CRON_SECRET` | Every 15 minutes while CRM verification is enabled | 2 hours (`MEMBERSHIP_VERIFICATION_WARN_HOURS`) | 24 hours (`MEMBERSHIP_VERIFICATION_STALE_HOURS`) |
+
+Warn is a small multiple of cadence — roughly 4–8 expected ticks, or two hourly scheduler ticks — not a single missed tick. A scheduler jitter, a slow run or one failed provider call must not page anyone: those are covered by the run's own `ok` and error evidence. An exhausted warn threshold means ticks are being missed repeatedly, which is worth knowing within an hour or two rather than a day. Fail is the wide outer bound where the job's guarantee is clearly broken and someone must act.
+
+The digest and verification endpoints are documented as running every 15 minutes, so a 24-hour-only alert would hide 96 missed ticks. The two tiers close that blind spot while keeping normal operation quiet.
 
 ### Health command
 
@@ -192,39 +199,46 @@ Overall state is the worst check, ordered `ok < unknown < degraded < failing`.
 
 | Check | What it reads | States |
 |---|---|---|
-| `governance-scheduler` | Newest apply entry in `job_runs` | `ok`; `failing` when there is no run, the run is older than the threshold, or the last run failed; `degraded` when the last run completed with errors |
+| `governance-scheduler` | Newest apply entry in `job_runs` | `ok` inside warn; `degraded` past warn, or when the last run completed with errors; `failing` past fail, when the last run failed, or when there is no run |
 | `ballot-deadlines` | Matters in Decide whose `ballotClosesAt` passed without `ballotClosedAt` | `ok`; `degraded` within the grace window (the next run will close them); `failing` beyond it |
-| `digest` | Newest apply digest entry | `unknown` when digest email is disabled; otherwise `ok`, `failing` for missing/stale/failed, `degraded` when the last run held messages |
-| `membership-verification` | Newest apply entry plus due attempts | `unknown` when the feature is disabled; `ok`; `failing` for missing/stale/failed; `degraded` when attempts are due |
+| `digest` | Newest apply digest entry | `unknown` when digest email is disabled; otherwise `ok` inside warn; `degraded` past warn or when the last run held messages; `failing` past fail, when the last run failed, or when there is no run |
+| `membership-verification` | Newest apply entry plus due attempts | `unknown` when the feature is disabled; otherwise `ok` inside warn; `degraded` past warn or when attempts are due; `failing` past fail, when the last run failed, or when there is no run |
 | `email-delivery` | Recent `engagement_email_outbox` rows with status `failed` or `held` | `ok` or `degraded` |
 | `turnstile` | Existing Turnstile configuration helper | `ok` enforced, `ok` outside production when not enforced, `degraded` when disabled in production, `failing` when misconfigured in production |
 
-Thresholds are named in the report and in every check that used one. Change them with environment variables; the report records whether a value is the default or came from the environment.
+Thresholds are named in the report and in every check that applied one. Change them with environment variables; the report records each value, its variable name and whether it is the default or came from the environment. Every job check has both a warn and a fail threshold. If a configured warn value is not below the fail value, that check reports `unknown` with the conflicting values rather than quietly picking one.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `GOVERNANCE_SCHEDULER_STALE_HOURS` | 26 | Alert when the last apply run is older |
-| `DIGEST_STALE_HOURS` | 24 | Alert when the last digest apply run is older |
-| `MEMBERSHIP_VERIFICATION_STALE_HOURS` | 24 | Alert when the last verification apply run is older |
+| `GOVERNANCE_SCHEDULER_WARN_HOURS` | 2 | Degraded when the last apply run is older |
+| `GOVERNANCE_SCHEDULER_STALE_HOURS` | 26 | Failing when the last apply run is older |
+| `DIGEST_WARN_HOURS` | 1 | Degraded when the last digest apply run is older |
+| `DIGEST_STALE_HOURS` | 24 | Failing when the last digest apply run is older |
+| `MEMBERSHIP_VERIFICATION_WARN_HOURS` | 2 | Degraded when the last verification apply run is older |
+| `MEMBERSHIP_VERIFICATION_STALE_HOURS` | 24 | Failing when the last verification apply run is older |
 | `BALLOT_CLOSURE_GRACE_HOURS` | 2 | Grace before an unclosed deadline is failing rather than degraded |
 | `EMAIL_DELIVERY_WINDOW_HOURS` | 24 | Window counted for failed or held email |
 
 ### What each state means
 
+- **Governance scheduler degraded.** Runs are being missed past the warn threshold, or the last run left blockers or errors. Nothing advances or closes until a run succeeds.
 - **Governance scheduler failing.** Nothing advances at the deliberation deadline or records ballot closure. Voting still refuses an expired ballot at vote time, and officers can still act manually. Run the scheduler with `--apply` and read its report.
 - **Ballot deadlines failing.** The scheduler ran (or did not) and a ballot stayed open past its deadline with no closure record. This is evidence about closure, not about a result: no result is recorded by closure.
+- **Digest degraded.** The digest is late past its warn threshold, or the last run held messages. Members may not receive ballot reminders.
 - **Digest failing.** Members receive no ballot reminders. Check the endpoint's bearer secret, `ENGAGE_DIGEST_ENABLED`, and delivery holds.
+- **Membership verification degraded.** The cycle is late past its warn threshold, or attempts are queued. The next successful cycle clears the backlog.
 - **Membership verification failing.** Membership status stops tracking the CRM. Existing statuses are unchanged; no one is suspended by a failed run.
 - **Email delivery degraded.** Failed or held outbox rows need review in email administration. Bounced or complained addresses stay suppressed.
 - **Turnstile degraded or failing.** In production a missing key fails protected actions closed, so magic-link sign-in and public submission stop working. Set both Turnstile keys.
-- **Unknown.** The feature is not enabled in this deployment, or a check could not read its evidence. It is not proof of health.
+- **Unknown.** The feature is not enabled in this deployment, a warn/fail threshold pair is invalid, or a check could not read its evidence. It is not proof of health.
 
 ### Escalation
 
 **Owner:** maintainer (currently Ethan Cornwill, `@finneh4249`). This is a placeholder until the party nominates an operations rota.
 
 - Exit `1` or a `503` from `/api/health`: acknowledge immediately, follow the runbook action on the failing check, escalate to the maintainer if it is not resolved within one hour.
-- Exit `2`: review on the next working day unless it names governance scheduling or email delivery.
+- Exit `2` naming a scheduled job, email delivery or ballot deadlines: investigate the same day, because a warn state becomes failing if the job keeps missing.
+- Exit `2` otherwise: review on the next working day.
 - No paging integration exists. Alerting is the operator's external monitor invoking `ops:health`; do not claim alerts are delivered.
 
 ### Runbook actions
