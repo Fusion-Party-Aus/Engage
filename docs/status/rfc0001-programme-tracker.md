@@ -21,7 +21,7 @@ Status values:
 |---|---|---|
 | Integration | Combine Sprint 1 branches, reconcile with decisions, verify | **Integrated** — see [integration report](sprint1-integration-report.md) |
 | 1 | Integrity, deadlines, automatic advancement, outcome correctness | **Done** — deadlines, seconding, advancement, closure and computed outcome validation merged to `main`; replica-set governance coverage added |
-| 2 | Command layer, route policy, read models, jobs, Turnstile, notifications | **In progress** — rendering-performance and Turnstile slices integrated; command layer (#53), read models (#54) and notifications (#33) pending |
+| 2 | Command layer, route policy, read models, jobs, Turnstile, notifications | **In progress** — rendering-performance and Turnstile slices integrated; ballot command layer and route policy extracted (#53, partial); read models (#54) and notifications (#33) pending |
 | 3 | Decision records, following, admin queues, role UX, Horizon consistency | Planned |
 | 4 | Durable jobs, identity/CRM ports, observability, audit viewer, encryption hardening | Planned |
 | 5 | Automatic ratification, collision resolution, amend/repeal, public APIs, elections | Partly blocked on O1–O8 |
@@ -35,7 +35,7 @@ Status values:
 | Turnstile and abuse protection | `feat/rfc0001-sprint1-integration` | #38 (part) | **Integrated** — server verification, protected unauthenticated actions, durable rate limiting. Headers/CSRF remain. |
 | Ballot-results migration safety | `fix/ballot-results-index-migration` | #55 | **Done** — read-only preflight, backup, verified apply, loud failure, recovery report, replica-set tests. See [procedure](../ballot-results-index-migration.md). |
 | Computed ballot outcome validation | `main` (`762f76c`, PR #86) | #28 | **Done for the decided part** — Yes-versus-No comparison (D9), no quorum or turnout (D8), abstentions excluded without a denominator (D10/O1), versioned rule basis, stored tally, closed-ballot requirement, bound-set refusal, audited override and legal-text update. Replica-set tests. Abstention denominator, ranked choice and a computed check for amendment endorsement ballots remain open. |
-| Governance command layer | — | #53 | Planned — next Phase 2 slice |
+| Governance command layer | `feat/governance-command-ballots` | #53 (part) | **Partial** — typed ballot commands (`ballot.bind`, `ballot.record_result`) and central route policy extracted; routes are thin and the domain functions are unchanged. Proposals, amendments and membership remain |
 | Decision record and responsibility queue | — | #54 | Planned — depends on #53 |
 
 Sprint 1 and the slices above were merged to `main` as `3b36947` (PR #51) on 14 November 2026. The [handover brief](orchestrator-handover.md) predates that merge; Phase 2 work now branches from `main`.
@@ -61,7 +61,7 @@ Sprint 1 and the slices above were merged to `main` as `3b36947` (PR #51) on 14 
 
 | ID | Recommendation | Issue | State | Notes |
 |---|---|---|---|---|
-| S1 | Governance command layer and central route policy | #53 | **Planned** | Issue opened. Coordinate read queries with #52. |
+| S1 | Governance command layer and central route policy | #53 | **Partial** | Ballot lifecycle extracted: typed `ballot.bind` and `ballot.record_result` commands, central `GOVERNANCE_ROUTE_POLICY` table and drift tests. Proposals, amendments and membership remain route-local. |
 | S2 | Decision record and lineage read model | #54 | **Planned** | Depends on I12/S1. |
 | S3 | Ballot lifecycle: open, close, certify | #26 | **Partial** | Open, revision binding and scheduled close exist; certification remains an explicit officer act. Automated certification/ratification is Phase 5. |
 | S4 | Read models and tally projections | — | **Planned** | Depends on I12/S1. |
