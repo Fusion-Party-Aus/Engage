@@ -3,8 +3,10 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import {
   BALLOT_OUTCOME_RULE_BASIS,
+  ballotOutcomeLabel,
   computeBallotOutcome,
   loadBallotTallyCryptoConfig,
+  resolveBallotClosure,
   sumVoteTally,
 } from "./ballots.ts";
 import { generateBallotKeyHex } from "./ballot-crypto.ts";
@@ -197,4 +199,69 @@ test("display key loading degrades to null instead of throwing", () => {
   });
   assert.ok(config);
   assert.equal(config?.mode, "encrypt");
+});
+
+test("outcome labels are title case for every recorded and computed value", () => {
+  assert.equal(ballotOutcomeLabel("successful"), "Successful");
+  assert.equal(ballotOutcomeLabel("unsuccessful"), "Unsuccessful");
+  assert.equal(ballotOutcomeLabel("inconclusive"), "Inconclusive");
+  assert.equal(ballotOutcomeLabel(undefined), "Not recorded");
+});
+
+test("closure state follows the ballot row before the matter", () => {
+  const now = new Date("2026-11-15T00:00:00Z");
+  const future = new Date("2026-11-20T00:00:00Z");
+  const past = new Date("2026-11-10T00:00:00Z");
+
+  // A live ballot on a closed matter is not certifiable.
+  assert.deepEqual(
+    resolveBallotClosure({
+      ballot: { status: "open", closesAt: future },
+      matter: { ballotClosedAt: now },
+      now,
+    }),
+    { closed: false, closesAt: future, basis: "ballot" },
+  );
+
+  // A closed status wins even without a close time.
+  assert.deepEqual(
+    resolveBallotClosure({
+      ballot: { status: "closed" },
+      matter: { ballotClosesAt: future },
+      now,
+    }),
+    { closed: true, basis: "ballot" },
+  );
+
+  // A ballot close time that has passed is closed.
+  assert.deepEqual(
+    resolveBallotClosure({
+      ballot: { status: "open", closesAt: past },
+      matter: null,
+      now,
+    }),
+    { closed: true, closesAt: past, basis: "ballot" },
+  );
+
+  // Legacy ballots fall back to the matter.
+  assert.deepEqual(
+    resolveBallotClosure({
+      ballot: null,
+      matter: { ballotClosedAt: past },
+      now,
+    }),
+    { closed: true, basis: "matter" },
+  );
+  assert.deepEqual(
+    resolveBallotClosure({
+      ballot: { status: "open" },
+      matter: { ballotClosesAt: future },
+      now,
+    }),
+    { closed: false, closesAt: future, basis: "matter" },
+  );
+  assert.deepEqual(resolveBallotClosure({ now }), {
+    closed: false,
+    basis: "none",
+  });
 });

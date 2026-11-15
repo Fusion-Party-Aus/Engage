@@ -6,13 +6,14 @@ import {
   BALLOT_OUTCOME_RULE_BASIS,
   BallotDomainError,
   FORMAL_DECISIONS_COLLECTION,
+  proposalBallotResultFilter,
   readBoundBallotTallies,
   recordFormalDecision,
   upsertMatterBallot,
 } from "./ballots.ts";
 import { GOVERNANCE_EVENTS_COLLECTION } from "./governance-relationships.ts";
 import { closeDatabase, getDatabase } from "./db.ts";
-import { castVote } from "./store.ts";
+import { castVote, getProposalDetail, listProposals } from "./store.ts";
 import type { PlatformEnv, SessionUser, VoteChoice } from "./types.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 import { POST as recordResultRoute } from "../pages/api/admin/ballots/result.ts";
@@ -850,6 +851,17 @@ describe(
         recordedBy: "admin-1",
       });
       assert.equal(second.result, "unsuccessful");
+
+      // Results are keyed by ballot, so the primary lookup is not shadowed by
+      // the sibling result.
+      const primaryResult = await db
+        .collection(FORMAL_DECISIONS_COLLECTION)
+        .findOne(proposalBallotResultFilter(proposalId));
+      assert.equal(primaryResult?.decisionEventId, "BALLOT-PRIMARY");
+      const secondResult = await db
+        .collection(FORMAL_DECISIONS_COLLECTION)
+        .findOne({ ballotId: secondBallotId });
+      assert.equal(secondResult?.decisionEventId, "BALLOT-SECOND");
     });
 
     it("refuses an over-length override reason instead of truncating the audit record", async () => {
@@ -918,6 +930,74 @@ describe(
           .collection(GOVERNANCE_EVENTS_COLLECTION)
           .countDocuments({ matterId: proposalId, eventType: "decision.recorded" }),
         1,
+      );
+    });
+
+    it("refuses an unnecessary override reason instead of silently dropping it", async () => {
+      const proposalId = "PROP-UNEXPECTED-REASON";
+      await seedBallot(db, proposalId);
+      await castChoices(db, proposalId, ["approve", "approve", "reject"]);
+      await closeBallot(db, proposalId);
+
+      const withReason = {
+        matterId: proposalId,
+        revisionId: "rev-1",
+        result: "successful" as const,
+        decisionEventId: "BALLOT-UNEXPECTED-REASON",
+        recordedBy: "admin-1",
+        overrideReason: "A reason the result does not need.",
+      };
+      const refused = (error: unknown) =>
+        error instanceof BallotDomainError &&
+        error.code === "RESULT_OVERRIDE_REASON_UNEXPECTED" &&
+        error.status === 400;
+      await assert.rejects(recordFormalDecision(db, withReason), refused);
+      // The exact retry behaves the same way; nothing was written.
+      await assert.rejects(recordFormalDecision(db, withReason), refused);
+      assert.equal(
+        await db
+          .collection(FORMAL_DECISIONS_COLLECTION)
+          .countDocuments({ proposalId }),
+        0,
+      );
+
+      const { overrideReason: _unused, ...withoutReason } = withReason;
+      const recorded = await recordFormalDecision(db, withoutReason);
+      assert.equal(recorded.result, "successful");
+      assert.equal(recorded.override, undefined);
+      assert.deepEqual(await recordFormalDecision(db, withoutReason), recorded);
+    });
+
+    it("renders a display tally with unreadable votes instead of throwing", async () => {
+      const proposalId = "PROP-UNREADABLE-DISPLAY";
+      await seedBallot(db, proposalId);
+      await castChoices(db, proposalId, ["approve"]);
+      await closeBallot(db, proposalId);
+      await db.collection(PROPOSAL_VOTES).insertOne({
+        ballotId: proposalBallotId(proposalId),
+        proposalId,
+        revisionId: "rev-1",
+        voterBlindIndex: "display-blind-index",
+        voteEnvelope: { v: 1, alg: "aes-256-gcm", kid: "v1", iv: "AAAA", tag: "AAAA", ct: "AAAA" },
+        updatedAt: new Date(),
+      });
+
+      // Strict reads keep failing loudly so no tally is quietly under-reported.
+      await assert.rejects(listProposals(db), /decryption keys/i);
+
+      const proposals = await listProposals(db, { tolerateUnreadableVotes: true });
+      const row = proposals.find((proposal) => proposal.proposalId === proposalId);
+      assert.equal(row?.unreadableVoteCount, 1);
+      assert.equal(row?.votes.total, 1);
+
+      const detail = await getProposalDetail(db, proposalId, memberUser("display-viewer"), {
+        tolerateUnreadableVotes: true,
+      });
+      assert.equal(detail?.unreadableVoteCount, 1);
+      assert.equal(detail?.proposal.unreadableVoteCount, 1);
+      await assert.rejects(
+        getProposalDetail(db, proposalId, memberUser("display-viewer")),
+        /decryption keys/i,
       );
     });
   },
