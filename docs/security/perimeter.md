@@ -1,6 +1,6 @@
 # Perimeter security: headers, CSP and origin checks
 
-**Status:** Implemented on `feat/security-headers-csrf`, pending merge · **Recorded:** 15 November 2026
+**Status:** Implemented; the browser harness runs in CI · **Recorded:** 15 November 2026
 **Issue:** #38 (security headers, CSP and Origin/CSRF coverage) · **Programme:** RFC 0001 I10
 **Related:** [Turnstile and abuse protection](turnstile.md), [API and authorisation](../architecture/api-and-authorisation.md), [Known gap 15](../status/known-gaps.md)
 
@@ -190,6 +190,10 @@ ENGAGE_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs \
   node scripts/security-perimeter-browser.mjs
 ```
 
+`npm run perimeter:browser` runs the same file. Both forms need a fresh
+`npm run build` and a Playwright module supplied outside the application
+(`ENGAGE_PLAYWRIGHT_MODULE`); Playwright is never added as a dependency.
+
 Observed on 15 November 2026: zero CSP violations, console errors or failed
 requests on `/`, a proposal page, `/member/` and `/sense-box/`; the Turnstile
 script and frame requests and the Plausible script and event requests reached
@@ -199,6 +203,41 @@ a browser cross-origin POST returned 403; a JSON cross-origin POST and an
 absent-Origin request with a dev session cookie each returned 403; a server-to-server
 POST returned 200 and a Bearer cron call returned 409 (CRM disabled) rather
 than 403.
+
+### In CI
+
+`.github/workflows/ci.yml` runs this harness in the step
+`Perimeter security browser verification`, after `pnpm build` and after the
+Playwright 1.57.0 install. It reuses the module the member lifecycle step
+installed through the same `ENGAGE_PLAYWRIGHT_MODULE` path; nothing is
+installed twice and Playwright stays out of the application.
+
+The harness is safe to run unattended:
+
+- an overall 180-second deadline (`ENGAGE_PERIMETER_TIMEOUT_MS`) stops the run
+  and fails the step instead of hanging the job;
+- Chromium and the spawned preview server are always stopped, including after a
+  failed assertion, with a `SIGKILL` fallback if `SIGTERM` does not finish;
+- any failed assertion, console error, page error, failed request or CSP
+  violation exits non-zero, including one that appears after a page's own check;
+- Cloudflare and Plausible are intercepted and the database is the in-memory
+  seed, so the run contacts no external service.
+
+On every pull request it therefore proves the header set and document policy on
+four pages, the non-document policy on JSON, that every allowed external host is
+still permitted by the policy, that same-origin fetches and native form posts
+are accepted, and that cross-origin and cookie-without-Origin writes are
+refused.
+
+`src/lib/ci-workflow.test.ts` fails the suite if the step is removed, moved
+before the build or before the Playwright install, installs its own copy, or if
+`perimeter:browser` and the harness file drift apart.
+
+**Remaining gap:** CI runs the production build directly on the runner with the
+in-memory database, not through Cloudflare/Coolify or a real MongoDB. It proves
+the application's own policy and origin rule, not the proxy path (headers on
+static assets, Astro's early 403) or a real Turnstile or Plausible deployment.
+Production responses remain a deployment check.
 
 ## Residual risk and what remains
 
@@ -247,8 +286,10 @@ than 403.
 - **Production headers were not observed** through Cloudflare/Coolify in this
   slice. The build and standalone server were verified; the proxy path remains
   a deployment check.
-- **The browser script is manual.** It is not wired into CI; the unit tests are
-  the regression gate and the browser script is the release evidence.
+- **The browser script runs in CI but is not a production check.** It runs the
+  production build against the in-memory seed, with Cloudflare and Plausible
+  intercepted, so a real provider outage, the proxy path and production data are
+  not covered. The unit tests remain the fast regression gate.
 - **Shiki/Markdown.** Astro warns that Shiki emits inline styles that a hash
   policy cannot allow. Engage has no Markdown pages today; do not add one
   without addressing its styles.

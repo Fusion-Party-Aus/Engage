@@ -13,6 +13,11 @@
 // This script never contacts production: Cloudflare and Plausible requests are
 // intercepted and answered locally. Playwright is supplied through
 // ENGAGE_PLAYWRIGHT_MODULE, as in CI.
+//
+// It is safe to run in CI: an overall deadline fails the step instead of
+// hanging the job, and Chromium and the preview server are always stopped, on
+// success and on every failure. Any assertion, console error, page error,
+// failed request or CSP violation exits non-zero.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
@@ -34,6 +39,31 @@ const origin = `http://localhost:${port}`;
 const foreignOrigin = `http://127.0.0.1:${port}`;
 const cronSecret = "perimeter-browser-cron-secret";
 const turnstileSiteKey = "1x00000000000000000000AA";
+
+// A hung page, browser or server must fail the step rather than occupy the
+// runner. 180 s is several times the observed runtime of a healthy run.
+const timeoutMs = Number(process.env.ENGAGE_PERIMETER_TIMEOUT_MS ?? 180_000);
+if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+  throw new Error("ENGAGE_PERIMETER_TIMEOUT_MS must be a positive number.");
+}
+const cleanupBudgetMs = 10_000;
+
+async function withDeadline(label, ms, work) {
+  let timer;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} did not finish within ${ms} ms`)),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const server = spawn(process.execPath, ["dist/server/entry.mjs"], {
   stdio: ["ignore", "pipe", "pipe"],
@@ -64,7 +94,60 @@ server.stdout.on("data", (chunk) => (serverOutput += chunk));
 server.stderr.on("data", (chunk) => (serverOutput += chunk));
 
 const results = [];
+const openedPages = [];
 let browser;
+let shuttingDown = false;
+let timedOut = false;
+
+const deadline = setTimeout(() => {
+  timedOut = true;
+  // Set immediately so no exit path can report success after the deadline.
+  process.exitCode = 1;
+  console.error(
+    `Perimeter verification exceeded ${timeoutMs} ms; stopping and failing.`,
+  );
+  void cleanup().finally(() => process.exit(1));
+}, timeoutMs);
+
+// Last-resort guard: pages closed by the deadline can reject an in-flight
+// browser call, and that exception can unwind before the async cleanup reaches
+// the server. A synchronous kill on exit always stops the child.
+process.on("exit", () => {
+  if (server.exitCode === null && server.signalCode === null) {
+    server.kill("SIGKILL");
+  }
+});
+
+async function stopServer() {
+  if (server.exitCode !== null || server.signalCode !== null) return;
+  const exited = new Promise((resolve) => server.once("exit", resolve));
+  server.kill("SIGTERM");
+  try {
+    await withDeadline("Preview server shutdown", 5_000, () => exited);
+  } catch {
+    server.kill("SIGKILL");
+    await withDeadline("Preview server kill", 5_000, () => exited).catch(() => {});
+  }
+}
+
+// Idempotent so the deadline and the `finally` cannot fight over the same
+// process handles. Every await is bounded.
+async function cleanup() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  clearTimeout(deadline);
+  // Signal the server before any await, so no exit path leaves it running.
+  if (server.exitCode === null && server.signalCode === null) {
+    server.kill("SIGTERM");
+  }
+  if (browser) {
+    await withDeadline("Chromium shutdown", cleanupBudgetMs, () => browser.close())
+      .catch((error) => console.error(`Chromium did not close cleanly: ${error.message}`));
+  }
+  await stopServer().catch((error) =>
+    console.error(`Preview server did not stop cleanly: ${error.message}`),
+  );
+}
 
 async function waitForServer() {
   for (let attempt = 0; attempt < 120; attempt += 1) {
@@ -204,7 +287,15 @@ try {
       waitUntil: "networkidle",
     });
     assert.ok(response, `${path}: no document response`);
-    return { page, response, consoleErrors, pageErrors, failedRequests };
+    const opened = { page, response, consoleErrors, pageErrors, failedRequests };
+    openedPages.push({
+      label: path,
+      page,
+      consoleErrors,
+      pageErrors,
+      failedRequests,
+    });
+    return opened;
   }
 
   async function violations(page) {
@@ -458,8 +549,23 @@ try {
   assert.notEqual(cron.status, 403, "Bearer cron call was blocked as cross-site");
   results.push({ bearerCronWithoutOrigin: cron.status });
 
+  // A console error, page error, failed request or CSP violation that appeared
+  // after a page's own check still fails the run.
+  for (const record of openedPages) {
+    assert.deepEqual(record.consoleErrors, [], `${record.label}: CSP console errors`);
+    assert.deepEqual(record.pageErrors, [], `${record.label}: page errors`);
+    assert.deepEqual(record.failedRequests, [], `${record.label}: failed requests`);
+    assert.deepEqual(await violations(record.page), [], `${record.label}: CSP violations`);
+  }
+
   console.log(JSON.stringify({ origin, results }, null, 2));
+} catch (error) {
+  // After the deadline the browser is closed under the run, so a browser error
+  // is expected; the deadline already set the failing exit code.
+  if (!timedOut) throw error;
+  console.error(
+    `Perimeter verification stopped after the deadline: ${error instanceof Error ? error.message : String(error)}`,
+  );
 } finally {
-  if (browser) await browser.close();
-  server.kill("SIGTERM");
+  await cleanup();
 }

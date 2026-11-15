@@ -138,8 +138,8 @@ perimeter middleware now sets `X-Content-Type-Options`, `Referrer-Policy`,
 hash-based Content Security Policy. Astro's form-post origin check is kept and
 extended for every state-changing method: cross-site `Sec-Fetch-Site`, a
 mismatched `Origin`, and an absent `Origin` with a session cookie are refused.
-A real-browser check covers the home, proposal, sign-in and Sense Box pages,
-Turnstile, Plausible, same-origin writes and cross-origin rejection. See
+A real-browser check in CI covers the home, proposal, sign-in and Sense Box
+pages, Turnstile, Plausible, same-origin writes and cross-origin rejection. See
 [security/perimeter.md](../security/perimeter.md).
 
 Before this slice, the application had no CSP, HSTS, frame or content-type
@@ -154,7 +154,7 @@ the Node adapter before middleware) and on Astro's own early cross-site 403. The
 reverse proxy should add the same headers. Production headers have not been
 observed through Cloudflare/Coolify.
 
-**Direction:** Keep the unit tests and the browser script as the regression
+**Direction:** Keep the unit tests and the CI browser harness as the regression
 evidence. Add proxy headers for static assets, decide whether to add CSRF tokens
 for same-origin script compromise, and verify the deployed header set.
 

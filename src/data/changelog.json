@@ -1,21 +1,39 @@
 [
   {
-    "hash": "f65f00c",
+    "hash": "a1f614c",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "security",
+    "summary": "Record that the perimeter harness runs in CI",
+    "details": "States what the CI step proves, how it is made safe to run unattended, and the remaining gap: the production build against the in-memory seed, not Cloudflare/Coolify, a real MongoDB or the real providers."
+  },
+  {
+    "hash": "d94bbcf",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ci",
+    "summary": "Run the perimeter browser harness on every pull request",
+    "details": "Runs scripts/security-perimeter-browser.mjs after the build and after the existing Playwright 1.57.0 install, reusing the same ENGAGE_PLAYWRIGHT_MODULE path rather than installing a second copy. Extends src/lib/ci-workflow.test.ts to compare step positions, so it fails if the step disappears, moves before the build or the Playwright install, installs its own Playwright, or if 'perimeter:browser' and the harness file drift apart."
+  },
+  {
+    "hash": "1f60094",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "security",
+    "summary": "Bound the perimeter browser harness and always clean up",
+    "details": "The harness now has a hard 180-second deadline (ENGAGE_PERIMETER_TIMEOUT_MS) that stops the run and fails instead of hanging, signals the preview server before any await, escalates to SIGKILL, bounds Chromium shutdown, and kills the child from a process exit handler as a last resort. A page error, failed request or CSP violation that appears after a page's own check also fails the run. Adds 'perimeter:browser' for local use; a build and ENGAGE_PLAYWRIGHT_MODULE are still required."
+  },
+  {
+    "hash": "78c07c0",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
     "scope": "notifications",
-    "summary": "Wire ballot opened and closing soon through a durable outbox",
-    "details": "Add notification_outbox, written immediately after a committed lifecycle transition and drained by npm run notifications:drain (dry-run by default, --apply to send). Two events are wired: a ballot opened by the lifecycle scheduler (new_ballots) and an open ballot inside the approved seven-day window (closing_deadlines). The audience is the voting electorate. Candidates are confirmed with getProposalEligibility and canViewProposal, the same predicate and visibility gate used when casting a vote, and eligibility is checked again at drain time so a revoked membership is suppressed rather than notified. Rows carry one unique dedupeKey per member, ballot and event; the drain claims with a conditional lease, retries at 1/2/4/8 minutes and stops at five attempts. Terminal rows carry a two-year retention TTL. Enqueue and delivery can never fail, block or alter a governance transition, and the scheduler report is unchanged. governance_outcomes and contribution_responses stay unwired: the result route is being refactored and the comment-outcome event needs a product decision."
-  },
-  {
-    "hash": "681c18e",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "notifications",
-    "summary": "Write the delivery dedupe key the unique index requires",
-    "details": "The notification_deliveries unique index is on dedupeKey, but in-app and push delivery documents only set a composite _id. Every insert after the first therefore collided on a missing dedupeKey and was swallowed as a duplicate, so production could create at most one inbox item in total. Write the composite value to dedupeKey (and a push equivalent), keeping the existing _id dedupe contract and index shape unchanged."
+    "summary": "Durable outbox for ballot opened and closing soon (#33) (#102)",
+    "details": "* fix(notifications): write the delivery dedupe key the unique index requires The notification_deliveries unique index is on dedupeKey, but in-app and push delivery documents only set a composite _id. Every insert after the first therefore collided on a missing dedupeKey and was swallowed as a duplicate, so production could create at most one inbox item in total. Write the composite value to dedupeKey (and a push equivalent), keeping the existing _id dedupe contract and index shape unchanged. * feat(notifications): wire ballot opened and closing soon through a durable outbox Add notification_outbox, written immediately after a committed lifecycle transition and drained by npm run notifications:drain (dry-run by default, --apply to send). Two events are wired: a ballot opened by the lifecycle scheduler (new_ballots) and an open ballot inside the approved seven-day window (closing_deadlines). The audience is the voting electorate. Candidates are confirmed with getProposalEligibility and canViewProposal, the same predicate and visibility gate used when casting a vote, and eligibility is checked again at drain time so a revoked membership is suppressed rather than notified. Rows carry one unique dedupeKey per member, ballot and event; the drain claims with a conditional lease, retries at 1/2/4/8 minutes and stops at five attempts. Terminal rows carry a two-year retention TTL. Enqueue and delivery can never fail, block or alter a governance transition, and the scheduler report is unchanged. governance_outcomes and contribution_responses stay unwired: the result route is being refactored and the comment-outcome event needs a product decision. * chore(changelog): refresh snapshot for the notification outbox"
   },
   {
     "hash": "0aea7b5",
@@ -650,21 +668,5 @@
     "category": "feature",
     "scope": "ui",
     "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
   }
 ]
