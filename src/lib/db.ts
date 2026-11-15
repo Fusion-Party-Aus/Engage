@@ -213,6 +213,13 @@ export async function initializeDatabase(db: Db): Promise<void> {
     db.collection("member_notifications").createIndex({memberId:1,createdAt:-1}),
     db.collection("member_notifications").createIndex({notificationId:1},{unique:true}),
     db.collection("notification_deliveries").createIndex({dedupeKey:1},{unique:true}),
+    // Durable notification outbox (#33). `retainUntil` is a TTL that only
+    // terminal rows carry, so unresolved work is never swept away.
+    db.collection("notification_outbox").createIndex({dedupeKey:1},{unique:true,name:"outbox_dedupe_unique"}),
+    db.collection("notification_outbox").createIndex({status:1,nextAttemptAt:1},{name:"outbox_due"}),
+    db.collection("notification_outbox").createIndex({matterId:1,event:1},{name:"outbox_matter_event"}),
+    db.collection("notification_outbox").createIndex({memberId:1,createdAt:-1},{name:"outbox_member_created"}),
+    db.collection("notification_outbox").createIndex({retainUntil:1},{expireAfterSeconds:0,name:"outbox_retention"}),
     db.collection("crm_identity_links").createIndex({memberId:1,application:1},{unique:true}),
     db.collection("crm_identity_links").createIndex({crmPersonId:1}),
     db.collection("crm_identity_links").createIndex({application:1,status:1,nextCheckAt:1}),

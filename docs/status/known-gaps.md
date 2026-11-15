@@ -72,13 +72,17 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 **Direction:** Apply the same source guard to self-service and add a test.
 
-### 7. Notification fan-out is built but unwired
+### 7. Notification fan-out is partly wired
 
-**Impact:** Opening a ballot or recording an outcome does not create in-app notifications or push messages, despite the notification model and preferences implying it might. Only membership verification and digest email send today.
+**Impact:** Opening a ballot did not create in-app notifications or push messages, despite the notification model and preferences implying it might. Only membership verification and digest email sent.
 
-**Evidence:** `dispatchMemberNotification` in `src/lib/notifications.ts` has no production caller.
+**Addressed on `feat/notification-outbox` (#33):** a durable `notification_outbox` (unique dedupe key, claim lease, bounded retry with backoff, retention TTL) is written after a committed governance transition and drained by `npm run notifications:drain` (dry-run by default, `--apply`). Two events are wired: a ballot opened by the lifecycle scheduler (`new_ballots`) and an open ballot inside the approved seven-day window (`closing_deadlines`). The audience is the voting electorate: candidates are confirmed with `getProposalEligibility` and `canViewProposal`, and eligibility is re-checked at drain, so a revoked membership is suppressed rather than notified. In-app is the baseline channel; Web Push remains strictly opt-in; the general-communications switch and email suppression do not hide a formal ballot notice.
 
-**Direction:** Wire chosen governance events with dedupe, preferences and a delivery record. Decide which events are essential versus engagement.
+**Still open:** `governance_outcomes` is not wired because the result route is being refactored elsewhere, and `contribution_responses` needs a product decision. Email fan-out from the outbox is deferred (the digest already emails outstanding ballots). No production scheduler is configured, so no notification is delivered there yet (item 21).
+
+**Evidence:** `src/lib/notification-outbox.ts`, `scripts/drain-notification-outbox.ts`, `notification-outbox.test.ts`, `notification-outbox-mongo.test.ts`; [notifications and jobs](../architecture/notifications-and-jobs.md#governance-notification-events).
+
+**Direction:** wire the remaining events when the result route and the comment-outcome decision land. Do not tell members that every governance event produces a notification.
 
 ### 8. Public supersession can link to an unpublished policy
 

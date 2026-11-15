@@ -2,7 +2,9 @@ import type { Db } from "mongodb";
 import { BALLOTS_COLLECTION } from "./ballots.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEventOnce } from "./governance-relationships.ts";
-import { withJobRun } from "./job-runs.ts";
+import { jobErrorMessage, withJobRun } from "./job-runs.ts";
+import { enqueueGovernanceNotifications } from "./notification-outbox.ts";
+import { logOperationalEvent } from "./resilience.ts";
 import {
   LIFECYCLE_SYSTEM_ACTOR,
   amendmentBlocksScheduledAdvancement,
@@ -565,6 +567,30 @@ export async function runGovernanceScheduler(
     async () => {
       const advancement = await advanceDueDeliberations(db, { now, dryRun });
       const closure = await closeDueBallots(db, { now, dryRun });
+      // Notification fan-out runs after the committed transitions. It is
+      // deliberately outside the transaction and outside the report: a
+      // notification problem can never fail, block or alter a governance
+      // transition (#33). Enqueue is idempotent and the next run repairs an
+      // enqueue lost to a crash.
+      if (!dryRun) {
+        try {
+          const enqueued = await enqueueGovernanceNotifications(db, {
+            now,
+            advanced: advancement.advanced,
+          });
+          for (const report of enqueued) {
+            if (report.errors.length === 0) continue;
+            logOperationalEvent("error", "governance_notification_enqueue_failed", {
+              event: report.event,
+              errors: report.errors.map((entry) => jobErrorMessage(entry.message)),
+            });
+          }
+        } catch (error) {
+          logOperationalEvent("error", "governance_notification_enqueue_failed", {
+            message: jobErrorMessage(error),
+          });
+        }
+      }
       const skipped = [...advancement.skipped, ...closure.skipped];
       const errors = [...advancement.errors, ...closure.errors];
       return {
