@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { ALL_NATIONAL_PERMISSIONS, LEGACY_MODERATOR_PERMISSIONS } from "./rbac.ts";
@@ -7,7 +14,10 @@ import {
   GOVERNANCE_ROUTE_POLICY,
   GOVERNED_ROUTE_DIRECTORIES,
   authoriseGovernanceCommand,
+  discoverGovernedRoutes,
   governanceRouteDeclaration,
+  undeclaredGovernanceRoutes,
+  type GovernanceRouteDeclaration,
 } from "./route-policy.ts";
 import { GOVERNANCE_COMMANDS } from "./governance-commands.ts";
 import type { SessionUser } from "./types.ts";
@@ -15,25 +25,32 @@ import { POST as bindRoute } from "../pages/api/admin/ballots/bind.ts";
 import { POST as recordResultRoute } from "../pages/api/admin/ballots/result.ts";
 
 const projectRoot = fileURLToPath(new URL("../../", import.meta.url));
+const apiRoot = `${projectRoot}/src/pages/api`;
+const governedRoots = GOVERNED_ROUTE_DIRECTORIES.map(
+  (directory) => `${projectRoot}/${directory}`,
+);
+const discovered = discoverGovernedRoutes(apiRoot, governedRoots);
 
-const ROUTE_HANDLER_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+interface RouteFixture {
+  apiRoot: string;
+  root: string;
+  cleanup: () => void;
+}
 
-function routeFilesIn(directory: string): Array<{
-  route: string;
-  methods: string[];
-  source: string;
-}> {
-  const files = readdirSync(`${projectRoot}/${directory}`).filter((name) =>
-    name.endsWith(".ts"),
-  );
-  return files.map((name) => {
-    const source = readFileSync(`${projectRoot}/${directory}/${name}`, "utf8");
-    const methods = ROUTE_HANDLER_METHODS.filter((method) =>
-      new RegExp(`export const ${method}\\b`).test(source),
-    );
-    const route = `${directory.replace(/^src\/pages/, "")}/${name.replace(/\.ts$/, "")}`;
-    return { route, methods, source };
-  });
+/** Build a temporary `src/pages/api` tree; never touches the repository. */
+function routeFixture(files: Record<string, string>): RouteFixture {
+  const base = mkdtempSync(join(tmpdir(), "engage-governed-routes-"));
+  const fixtureApiRoot = join(base, "api");
+  for (const [relativePath, source] of Object.entries(files)) {
+    const file = join(fixtureApiRoot, relativePath);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, source);
+  }
+  return {
+    apiRoot: fixtureApiRoot,
+    root: join(fixtureApiRoot, "admin", "ballots"),
+    cleanup: () => rmSync(base, { recursive: true, force: true }),
+  };
 }
 
 const baseUser: SessionUser = {
@@ -111,47 +128,45 @@ const otherScope = (branchId: string) => ({
 });
 
 describe("governance route policy declarations", () => {
-  it("declares every route in a governed directory", () => {
-    for (const directory of GOVERNED_ROUTE_DIRECTORIES) {
-      const files = routeFilesIn(directory);
-      assert.ok(files.length > 0, `${directory} must contain at least one route`);
-      for (const file of files) {
-        assert.ok(
-          file.methods.length > 0,
-          `${file.route} exports no HTTP handler method`,
-        );
-        for (const method of file.methods) {
-          const key = `${method} ${file.route}`;
-          assert.ok(
-            GOVERNANCE_ROUTE_POLICY.some((entry) => entry.route === key),
-            `governance route '${key}' has no policy declaration`,
-          );
-        }
-      }
+  it("discovers every route under a governed directory and declares it", () => {
+    assert.ok(discovered.length > 0, "the governed directories contain routes");
+    for (const entry of discovered)
+      assert.ok(entry.methods.length > 0, `${entry.file} exports no handler`);
+    assert.deepEqual(
+      undeclaredGovernanceRoutes(discovered),
+      [],
+      "every discovered governance route must be declared",
+    );
+    for (const declaration of GOVERNANCE_ROUTE_POLICY) {
+      assert.ok(
+        discovered.some((entry) => entry.routes.includes(declaration.route)),
+        `${declaration.route} does not correspond to a discovered route file`,
+      );
     }
   });
 
   it("declares each policy against a real route file that runs the command layer", () => {
     for (const declaration of GOVERNANCE_ROUTE_POLICY) {
-      const [method, path] = declaration.route.split(" ");
-      const file = `${projectRoot}/src/pages${path}.ts`;
-      assert.ok(existsSync(file), `${declaration.route} has no route file`);
-      const source = readFileSync(file, "utf8");
+      const [method] = declaration.route.split(" ");
+      const entry = discovered.find((candidate) =>
+        candidate.routes.includes(declaration.route),
+      );
+      assert.ok(entry, `${declaration.route} has no route file`);
       assert.match(
-        source,
+        entry.source,
         new RegExp(`export const ${method}\\b`),
         `${declaration.route} does not export ${method}`,
       );
       assert.ok(
-        source.includes(`"${declaration.route}"`),
+        entry.source.includes(`"${declaration.route}"`),
         `${declaration.route} is not the route key the file uses`,
       );
       assert.ok(
-        source.includes("runGovernanceRoute("),
+        entry.source.includes("runGovernanceRoute("),
         `${declaration.route} does not run the command layer`,
       );
       assert.ok(
-        source.includes("authoriseGovernanceRoute("),
+        entry.source.includes("authoriseGovernanceRouteRole("),
         `${declaration.route} does not authorise through the policy table`,
       );
     }
@@ -172,29 +187,101 @@ describe("governance route policy declarations", () => {
   });
 
   it("keeps permission checks and permission literals out of governed route files", () => {
-    for (const directory of GOVERNED_ROUTE_DIRECTORIES) {
-      for (const file of routeFilesIn(directory)) {
-        assert.ok(
-          !file.source.includes('hasPermission("ballots.'),
-          `${file.route} embeds an inline ballots permission literal`,
-        );
-        assert.ok(
-          !/hasPermission\s*\(/.test(file.source),
-          `${file.route} calls hasPermission directly instead of the policy table`,
-        );
-        assert.ok(
-          !/requireApiPermission\s*\(/.test(file.source),
-          `${file.route} calls requireApiPermission directly instead of the policy table`,
-        );
-        assert.ok(
-          !/["']ballots\.(bind|record_result)["']/.test(file.source),
-          `${file.route} embeds a permission key`,
-        );
-        assert.ok(
-          !/\.isAdmin\b|\.isBranchAdmin\b/.test(file.source),
-          `${file.route} re-implements the role gate instead of the policy table`,
-        );
-      }
+    for (const entry of discovered) {
+      assert.ok(
+        !entry.source.includes('hasPermission("ballots.'),
+        `${entry.file} embeds an inline ballots permission literal`,
+      );
+      assert.ok(
+        !/hasPermission\s*\(/.test(entry.source),
+        `${entry.file} calls hasPermission directly instead of the policy table`,
+      );
+      assert.ok(
+        !/requireApiPermission\s*\(/.test(entry.source),
+        `${entry.file} calls requireApiPermission directly instead of the policy table`,
+      );
+      assert.ok(
+        !/["']ballots\.(bind|record_result)["']/.test(entry.source),
+        `${entry.file} embeds a permission key`,
+      );
+      assert.ok(
+        !/\.isAdmin\b|\.isBranchAdmin\b/.test(entry.source),
+        `${entry.file} re-implements the role gate instead of the policy table`,
+      );
+    }
+  });
+});
+
+describe("governed route discovery", () => {
+  it("finds nested, index and JavaScript routes with every handler export form", () => {
+    const fixture = routeFixture({
+      "admin/ballots/bind.ts":
+        'import type { APIRoute } from "astro";\nexport const POST: APIRoute = async () => new Response();\n',
+      "admin/ballots/[id]/certify.ts":
+        'import { hasPermission } from "../../../../lib/rbac.ts";\nexport async function POST() { hasPermission(null, "ballots.bind"); }\n',
+      "admin/ballots/legacy.js":
+        "export function GET() { return new Response(); }\n",
+      "admin/ballots/reexport.mjs":
+        "const patch = () => new Response();\nexport { patch as PATCH };\n",
+      "admin/ballots/index.ts":
+        "export const GET = () => new Response();\nexport const prerender = false;\n",
+      "admin/ballots/helper.ts":
+        "export const helper = () => 1;\n",
+    });
+    try {
+      const routes = discoverGovernedRoutes(fixture.apiRoot, [fixture.root]);
+      const keys = routes.flatMap((entry) => entry.routes);
+      assert.ok(
+        keys.includes("POST /api/admin/ballots/bind"),
+        "const handler discovered",
+      );
+      assert.ok(
+        keys.includes("POST /api/admin/ballots/[id]/certify"),
+        "nested route discovered",
+      );
+      assert.ok(
+        keys.includes("GET /api/admin/ballots/legacy"),
+        "JavaScript route discovered",
+      );
+      assert.ok(
+        keys.includes("PATCH /api/admin/ballots/reexport"),
+        "export { handler as METHOD } discovered",
+      );
+      assert.ok(
+        keys.includes("GET /api/admin/ballots"),
+        "index route key omits /index",
+      );
+      assert.ok(
+        !keys.some((key) => key.includes("helper")),
+        "a module with no handler export is not a route",
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("fails closed for a nested or JavaScript route with no declaration", () => {
+    const fixture = routeFixture({
+      "admin/ballots/bind.ts": "export const POST = () => new Response();\n",
+      "admin/ballots/[id]/certify.ts":
+        'import { hasPermission } from "rbac";\nexport const POST = () => hasPermission(null, "ballots.bind");\n',
+      "admin/ballots/legacy.js": "export const DELETE = () => new Response();\n",
+    });
+    try {
+      const routes = discoverGovernedRoutes(fixture.apiRoot, [fixture.root]);
+      const declarations: GovernanceRouteDeclaration[] = [
+        {
+          route: "POST /api/admin/ballots/bind",
+          command: "ballot.bind",
+          permission: "ballots.bind",
+        },
+      ];
+      assert.deepEqual(undeclaredGovernanceRoutes(routes, declarations), [
+        "DELETE /api/admin/ballots/legacy",
+        "POST /api/admin/ballots/[id]/certify",
+      ]);
+    } finally {
+      fixture.cleanup();
     }
   });
 });
@@ -342,6 +429,21 @@ describe("governance route authentication gate", () => {
       locals: { runtime: { env: { APP_MODE: "test" } } },
     } as never);
 
+  const callWithRawBody = (
+    handler: typeof bindRoute,
+    path: string,
+    body: string,
+    cookie: string,
+  ) =>
+    handler({
+      request: new Request(`http://localhost${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body,
+      }),
+      locals: { runtime: { env: { APP_MODE: "test" } } },
+    } as never);
+
   it("returns 401 for both ballot routes without a session", async () => {
     let response = await call(bindRoute, "/api/admin/ballots/bind");
     assert.equal(response.status, 401);
@@ -370,5 +472,24 @@ describe("governance route authentication gate", () => {
       "engage_dev_user=member",
     );
     assert.equal(response.status, 403);
+  });
+
+  it("returns 403, not 400, when an unauthorised caller sends a malformed body", async () => {
+    for (const [handler, path] of [
+      [bindRoute, "/api/admin/ballots/bind"],
+      [recordResultRoute, "/api/admin/ballots/result"],
+    ] as const) {
+      const response = await callWithRawBody(
+        handler,
+        path,
+        "{",
+        "engage_dev_user=member",
+      );
+      assert.equal(response.status, 403);
+      assert.equal(
+        ((await response.json()) as { error: string }).error,
+        "Administrator access required.",
+      );
+    }
   });
 });

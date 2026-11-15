@@ -11,6 +11,10 @@ import { GOVERNANCE_EVENTS_COLLECTION } from "./governance-relationships.ts";
 import { ALL_NATIONAL_PERMISSIONS } from "./rbac.ts";
 import { closeDatabase } from "./db.ts";
 import { runGovernanceRoute } from "./route-policy.ts";
+import {
+  GOVERNANCE_COMMANDS,
+  type GovernanceCommandId,
+} from "./governance-commands.ts";
 import type { PlatformEnv, SessionUser } from "./types.ts";
 import { POST as bindRoute } from "../pages/api/admin/ballots/bind.ts";
 import { POST as recordResultRoute } from "../pages/api/admin/ballots/result.ts";
@@ -211,6 +215,52 @@ describe(
       );
     });
 
+    it("bind route keeps the pre-existing 400 for a conflicting ballot revision", async () => {
+      const proposalId = "PROP-BIND-CONFLICT";
+      await seedProposal(db, proposalId);
+      // A ballot row already bound to another revision makes the domain's
+      // upsertMatterBallot throw BallotDomainError(409). The old bind route
+      // caught only BallotBindingError, so this surfaced as the generic 400.
+      await db.collection("ballots").insertOne({
+        ballotId: proposalBallotId(proposalId),
+        matterId: proposalId,
+        revisionId: "rev-already-bound",
+      });
+      const body = {
+        proposalId,
+        revisionId: revisionIdFor(proposalId),
+        decisionEventId: "BIND-CONFLICT-1",
+        reason: "Conflicting ballot revision fixture.",
+      };
+
+      let response = await callRoute(
+        bindRoute,
+        "/api/admin/ballots/bind",
+        body,
+      );
+      assert.equal(response.status, 400, "bind must not be upgraded to 409");
+      assert.equal(
+        ((await response.json()) as { error: string }).error,
+        "Ballot is already bound to a different immutable wording revision.",
+      );
+      assert.equal(
+        await db
+          .collection("ballot_binding_events")
+          .countDocuments({ proposalId }),
+        1,
+      );
+
+      response = await callRoute(bindRoute, "/api/admin/ballots/bind", body);
+      assert.equal(response.status, 200, "an identical retry is idempotent");
+      assert.equal(
+        await db
+          .collection("ballot_binding_events")
+          .countDocuments({ proposalId }),
+        1,
+        "no second binding event is written",
+      );
+    });
+
     it("bind command refuses a branch administrator outside the ballot authority", async () => {
       const proposalId = "PROP-BIND-MISMATCH";
       await seedProposal(db, proposalId, { branchId: "branch-vic" });
@@ -393,6 +443,122 @@ describe(
         (outcome.headers ?? {})["cache-control"],
         "private, no-store",
       );
+    });
+
+    it("result route denies a branch administrator outside the ballot authority without writing", async () => {
+      const proposalId = "PROP-RESULT-SCOPE-DENIED";
+      await seedProposal(db, proposalId, {
+        branchId: "branch-vic",
+        bound: true,
+        closed: true,
+      });
+      await seedVotes(db, proposalId, ["approve"]);
+      // The development member becomes a branch administrator of another branch
+      // so the route passes the coarse role gate and fails the scope gate.
+      await db.collection("branch_memberships").insertOne({
+        memberId: "dev-member-01",
+        branchId: "branch-nsw",
+        branchRole: "administrator",
+        status: "active",
+        assignedBy: "fixture",
+        assignedAt: new Date(),
+      });
+      const response = await callRoute(
+        recordResultRoute,
+        "/api/admin/ballots/result",
+        {
+          proposalId,
+          result: "successful",
+          decisionEventId: "RESULT-SCOPE-DENIED-1",
+        },
+        "engage_dev_user=member",
+      );
+      assert.equal(response.status, 403);
+      assert.match(
+        String(((await response.json()) as { error: string }).error),
+        /not authorised to record an outcome/,
+      );
+      assert.equal(
+        await db
+          .collection(FORMAL_DECISIONS_COLLECTION)
+          .countDocuments({ proposalId }),
+        0,
+      );
+      assert.equal(
+        (await db.collection("ballots").findOne({
+          ballotId: proposalBallotId(proposalId),
+        }))?.status,
+        "closed",
+        "the denied request must not certify the ballot",
+      );
+      assert.equal(
+        await db
+          .collection(GOVERNANCE_EVENTS_COLLECTION)
+          .countDocuments({
+            matterId: proposalId,
+            eventType: "decision.recorded",
+          }),
+        0,
+      );
+    });
+
+    it("writes every audit event each command declares", async () => {
+      const bindProposalId = "PROP-EVENTS-BIND";
+      await seedProposal(db, bindProposalId);
+      let response = await callRoute(
+        bindRoute,
+        "/api/admin/ballots/bind",
+        {
+          proposalId: bindProposalId,
+          revisionId: revisionIdFor(bindProposalId),
+          decisionEventId: "EVENTS-BIND-1",
+          reason: "Audit event declaration fixture.",
+        },
+      );
+      assert.equal(response.status, 201);
+
+      const resultProposalId = "PROP-EVENTS-RESULT";
+      await seedProposal(db, resultProposalId, {
+        bound: true,
+        closed: true,
+      });
+      await seedVotes(db, resultProposalId, ["approve"]);
+      response = await callRoute(
+        recordResultRoute,
+        "/api/admin/ballots/result",
+        {
+          proposalId: resultProposalId,
+          result: "successful",
+          decisionEventId: "EVENTS-RESULT-1",
+        },
+      );
+      assert.equal(response.status, 201);
+
+      const writtenEvents = async (matterId: string) =>
+        new Set(
+          (
+            await db
+              .collection(GOVERNANCE_EVENTS_COLLECTION)
+              .find({ matterId })
+              .toArray()
+          ).map((event) => String(event.eventType)),
+        );
+      const fixtures: Record<GovernanceCommandId, string> = {
+        "ballot.bind": bindProposalId,
+        "ballot.record_result": resultProposalId,
+      };
+      for (const [commandId, matterId] of Object.entries(fixtures) as Array<
+        [GovernanceCommandId, string]
+      >) {
+        const declared = GOVERNANCE_COMMANDS[commandId].events;
+        assert.ok(declared.length > 0, `${commandId} must declare its events`);
+        const written = await writtenEvents(matterId);
+        for (const eventType of declared)
+          assert.ok(
+            written.has(eventType),
+            `${commandId} declares '${eventType}' but wrote ${[...written].join(", ")}`,
+          );
+      }
     });
 
     it("denies an ordinary moderator before any database work", async () => {
