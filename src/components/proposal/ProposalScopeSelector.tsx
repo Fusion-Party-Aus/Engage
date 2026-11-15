@@ -61,19 +61,19 @@ export default function ProposalScopeSelector({
 
   return (
     <FieldSet className="gap-2" data-proposal-scope-selector>
-      <FieldLegend className="mb-0">Proposal scope</FieldLegend>
+      <FieldLegend className="mb-0">Who should consider this idea?</FieldLegend>
       <input type="hidden" name="scope" value={scope} />
 
       <Select value={scope} onValueChange={setScope}>
         <SelectTrigger
-          aria-label="Proposal scope"
+          aria-label="Who should consider this idea?"
           aria-describedby="proposal-scope-hint"
         >
-          <SelectValue placeholder="Choose a proposal scope">{selectedLabel}</SelectValue>
+          <SelectValue placeholder="Choose National or a branch">{selectedLabel}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            <SelectLabel>National and states/territories</SelectLabel>
+            <SelectLabel>National, states and territories</SelectLabel>
             {geographic.map((option) => (
               <SelectItem
                 key={option.key}
@@ -117,7 +117,7 @@ export default function ProposalScopeSelector({
 
       <FieldDescription id="proposal-scope-hint">
         {hint ??
-          'National proposals are open to every member. You can also submit to any state, territory, or local branch. Submitting does not grant voting rights in that branch.'}
+          'Choose National or the branch you want to consider this idea. You can submit to any recognised branch, but voting in its ballots requires membership of that branch.'}
       </FieldDescription>
       {selected?.branchName && selected.branchName !== selected.label ? (
         <FieldDescription className="text-xs">

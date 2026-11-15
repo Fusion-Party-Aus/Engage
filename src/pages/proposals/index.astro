@@ -248,7 +248,7 @@ const hasActiveFilters =
       <!-- Workflow Tabs & Personal Relevance Shortcuts -->
       <div class="workflow-bar">
         <div class="workflow-tabs-row">
-          <nav class="workflow-tabs" aria-label="Filter proposals by workflow stage">
+          <nav class="workflow-tabs" aria-label="Filter proposals by stage">
             {stageTabs.map((tab) => {
               const isCurrent = initialStage === tab.id;
               return (
@@ -275,8 +275,8 @@ const hasActiveFilters =
         <fieldset class="participation-filters">
           <legend>For me</legend>
           <input type="hidden" name="focus" value={initialFocus === 'recent' ? 'recent' : 'all'} />
-          {user?.canParticipate && initialStage === 'decide' && <label><Checkbox id="needs-my-vote" name="needsVote" value="1" defaultChecked={initialFocus === 'needs-vote'} data-auto-submit /> Needs my vote <span class="tabular">{myOutstandingVotes.length}</span></label>}
-          {user?.canParticipate && initialStage !== 'decide' && <a class="personal-vote-link" href={buildFilterUrl({ stage: 'decide', focus: 'needs-vote', needsVote: null, page: '1' })}>Needs my vote <span class="tabular">{myOutstandingVotes.length}</span></a>}
+          {user?.canParticipate && initialStage === 'decide' && <label><Checkbox id="needs-my-vote" name="needsVote" value="1" defaultChecked={initialFocus === 'needs-vote'} data-auto-submit /> I haven’t voted yet <span class="tabular">{myOutstandingVotes.length}</span></label>}
+          {user?.canParticipate && initialStage !== 'decide' && <a class="personal-vote-link" href={buildFilterUrl({ stage: 'decide', focus: 'needs-vote', needsVote: null, page: '1' })}>I haven’t voted yet <span class="tabular">{myOutstandingVotes.length}</span></a>}
           {user && <label><Checkbox id="joined-discussions" name="joined" value="1" defaultChecked={joinedOnly} data-auto-submit /> Discussions I’ve joined</label>}
         </fieldset>
         <div class="search-row">
@@ -302,14 +302,14 @@ const hasActiveFilters =
           <div class="quiet-filters">
 
             <div class="quiet-select-wrap">
-              <label for="proposal-space" class="sr-only">Space</label>
+              <label for="proposal-space" class="sr-only">Topic</label>
               <NativeSelect
                 id="proposal-space"
                 name="space"
                 defaultValue={initialSpace}
                 data-auto-submit
               >
-                <option value="all" selected={!initialSpace || initialSpace === 'all'}>All spaces ({spaces.length})</option>
+                <option value="all" selected={!initialSpace || initialSpace === 'all'}>All topics ({spaces.length})</option>
                 {spaces.map((sp) => (
                   <option value={sp} selected={initialSpace === sp}>{sp}</option>
                 ))}
@@ -352,13 +352,13 @@ const hasActiveFilters =
                 defaultValue={effectiveSort}
                 data-auto-submit
               >
-                <option value="priority" selected={effectiveSort === 'priority'}>Sort: Stage priority</option>
+                <option value="priority" selected={effectiveSort === 'priority'}>Sort: Voting first</option>
                 <option value="recent" selected={effectiveSort === 'recent'}>Sort: Recently updated</option>
-                <option value="divisive" selected={effectiveSort === 'divisive'}>Sort: Most divisive (5+ votes)</option>
-                <option value="approved" selected={effectiveSort === 'approved'}>Sort: Most approved (5+ votes)</option>
+                <option value="divisive" selected={effectiveSort === 'divisive'}>Sort: Most divided (5+ Approve/Reject votes)</option>
+                <option value="approved" selected={effectiveSort === 'approved'}>Sort: Highest approval share (5+ Approve/Reject votes)</option>
                 <option value="active" selected={effectiveSort === 'active'}>Sort: Most active</option>
-                <option value="ballots" selected={effectiveSort === 'ballots'}>Sort: Ballots cast</option>
-                <option value="contributions" selected={effectiveSort === 'contributions'}>Sort: Contributions</option>
+                <option value="ballots" selected={effectiveSort === 'ballots'}>Sort: Most votes</option>
+                <option value="contributions" selected={effectiveSort === 'contributions'}>Sort: Most contributions</option>
               </NativeSelect>
             </div>
 
@@ -372,8 +372,8 @@ const hasActiveFilters =
       <details class="explore-proposals">
         <summary>Explore</summary>
         <div>
-          <a href={buildFilterUrl({ sort: 'divisive', page: '1' })}>Most divisive</a>
-          <a href={buildFilterUrl({ sort: 'approved', page: '1' })}>Most approved</a>
+          <a href={buildFilterUrl({ sort: 'divisive', page: '1' })}>Most divided</a>
+          <a href={buildFilterUrl({ sort: 'approved', page: '1' })}>Highest approval share</a>
           <a href={buildFilterUrl({ sort: 'active', page: '1' })}>Most active</a>
         </div>
       </details>
@@ -400,9 +400,9 @@ const hasActiveFilters =
                 : item.stage === 'decide'
                 ? hasVoted
                   ? 'Review ballot →'
-                  : 'Review & vote →'
+                  : 'Read ballot →'
                 : item.stage === 'deliberate'
-                  ? 'Join discussion →'
+                  ? 'Read discussion →'
                   : item.stage === 'implement'
                     ? 'Implementation status →'
                     : 'Read idea →';
@@ -475,7 +475,7 @@ const hasActiveFilters =
                       <>
                         <span class="participation-dot" aria-hidden="true">·</span>
                         <span class="participation-personal is-needs-vote">
-                          Needs your vote
+                          You haven’t voted yet
                         </span>
                       </>
                     )}

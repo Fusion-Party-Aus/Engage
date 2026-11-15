@@ -70,11 +70,11 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     <header class="compose-header">
       <div class="compose-header__top">
         <h1>{isPolicyChange ? `${policyChangeLabel(changeType)}` : 'Suggest an idea'}</h1>
-        <Badge variant="info">Step 1 takes ~60 sec</Badge>
+        <Badge variant="info">New proposal</Badge>
       </div>
       <p>{isPolicyChange
-        ? 'This proposal will be recorded against the published policy below. The policy does not change unless the proposal is successful, ratified and published.'
-        : 'Start with the core change you want to see. Other members will help refine the wording and commitments during deliberation.'}</p>
+        ? 'This proposal refers to the published policy below. Submitting it leaves that policy unchanged. Adopted amendments and replacements take effect when published; a repeal takes effect at ratification.'
+        : 'Explain what you want Fusion to do and why. Another verified member must second your proposal before it moves into discussion.'}</p>
     </header>
 
     {isPolicyChange && (
@@ -91,7 +91,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     {!user ? (
       <Alert className="callout">
         <AlertDescription>
-          <p>Sign in with your passkey or a 1-click email link to suggest an idea—you’ll be returned right here.</p>
+          <p>Sign in to suggest an idea. You’ll return to this form afterwards.</p>
           <Button href={`/member/?returnTo=${encodeURIComponent(signInReturnTo)}&intent=propose`}>
             {isPolicyChange ? 'Sign in to propose a change' : 'Sign in to suggest an idea'}
           </Button>
@@ -100,7 +100,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     ) : !user.canParticipate ? (
       <Alert className="callout" variant="warning">
         <AlertDescription>
-          <p>Your membership needs to be verified before you can submit an idea.</p>
+          <p>This account cannot submit ideas yet. Check your membership status in My Engage.</p>
           <Button href="/member/" variant="outline">Check your account</Button>
         </AlertDescription>
       </Alert>
@@ -113,19 +113,19 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
               client:load
               options={changeTypeOptions.map((option) => ({ value: option, label: policyChangeLabel(option) }))}
               defaultValue={changeType}
-              hint="The current policy stays in force unless this proposal is successful, ratified and published."
+              hint="Submitting leaves the current policy unchanged. An adopted amendment or replacement takes effect when published; a repeal takes effect at ratification."
             />
           </>
         )}
         <Field label="Title" htmlFor="proposal-title">
-          <Input id="proposal-title" name="title" required minLength={4} maxLength={200} defaultValue={defaultTitle} placeholder="A clear, concise title (e.g. Expand regional rail frequencies)" />
+          <Input id="proposal-title" name="title" required minLength={4} maxLength={200} defaultValue={defaultTitle} placeholder="For example: Run regional trains more often" />
         </Field>
 
         <div class="topic-field-block">
-          <Field label="Topic space" htmlFor="proposal-topic">
+          <Field label="Topic" htmlFor="proposal-topic">
             <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="Choose a topic below or type your own (e.g. Housing, Climate)" />
           </Field>
-          <div class="topic-chips" role="group" aria-label="Quick-select topic space">
+          <div class="topic-chips" role="group" aria-label="Suggested topics">
             {quickTopics.map((topic) => (
               <Button type="button" className="topic-chip" variant="outline" size="sm" data-topic-value={topic}>
                 {topic}
@@ -145,27 +145,27 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
               ...(parentName ? { parentName } : {}),
             }))}
             defaultValue={defaultScopeKey}
-            hint="National proposals are open to every member. You can also submit to any state, territory or local branch. Submitting does not grant voting rights in that branch."
+            hint="Choose National or the branch you want to consider this idea. You can submit to any recognised branch, but voting in its ballots requires membership of that branch."
           />
         )}
 
-        <Field label="What would change? (Summary)" htmlFor="proposal-summary">
+        <Field label="What would change?" htmlFor="proposal-summary">
           <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder={summaryPlaceholder} />
         </Field>
 
         <details class="optional-drawer">
           <summary>
-            <span>Add key commitments, background rationale &amp; images</span>
-            <Badge variant="outline">Optional · Can be added later</Badge>
+            <span>Add commitments, background or images</span>
+            <Badge variant="outline">Optional</Badge>
           </summary>
           <div class="compose-details-grid">
-            <Field label="What should this achieve? (One commitment per line)" htmlFor="proposal-outcomes">
-              <Textarea id="proposal-outcomes" name="outcomes" rows={4} placeholder="1. First key commitment&#10;2. Second key commitment" />
+            <Field label="What should this achieve? (one commitment per line)" htmlFor="proposal-outcomes">
+              <Textarea id="proposal-outcomes" name="outcomes" rows={4} placeholder="More frequent services&#10;Better connections between trains and buses" />
             </Field>
 
             <div class="markdown-field-group">
               <div class="markdown-field-head">
-                <Label htmlFor="proposal-details">Why does it matter? (Rationale &amp; markdown)</Label>
+                <Label htmlFor="proposal-details">Why does it matter?</Label>
                 <div class="markdown-toolbar">
                   <Button type="button" className="toolbar-btn" id="insert-image-btn" variant="outline" size="sm">
                     <ImagePlus aria-hidden="true" />
@@ -181,15 +181,15 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
                 id="proposal-details"
                 name="details"
                 rows={7}
-                placeholder="Provide background evidence, design rationale, or attach an inline image with ![Alt text](https://example.com/image.png)..."
+                placeholder="Explain the problem, share evidence and link to useful references."
               />
               <p class="field-hint">
-                Supports Markdown headings, lists, links, and inline images via <code>![Alt text](https://...)</code> or <code>[!Alt text](https://...)</code>.
+                You can use Markdown for headings and lists. Use Add image or Add link to insert a reference.
               </p>
             </div>
 
             <div class="attachment-fields-row">
-              <Field label="Featured image or reference URL (optional)" htmlFor="proposal-attachment-url">
+              <Field label="Image or reference link (optional)" htmlFor="proposal-attachment-url">
                 <Input
                   id="proposal-attachment-url"
                   name="attachmentUrl"
@@ -200,7 +200,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
                 <Input
                   id="proposal-attachment-desc"
                   name="attachmentDescription"
-                  placeholder="Caption or description of the attached image/document"
+                  placeholder="Describe the image or document"
                 />
               </Field>
             </div>
@@ -208,7 +208,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
         </details>
 
         <div class="form-actions">
-          <Button type="submit" id="submit-btn">Put idea on the record</Button>
+          <Button type="submit" id="submit-btn">Submit proposal</Button>
           <span id="submit-status" class="form-status" role="status" aria-live="polite"></span>
         </div>
       </form>

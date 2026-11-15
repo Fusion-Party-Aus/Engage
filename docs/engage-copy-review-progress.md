@@ -7,7 +7,7 @@ Updated 15 November 2026. Source of truth: pushed branch and this document, not 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review`, based on main `20dfa90`.
 - PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
-- Next task: batch 3a, proposal browse and new-proposal forms. Continue into detail/ballot/amendment copy as separate slices. Do not repeat public introductions or the how-it-works guide.
+- Next task: batch 3b, proposal detail/ballot/amendment copy and discussion components. Public introductions, guide, browsing and creation are reviewed.
 - This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
 
 ## Recovery and scope
@@ -31,7 +31,8 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 1 | Homepage introduction/lifecycle wording; discussion heading and cross-references; sign-in discussion intent | Delivered in `2d25398`; validated and published in PR #98 |
 | 2a | Remaining homepage copy, its metadata and shared proposal highlights | Delivered in `8558e05`; remote tree verified |
 | 2b | How-it-works guide, default metadata, shared layout/navigation/footer | Delivered in `17a0fac`; remote tree verified |
-| 3 | Proposal browse/create/detail, seconding, comments, forms, amendment and ballot interfaces | Not reviewed beyond batch 1 strings |
+| 3a | Proposal browsing and new-proposal forms, scope/change selectors | Validated; publishing checkpoint |
+| 3b | Proposal detail, seconding, comments, amendment and ballot interfaces | Next |
 | 4 | Policy registry, policy detail, provenance and change proposals; branch journeys and Sense Box | Not reviewed |
 | 5 | Onboarding, membership, My Engage, account, branch preferences, notifications | Not reviewed beyond discussion intent |
 | 6 | Emails, push, digests and unsubscribe flows | Not reviewed |
@@ -77,3 +78,9 @@ Rewrote all guide prose and metadata, retained its existing sections, anchors, c
 Accuracy checked against `secondProposal`, proposal/amendment stage gates, lifecycle scheduler, decision register D3–D20/D33–D35, policy-import docs and build/deploy operations. Formal amendments currently require Propose/Deliberate; later-stage amendments remain separate implementation work. Normal timing is described as usual, actual proposal dates take precedence; no hardcoded first-round promise.
 
 Validation: `pnpm check` passes (0 errors/warnings, 20 hints), production build passes, diff whitespace and changed-markup raw-control audit pass. Browser launch was attempted but blocked by the environment’s socket permissions; no rendered/mobile/keyboard result is claimed. No CSS or controls changed. Shared header reviewed and retained. Default metadata in `site-config.ts` changed because it overrides the layout fallback. Existing persisted settings are not migrated.
+
+## Batch 3a handover
+
+Reviewed proposal list/search/filter/empty-state labels, submission form, selectors and inline submission errors. “Proposal scope” becomes “Who should consider this idea?”; optional details ask for background/evidence instead of design rationale. Replaced unverified submission speed claim with “New proposal”. The account warning no longer assumes every blocked account is pending verification. Voting is optional (“I haven’t voted yet”); list actions invite reading before voting. Approval share/split sorting labels reflect Approve/Reject-only minimums in `proposalMetrics`, not adoption. Repeal timing corrected against D35: ratification takes effect without a later publication step; amendments/replacements require publication. No form payload, constraints, links, gates or ranking changed.
+
+Validation: `pnpm check`, `pnpm build` and whitespace audit pass; raw-control matches are existing hidden form inputs only. No rendered/mobile check: Chromium unavailable due socket permissions as recorded above. Existing native image/link prompts are retained; replacing controls is outside this editorial slice. API error text and other journeys remain batch 8.
