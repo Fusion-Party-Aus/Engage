@@ -4,6 +4,10 @@ import { privateJson, toPublicationEventDto } from "../../../../lib/api-contract
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { requireApiPermission } from "../../../../lib/rbac.ts";
 import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
+import {
+  applyRatifiedPolicyChange,
+  isPolicyChangeType,
+} from "../../../../lib/policy-change.ts";
 
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -119,6 +123,29 @@ export const POST: APIRoute = async ({ request, locals }) => {
         },
       },
     );
+    if (Array.isArray(policy.supersedes) && policy.supersedes.length) {
+      const changeType = isPolicyChangeType(policy.changeType)
+        ? policy.changeType
+        : "amend";
+      for (const targetPolicyId of policy.supersedes.map(String)) {
+        await applyRatifiedPolicyChange(db, {
+          proposalId: String(policy.proposalId ?? policyId),
+          revisionId: String(
+            policy.ratification?.ballotRevisionId ?? policy.revisionId,
+          ),
+          ratifiedRevisionId: String(policy.revisionId),
+          changeType,
+          targetPolicyId,
+          targetPolicyRevisionId: String(policy.supersedesRevisionId ?? ""),
+          decisionEventId: String(policy.ratification.decisionEventId),
+          authorityBranchId: String(
+            policy.ratification?.authorityBranchId ?? "",
+          ),
+          actorId: user.memberId,
+          ratifiedAt: durableEvent?.publishedAt ?? new Date(),
+        });
+      }
+    }
     await db
       .collection("publication_events")
       .updateOne(

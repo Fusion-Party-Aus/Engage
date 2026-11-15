@@ -317,6 +317,18 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .createIndex({ policyId: 1 }, { unique: true })
         .catch(() => {}),
       db
+        .collection("policy_revisions")
+        .createIndex({ revisionId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
+        .collection("policy_revisions")
+        .createIndex({ policyId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("policy_import_runs")
+        .createIndex({ runId: 1 }, { unique: true })
+        .catch(() => {}),
+      db
         .collection("publication_events")
         .createIndex({ eventId: 1 }, { unique: true })
         .catch(() => {}),

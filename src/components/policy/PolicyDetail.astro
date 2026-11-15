@@ -1,0 +1,232 @@
+---
+import PortableText from '../PortableText.astro';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import type { PolicyDetailContext } from '../../lib/policy-detail.ts';
+import {
+  humanisePolicyLabel,
+  policyCanonicalPath,
+  policyStatusLabel,
+  policyStatusVariant,
+} from '../../lib/policy-registry.ts';
+import type { SessionUser } from '../../lib/types.ts';
+
+interface Props {
+  context: PolicyDetailContext;
+  user: SessionUser | null;
+  backHref: string;
+  backLabel: string;
+}
+
+const { context, user, backHref, backLabel } = Astro.props;
+const {
+  policy,
+  branch,
+  authority,
+  sourceProposal,
+  sourceResult,
+  changeProposals,
+  previousPolicy,
+  successorPolicy,
+  repealProposal,
+} = context;
+const canonicalPath = policyCanonicalPath(policy);
+const imported = policy.recordOrigin === 'branch-import';
+const isCurrent = policy.publicationStatus === 'published';
+const branchSlug = typeof policy.branchSlug === 'string' ? policy.branchSlug : null;
+const pillar = typeof policy.pillar === 'string' && policy.pillar ? humanisePolicyLabel(policy.pillar) : null;
+const revisions = policy.revisionIds ?? [policy.revisionId].filter(Boolean);
+const changeLabel = (changeType: string) => changeType === 'repeal' ? 'Repeal' : changeType === 'replace' ? 'Replace' : 'Amend';
+const stageLabel = (stage: string) => stage === 'decide' ? 'Open vote' : stage === 'deliberate' ? 'In discussion' : stage === 'implement' ? 'Decided' : stage === 'archived' ? 'Closed' : 'Gathering support';
+const formatDate = (value: unknown) => value ? new Date(String(value)).toLocaleDateString('en-AU', { dateStyle: 'long' }) : null;
+---
+
+<div class="page-wrap section-space policy-detail">
+  <nav class="policy-breadcrumb" aria-label="Breadcrumb">
+    <a href="/policies/">Policy registry</a>
+    {branchSlug && <span aria-hidden="true">/</span>}
+    {branchSlug && <a href={`/policies/${encodeURIComponent(branchSlug)}/`}>{branch?.name ?? 'Branch'}</a>}
+  </nav>
+
+  <header class="policy-detail__header">
+    <div class="policy-detail__status">
+      <Badge variant={policyStatusVariant(String(policy.publicationStatus))}>{policyStatusLabel(String(policy.publicationStatus))}</Badge>
+      {pillar && <span>{pillar}</span>}
+      {policy.category && <span>{policy.category}</span>}
+    </div>
+    <h1>{policy.title}</h1>
+    <p class="policy-summary">{policy.summary}</p>
+    <div class="policy-facts">
+      <span><strong>Adopted by</strong>{authority?.name ?? 'Not recorded'}</span>
+      <span><strong>Applies to</strong>{branch?.name ?? policy.jurisdiction ?? 'Jurisdiction not recorded'}</span>
+      {imported
+        ? <span><strong>In force since</strong>{formatDate(policy.effectiveAt) ?? 'Not recorded'}</span>
+        : <span><strong>Ratified</strong>{formatDate(policy.ratification?.ratifiedAt) ?? 'Not recorded'}</span>}
+    </div>
+
+    {isCurrent ? (
+      <div class="policy-actions">
+        <Button href={`/proposals/new/?targetPolicyId=${encodeURIComponent(policy.policyId)}`}>
+          {user?.canParticipate ? 'Propose a change' : 'Sign in to propose a change'}
+        </Button>
+        <span>Amend, replace or repeal this policy through a member proposal.</span>
+      </div>
+    ) : policy.publicationStatus === 'superseded' && successorPolicy ? (
+      <div class="policy-actions">
+        <Button href={policyCanonicalPath(successorPolicy)}>Read the current policy</Button>
+        <span>Superseded {formatDate(policy.supersededAt) ? `on ${formatDate(policy.supersededAt)}` : ''}.</span>
+      </div>
+    ) : policy.publicationStatus === 'repealed' ? (
+      <div class="policy-actions">
+        <Button href="/policies/">Browse current policy</Button>
+        <span>Repealed {formatDate(policy.repealedAt) ? `on ${formatDate(policy.repealedAt)}` : ''}. It no longer applies.</span>
+      </div>
+    ) : null}
+  </header>
+
+  {imported && (
+    <p class="policy-origin">
+      Adopted by the {authority?.name ?? 'branch'} executive before this record was imported into Engage.
+      {policy.import?.canonicalUrl && <> Source: <a href={policy.import.canonicalUrl} target="_blank" rel="noreferrer noopener">the original published policy ↗</a>.</>}
+    </p>
+  )}
+
+  {policy.commitments?.length > 0 && (
+    <Card>
+      <CardHeader><CardTitle>Key commitments</CardTitle></CardHeader>
+      <CardContent><ul class="policy-list">{policy.commitments.map((item: string) => <li>{item}</li>)}</ul></CardContent>
+    </Card>
+  )}
+
+  {isCurrent ? (
+    <Card className="exact-wording">
+      <CardHeader><CardTitle>{imported ? 'Policy detail' : 'Approved wording'}</CardTitle></CardHeader>
+      <CardContent>
+        <PortableText value={policy.approvedWording} />
+        <p class="revision-ref">
+          {imported ? 'Imported wording revision' : 'Authorised revision'}: <code>{policy.ratification?.ratifiedRevisionId ?? policy.revisionId}</code>
+        </p>
+      </CardContent>
+    </Card>
+  ) : (
+    <p class="policy-retired-note">This historical policy record remains visible to explain its status. It is not presented as current approved wording.</p>
+  )}
+
+  {changeProposals.length > 0 && (
+    <Card>
+      <CardHeader>
+        <CardTitle>Changes to this policy</CardTitle>
+        <p class="policy-card-note">A proposal changes this policy only after a successful ballot and ratification.</p>
+      </CardHeader>
+      <CardContent>
+        <ul class="policy-change-list">
+          {changeProposals.map((proposal: any) => (
+            <li>
+              <div>
+                <a href={`/proposals/${proposal.slug}/`}>{proposal.title}</a>
+                <span>{changeLabel(String(proposal.changeType))} · {stageLabel(String(proposal.stage))}</span>
+              </div>
+              {policy.repealedBy?.proposalId === proposal.proposalId ? (
+                <Badge variant="destructive">Repealed this policy</Badge>
+              ) : policy.supersededBy === proposal.proposalId ? (
+                <Badge variant="success">In force</Badge>
+              ) : proposal.stage === 'implement' ? (
+                <Badge variant="info">Decided, awaiting publication</Badge>
+              ) : (
+                <Badge variant="outline">In progress</Badge>
+              )}
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  )}
+
+  {(previousPolicy || successorPolicy || repealProposal) && (
+    <Card>
+      <CardHeader><CardTitle>Change history</CardTitle></CardHeader>
+      <CardContent>
+        <dl class="policy-lineage">
+          {previousPolicy && (
+            <div>
+              <dt>{policy.changeType === 'replace' ? 'Replaces' : 'Amends'}</dt>
+              <dd><a href={policyCanonicalPath(previousPolicy)}>{previousPolicy.title}</a></dd>
+            </div>
+          )}
+          {successorPolicy && (
+            <div>
+              <dt>Superseded by</dt>
+              <dd><a href={policyCanonicalPath(successorPolicy)}>{successorPolicy.title}</a> · {formatDate(policy.supersededAt)}</dd>
+            </div>
+          )}
+          {repealProposal && (
+            <div>
+              <dt>Repealed by</dt>
+              <dd><a href={`/proposals/${repealProposal.slug}/`}>{repealProposal.title}</a> · {formatDate(policy.repealedAt)}</dd>
+            </div>
+          )}
+        </dl>
+      </CardContent>
+    </Card>
+  )}
+
+  <Card className="policy-governance">
+    <details>
+      <summary>Governance record and provenance</summary>
+      <dl>
+        <dt>Policy identifier</dt><dd><code>{policy.policyId}</code></dd>
+        <dt>How it was adopted</dt><dd>{imported ? `Imported from ${policy.provenance?.label ?? 'the branch policy platform'}; adopted by the branch executive.` : 'Ratified through an Engage member ballot.'}</dd>
+        <dt>Source proposal</dt><dd>{sourceProposal ? <a href={`/proposals/${sourceProposal.slug}/`}>{sourceProposal.title}</a> : 'None. This policy was not produced by an Engage proposal.'}</dd>
+        <dt>Ballot result</dt><dd>{sourceResult ? `${String(sourceResult.result)}${sourceResult.recordedAt ? ` · ${formatDate(sourceResult.recordedAt)}` : ''}` : 'No Engage ballot recorded'}</dd>
+        <dt>Authority</dt><dd>{authority?.name ?? policy.ratification?.authorityBranchId ?? 'Not recorded'}</dd>
+        <dt>Decision event</dt><dd>{policy.ratification?.decisionEventId ?? policy.repealedBy?.decisionEventId ?? 'Not recorded'}</dd>
+        <dt>Ratified</dt><dd>{formatDate(policy.ratification?.ratifiedAt) ?? 'Not ratified through Engage'}</dd>
+        <dt>Effective</dt><dd>{formatDate(policy.effectiveAt) ?? 'Not recorded'}</dd>
+        <dt>Published</dt><dd>{formatDate(policy.publishedAt) ?? 'Not recorded'}</dd>
+        <dt>Provenance</dt><dd>{policy.provenance?.label ?? policy.provenance?.category ?? 'Not recorded'}{policy.provenance?.uncertaintyNote ? ` · ${policy.provenance.uncertaintyNote}` : ''}</dd>
+        {imported && <dt>Import basis</dt><dd>{policy.import?.authorityBasis ?? 'Not recorded'}</dd>}
+        {imported && <dt>Imported</dt><dd>{formatDate(policy.import?.importedAt) ?? 'Not recorded'}</dd>}
+        {imported && <dt>Source record</dt><dd><code>{policy.import?.sourceSlug ?? 'Not recorded'}</code></dd>}
+        <dt>Adopted amendments</dt><dd>{policy.ratification?.adoptedAmendmentIds?.join(', ') || 'None recorded'}</dd>
+        <dt>Published wording revisions</dt><dd>{revisions.map((id: string) => <code>{id}</code>).reduce((acc: any, item: any, index: number) => index ? [...acc, ', ', item] : [item], [])}</dd>
+      </dl>
+    </details>
+  </Card>
+
+  <Button href={backHref} variant="ghost" size="sm">{backLabel}</Button>
+</div>
+
+<style>
+  .policy-detail { display:grid; gap:1.25rem; max-width:58rem; }
+  .policy-breadcrumb { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; color:var(--horizon-muted); font-size:.88rem; }
+  .policy-breadcrumb a { color:var(--horizon-muted); text-decoration:none; }
+  .policy-breadcrumb a:hover { color:var(--horizon-purple); text-decoration:underline; text-underline-offset:.18em; }
+  .policy-detail__header { border-bottom:1px solid var(--horizon-line); padding-bottom:1.5rem; }
+  .policy-detail__status { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; color:var(--horizon-muted); font-size:.9rem; }
+  .policy-detail h1 { margin:.6rem 0 .8rem; font:600 clamp(2rem,5vw,3.5rem)/1.1 Newsreader,Georgia,serif; color:var(--horizon-purple); overflow-wrap:anywhere; }
+  .policy-summary { max-width:48rem; font-size:1.15rem; line-height:1.6; }
+  .policy-facts { display:flex; flex-wrap:wrap; gap:1rem 2rem; margin-top:1.5rem; }
+  .policy-facts span { display:grid; gap:.25rem; }
+  .policy-facts strong, .revision-ref { color:var(--horizon-muted); font-size:.9rem; }
+  .policy-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem 1rem; margin-top:1.5rem; }
+  .policy-actions span, .policy-origin { margin:0; color:var(--horizon-muted); font-size:.9rem; line-height:1.55; }
+  .policy-origin { max-width:52rem; }
+  .policy-list { margin:0; padding-left:1.25rem; line-height:1.6; }
+  .policy-card-note { margin:.25rem 0 0; color:var(--horizon-muted); font-size:.9rem; }
+  .policy-change-list { display:grid; gap:.6rem; margin:0; padding:0; list-style:none; }
+  .policy-change-list li { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.5rem; padding:.65rem 0; border-bottom:1px solid var(--horizon-line); }
+  .policy-change-list li:last-child { border-bottom:0; }
+  .policy-change-list a { font-weight:600; }
+  .policy-change-list span { display:block; color:var(--horizon-muted); font-size:.85rem; }
+  .policy-lineage { display:grid; gap:.65rem; margin:0; }
+  .policy-lineage div { display:grid; grid-template-columns:minmax(9rem, 1fr) 2fr; gap:.25rem 1rem; }
+  .policy-lineage dt { font-weight:650; }
+  .policy-lineage dd { margin:0; }
+  .policy-governance details { padding:1rem 1.25rem; }
+  .policy-governance summary { min-height:2.5rem; display:flex; align-items:center; cursor:pointer; font-weight:650; }
+  .policy-governance dl { display:grid; grid-template-columns:minmax(9rem, 1fr) 2fr; gap:.65rem 1rem; overflow-wrap:anywhere; }
+  .policy-governance dt { font-weight:650; }
+  .policy-governance dd { margin:0; }
+  @media(max-width:600px) { .policy-governance dl, .policy-lineage div { grid-template-columns:1fr; gap:.2rem; } .policy-governance dd, .policy-lineage dd { margin-bottom:.75rem; } }
+</style>

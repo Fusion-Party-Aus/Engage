@@ -21,6 +21,7 @@ import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { canRespondToContribution, canViewProposal, getProposalDetail, isGovernanceResolution, listOutstandingDecisions, normalizeProposalDoc, resolveContributionEvidenceMap } from '../../lib/store.ts';
 import { getProposalEligibility } from '../../lib/branch-participation.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
+import { policyCanonicalPath } from '../../lib/policy-registry.ts';
 import type { ProposalStage } from '../../lib/types.ts';
 
 export const prerender = false;
@@ -48,6 +49,7 @@ const [
   eligibility,
   relatedBranches,
   evidenceMap,
+  targetPolicyForChange,
 ] = proposal
   ? await Promise.all([
       proposal.supersededByProposalId
@@ -71,8 +73,11 @@ const [
         ? db.collection('branches').find({ branchId: { $in: [...new Set([proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)))] } }).toArray()
         : Promise.resolve([]),
       resolveContributionEvidenceMap(db, proposal, detail.comments, user),
+      proposal.targetPolicyId
+        ? db.collection('policy_registry').findOne({ policyId: proposal.targetPolicyId })
+        : Promise.resolve(null),
     ])
-  : [null, [], null, null, [], [], [], null, [], new Map()];
+  : [null, [], null, null, [], [], [], null, [], new Map(), null];
 
 const supersededByProposal = supersededByDetail?.proposal ?? null;
 const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
@@ -115,7 +120,7 @@ const allAmendmentRevisions = amendmentRows.length
   : [];
 
 const evidencePolicyPublic = Boolean(
-  policyRecord && ['published', 'withdrawn', 'superseded'].includes(String(policyRecord.publicationStatus ?? '')),
+  policyRecord && ['published', 'withdrawn', 'superseded', 'repealed'].includes(String(policyRecord.publicationStatus ?? '')),
 );
 const evidenceOptions = proposal
   ? [
@@ -291,7 +296,7 @@ const decisionChain = proposal
         : {
             label: 'Policy Registry',
             value: policyStatusLabel,
-            href: evidencePolicyPublic && policyRecord ? `/policies/${encodeURIComponent(String(policyRecord.policyId))}/` : undefined,
+            href: evidencePolicyPublic && policyRecord ? policyCanonicalPath(policyRecord) : undefined,
             state: policyRecord?.publicationStatus === 'published' ? 'done' : policyRecord ? 'current' : 'pending',
           },
     ]
@@ -305,7 +310,7 @@ const activityEvents = proposal
             actor: branchNameFor(policyRecord.ratification.authorityBranchId),
             action: 'ratified policy record',
             badge: String(policyRecord.publicationStatus ?? 'adopted'),
-            href: `/policies/${encodeURIComponent(String(policyRecord.policyId))}/`,
+            href: policyCanonicalPath(policyRecord),
           }]
         : []),
       ...(ballotResult?.recordedAt
@@ -438,6 +443,17 @@ const initialsFor = (name: string) =>
 
           <h1 class="proposal-hero__title">{proposal.title}</h1>
           <p class="proposal-hero__summary">{proposal.summary}</p>
+          {proposal.targetPolicyId && (
+            <div class="superseded-notice">
+              <strong>
+                {proposal.changeType === 'repeal' ? 'Proposes to repeal' : proposal.changeType === 'replace' ? 'Proposes to replace' : 'Proposes to amend'}:
+              </strong>{' '}
+              {targetPolicyForChange
+                ? <a href={policyCanonicalPath(targetPolicyForChange)}>{targetPolicyForChange.title}</a>
+                : proposal.targetPolicyId}
+              <span> The published policy is unchanged unless this proposal is successful and ratified.</span>
+            </div>
+          )}
           {proposal.stage === 'archived' && (
             <div class="superseded-notice" role="status">
               <strong>Archived record (read-only):</strong>{' '}
@@ -601,7 +617,7 @@ const initialsFor = (name: string) =>
                   )}
                 </>
               ) : policyRecord ? (
-                <a href={`/policies/${encodeURIComponent(String(policyRecord.policyId))}/`} class="next-action-btn is-primary">
+                <a href={policyCanonicalPath(policyRecord)} class="next-action-btn is-primary">
                   Open policy record →
                 </a>
               ) : (
@@ -664,7 +680,7 @@ const initialsFor = (name: string) =>
                 {isResolution ? (
                   <strong>{resolutionStatusLabel}</strong>
                 ) : evidencePolicyPublic && policyRecord ? (
-                  <a class="fact-link" href={`/policies/${encodeURIComponent(String(policyRecord.policyId))}/`}>
+                  <a class="fact-link" href={policyCanonicalPath(policyRecord)}>
                     {policyStatusLabel} →
                   </a>
                 ) : (

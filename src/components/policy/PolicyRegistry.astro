@@ -1,0 +1,183 @@
+---
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
+import { NativeSelect } from '../ui/native-select';
+import {
+  policyCanonicalPath,
+  policyStatusLabel,
+  policyStatusVariant,
+  type PolicyRegistrySection,
+} from '../../lib/policy-registry.ts';
+
+interface Props {
+  sections: PolicyRegistrySection[];
+  branches: Array<Record<string, any>>;
+  showHistory: boolean;
+  query: string;
+  branchFilter: string;
+  action: string;
+  clearHref: string;
+  branch?: Record<string, any> | null;
+}
+
+const {
+  sections,
+  branches,
+  showHistory,
+  query,
+  branchFilter,
+  action,
+  clearHref,
+  branch = null,
+} = Astro.props;
+const branchName = new Map(
+  branches.map((item: any) => [String(item.branchId), String(item.name ?? item.branchId)]),
+);
+const hasFilter = Boolean(query || branchFilter);
+const count = sections.reduce(
+  (total, section) =>
+    total + section.groups.reduce((sum, group) => sum + group.items.length, 0),
+  0,
+);
+const noun = showHistory ? 'past record' : 'policy';
+const scoped = sections.length === 1 && !sections[0]?.label;
+const SectionHeading = 'h2';
+const GroupHeading = scoped ? 'h2' : 'h3';
+---
+
+<div class="registry-browser">
+  <form class="registry-controls" method="get" action={action} role="search">
+    {showHistory && <input type="hidden" name="history" value="1" />}
+    <Field label="Search policies" htmlFor="policy-search">
+      <Input id="policy-search" type="search" name="q" defaultValue={query} placeholder="Title, topic or wording" />
+    </Field>
+    {!branch && (
+      <Field label="Branch" htmlFor="policy-branch">
+        <NativeSelect id="policy-branch" name="branch" defaultValue={branchFilter}>
+          <option value="" selected={!branchFilter}>All branches</option>
+          {branches.map((item: any) => (
+            <option value={item.branchId} selected={branchFilter === item.branchId}>{item.name}</option>
+          ))}
+        </NativeSelect>
+      </Field>
+    )}
+    <div class="registry-controls__actions">
+      <Button type="submit" size="sm">Search</Button>
+      {hasFilter && <Button href={clearHref} variant="ghost" size="sm">Clear</Button>}
+    </div>
+  </form>
+
+  {count > 0 ? (
+    <div class="registry-sections">
+      {sections.map((section) => {
+        const sectionCount = section.groups.reduce((sum, group) => sum + group.items.length, 0);
+        return (
+          <section class="registry-section" aria-labelledby={`policy-section-${section.key}`}>
+            {section.label && (
+              <div class="registry-section__head">
+                <div>
+                  <SectionHeading id={`policy-section-${section.key}`}>
+                    {section.href ? <a href={section.href}>{section.label}</a> : section.label}
+                  </SectionHeading>
+                  <p class="tabular">{sectionCount} {sectionCount === 1 ? noun : `${noun === 'policy' ? 'policies' : 'records'}`}</p>
+                </div>
+                {section.href && (
+                  <Button href={section.href} variant="outline" size="sm">
+                    {showHistory ? 'Branch records' : 'Branch registry'} →
+                  </Button>
+                )}
+              </div>
+            )}
+            <div class="registry-groups">
+              {section.groups.map((group) => (
+                <section class="registry-group" aria-labelledby={`policy-group-${section.key}-${group.key}`}>
+                  <div class="registry-group__head">
+                    <GroupHeading id={`policy-group-${section.key}-${group.key}`}>{group.label}</GroupHeading>
+                    <span class="tabular">{group.items.length}</span>
+                  </div>
+                  {group.description && <p class="registry-group__note">{group.description}</p>}
+                  <ul class="registry-rows">
+                    {group.items.map((policy: any) => (
+                      <li class="registry-row">
+                        <div class="registry-row__body">
+                          <a class="registry-row__title" href={policyCanonicalPath(policy)}>{policy.title}</a>
+                          {policy.summary && <p class="registry-row__summary">{policy.summary}</p>}
+                          <p class="registry-row__meta">
+                            {policy.category && <span>{policy.category}</span>}
+                            {!section.label && <span>{branchName.get(String(policy.jurisdictionBranchId)) ?? policy.jurisdiction ?? 'Branch not recorded'}</span>}
+                            {policy.recordOrigin === 'branch-import' && <span>Branch-adopted</span>}
+                          </p>
+                        </div>
+                        {showHistory && (
+                          <Badge variant={policyStatusVariant(String(policy.publicationStatus))}>
+                            {policyStatusLabel(String(policy.publicationStatus))}
+                          </Badge>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  ) : (
+    <div class="registry-empty">
+      <h2>{hasFilter ? `No ${noun} matches this search` : showHistory ? 'No past records yet' : 'No policy here yet'}</h2>
+      <p>
+        {hasFilter
+          ? 'Try a different search or branch.'
+          : showHistory
+            ? 'Withdrawn, superseded and repealed policies appear here when they occur.'
+            : 'Adopted policy appears here once it is ratified and published. Ideas under discussion stay in proposals.'}
+      </p>
+      {hasFilter ? (
+        <Button href={clearHref} variant="outline" size="sm">Clear search</Button>
+      ) : (
+        <Button href="/proposals/" variant="outline" size="sm">Browse proposals</Button>
+      )}
+    </div>
+  )}
+</div>
+
+<style>
+  .registry-browser { display:grid; gap:1.75rem; }
+  .registry-controls { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto; align-items:end; gap:.85rem; }
+  .registry-controls__actions { display:flex; align-items:center; gap:.5rem; padding-bottom:.1rem; }
+  .registry-sections { display:grid; gap:2.75rem; }
+  .registry-section { display:grid; gap:1.25rem; }
+  .registry-section + .registry-section { padding-top:1.75rem; border-top:1px solid var(--horizon-line); }
+  .registry-section__head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:.75rem; }
+  .registry-section__head h2 { margin:0; font:650 clamp(1.3rem,2vw,1.6rem)/1.2 Outfit,sans-serif; color:var(--horizon-ink); }
+  .registry-section__head h2 a { color:inherit; text-decoration:none; }
+  .registry-section__head h2 a:hover { color:var(--horizon-purple); text-decoration:underline; text-underline-offset:.16em; }
+  .registry-section__head p { margin:.2rem 0 0; color:var(--horizon-muted); font-size:.84rem; }
+  .registry-groups { display:grid; gap:1.75rem; }
+  .registry-group { display:grid; gap:.5rem; }
+  .registry-group__head { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; padding-bottom:.4rem; border-bottom:1px solid var(--horizon-line); }
+  .registry-group__head h3, .registry-group__head h2 { margin:0; font:650 1.02rem/1.3 Outfit,sans-serif; letter-spacing:.01em; color:var(--horizon-ink); }
+  .registry-group__head span { color:var(--horizon-muted); font-size:.85rem; }
+  .registry-group__note { margin:0; max-width:70ch; color:var(--horizon-muted); font-size:.9rem; line-height:1.55; }
+  .registry-rows { display:grid; margin:0; padding:0; list-style:none; }
+  .registry-row { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:.85rem .25rem; border-bottom:1px solid var(--horizon-line); }
+  .registry-row:last-child { border-bottom:0; }
+  .registry-row__body { display:grid; gap:.2rem; min-width:0; }
+  .registry-row__title { font:600 1.02rem/1.35 Outfit,sans-serif; color:var(--horizon-purple); text-decoration:none; }
+  .registry-row__title:hover { text-decoration:underline; text-underline-offset:.16em; }
+  .registry-row__title:focus-visible { outline:3px solid var(--horizon-focus); outline-offset:3px; border-radius:.1rem; }
+  .registry-row__summary { margin:0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; max-width:78ch; color:var(--horizon-muted); font-size:.92rem; line-height:1.55; }
+  .registry-row__meta { display:flex; flex-wrap:wrap; gap:.35rem 1rem; margin:.15rem 0 0; color:var(--horizon-muted); font-size:.78rem; }
+  .registry-row__meta span { position:relative; }
+  .registry-row__meta span + span::before { content:'·'; position:absolute; left:-.58rem; }
+  .registry-empty { display:grid; justify-items:start; gap:.6rem; max-width:60ch; padding:2rem 0; }
+  .registry-empty h2 { margin:0; font:650 1.15rem/1.3 Outfit,sans-serif; }
+  .registry-empty p { margin:0; color:var(--horizon-muted); line-height:1.6; }
+  @media (max-width: 760px) {
+    .registry-controls { grid-template-columns:1fr; }
+    .registry-row { flex-direction:column; gap:.4rem; }
+  }
+</style>

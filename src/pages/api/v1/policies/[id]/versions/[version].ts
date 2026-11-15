@@ -10,9 +10,13 @@ export const GET: APIRoute = async ({ params, locals, request }) => {
     .collection("policy_registry")
     .findOne({ policyId: params.id, publicationStatus: "published" });
   if (!p) return Response.json({ error: "Policy not found." }, { status: 404 });
-  const r = await db
-    .collection("proposal_revisions")
-    .findOne({ revisionId: params.version, proposalId: p.proposalId });
+  const r =
+    (await db
+      .collection("proposal_revisions")
+      .findOne({ revisionId: params.version, proposalId: p.proposalId })) ??
+    (await db
+      .collection("policy_revisions")
+      .findOne({ revisionId: params.version, policyId: p.policyId }));
   if (!r)
     return Response.json({ error: "Version not found." }, { status: 404 });
   const data = toPublicRevisionDto(r);

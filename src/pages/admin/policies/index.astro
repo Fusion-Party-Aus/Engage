@@ -19,6 +19,7 @@ import {
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { isGovernanceResolution, isPolicyRegistryRecordForResolution, listProposals } from '../../../lib/store.ts';
+import { policyCanonicalPath } from '../../../lib/policy-registry.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import Field from '../../../components/admin/Field.astro';
@@ -38,6 +39,7 @@ const db = await getDatabase(env);
 const rawQuery = (Astro.url.searchParams.get('q') ?? '').trim();
 const q = rawQuery.toLowerCase();
 const publicationFilter = Astro.url.searchParams.get('publication') ?? 'all';
+const branchFilter = Astro.url.searchParams.get('branch') ?? '';
 const [branches, rawPolicies, proposals, resultRows] = user.isAdmin
   ? await Promise.all([
       db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
@@ -47,6 +49,7 @@ const [branches, rawPolicies, proposals, resultRows] = user.isAdmin
     ])
   : [[], [], [], []];
 const proposalMap = new Map(proposals.map((proposal) => [proposal.proposalId, proposal]));
+const policyById = new Map(rawPolicies.map((policy: any) => [String(policy.policyId), policy]));
 const policies = rawPolicies.filter(
   (policy: any) =>
     !isPolicyRegistryRecordForResolution(
@@ -56,11 +59,26 @@ const policies = rawPolicies.filter(
 );
 const filteredPolicies = policies.filter(
   (policy: any) =>
-    (!q || `${policy.title} ${policy.policyId} ${policy.jurisdiction ?? ''} ${policy.category ?? ''}`.toLowerCase().includes(q)) &&
-    (publicationFilter === 'all' || policy.publicationStatus === publicationFilter),
+    (!q || `${policy.title} ${policy.policyId} ${policy.jurisdiction ?? ''} ${policy.category ?? ''} ${policy.pillar ?? ''}`.toLowerCase().includes(q)) &&
+    (publicationFilter === 'all' || policy.publicationStatus === publicationFilter) &&
+    (!branchFilter || policy.jurisdictionBranchId === branchFilter),
+);
+const registryHref = (publication: string) => {
+  const params = new URLSearchParams();
+  if (publication !== 'all') params.set('publication', publication);
+  if (branchFilter) params.set('branch', branchFilter);
+  if (rawQuery) params.set('q', rawQuery);
+  const query = params.toString();
+  return query ? `/admin/policies/?${query}` : '/admin/policies/';
+};
+const repealedByProposal = new Set(
+  policies
+    .map((policy: any) => String(policy.repealedBy?.proposalId ?? ""))
+    .filter(Boolean),
 );
 const awaitingRatification = resultRows
   .filter((result) => !policies.some((policy: any) => policy.proposalId === result.proposalId))
+  .filter((result) => !repealedByProposal.has(String(result.proposalId)))
   .map((result) => ({ ...result, proposal: proposalMap.get(result.proposalId) }))
   .filter((row) => row.proposal && !isGovernanceResolution(row.proposal));
 
@@ -153,10 +171,21 @@ for (const event of publicationEvents) {
                           <span class="tabular text-xs font-bold text-muted-foreground">{row.proposal.proposalId}</span>
                           <strong class="text-sm font-semibold text-foreground">{row.proposal.title}</strong>
                           <Badge variant="warning">Successful ballot · unratified</Badge>
+                          {row.proposal.changeType && (
+                            <Badge variant="outline">
+                              {row.proposal.changeType === 'repeal' ? 'Repeal' : row.proposal.changeType === 'replace' ? 'Replace' : 'Amend'}
+                            </Badge>
+                          )}
                         </div>
                         <small class="text-muted-foreground">
                           Frozen ballot revision <code>{String(row.revisionId).slice(0, 8)}</code> · recorded {formatDate(row.recordedAt)}
                         </small>
+                        {row.proposal.targetPolicyId && (
+                          <small class="text-muted-foreground">
+                            {row.proposal.changeType === 'repeal' ? 'Repeals' : 'Changes'}{' '}
+                            {policyById.get(String(row.proposal.targetPolicyId))?.title ?? row.proposal.targetPolicyId}
+                          </small>
+                        )}
                       </div>
                       <ScrollText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     </summary>
@@ -227,9 +256,10 @@ for (const event of publicationEvents) {
                   ['unpublished', 'Unpublished', unpublishedCount],
                   ['withdrawn', 'Withdrawn', policies.filter((p: any) => p.publicationStatus === 'withdrawn').length],
                   ['superseded', 'Superseded', policies.filter((p: any) => p.publicationStatus === 'superseded').length],
+                  ['repealed', 'Repealed', policies.filter((p: any) => p.publicationStatus === 'repealed').length],
                 ].map(([val, label, count]) => (
                   <a
-                    href={val === 'all' ? '/admin/policies/' : `/admin/policies/?publication=${val}`}
+                    href={registryHref(String(val))}
                     class:list={['project-tab', { 'is-active': publicationFilter === val }]}
                     aria-current={publicationFilter === val ? 'page' : undefined}
                   >
@@ -249,14 +279,22 @@ for (const event of publicationEvents) {
                 <Field label="Publication status" htmlFor="policy-publication-filter">
                   <NativeSelect defaultValue={publicationFilter} id="policy-publication-filter" name="publication">
                     <option value="all" selected={!publicationFilter || publicationFilter === 'all'}>All statuses</option>
-                    {['unpublished', 'published', 'withdrawn', 'superseded'].map((status) => (
+                    {['unpublished', 'published', 'withdrawn', 'superseded', 'repealed'].map((status) => (
                       <option value={status} selected={publicationFilter === status}>{status[0]!.toUpperCase() + status.slice(1)}</option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="Branch" htmlFor="policy-branch-filter">
+                  <NativeSelect defaultValue={branchFilter} id="policy-branch-filter" name="branch">
+                    <option value="" selected={!branchFilter}>All branches</option>
+                    {branches.map((item: any) => (
+                      <option value={item.branchId} selected={branchFilter === item.branchId}>{item.name}</option>
                     ))}
                   </NativeSelect>
                 </Field>
                 <div class="flex items-end gap-2">
                   <Button type="submit" variant="outline" size="sm">Apply</Button>
-                  {(rawQuery || publicationFilter !== 'all') && (
+                  {(rawQuery || publicationFilter !== 'all' || branchFilter) && (
                     <Button href="/admin/policies/" variant="ghost" size="sm">Reset</Button>
                   )}
                 </div>
@@ -330,11 +368,24 @@ for (const event of publicationEvents) {
                           <dt>Superseded by</dt>
                           <dd>{policy.supersededBy ?? 'Active'}</dd>
                         </div>
+                        <div>
+                          <dt>Origin</dt>
+                          <dd>{policy.recordOrigin === 'branch-import' ? 'Imported branch policy' : 'Engage ratification'}</dd>
+                        </div>
+                        {Array.isArray(policy.supersedes) && policy.supersedes.length > 0 && (
+                          <div>
+                            <dt>Changes</dt>
+                            <dd>
+                              {policy.changeType === 'replace' ? 'Replaces' : 'Amends'}{' '}
+                              {policy.supersedes.map((id: string) => policyById.get(String(id))?.title ?? id).join(', ')}
+                            </dd>
+                          </div>
+                        )}
                       </dl>
 
                       <div class="admin-record-actions">
                         {['published', 'withdrawn', 'superseded'].includes(String(policy.publicationStatus)) && (
-                          <Button href={`/policies/${encodeURIComponent(String(policy.policyId))}/`} variant="outline" size="sm">
+                          <Button href={policyCanonicalPath(policy)} variant="outline" size="sm">
                             View public policy
                           </Button>
                         )}
@@ -369,6 +420,12 @@ for (const event of publicationEvents) {
 
                       {policy.publicationStatus === 'unpublished' && (
                         <form class="policy-action-form publish-form" data-policy-id={policy.policyId}>
+                          {Array.isArray(policy.supersedes) && policy.supersedes.length > 0 && (
+                            <p class="admin-inline-note">
+                              Publishing this record will supersede{' '}
+                              {policy.supersedes.map((id: string) => policyById.get(String(id))?.title ?? id).join(', ')}.
+                            </p>
+                          )}
                           <div class="admin-actions">
                             <Button type="submit" size="sm">Authorise publication</Button>
                             <span class="admin-status" role="status" aria-live="polite"></span>
@@ -630,7 +687,7 @@ for (const event of publicationEvents) {
 
   .registry-filter-form {
     display: grid;
-    grid-template-columns: 2fr 1fr auto;
+    grid-template-columns: 2fr 1fr 1fr auto;
     gap: 0.75rem;
     align-items: end;
   }

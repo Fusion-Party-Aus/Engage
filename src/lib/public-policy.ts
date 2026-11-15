@@ -1,8 +1,16 @@
+import { policyCanonicalPath } from "./policy-registry.ts";
+
 export function publicPolicy(row: Record<string, any>) {
+  const canonicalPath = policyCanonicalPath(row);
   return {
     policyId: row.policyId,
+    /** Public address of this record. */
+    canonicalPath,
+    branchSlug: row.branchSlug ?? null,
+    policySlug: row.policySlug ?? null,
     title: row.title,
     summary: row.summary,
+    pillar: row.pillar ?? null,
     category: row.category ?? null,
     commitments: Array.isArray(row.commitments) ? row.commitments : [],
     approvedWording: row.approvedWording ?? "",
@@ -12,6 +20,10 @@ export function publicPolicy(row: Record<string, any>) {
       : [row.revisionId].filter(Boolean),
     status: row.status,
     publicationStatus: row.publicationStatus,
+    /** "branch-import" records were adopted outside Engage. */
+    recordOrigin: row.recordOrigin ?? null,
+    changeType: row.changeType ?? null,
+    supersedes: Array.isArray(row.supersedes) ? row.supersedes : [],
     provenance: row.provenance ?? null,
     jurisdiction: row.jurisdiction ?? null,
     jurisdictionBranchId: row.jurisdictionBranchId ?? null,
@@ -34,6 +46,17 @@ export function publicPolicy(row: Record<string, any>) {
     publishedAt: row.publishedAt ?? null,
     supersededBy: row.supersededBy ?? null,
     supersededAt: row.supersededAt ?? null,
+    supersededByChangeType: row.supersededByChangeType ?? null,
+    repealedAt: row.repealedAt ?? null,
+    repealedBy: row.repealedBy
+      ? {
+          proposalId: row.repealedBy.proposalId,
+          revisionId: row.repealedBy.revisionId,
+          decisionEventId: row.repealedBy.decisionEventId,
+          authorityBranchId: row.repealedBy.authorityBranchId,
+          recordedAt: row.repealedBy.recordedAt,
+        }
+      : null,
     withdrawnAt: row.withdrawnAt ?? null,
   };
 }

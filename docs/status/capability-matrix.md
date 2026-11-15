@@ -125,8 +125,10 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Supersede a published policy | Implemented | Cycle detection |
 | Reconcile pending publication events | Implemented | Admin-only, state-filtered |
 | Un-ratify or edit registry wording | Not implemented | Append-only model |
-| Import the national policy baseline | Not implemented | Registry starts empty |
-| Import Victorian baseline | Not implemented; blocked | No corpus or authority |
+| Change an adopted policy (amend/replace/repeal) | Implemented | New proposal declares target + change type; lineage on ratification/publication |
+| Import the national policy baseline | Not implemented | Deferred (#36); registry does not claim it |
+| Import Victorian branch baseline | Implemented | `pnpm policies:import-branch`; branch authority, immutable revisions (#89) |
+| Distinguish imported policy from Engage-ratified policy | Implemented | `recordOrigin`, provenance, public page and API |
 | Branch-level ratification | Not implemented | — |
 | Public API for published policy | Implemented | `/api/v1/` |
 | Public API for proposals | Not implemented | Proposals are web-only |
