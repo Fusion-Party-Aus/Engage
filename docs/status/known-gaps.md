@@ -98,6 +98,8 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 Two amendments can edit the same field and both be `ready`. Conflict detection compares an amendment against the proposal revision, not against other amendments. Applying them sequentially may produce an unintended combined wording.
 
+**Partially addressed for reporting:** the member-facing decision record (#54) derives adopted wording only for zero or one applied amendment (D15/D16). Two or more applied amendments show an explicit collision-review-required state and produce no derived text. The collision rule itself, and any administrator queue for it, remain unbuilt.
+
 **Direction:** Detect field overlap at resolution time and require an explicit precedence decision.
 
 ### 10. Results are checked against the tally but the voting rules are incomplete
