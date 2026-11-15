@@ -1,6 +1,6 @@
 # Known gaps, defects and open decisions
 
-**Status:** Current · **Verified:** 13 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 > **RFC 0001 programme status.** The Sprint 1 integrity, lifecycle, rendering
 > performance and Turnstile slices were merged to `main` as `3b36947` (PR #51) on
@@ -133,6 +133,18 @@ Comments can be deleted by staff, but there is no moderation state, reason or au
 **Threading safeguard (implemented):** deleting a comment that still has replies clears the body, sets `deletedAt`/`deletedBy` and keeps a placeholder so the surviving replies keep their parent. A comment with no replies is still deleted outright. The stored body is never returned to readers once deleted. This is not a moderation record: the actor and time are stored on the placeholder, but there is no reason, review queue or audit event.
 
 **Direction:** Decide whether moderation is deletion or a visible state. Record the actor, reason and time either way.
+
+### 14a. Public profile limitations
+
+**Implemented:** public profiles at `/members/<memberId>/` aggregate existing comments, proposals and amendments, with owner-editable biography and display-only comment karma ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)).
+
+**Limits today:**
+
+- There is no profile visibility opt-out or self-service account deletion. Disabling an account returns 404 for its profile and suppresses author links, but historic comments on visible proposals remain part of the discussion.
+- Avatars are initials only. There is no image upload, storage or external image fetch.
+- The profile URL contains the opaque Better Auth `memberId`. It is not an email address or CRM identifier, but it is stable and therefore linkable.
+- When the account document is gone but a visible contribution remains, the profile uses the author name stored on that contribution. A name that exists only on a private proposal does not create a profile.
+- Karma has no leaderboard, tier or permission effect by design.
 
 ### 15. Perimeter security is incomplete
 
@@ -323,6 +335,7 @@ The actionable gaps were opened as GitHub issues on 13 November 2026. This page 
 | Rendering performance and list read path | #52 |
 | Governance command layer and route policy | #53 |
 | Decision record and responsibility queue | #54 |
+| Public member profiles and contribution history | #113 |
 | Ballot-results index migration safety — resolved 15 November 2026 | #55 |
 
 Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain partly blocked on unresolved governance or legal decisions; implement only the parts the decision register settles. #28's Yes-versus-No computed check is implemented against D8/D9, while the abstention denominator (O1, D10) remains undecided.
