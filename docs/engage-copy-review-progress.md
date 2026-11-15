@@ -7,7 +7,7 @@ Updated 15 November 2026. Source of truth: pushed branch and this document, not 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review`, based on main `20dfa90`.
 - PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
-- Next task: batch 2b, rewrite `/how-it-works/` against the decision register and current lifecycle. Seconding and scheduling are implemented, not future features. D13–D20 distinguish member authority from officer certification; automatic ratification remains incomplete. Check the first-round exception before publishing dates. Do not repeat batches 1 or 2a.
+- Next task: batch 3a, proposal browse and new-proposal forms. Continue into detail/ballot/amendment copy as separate slices. Do not repeat public introductions or the how-it-works guide.
 - This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
 
 ## Recovery and scope
@@ -29,8 +29,8 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | Batch | Area | State |
 |---|---|---|
 | 1 | Homepage introduction/lifecycle wording; discussion heading and cross-references; sign-in discussion intent | Delivered in `2d25398`; validated and published in PR #98 |
-| 2a | Remaining homepage copy, its metadata and shared proposal highlights | Validated; delivery commit is the commit containing this row (confirm remote before continuing) |
-| 2b | How-it-works guide, remaining public metadata, shared layout/navigation/footer | Next |
+| 2a | Remaining homepage copy, its metadata and shared proposal highlights | Delivered in `8558e05`; remote tree verified |
+| 2b | How-it-works guide, default metadata, shared layout/navigation/footer | Validated; publishing checkpoint |
 | 3 | Proposal browse/create/detail, seconding, comments, forms, amendment and ballot interfaces | Not reviewed beyond batch 1 strings |
 | 4 | Policy registry, policy detail, provenance and change proposals; branch journeys and Sense Box | Not reviewed |
 | 5 | Onboarding, membership, My Engage, account, branch preferences, notifications | Not reviewed beyond discussion intent |
@@ -56,7 +56,7 @@ Batch 1: `pnpm install --frozen-lockfile`; `pnpm check` passes (324 files, zero 
 ## Outstanding questions
 
 - All-public access direction needs an explicit migration/access-policy implementation, including previously restricted records and archived records; this PR does not expose them.
-- Guide has stale procedural, provenance and roadmap claims: inspect each against code, not old copy. Do not describe the existing national platform as being re-ratified; Reclaim and legacy national provenance are separate (D33).
+- Reclaim and legacy national provenance are separate (D33); never imply legacy national policies are being re-ratified. The guide now explains that references alone do not establish adoption.
 - Review legal text carefully; do not silently change privacy promises or enable acceptance gates.
 - Production deployment has not been performed.
 
@@ -69,3 +69,11 @@ Examples: “Open for stances” → “Join the discussion”; “Put an idea o
 Evidence checked: `getProposalDetail`, `secondProposal`, `listOutstandingDecisions` in `src/lib/store.ts`; `proposalMetrics`/`rankProposals`; decision register D3, D11, D13–D20. Public discussion is readable only after proposal visibility/archive gates. Earlier product docs contain stale claims; use code and decision register.
 
 Validation: `pnpm check` passes, 324 files, zero errors/warnings, 23 existing hints. `pnpm build` passes. `git diff --check` and changed-file raw-control audit pass. No live signed-in/browser/mobile checks. Changelog regeneration exposed the known truncation in #96; preserve earlier entries when recording this batch rather than fixing the generator here.
+
+## Batch 2b handover
+
+Rewrote all guide prose and metadata, retained its existing sections, anchors, cards and CSS. Removed unsupported promises of instant transfer, atomic voting transactions and a working public poll. The pulse-poll flag is only stored/read in configuration: there is no poll interface or submission handler. Operating section now explains what must be protected and links the canonical guide instead of showing obsolete commands and secrets-transfer instructions. No environment/config values exposed. Footer copy and fallback metadata aligned; configured site copy remains administrator-controlled.
+
+Accuracy checked against `secondProposal`, proposal/amendment stage gates, lifecycle scheduler, decision register D3–D20/D33–D35, policy-import docs and build/deploy operations. Formal amendments currently require Propose/Deliberate; later-stage amendments remain separate implementation work. Normal timing is described as usual, actual proposal dates take precedence; no hardcoded first-round promise.
+
+Validation: `pnpm check` passes (0 errors/warnings, 20 hints), production build passes, diff whitespace and changed-markup raw-control audit pass. Browser launch was attempted but blocked by the environment’s socket permissions; no rendered/mobile/keyboard result is claimed. No CSS or controls changed. Shared header reviewed and retained. Default metadata in `site-config.ts` changed because it overrides the layout fallback. Existing persisted settings are not migrated.

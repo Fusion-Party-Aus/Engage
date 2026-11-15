@@ -223,7 +223,7 @@ export function getDefaultSiteConfig(env: PlatformEnv = {}): SiteConfig {
     tagline:
       "Explore ideas, join discussions, and vote on the decisions that shape Fusion.",
     defaultDescription:
-      "Browse proposals, join discussions, vote when eligible, and explore the policy registry from Fusion Party Australia.",
+      "Read what Fusion is discussing, help shape an idea and vote on the party’s decisions when eligible.",
     defaultOgImage: ogImage,
     allowPublicIndexing,
     publicPulsePollEnabled,
