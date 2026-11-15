@@ -201,6 +201,9 @@ export async function createInAppNotification(
     try {
       await db.collection(NOTIFICATION_DELIVERIES_COLLECTION).insertOne({
         _id: `inapp:${input.memberId}:${input.dedupeKey}` as any,
+        // The unique index is on `dedupeKey`; the composite must be written or
+        // every document after the first collides on a missing field.
+        dedupeKey: `inapp:${input.memberId}:${input.dedupeKey}`,
         memberId: input.memberId,
         channel: "in_app",
         topic: input.topic,
@@ -323,6 +326,7 @@ export async function dispatchMemberNotification(
     try {
       await db.collection(NOTIFICATION_DELIVERIES_COLLECTION).insertOne({
         _id: `push:${input.memberId}:${input.dedupeKey}` as any,
+        dedupeKey: `push:${input.memberId}:${input.dedupeKey}`,
         memberId: input.memberId,
         channel: "push",
         topic: input.topic,
