@@ -4,6 +4,10 @@ import { createDevSessionCookie } from "./auth.ts";
 import { getDatabase } from "./db.ts";
 import { applyBranchPolicyImport, planBranchPolicyImport } from "./policy-import.ts";
 import { canViewProposal, saveProposal } from "./store.ts";
+import {
+  POLICY_CHANGE_GUIDANCE,
+  defaultPolicyChangeTitle,
+} from "./policy-change.ts";
 import { POST as postRatify } from "../pages/api/admin/policies/ratify.ts";
 import { POST as postPublish } from "../pages/api/admin/policies/publish.ts";
 import type { SessionUser } from "./types.ts";
@@ -182,6 +186,63 @@ function publishRequest(policyId: string, key: string) {
 }
 
 describe("post-ratification policy lifecycle", () => {
+  it("names the chosen action and describes when it takes effect", () => {
+    const title = "Turn Trams into Surface Rapid Transit";
+    assert.equal(defaultPolicyChangeTitle("repeal", title), `Repeal: ${title}`);
+    assert.equal(defaultPolicyChangeTitle("amend", title), `Amend: ${title}`);
+    assert.equal(
+      defaultPolicyChangeTitle("replace", title),
+      `Replace: ${title}`,
+    );
+    assert.match(POLICY_CHANGE_GUIDANCE.repeal.effect, /ratified/);
+    assert.match(POLICY_CHANGE_GUIDANCE.amend.effect, /published/);
+    assert.match(POLICY_CHANGE_GUIDANCE.replace.effect, /published/);
+  });
+
+  it("inherits the policy topic and keeps only the fields the action uses", async () => {
+    const db = await getDatabase(env);
+    await seedBranches(db);
+    await seedPublishedPolicy(db, "vic-transport-policy", {
+      category: "Transport & Infrastructure",
+    });
+
+    const amendment = await saveProposal(db, member, {
+      title: "Amend: Open Government by Default",
+      space: "A different topic",
+      summary: "Change the publication commitment.",
+      targetSection: "Commitment 2",
+      proposedWording: "Ignored for an amendment.",
+      targetPolicyId: "vic-transport-policy",
+      changeType: "amend",
+    });
+    assert.equal(amendment.space, "Transport & Infrastructure");
+    assert.equal(amendment.targetSection, "Commitment 2");
+    assert.equal(amendment.proposedWording, undefined);
+
+    const replacement = await saveProposal(db, member, {
+      title: "Replace: Open Government by Default",
+      summary: "Replace the policy with a narrower one.",
+      proposedWording: "The replacement wording.",
+      targetSection: "Ignored for a replacement.",
+      targetPolicyId: "vic-transport-policy",
+      changeType: "replace",
+    });
+    assert.equal(replacement.space, "Transport & Infrastructure");
+    assert.equal(replacement.proposedWording, "The replacement wording.");
+    assert.equal(replacement.targetSection, undefined);
+
+    const repeal = await saveProposal(db, member, {
+      title: "Repeal: Open Government by Default",
+      summary: "This policy should be removed.",
+      targetSection: "Ignored for a repeal.",
+      proposedWording: "Ignored for a repeal.",
+      targetPolicyId: "vic-transport-policy",
+      changeType: "repeal",
+    });
+    assert.equal(repeal.targetSection, undefined);
+    assert.equal(repeal.proposedWording, undefined);
+  });
+
   it("creates a change proposal against a published policy and inherits its authority", async () => {
     const db = await getDatabase(env);
     await seedBranches(db);

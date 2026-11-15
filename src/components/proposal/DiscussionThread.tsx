@@ -839,21 +839,50 @@ function CommentItem({
         aria-labelledby={`author-${comment.commentId}`}
       >
         <div className="comment__row">
-          <Avatar
-            size={node.depth === 0 ? 'default' : 'sm'}
-            className="comment__avatar"
-          >
-            <AvatarFallback>{initialsFor(comment.authorName)}</AvatarFallback>
-          </Avatar>
+          {comment.authorProfileHref ? (
+            <a
+              className="comment__avatar-link"
+              href={comment.authorProfileHref}
+              aria-label={`View ${comment.authorName}'s profile`}
+            >
+              <Avatar
+                size={node.depth === 0 ? 'default' : 'sm'}
+                className="comment__avatar"
+              >
+                <AvatarFallback>{initialsFor(comment.authorName)}</AvatarFallback>
+              </Avatar>
+            </a>
+          ) : (
+            <Avatar
+              size={node.depth === 0 ? 'default' : 'sm'}
+              className="comment__avatar"
+            >
+              <AvatarFallback>{initialsFor(comment.authorName)}</AvatarFallback>
+            </Avatar>
+          )}
 
           <div className="comment__main">
             <header className="comment__meta">
-              <strong
-                className="comment__author"
-                id={`author-${comment.commentId}`}
-              >
-                {comment.authorName}
-              </strong>
+              {comment.authorProfileHref ? (
+                <a
+                  className="comment__author-link"
+                  href={comment.authorProfileHref}
+                >
+                  <strong
+                    className="comment__author"
+                    id={`author-${comment.commentId}`}
+                  >
+                    {comment.authorName}
+                  </strong>
+                </a>
+              ) : (
+                <strong
+                  className="comment__author"
+                  id={`author-${comment.commentId}`}
+                >
+                  {comment.authorName}
+                </strong>
+              )}
               <Badge variant={meta.variant}>
                 {meta.label}
               </Badge>

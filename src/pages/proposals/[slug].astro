@@ -23,6 +23,7 @@ import { getProposalEligibility } from '../../lib/branch-participation.ts';
 import { hasPermission } from '../../lib/rbac.ts';
 import { commentUpvotePercent, compareComments } from '../../lib/comment-thread.ts';
 import type { DiscussionComment } from '../../lib/comment-thread.ts';
+import { resolveMemberProfileLinks } from '../../lib/member-profile.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import { policyCanonicalPath } from '../../lib/policy-registry.ts';
 import type { ProposalStage } from '../../lib/types.ts';
@@ -152,6 +153,27 @@ for (const amendment of amendmentRows) {
   if (current) amendment.changes = current.snapshot;
 }
 const comments = detail?.comments ?? [];
+const profileLinks = await resolveMemberProfileLinks(db, [
+  ...comments.map((comment) => comment.memberId),
+  ...(proposal?.authorId ? [proposal.authorId] : []),
+  ...amendmentRows
+    .map((amendment: any) => amendment.authorId)
+    .filter((value: unknown): value is string => typeof value === 'string'),
+]);
+const profileLinkFor = (memberId?: string | null) =>
+  memberId ? profileLinks.get(String(memberId).trim()) ?? null : null;
+const proposalAuthorLink = profileLinkFor(proposal?.authorId);
+const proposalAuthorDisplayName =
+  proposalAuthorLink?.name || proposal?.authorName || 'Fusion Working Group';
+const proposalAuthorHref =
+  proposalAuthorLink && (proposalAuthorLink.name || proposal?.authorName)
+    ? proposalAuthorLink.href
+    : null;
+for (const amendment of amendmentRows) {
+  const link = profileLinkFor(amendment.authorId);
+  amendment.authorProfileHref = link?.href ?? null;
+  amendment.authorDisplayName = link?.name ?? '';
+}
 const canModerateComments = Boolean(
   user && (user.isStaff || hasPermission(user, 'comments.moderate', proposal?.originatingBranchId)),
 );
@@ -165,10 +187,13 @@ const feedbackEvidence = (evidence?: { kind: string; recordId: string }) => {
 const discussionComments: DiscussionComment[] = comments.map((comment) => {
   const evidence = comment.feedback?.evidence;
   const resolvedEvidence = feedbackEvidence(evidence);
+  const authorLink = profileLinkFor(comment.memberId);
+  const authorName = authorLink?.name || comment.authorName;
   return {
     commentId: comment.commentId,
     parentCommentId: comment.parentCommentId ?? null,
-    authorName: comment.authorName,
+    authorName,
+    authorProfileHref: authorName ? authorLink?.href ?? null : null,
     stance: comment.stance,
     body: comment.body,
     createdAt: new Date(comment.createdAt).toISOString(),
@@ -359,10 +384,10 @@ const activityEvents = proposal
         : []),
       ...amendmentRows.slice(-3).map((amendment: any) => ({
         date: new Date(amendment.updatedAt ?? amendment.createdAt ?? proposal.updatedAt),
-        actor: amendment.authorName || 'Member',
+        actor: amendment.authorDisplayName || amendment.authorName || 'Member',
         action: 'submitted formal amendment',
         badge: String(amendment.status ?? 'proposed'),
-        href: '#amendments-heading',
+        href: `#amendment-${String(amendment.amendmentId)}`,
       })),
       ...revisions.slice(0, 3).map((revision: any, idx: number) => ({
         date: new Date(revision.createdAt ?? proposal.updatedAt),
@@ -692,8 +717,17 @@ const initialsFor = (name: string) =>
             <div class="governance-fact">
               <dt>Proposed by</dt>
               <dd>
-                <span class="fact-avatar" aria-hidden="true">{initialsFor(proposal.authorName || 'Fusion Working Group')}</span>
-                <strong>{proposal.authorName || 'Fusion Working Group'}</strong>
+                {proposalAuthorHref ? (
+                  <a class="fact-author-link" href={proposalAuthorHref}>
+                    <span class="fact-avatar" aria-hidden="true">{initialsFor(proposalAuthorDisplayName)}</span>
+                    <strong>{proposalAuthorDisplayName}</strong>
+                  </a>
+                ) : (
+                  <>
+                    <span class="fact-avatar" aria-hidden="true">{initialsFor(proposalAuthorDisplayName)}</span>
+                    <strong>{proposalAuthorDisplayName}</strong>
+                  </>
+                )}
               </dd>
             </div>
             <div class="governance-fact">
@@ -748,6 +782,9 @@ const initialsFor = (name: string) =>
               <a href="#outcomes-heading">
                 Key commitments <span class="nav-count tabular">{proposal.outcomes.length}</span>
               </a>
+            )}
+            {proposal.proposedWording && (
+              <a href="#proposed-wording-heading">Proposed wording</a>
             )}
             {(proposal.details || proposal.detailHtml) && (
               <a href="#details-heading">Rationale</a>
@@ -829,8 +866,32 @@ const initialsFor = (name: string) =>
               </section>
             )}
 
-            <!-- Key Commitments -->
+            <!-- Policy change wording and key commitments -->
             <section id="proposal-decision" class="decision-content" aria-label="Proposal summary and commitments">
+
+            {proposal.targetSection && (
+              <section aria-labelledby="target-section-heading">
+                <div class="doc-section__header">
+                  <div>
+                    <h2 id="target-section-heading">Part of the policy to change</h2>
+                  </div>
+                </div>
+                <p>{proposal.targetSection}</p>
+              </section>
+            )}
+
+            {proposal.proposedWording && (
+              <section aria-labelledby="proposed-wording-heading">
+                <div class="doc-section__header">
+                  <div>
+                    <h2 id="proposed-wording-heading">Proposed wording</h2>
+                  </div>
+                </div>
+                <div class="prose-content">
+                  <PortableText value={proposal.proposedWording} />
+                </div>
+              </section>
+            )}
 
             {proposal.outcomes.length > 0 && (
               <section aria-labelledby="outcomes-heading">
@@ -990,6 +1051,16 @@ const initialsFor = (name: string) =>
                                 Base revision <code>{String(amendment.baseRevisionId).slice(0, 8)}</code> · snapshot <code>{String(amendment.currentRevisionId ?? 'legacy').slice(0, 8)}</code>
                                 {amendment.rebasedFromRevisionId ? ` · rebased from ${String(amendment.rebasedFromRevisionId).slice(0, 8)}` : ''}
                               </p>
+                              {amendment.authorDisplayName && (
+                                <p class="amendment-author">
+                                  Proposed by{' '}
+                                  {amendment.authorProfileHref ? (
+                                    <a href={amendment.authorProfileHref}>{amendment.authorDisplayName}</a>
+                                  ) : (
+                                    <strong>{amendment.authorDisplayName}</strong>
+                                  )}
+                                </p>
+                              )}
                             </div>
                           </div>
                           <Badge variant={statusTone}>{amendment.status}</Badge>
@@ -1109,7 +1180,9 @@ const initialsFor = (name: string) =>
                       <div class="takeaway-box__head">
                         <Badge variant="success">Leading support</Badge>
                         <span class="takeaway-meta tabular" title={`${commentUpvotePercent(topSupportComment)}% upvoted from ${topSupportComment.upvoteCount + topSupportComment.downvoteCount} votes`}>
-                          {topSupportComment.authorName} · {topSupportComment.score} {topSupportComment.score === 1 || topSupportComment.score === -1 ? 'point' : 'points'}
+                          {topSupportComment.authorProfileHref ? (
+                            <a class="takeaway-author" href={topSupportComment.authorProfileHref}>{topSupportComment.authorName}</a>
+                          ) : topSupportComment.authorName} · {topSupportComment.score} {topSupportComment.score === 1 || topSupportComment.score === -1 ? 'point' : 'points'}
                         </span>
                       </div>
                       <p class="takeaway-quote">{topSupportComment.body}</p>
@@ -1120,7 +1193,9 @@ const initialsFor = (name: string) =>
                       <div class="takeaway-box__head">
                         <Badge variant="destructive">Leading concern</Badge>
                         <span class="takeaway-meta tabular" title={`${commentUpvotePercent(topConcernComment)}% upvoted from ${topConcernComment.upvoteCount + topConcernComment.downvoteCount} votes`}>
-                          {topConcernComment.authorName} · {topConcernComment.score} {topConcernComment.score === 1 || topConcernComment.score === -1 ? 'point' : 'points'}
+                          {topConcernComment.authorProfileHref ? (
+                            <a class="takeaway-author" href={topConcernComment.authorProfileHref}>{topConcernComment.authorName}</a>
+                          ) : topConcernComment.authorName} · {topConcernComment.score} {topConcernComment.score === 1 || topConcernComment.score === -1 ? 'point' : 'points'}
                         </span>
                       </div>
                       <p class="takeaway-quote">{topConcernComment.body}</p>
@@ -2020,6 +2095,36 @@ const initialsFor = (name: string) =>
     text-decoration: underline;
   }
 
+  .fact-author-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .fact-author-link:hover {
+    text-decoration: underline;
+  }
+
+  .fact-author-link:focus-visible,
+  .takeaway-author:focus-visible,
+  .amendment-author a:focus-visible {
+    outline: 2px solid var(--horizon-focus);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  .takeaway-author {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .takeaway-author:hover {
+    text-decoration: underline;
+  }
+
   /* Sticky Section Jump Navigation */
   .reading-nav {
     position: sticky;
@@ -2357,6 +2462,22 @@ const initialsFor = (name: string) =>
     margin: 0.15rem 0 0;
     font-size: 0.8rem;
     color: var(--horizon-muted);
+  }
+
+  .amendment-author {
+    margin: 0.2rem 0 0;
+    font-size: 0.8rem;
+    color: var(--horizon-muted);
+  }
+
+  .amendment-author a {
+    color: var(--horizon-purple);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .amendment-author a:hover {
+    text-decoration: underline;
   }
 
   .amendment-conflict {

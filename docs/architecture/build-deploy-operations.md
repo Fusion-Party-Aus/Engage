@@ -1,6 +1,6 @@
 # Build, deployment and operations
 
-**Status:** Current · **Verified:** 15 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 This page is the engineering path. For host-specific procedures, the older deployment documents remain useful but must be read with their dates: `docs/coolify-deployment.md`, `docs/coolify-cutover-checklist.md`, `docs/operations.md`, `docs/nuc-deployment.md`. Where they conflict with this page, treat this page as current and record the drift.
 
@@ -63,7 +63,7 @@ CI provisions a single-node MongoDB 8.0 replica set. Use the same when changing 
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request to `main` and on pushes to `main`, `fix/**` and `codex/**`: install, an isolated MongoDB replica set, `pnpm check`, the documentation link check, `pnpm test`, `pnpm build`, the member lifecycle browser journey, then the perimeter security browser harness.
+`.github/workflows/ci.yml` runs on every pull request to `main` and on pushes to `main`, `fix/**` and `codex/**`: install, an isolated MongoDB replica set, `pnpm check`, the documentation link check, `pnpm test`, `pnpm build`, the member lifecycle browser journey, then the perimeter security, threaded discussion and public member profile browser harnesses.
 
 The perimeter harness (`scripts/security-perimeter-browser.mjs`, also `pnpm perimeter:browser`) starts the built server on the in-memory database and drives real Chromium with Cloudflare and Plausible intercepted. It proves the response headers and CSP, that every allowed external host still reaches the network layer, that same-origin fetches and native form posts are accepted, and that cross-origin and cookie-without-Origin writes are refused. It has a hard 180-second deadline and always stops Chromium and the preview server, so a hung page fails the step instead of the job. Playwright is installed once per job and reused through `ENGAGE_PLAYWRIGHT_MODULE`; it is not an application dependency.
 
@@ -74,7 +74,10 @@ Local use:
 ```sh
 pnpm build
 ENGAGE_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs pnpm perimeter:browser
+ENGAGE_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/member-profile-browser.mjs
 ```
+
+The member profile harness proves the discussion author links, the public profile tabs and statistics, the exact-comment deep link, empty tabs and the 404 for an unknown member on desktop and mobile. It writes screenshots to `docs/screenshots/member-profile/`.
 
 The gap: CI runs the production build directly on the runner, not through Cloudflare/Coolify or a real MongoDB. Proxy headers on static assets, Astro's early cross-site 403 and production responses are still deployment checks.
 

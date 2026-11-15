@@ -1,6 +1,6 @@
 # Data and persistence
 
-**Status:** Current · **Verified:** 14 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 ## Connection model
 
@@ -186,6 +186,22 @@ Only `publicationStatus: "published"` is authoritative public policy.
 
 External-source records cannot be edited or revoked locally.
 
+### Public profile
+
+The Better Auth `user` document carries the public profile fields:
+
+```ts
+{
+  name,                       // display name, editable through Better Auth
+  bio?,                       // plain text, max 500 characters
+  bioUpdatedAt?,              // last owner edit
+  createdAt,
+  disabled?                   // a disabled account has no public profile
+}
+```
+
+`src/lib/member-profile.ts` builds the profile and its paginated history on read. It queries `comments` by `memberId`, `proposals` by `authorId` and `amendments` by `authorId`, then filters every proposal through `canViewProposal` and the archived-review rule before exposing a count, title, excerpt or link. Deleted comments and withdrawn amendments are excluded. The profile never copies contribution records into a separate collection, so there is no drift between a profile and the discussion it summarises.
+
 ## Indexes and uniqueness
 
 `initializeDatabase()` creates roughly forty indexes in two batches. The important uniqueness constraints are:
@@ -201,6 +217,8 @@ External-source records cannot be edited or revoked locally.
 - one notification delivery per dedupe ID;
 - unique role assignments and RBAC role IDs where applicable;
 - TTL index on `rate_limits.expiresAt` for abuse-protection windows.
+
+Public profile reads are supported by `comments { memberId: 1, deletedAt: 1, createdAt: -1 }`, the existing `proposals { authorId: 1, createdAt: 1 }` index and `amendments { authorId: 1, createdAt: -1 }` ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)).
 
 A known gap: there is no unique `(branchId, memberId)` index on `branch_memberships`; correctness relies on application upserts.
 
