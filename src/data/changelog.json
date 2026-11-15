@@ -1,5 +1,22 @@
 [
   {
+    "hash": "277576c",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Never imply a ballot close date that was not recorded",
+    "details": "A legacy closed ballot with no close time now says only that it closed, instead of presenting the current date as the close date."
+  },
+  {
+    "hash": "e22253a",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh the snapshot for the responsibility queue"
+  },
+  {
     "hash": "29d849d",
     "date": "2026-11-15",
     "type": "docs",
@@ -653,21 +670,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Add WebAuthn passkey support, improved sign-in UX, and guided member onboarding flow"
-  },
-  {
-    "hash": "ac9bb41",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "deploy",
-    "summary": "Automate production deployment gated on staging health"
-  },
-  {
-    "hash": "c6edce0",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "audit",
-    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
   }
 ]
