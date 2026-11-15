@@ -17,7 +17,9 @@ import type { PlatformEnv } from "./types.ts";
  * Commands are deliberately thin: they call the existing domain functions
  * (`bindBallotToRevision`, `recordFormalDecision`) and do not duplicate them.
  * Their value is one place for authorisation, scope resolution and
- * preconditions, not a second domain layer.
+ * preconditions, not a second domain layer. Preconditions are documented on
+ * each command for readers; the domain function the command calls enforces
+ * them.
  *
  * Extraction is incremental (#53). Only the ballot lifecycle is migrated so
  * far; proposals and membership remain in their routes.
@@ -65,7 +67,11 @@ export interface GovernanceCommand<TInput, TSubject> {
   readonly summary: string;
   /** The single permission this act requires. Declared per route too. */
   readonly requiredPermission: PermissionKey;
-  /** What must be true before the command executes. Enforced by the command. */
+  /**
+   * What must be true before the command executes. Documented for readers;
+   * enforced by the domain function each command delegates to, not by this
+   * layer.
+   */
   readonly preconditions: readonly string[];
   /** What the command changes when it succeeds. */
   readonly effects: readonly string[];

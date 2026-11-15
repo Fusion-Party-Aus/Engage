@@ -1,4 +1,6 @@
 import type { Db } from "mongodb";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { canManageBranchBallot } from "./auth.ts";
 import { BallotBindingError } from "./ballot-binding.ts";
 import { BallotDomainError } from "./ballots.ts";
@@ -33,6 +35,10 @@ export type GovernanceRouteKey =
 export interface GovernanceRouteDeclaration {
   route: GovernanceRouteKey;
   command: GovernanceCommandId;
+  /**
+   * Mirrors the command's `requiredPermission` so the table is readable on its
+   * own. The route enforces the command's value; a test fails if the two drift.
+   */
   permission: PermissionKey;
 }
 
@@ -49,10 +55,125 @@ export const GOVERNANCE_ROUTE_POLICY: readonly GovernanceRouteDeclaration[] = [
   },
 ];
 
-/** Directories whose route files must declare their command and permission. */
+/** Directories scanned recursively for route files that must declare their command and permission. */
 export const GOVERNED_ROUTE_DIRECTORIES: readonly string[] = [
   "src/pages/api/admin/ballots",
 ];
+
+export interface DiscoveredGovernanceRoute {
+  /** Absolute path of the route module. */
+  file: string;
+  source: string;
+  /** Export names that are HTTP handlers, e.g. `["POST"]`. */
+  methods: string[];
+  /** Route keys derived from the file location, e.g. `["POST /api/.../bind"]`. */
+  routes: string[];
+}
+
+const HTTP_HANDLER_METHODS = [
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "OPTIONS",
+  "HEAD",
+  "ALL",
+] as const;
+
+const ROUTE_FILE_EXTENSIONS = [".ts", ".js", ".mjs"] as const;
+
+function routeFilesRecursively(directory: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...routeFilesRecursively(path));
+    } else if (
+      entry.isFile() &&
+      ROUTE_FILE_EXTENSIONS.some((extension) => entry.name.endsWith(extension))
+    ) {
+      files.push(path);
+    }
+  }
+  return files.sort();
+}
+
+/**
+ * Handler exports in any supported form: `export const POST`, `export function
+ * GET`, `export async function POST` and `export { handler as POST }`.
+ */
+function exportedHandlerMethods(source: string): string[] {
+  const exported = new Set<string>();
+  const addIfHandler = (name: string) => {
+    if ((HTTP_HANDLER_METHODS as readonly string[]).includes(name))
+      exported.add(name);
+  };
+  for (const match of source.matchAll(
+    /export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\b/g,
+  ))
+    addIfHandler(match[1]);
+  for (const match of source.matchAll(
+    /export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\b/g,
+  ))
+    addIfHandler(match[1]);
+  for (const match of source.matchAll(/export\s*\{([^}]*)\}/g)) {
+    for (const clause of match[1].split(",")) {
+      const [local, alias] = clause.trim().split(/\s+as\s+/);
+      addIfHandler((alias ?? local).trim());
+    }
+  }
+  return HTTP_HANDLER_METHODS.filter((method) => exported.has(method));
+}
+
+/**
+ * Discover every route module under `roots` and derive its route keys from the
+ * path relative to `apiRoot` (the `src/pages/api` directory). Recursive and
+ * extension-agnostic so a nested or JavaScript route cannot escape the drift
+ * check. Pure: callers pass absolute paths, so tests can point it at a temporary
+ * directory.
+ */
+export function discoverGovernedRoutes(
+  apiRoot: string,
+  roots: readonly string[],
+): DiscoveredGovernanceRoute[] {
+  const discovered: DiscoveredGovernanceRoute[] = [];
+  for (const root of roots) {
+    for (const file of routeFilesRecursively(root)) {
+      const source = readFileSync(file, "utf8");
+      const methods = exportedHandlerMethods(source);
+      if (!methods.length) continue;
+      const routePath =
+        "/api/" +
+        relative(apiRoot, file)
+          .split(sep)
+          .join("/")
+          .replace(/\.(ts|js|mjs)$/, "")
+          .replace(/\/index$/, "");
+      discovered.push({
+        file,
+        source,
+        methods,
+        routes: methods.map((method) => `${method} ${routePath}`),
+      });
+    }
+  }
+  return discovered;
+}
+
+/** Route keys that exist under a governed root but have no declaration. */
+export function undeclaredGovernanceRoutes(
+  discovered: readonly DiscoveredGovernanceRoute[],
+  declarations: readonly GovernanceRouteDeclaration[] = GOVERNANCE_ROUTE_POLICY,
+): string[] {
+  const declared = new Set<string>(
+    declarations.map((entry) => entry.route),
+  );
+  return discovered
+    .flatMap((entry) => entry.routes)
+    .filter((route) => !declared.has(route))
+    .sort();
+}
 
 const POLICY_BY_ROUTE = new Map<GovernanceRouteKey, GovernanceRouteDeclaration>(
   GOVERNANCE_ROUTE_POLICY.map((entry) => [entry.route, entry]),
@@ -110,7 +231,13 @@ export function authoriseGovernanceCommand(
   return null;
 }
 
-export function authoriseGovernanceRoute(
+/**
+ * The coarse role gate only: national administrator, branch administrator or
+ * permission holder. It deliberately does not check branch scope — the route
+ * applies it before parsing to preserve the published 403 ordering, and
+ * `runGovernanceRoute` applies the resolved scope gate before any write.
+ */
+export function authoriseGovernanceRouteRole(
   user: SessionUser | null | undefined,
   route: GovernanceRouteKey,
 ): AuthorisationDenial | null {
@@ -142,6 +269,9 @@ export async function runGovernanceRoute(
     unknown,
     unknown
   >;
+  // The route already applied this coarse gate before reading the body. It is
+  // repeated deliberately so a caller that forgets the route-level gate still
+  // cannot reach a command without authorisation.
   const denial = authoriseGovernanceCommand(dependencies.user, declaration.command);
   if (denial) return { status: denial.status, body: denial.body };
   const parsed = command.parse(body);
@@ -168,15 +298,38 @@ export async function runGovernanceRoute(
 }
 
 /**
+ * The one domain error class each route's handler caught before the command
+ * layer existed. Everything else stays on the generic 400 path, exactly as it
+ * did: a `BallotDomainError` escaping the bind route is not an improvement
+ * opportunity, it is a status code that must not change.
+ */
+const ROUTE_DOMAIN_ERRORS: Record<
+  GovernanceRouteKey,
+  readonly (typeof BallotBindingError | typeof BallotDomainError)[]
+> = {
+  "POST /api/admin/ballots/bind": [BallotBindingError],
+  "POST /api/admin/ballots/result": [BallotDomainError],
+};
+
+/**
  * Map a thrown error to the response the route returned before this refactor.
- * Domain errors keep their own status and message; anything else is a 400.
+ * Only the route's own domain error keeps its status and message; anything else
+ * is a 400, as before.
  */
 export function governanceRouteError(
   route: GovernanceRouteKey,
   error: unknown,
 ): CommandOutcome {
-  if (error instanceof BallotBindingError || error instanceof BallotDomainError)
-    return { status: error.status, body: { error: error.message } };
+  if (
+    error instanceof Error &&
+    ROUTE_DOMAIN_ERRORS[route].some(
+      (domainError) => error instanceof domainError,
+    )
+  )
+    return {
+      status: (error as Error & { status: number }).status,
+      body: { error: error.message },
+    };
   const command = governanceCommand(governanceRouteDeclaration(route).command);
   return {
     status: 400,

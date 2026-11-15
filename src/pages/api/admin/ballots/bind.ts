@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import {
-  authoriseGovernanceRoute,
+  authoriseGovernanceRouteRole,
   governanceRouteError,
   runGovernanceRoute,
   type GovernanceRouteKey,
@@ -17,7 +17,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  const denial = authoriseGovernanceRoute(user, ROUTE);
+  // Coarse role gate before parsing, so an unauthorised caller gets 403.
+  const denial = authoriseGovernanceRouteRole(user, ROUTE);
   if (denial) return Response.json(denial.body, { status: denial.status });
   try {
     const body = (await request.json()) as Record<string, unknown>;
