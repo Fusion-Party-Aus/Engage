@@ -52,7 +52,7 @@ import { ballotExpired, ballotDeadlineLabel, closesWithinSevenDays } from '../..
 import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
 import { outstandingBallots, type DigestBallot } from '../../lib/engagement-email.ts';
 import { listProposals, listUserActivity } from '../../lib/store.ts';
-import { getMemberBioSettings, memberProfileHref } from '../../lib/member-profile.ts';
+import { getMemberProfileSettings, memberProfileHref } from '../../lib/member-profile.ts';
 import {
   ensureNationalBranchAssignment,
   getMemberBranchProfile,
@@ -227,10 +227,10 @@ const memberView =
   requestedView === 'activity' || requestedView === 'account' || requestedView === 'notifications' || requestedView === 'branches'
     ? requestedView
     : 'overview';
-const memberBio =
+const memberProfileSettings =
   user && memberView === 'account'
-    ? await getMemberBioSettings(db, user.memberId).catch(() => '')
-    : '';
+    ? await getMemberProfileSettings(db, user.memberId).catch(() => ({ bio: '', profileVisible: true }))
+    : { bio: '', profileVisible: true };
 
 // Contextual Intent Preservation (Message Match & Safe Same-Origin Redirect)
 const rawReturnTo = Astro.url.searchParams.get('returnTo')?.trim() ?? '';
@@ -962,7 +962,8 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               role={user.role}
               status={user.status}
               canParticipate={user.canParticipate}
-              bio={memberBio}
+              bio={memberProfileSettings.bio}
+              profileVisible={memberProfileSettings.profileVisible}
               profileHref={memberProfileHref(user.memberId)}
               branches={memberBranches.map((branch) => ({
                 id: branch.branchId,

@@ -8,6 +8,7 @@ import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import {
   getMemberProfilePage,
+  resolveMemberProfileRoute,
   type MemberProfileTab,
 } from '../../lib/member-profile.ts';
 import type { ProposalStage } from '../../lib/types.ts';
@@ -25,11 +26,23 @@ const requestedPage = Number.parseInt(
   Astro.url.searchParams.get('page') ?? '1',
   10,
 );
-const data = await getMemberProfilePage(db, Astro.params.memberId ?? '', {
-  tab: Astro.url.searchParams.get('tab'),
-  page: Number.isFinite(requestedPage) ? requestedPage : 1,
-  viewer,
-});
+const route = await resolveMemberProfileRoute(
+  db,
+  Astro.params.memberId ?? '',
+  env,
+);
+let data: Awaited<ReturnType<typeof getMemberProfilePage>> = null;
+if (route && (route.profileVisible || viewer?.memberId === route.memberId)) {
+  if (route.redirect) {
+    return Astro.redirect(`${route.redirect}${Astro.url.search}`, 301);
+  }
+  data = await getMemberProfilePage(db, route.memberId, {
+    tab: Astro.url.searchParams.get('tab'),
+    page: Number.isFinite(requestedPage) ? requestedPage : 1,
+    viewer,
+    profileIdentifier: route.canonicalIdentifier,
+  });
+}
 
 if (!data) Astro.response.status = 404;
 
@@ -141,7 +154,7 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
       : 'This member profile is not available.'
   }
   canonical={profile?.href}
-  noIndex={!profile}
+  noIndex={!profile || !profile.visible}
 >
   {!profile || !data ? (
     <ErrorPage
@@ -174,6 +187,11 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
               <p class="profile-joined">
                 Member since {dateLabel(profile.joinedAt)}
               </p>
+            )}
+            {!profile.visible && (
+              <Badge className="mt-1.5" variant="muted">
+                Hidden from others
+              </Badge>
             )}
           </div>
           {isOwner && (
