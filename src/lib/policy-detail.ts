@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { proposalBallotResultFilter } from "./ballots.ts";
 import { listPolicyChangeProposals } from "./policy-change.ts";
 import {
   canViewProposal,
@@ -56,7 +57,7 @@ export async function loadPolicyDetail(
       row.proposalId
         ? db
             .collection("ballot_results")
-            .findOne({ proposalId: String(row.proposalId) })
+            .findOne(proposalBallotResultFilter(String(row.proposalId)))
         : Promise.resolve(null),
       listPolicyChangeProposals(db, String(row.policyId)),
       Array.isArray(row.supersedes) && row.supersedes[0]
