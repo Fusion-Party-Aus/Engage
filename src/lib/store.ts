@@ -2254,6 +2254,7 @@ export async function addComment(
     depth,
     upvotes: [],
     downvotes: [],
+    voteVersion: 0,
     createdAt: new Date(),
   };
 
@@ -2302,76 +2303,107 @@ export async function voteOnComment(
   const id = commentId.trim();
   if (!id) throw new Error("Comment ID is required.");
   const col = db.collection<CommentRecord>("comments");
-  const existing = await col.findOne({ commentId: id });
-  if (!existing) throw new Error("Comment not found.");
+  const visible = await col.findOne({ commentId: id });
+  if (!visible) throw new Error("Comment not found.");
 
   const proposal = await db
     .collection<ProposalRecord>("proposals")
-    .findOne({ proposalId: existing.proposalId });
+    .findOne({ proposalId: visible.proposalId });
   if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user))
     throw new Error("Comment not found.");
 
-  const upvotes = Array.isArray(existing.upvotes) ? [...existing.upvotes] : [];
-  const downvotes = Array.isArray(existing.downvotes)
-    ? [...existing.downvotes]
-    : [];
-  const upvoteEvents = Array.isArray(existing.upvoteEvents)
-    ? [...existing.upvoteEvents]
-    : [];
-  const hasUpvoted = upvotes.includes(user.memberId);
-  const hasDownvoted = downvotes.includes(user.memberId);
-  let upvoted = false;
-  let downvoted = false;
+  // The vote is a single-document compare-and-swap. A concurrent vote bumps
+  // `voteVersion`, so this write misses and retries against the new state
+  // instead of overwriting another member's vote.
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const existing = await col.findOne({ commentId: id });
+    if (!existing) throw new Error("Comment not found.");
+    const upvotes = Array.isArray(existing.upvotes) ? [...existing.upvotes] : [];
+    const downvotes = Array.isArray(existing.downvotes)
+      ? [...existing.downvotes]
+      : [];
+    const upvoteEvents = Array.isArray(existing.upvoteEvents)
+      ? [...existing.upvoteEvents]
+      : [];
+    const hasUpvoted = upvotes.includes(user.memberId);
+    const hasDownvoted = downvotes.includes(user.memberId);
+    let upvoted = false;
+    let downvoted = false;
 
-  const removeUpvote = () => {
-    const index = upvotes.indexOf(user.memberId);
-    if (index >= 0) upvotes.splice(index, 1);
-    for (let i = upvoteEvents.length - 1; i >= 0; i -= 1) {
-      if (upvoteEvents[i]!.memberId === user.memberId) upvoteEvents.splice(i, 1);
-    }
-  };
-  const removeDownvote = () => {
-    const index = downvotes.indexOf(user.memberId);
-    if (index >= 0) downvotes.splice(index, 1);
-  };
+    const removeUpvote = () => {
+      const index = upvotes.indexOf(user.memberId);
+      if (index >= 0) upvotes.splice(index, 1);
+      for (let i = upvoteEvents.length - 1; i >= 0; i -= 1) {
+        if (upvoteEvents[i]!.memberId === user.memberId) upvoteEvents.splice(i, 1);
+      }
+    };
+    const removeDownvote = () => {
+      const index = downvotes.indexOf(user.memberId);
+      if (index >= 0) downvotes.splice(index, 1);
+    };
 
-  if (action === "upvote") {
-    removeDownvote();
-    if (hasUpvoted) {
-      removeUpvote();
-    } else {
-      upvotes.push(user.memberId);
-      upvoteEvents.push({ memberId: user.memberId, at: new Date() });
-      upvoted = true;
-    }
-  } else {
-    removeUpvote();
-    if (hasDownvoted) {
+    if (action === "upvote") {
       removeDownvote();
+      if (hasUpvoted) {
+        removeUpvote();
+      } else {
+        upvotes.push(user.memberId);
+        upvoteEvents.push({ memberId: user.memberId, at: new Date() });
+        upvoted = true;
+      }
     } else {
-      downvotes.push(user.memberId);
-      downvoted = true;
+      removeUpvote();
+      if (hasDownvoted) {
+        removeDownvote();
+      } else {
+        downvotes.push(user.memberId);
+        downvoted = true;
+      }
     }
+
+    const storedVersion = existing.voteVersion;
+    const version =
+      typeof storedVersion === "number" && Number.isFinite(storedVersion)
+        ? storedVersion
+        : 0;
+    const versionFilter =
+      storedVersion === undefined
+        ? { voteVersion: { $exists: false } }
+        : { voteVersion: storedVersion };
+    const result = await col.updateOne(
+      { commentId: id, ...versionFilter },
+      {
+        $set: {
+          upvotes,
+          downvotes,
+          upvoteEvents,
+          voteVersion: version + 1,
+        },
+      },
+    );
+    if (result.matchedCount === 1) {
+      const score = upvotes.length - downvotes.length;
+      const total = upvotes.length + downvotes.length;
+      return {
+        count: score,
+        score,
+        upvoteCount: upvotes.length,
+        downvoteCount: downvotes.length,
+        upvotePercent:
+          total > 0 ? Math.round((upvotes.length / total) * 100) : 0,
+        upvoted,
+        downvoted,
+        hasUpvoted: upvoted,
+        hasDownvoted: downvoted,
+      };
+    }
+    // Small jitter avoids two writers retrying in lockstep.
+    await new Promise((resolve) =>
+      setTimeout(resolve, 2 + Math.floor(Math.random() * 6)),
+    );
   }
 
-  await col.updateOne(
-    { commentId: id },
-    { $set: { upvotes, downvotes, upvoteEvents } },
-  );
-
-  const score = upvotes.length - downvotes.length;
-  const total = upvotes.length + downvotes.length;
-  return {
-    count: score,
-    score,
-    upvoteCount: upvotes.length,
-    downvoteCount: downvotes.length,
-    upvotePercent: total > 0 ? Math.round((upvotes.length / total) * 100) : 0,
-    upvoted,
-    downvoted,
-    hasUpvoted: upvoted,
-    hasDownvoted: downvoted,
-  };
+  throw new Error("Comment votes changed at the same time. Try again.");
 }
 
 /**

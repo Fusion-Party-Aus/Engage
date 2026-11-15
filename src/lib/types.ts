@@ -360,6 +360,8 @@ export interface CommentRecord {
   /** Member ids of downvotes. Aggregated only; never returned to a viewer. */
   downvotes?: string[];
   upvoteEvents?: Array<{ memberId: string; at: Date }>;
+  /** Compare-and-swap version for atomic comment vote updates. */
+  voteVersion?: number;
   feedback?: ContributionFeedback;
   feedbackHistory?: ContributionFeedbackHistoryEntry[];
   /**

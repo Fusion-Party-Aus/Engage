@@ -343,4 +343,56 @@ describe("threaded deliberation comments", () => {
     assert.equal(anonDto.downvotedByMe, false);
     assert.equal(anonDto.score, 1);
   });
+
+  it("applies concurrent votes without losing any", async () => {
+    const db = createMemoryDb();
+    const proposal = await createProposal(db, "Concurrent comment votes");
+    const parent = await addComment(db, author, {
+      proposalId: proposal.proposalId,
+      body: "A contribution with many simultaneous voters.",
+    });
+    const voters: SessionUser[] = Array.from({ length: 12 }, (_, index) => ({
+      ...responder,
+      memberId: `concurrent-voter-${index}`,
+      email: `concurrent-${index}@example.org`,
+    }));
+
+    await Promise.all(
+      voters.map((voter) =>
+        voteOnComment(db, voter, parent.commentId, "upvote"),
+      ),
+    );
+
+    const detail = await getProposalDetail(db, proposal.slug, responder);
+    const stored = detail?.comments.find(
+      (comment) => comment.commentId === parent.commentId,
+    )!;
+    assert.equal(stored.upvotes.length, 12);
+    assert.equal(stored.downvotes?.length, 0);
+    assert.equal(
+      toCommentDto(stored, responder).score,
+      12,
+      "no concurrent vote is lost",
+    );
+
+    // Two simultaneous clicks from the same member are two toggles: add then
+    // remove. The CAS must not leave a phantom or duplicate vote.
+    await Promise.all([
+      voteOnComment(db, responder, parent.commentId, "upvote"),
+      voteOnComment(db, responder, parent.commentId, "upvote"),
+    ]);
+    const afterDoubleClick = await getProposalDetail(
+      db,
+      proposal.slug,
+      responder,
+    );
+    const afterStored = afterDoubleClick?.comments.find(
+      (comment) => comment.commentId === parent.commentId,
+    )!;
+    assert.equal(
+      afterStored.upvotes.filter((id) => id === responder.memberId).length,
+      0,
+      "the same member cannot hold two votes after two clicks",
+    );
+  });
 });

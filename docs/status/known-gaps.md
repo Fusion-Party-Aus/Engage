@@ -251,7 +251,7 @@ The identifiable-ballot boundary is national administrator or a delegated nation
 
 **Residual risks:**
 
-- Comment votes have no dedicated rate limit or audit trail. A member can toggle a vote repeatedly, and a changed vote leaves no audit record. Vote updates are a read-modify-write without a transaction, so concurrent clicks from the same member could race. This is different from formal ballots, which have their own integrity controls.
+- Comment votes have no dedicated rate limit or audit trail. A member can toggle a vote repeatedly, and a changed vote leaves no audit record. This is different from formal ballots, which have their own integrity controls. Concurrent vote writes are atomic: each comment carries a `voteVersion` and an update only applies when that version is unchanged, so simultaneous votes are retried against the latest state rather than overwriting each other.
 - The API returns aggregate `downvoteCount` to build the client-side ranking. Voter identities are not exposed, but an exact aggregate downvote tally is available to any viewer of the proposal. If the product should behave like Reddit's hidden downvote count, the DTO must expose only score and percentage and the client must rank from those.
 - The Wilson constant (`z = 1.281551565545`), the score tie-break and the age tie-break are product defaults, not governance-approved rules. They are display ranking only and must never be presented as a measure of member support or a ballot signal.
 - Reply depth is capped visually at four levels and stored at 20. That is a usability ceiling, not a moderation rule.
