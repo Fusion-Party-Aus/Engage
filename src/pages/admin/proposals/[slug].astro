@@ -24,6 +24,7 @@ import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
+import { policyCanonicalPath } from '../../../lib/policy-registry.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
 import PortableText from '../../../components/PortableText.astro';
 import ActivityTimeline from '../../../components/blocks/timeline-3';
@@ -273,7 +274,7 @@ const adminChain = proposal
             label: 'Policy registry',
             value: policyState,
             state: policy?.publicationStatus === 'published' ? 'done' : policy ? 'current' : 'pending',
-            href: policy ? `/policies/${encodeURIComponent(String(policy.policyId))}/` : '#record-decision',
+            href: policy ? policyCanonicalPath(policy) : '#record-decision',
           },
     ]
   : [];
@@ -367,7 +368,7 @@ const activityEvents: ActivityTimelineEvent[] = proposal
               actor: 'Administration',
               action: 'ratified',
               target: policy.title,
-              href: `/policies/${encodeURIComponent(String(policy.policyId))}/`,
+              href: policyCanonicalPath(policy),
               kind: 'governance' as const,
               badge: 'Ratified',
             },
@@ -377,7 +378,7 @@ const activityEvents: ActivityTimelineEvent[] = proposal
               actor: 'Administration',
               action: 'published',
               target: policy.title,
-              href: `/policies/${encodeURIComponent(String(policy.policyId))}/`,
+              href: policyCanonicalPath(policy),
               kind: 'governance' as const,
               badge: 'Published',
             },
@@ -564,7 +565,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                 )}
 
                 {policy ? (
-                  <a href={`/policies/${encodeURIComponent(String(policy.policyId))}/`} class="project-file-card">
+                  <a href={policyCanonicalPath(policy)} class="project-file-card">
                     <span class="project-file-card__icon"><BookOpen aria-hidden="true" /></span>
                     <div class="project-file-card__meta">
                       <strong>Policy {policy.policyId}</strong>
@@ -953,8 +954,8 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                           href:
                             fb.evidence.kind === 'policy' &&
                             policy &&
-                            ['published', 'withdrawn', 'superseded'].includes(String(policy.publicationStatus ?? ''))
-                              ? `/policies/${encodeURIComponent(fb.evidence.recordId)}/`
+                            ['published', 'withdrawn', 'superseded', 'repealed'].includes(String(policy.publicationStatus ?? ''))
+                              ? policyCanonicalPath(policy)
                               : `${publicUrl}#${fb.evidence.kind === 'decision' ? 'proposal-vote' : `${fb.evidence.kind}-${encodeURIComponent(fb.evidence.recordId)}`}`,
                         }
                       : null;

@@ -5,6 +5,14 @@ import { privateJson, toRatifiedPolicyDto } from "../../../../lib/api-contracts.
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { requireApiPermission } from "../../../../lib/rbac.ts";
 import { isGovernanceResolution } from "../../../../lib/store.ts";
+import {
+  applyRatifiedPolicyChange,
+  isPolicyChangeType,
+} from "../../../../lib/policy-change.ts";
+import {
+  policySlugFromTitle,
+  uniquePolicySlug,
+} from "../../../../lib/policy-registry.ts";
 
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -38,6 +46,61 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "Proposal revision not found." },
         { status: 404 },
       );
+    // A change proposal must name a complete, current relationship to an
+    // adopted policy. Half-declared lineage is refused rather than guessed.
+    const declaredChangeType = isPolicyChangeType(proposal.changeType)
+      ? proposal.changeType
+      : null;
+    const declaredTargetPolicyId =
+      typeof proposal.targetPolicyId === "string"
+        ? proposal.targetPolicyId
+        : "";
+    if (Boolean(proposal.changeType) !== Boolean(proposal.targetPolicyId))
+      return Response.json(
+        {
+          error:
+            "This proposal declares an incomplete policy change. Both the target policy and the change type are required.",
+        },
+        { status: 409 },
+      );
+    if (proposal.targetPolicyId && !declaredChangeType)
+      return Response.json(
+        { error: "The declared change type is not recognised." },
+        { status: 409 },
+      );
+    let policyChangeTarget: Record<string, any> | null = null;
+    if (declaredChangeType && declaredTargetPolicyId) {
+      policyChangeTarget = await db
+        .collection("policy_registry")
+        .findOne({ policyId: declaredTargetPolicyId });
+      if (!policyChangeTarget)
+        return Response.json(
+          { error: "The policy this proposal changes was not found." },
+          { status: 409 },
+        );
+      if (
+        String(policyChangeTarget.revisionId ?? "") !==
+        String(proposal.targetPolicyRevisionId ?? "")
+      )
+        return Response.json(
+          {
+            error:
+              "The policy wording changed after this proposal was created. Start a new change proposal against the current wording.",
+          },
+          { status: 409 },
+        );
+      if (
+        declaredChangeType !== "repeal" &&
+        policyChangeTarget.publicationStatus !== "published"
+      )
+        return Response.json(
+          {
+            error:
+              "This proposal can only amend or replace a policy that is still published.",
+          },
+          { status: 409 },
+        );
+    }
     if (isGovernanceResolution(proposal as { kind?: string; proposalId?: string }))
       return Response.json(
         {
@@ -107,9 +170,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { status: 409 },
       );
     const jurisdictionBranchId =
-      typeof body.jurisdictionBranchId === "string"
+      typeof body.jurisdictionBranchId === "string" && body.jurisdictionBranchId
         ? body.jurisdictionBranchId
-        : null;
+        : typeof policyChangeTarget?.jurisdictionBranchId === "string"
+          ? policyChangeTarget.jurisdictionBranchId
+          : null;
     if (
       jurisdictionBranchId &&
       !(await db
@@ -138,6 +203,46 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return Response.json(
         { error: "A different revision is already ratified for this policy." },
         { status: 409 },
+      );
+    }
+    if (declaredChangeType === "repeal" && policyChangeTarget) {
+      if (
+        Array.isArray(body.adoptedAmendmentIds) &&
+        body.adoptedAmendmentIds.length
+      )
+        return Response.json(
+          {
+            error:
+              "A repeal decision cannot adopt amendments to wording that is being removed.",
+          },
+          { status: 409 },
+        );
+      if (
+        policyChangeTarget.publicationStatus === "repealed" &&
+        String(policyChangeTarget.repealedBy?.proposalId ?? "") ===
+          proposalId &&
+        String(policyChangeTarget.repealedBy?.decisionEventId ?? "") ===
+          decisionEventId
+      )
+        return privateJson(
+          { policy: toRatifiedPolicyDto(policyChangeTarget), repealed: true },
+          { status: 200 },
+        );
+      const repealed = await applyRatifiedPolicyChange(db, {
+        proposalId,
+        revisionId,
+        ratifiedRevisionId: revisionId,
+        changeType: "repeal",
+        targetPolicyId: declaredTargetPolicyId,
+        targetPolicyRevisionId: String(proposal.targetPolicyRevisionId ?? ""),
+        decisionEventId,
+        authorityBranchId,
+        actorId: user.memberId,
+        ratifiedAt: new Date(),
+      });
+      return privateJson(
+        { policy: toRatifiedPolicyDto(repealed), repealed: true },
+        { status: 201 },
       );
     }
     const amendmentIds = Array.isArray(body.adoptedAmendmentIds)
@@ -236,9 +341,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
       ratifiedBy: user.memberId,
       ratifiedAt: new Date(),
     };
+    const branchSlug = authorityBranchId.replace(/^branch-/, "").toLowerCase();
+    const policySlug = await uniquePolicySlug(
+      db,
+      branchSlug,
+      policySlugFromTitle(snapshot.title),
+      proposalId,
+    );
     const registry = {
       policyId: proposalId,
       proposalId,
+      branchSlug,
+      policySlug,
       title: snapshot.title,
       summary: snapshot.summary,
       category: proposal.space,
@@ -248,9 +362,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
       revisionIds: [...new Set([revisionId, ratifiedRevisionId])],
       status: "adopted",
       publicationStatus: "unpublished",
+      recordOrigin: "engage-ratification",
       provenance: revision.provenance ?? null,
+      ...(declaredChangeType && policyChangeTarget
+        ? {
+            changeType: declaredChangeType,
+            supersedes: [declaredTargetPolicyId],
+            supersedesRevisionId: proposal.targetPolicyRevisionId ?? null,
+          }
+        : {}),
       jurisdiction:
-        typeof body.jurisdiction === "string" ? body.jurisdiction : null,
+        typeof body.jurisdiction === "string" && body.jurisdiction
+          ? body.jurisdiction
+          : (policyChangeTarget?.jurisdiction ?? null),
       jurisdictionBranchId,
       governanceAuthorityBranchId: authorityBranchId,
       ratification,
@@ -278,6 +402,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "A different revision is already ratified for this policy." },
         { status: 409 },
       );
+    // An amended or replaced policy supersedes its predecessor only when the
+    // successor is published. Until then the current published wording remains
+    // the operative policy, so the registry never shows a gap.
     return privateJson({ policy: toRatifiedPolicyDto(existing) }, { status: 201 });
   } catch (error) {
     return Response.json(

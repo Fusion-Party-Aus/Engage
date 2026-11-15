@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { policyCanonicalPath } from "./policy-registry.ts";
 import type { ActivityTimelineEvent } from "./activity-timeline.ts";
 import { canViewProposal } from "./store.ts";
 import type { ProposalRecord, SessionUser } from "./types.ts";
@@ -399,7 +400,7 @@ export async function listMemberActivityStream(
     for (const policy of registry) {
       const proposalId = String(policy.proposalId ?? policy.policyId);
       const title = String(policy.title ?? titleFor(proposalId));
-      const href = `/policies/${encodeURIComponent(String(policy.policyId))}/`;
+      const href = policyCanonicalPath(policy);
       const ratifiedAt = asDate(policy.ratification?.ratifiedAt);
       if (ratifiedAt)
         events.push({
@@ -723,7 +724,7 @@ export async function buildMemberCatchUp(
 
   for (const policy of registry) {
     const proposalId = String(policy.proposalId ?? policy.policyId);
-    const href = `/policies/${encodeURIComponent(String(policy.policyId))}/`;
+    const href = policyCanonicalPath(policy);
     const milestones: Array<[unknown, string, string]> = [
       [policy.ratification?.ratifiedAt, "ratified", "Ratified"],
       [policy.publishedAt, "published", "Published"],

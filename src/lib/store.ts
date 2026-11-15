@@ -3,6 +3,8 @@ import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
 import { BALLOTS_COLLECTION, FORMAL_DECISIONS_COLLECTION } from "./ballots.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEvent } from "./governance-relationships.ts";
+import { isPolicyChangeType, PolicyChangeError } from "./policy-change.ts";
+import { policyCanonicalPath } from "./policy-registry.ts";
 import {
   PROPOSAL_VOTES,
   buildEncryptedVoteFields,
@@ -342,6 +344,17 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
       raw.supersededByProposalId && raw.supersededByNote
         ? String(raw.supersededByNote)
         : undefined,
+    ...(raw.targetPolicyId
+      ? {
+          targetPolicyId: String(raw.targetPolicyId),
+          ...(raw.targetPolicyRevisionId
+            ? { targetPolicyRevisionId: String(raw.targetPolicyRevisionId) }
+            : {}),
+          ...(isPolicyChangeType(raw.changeType)
+            ? { changeType: raw.changeType }
+            : {}),
+        }
+      : {}),
     authorId: raw.authorId ? String(raw.authorId) : undefined,
     authorName: raw.authorName ? String(raw.authorName) : undefined,
     createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
@@ -732,6 +745,69 @@ export async function listProposalRevisions(
   return { proposalId: proposal.proposalId, revisions: data };
 }
 
+export interface ResolvedPolicyChangeTarget {
+  targetPolicyId: string;
+  targetPolicyRevisionId: string;
+  changeType: import("./types.ts").PolicyChangeType;
+  target: Record<string, any>;
+}
+
+/**
+ * Resolve a declared amend/replace/repeal against a published policy.
+ *
+ * A proposal may only change a policy that is published *now*, against the
+ * exact revision it declares. If the policy is superseded or repealed later,
+ * the change proposal fails rather than silently retargeting current wording.
+ */
+export async function resolvePolicyChangeTarget(
+  db: Db,
+  input: { targetPolicyId?: unknown; changeType?: unknown },
+): Promise<ResolvedPolicyChangeTarget> {
+  const targetPolicyId = String(input.targetPolicyId ?? "").trim();
+  if (!targetPolicyId)
+    throw new PolicyChangeError("Choose the policy this proposal would change.", 400);
+  if (!isPolicyChangeType(input.changeType))
+    throw new PolicyChangeError(
+      "Choose whether the proposal amends, replaces or repeals the policy.",
+      400,
+    );
+  const target = await db.collection("policy_registry").findOne({
+    policyId: targetPolicyId,
+    publicationStatus: "published",
+  });
+  if (!target)
+    throw new PolicyChangeError(
+      "Only a currently published policy can be changed.",
+      404,
+    );
+  const linkedProposal = target.proposalId
+    ? await db
+        .collection("proposals")
+        .findOne({ proposalId: String(target.proposalId) })
+    : null;
+  if (
+    isPolicyRegistryRecordForResolution(
+      target as { policyId?: string; proposalId?: string; kind?: string },
+      linkedProposal as { kind?: string; proposalId?: string } | null,
+    )
+  )
+    throw new PolicyChangeError(
+      "Governance resolutions are not changed through the policy registry.",
+      409,
+    );
+  if (!target.revisionId)
+    throw new PolicyChangeError(
+      "The policy has no authoritative revision to change.",
+      409,
+    );
+  return {
+    targetPolicyId,
+    targetPolicyRevisionId: String(target.revisionId),
+    changeType: input.changeType,
+    target,
+  };
+}
+
 export async function saveProposal(
   db: Db,
   user: SessionUser,
@@ -748,6 +824,26 @@ export async function saveProposal(
   const existing = existingId
     ? await col.findOne({ proposalId: existingId })
     : null;
+  // A declared policy change is fixed at creation. Rewriting what a live
+  // proposal targets would let a draft claim authority over different policy.
+  const declaresChange =
+    body.targetPolicyId !== undefined || body.changeType !== undefined;
+  if (existing && declaresChange) {
+    const sameTarget =
+      String(body.targetPolicyId ?? existing.targetPolicyId ?? "") ===
+      String(existing.targetPolicyId ?? "");
+    const sameType =
+      String(body.changeType ?? existing.changeType ?? "") ===
+      String(existing.changeType ?? "");
+    if (!sameTarget || !sameType)
+      throw new Error(
+        "The policy a proposal changes is fixed when it is created.",
+      );
+  }
+  const policyChange =
+    !existing && declaresChange
+      ? await resolvePolicyChangeTarget(db, body)
+      : null;
   const branchFields = [
     "originatingBranchId",
     "governanceAuthorityBranchId",
@@ -1339,6 +1435,26 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
   // governance. This is derived from permissions, not from untrusted input, so
   // a follower cannot choose a stronger governance authority.
   if (!existing) {
+    if (policyChange) {
+      // A change inherits the governance context of the policy it changes.
+      // This is derived from the published record, never from client input, so
+      // a member cannot use an amendment to gain a different authority.
+      const targetBranchId =
+        policyChange.target.jurisdictionBranchId ??
+        policyChange.target.governanceAuthorityBranchId ??
+        null;
+      originatingBranchId = targetBranchId ?? originatingBranchId;
+      governanceAuthorityBranchId =
+        targetBranchId ?? governanceAuthorityBranchId;
+      jurisdictionBranchId =
+        policyChange.target.jurisdictionBranchId ??
+        targetBranchId ??
+        jurisdictionBranchId;
+      // A change concerns a policy that is already public, so its deliberation
+      // is public too. Voting eligibility stays with the branch and is not
+      // affected by visibility.
+      publicationScope = policyChange.target.publicationScope ?? "national";
+    }
     const [nationalBranchForDefault, originBranch] = await Promise.all([
       db
         .collection("branches")
@@ -1381,6 +1497,7 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
       : undefined;
     geographicScope = derivedScope ?? existing?.scope;
   }
+
   if (user.isAdmin) {
     for (const branchId of [
       originatingBranchId,
@@ -1715,6 +1832,13 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
     jurisdictionBranchId,
     publicationScope,
     ...(geographicScope ? { scope: geographicScope } : {}),
+    ...(policyChange
+      ? {
+          targetPolicyId: policyChange.targetPolicyId,
+          targetPolicyRevisionId: policyChange.targetPolicyRevisionId,
+          changeType: policyChange.changeType,
+        }
+      : {}),
     provenance,
     authorId: user.memberId,
     authorName: user.name || "Verified Member",
@@ -2416,6 +2540,7 @@ export async function resolveContributionEvidenceMap(
         "published",
         "withdrawn",
         "superseded",
+        "repealed",
       ].includes(pubStatus);
       if (!isPublicRecord && !user?.isStaff && !user?.isAdmin) continue;
       result.set(key, {
@@ -2426,7 +2551,7 @@ export async function resolveContributionEvidenceMap(
             ? `Adopted policy: ${String(pol.title ?? item.recordId)}`
             : `Policy record (${pubStatus}): ${String(pol.title ?? item.recordId)}`,
         ...(isPublicRecord
-          ? { href: `/policies/${encodeURIComponent(item.recordId)}/` }
+          ? { href: policyCanonicalPath(pol) }
           : {}),
       });
     }

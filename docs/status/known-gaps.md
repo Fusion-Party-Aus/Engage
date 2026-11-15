@@ -174,15 +174,15 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 
 ### 22. The Policy Registry is empty on a fresh install
 
-The seed contains 78 **proposals**, not adopted policy. There is no national baseline import, no `policy_revisions` for legacy adopted policy and no administrative import flow. This is the largest gap between the product story and the shipped state.
+The seed contains 78 **proposals**, not adopted policy. There is no national baseline import and no administrative import flow.
 
-**Direction:** A reviewed baseline import with explicit provenance and publication authority. This is a governance decision, not only an engineering task.
+**Partially resolved:** the Victorian branch registry can be imported with explicit branch-authority provenance, immutable `policy_revisions` and a dry-runnable reconciliation report (D34, [#89](https://github.com/Fusion-Party-Aus/Engage/issues/89), [runbook](../guides/branch-policy-import.md)). National Neon remains deferred (#36); a fresh install with no branch import still shows the explicit empty state.
 
 ### 23. Published policy cannot be amended or repealed from its own page
 
 A member can draft a new proposal, but there is no `targetPolicyId` or change type that connects it to an existing policy. Supersession is administrative.
 
-**Direction:** Add an explicit amend/repeal relationship with lineage and a ballot path.
+**Resolved:** a proposal may declare `targetPolicyId` and `changeType` (`amend`, `replace`, `repeal`). The policy page shows the authorised next action and lists linked proposals. Ratification binds the exact target revision; an amendment or replacement supersedes the predecessor when the successor is published, and a repeal records the deciding proposal as lineage. Drafts never alter published policy (D35, [#37](https://github.com/Fusion-Party-Aus/Engage/issues/37)).
 
 ### 24. Notice periods and confirmation ballots remain undefined
 

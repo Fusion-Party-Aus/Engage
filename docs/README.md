@@ -27,6 +27,7 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Protect sign-in and public submissions | [security/turnstile.md](security/turnstile.md) |
 | Build, test or deploy | [architecture/build-deploy-operations.md](architecture/build-deploy-operations.md) |
 | Migrate a database index | [ballot-results-index-migration.md](ballot-results-index-migration.md) |
+| Import an existing branch policy registry | [guides/branch-policy-import.md](guides/branch-policy-import.md) |
 | Make a change | [guides/contributing.md](guides/contributing.md) |
 | Act as an autonomous agent | [guides/agent-guide.md](guides/agent-guide.md) |
 | Know what is actually shipped | [status/capability-matrix.md](status/capability-matrix.md) |
@@ -56,7 +57,8 @@ docs/
 │   └── build-deploy-operations.md    # Local dev, CI, Docker, Coolify, NUC
 ├── guides/
 │   ├── contributing.md               # Change protocol and quality gates
-│   └── agent-guide.md                # Orientation, invariants, traps, recipes
+│   ├── agent-guide.md                # Orientation, invariants, traps, recipes
+│   └── branch-policy-import.md       # Import a branch's adopted policy registry
 ├── governance/
 │   └── decision-register.md          # Maintainer-approved governance rules
 ├── security/

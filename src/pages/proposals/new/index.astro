@@ -7,7 +7,10 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Textarea } from '../../../components/ui/textarea';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
+import { isPolicyChangeType, policyChangeLabel } from '../../../lib/policy-change.ts';
+import { policyCanonicalPath } from '../../../lib/policy-registry.ts';
 import ProposalScopeSelector from '../../../components/proposal/ProposalScopeSelector';
+import PolicyChangeTypeSelector from '../../../components/proposal/PolicyChangeTypeSelector';
 import { ImagePlus, Link as LinkIcon } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
@@ -38,24 +41,59 @@ const quickTopics = [
   'Economy & Tax',
   'Party Governance',
 ];
+
+// A proposal may start from an adopted policy. The change is recorded against
+// that exact published revision; the policy itself does not change until a
+// successful ballot is ratified.
+const requestedTargetPolicyId = (Astro.url.searchParams.get('targetPolicyId') ?? '').trim();
+const requestedChange = Astro.url.searchParams.get('change');
+const changeType = isPolicyChangeType(requestedChange) ? requestedChange : 'amend';
+const targetPolicy = requestedTargetPolicyId
+  ? await db.collection('policy_registry').findOne({
+      policyId: requestedTargetPolicyId,
+      publicationStatus: 'published',
+    })
+  : null;
+const isPolicyChange = Boolean(targetPolicy);
+const changeTypeOptions = ['amend', 'replace', 'repeal'] as const;
+const defaultTitle = targetPolicy
+  ? `${changeType === 'repeal' ? 'Repeal' : changeType === 'replace' ? 'Replace' : 'Amend'}: ${targetPolicy.title}`
+  : '';
+const summaryPlaceholder = changeType === 'repeal'
+  ? 'Explain why this policy should be repealed and what should happen instead.'
+  : 'Describe what should change and why. Other members will refine the wording during deliberation.';
+const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
 ---
 <SiteLayout title="Suggest an idea · Engage" description="Suggest a proposal for Fusion members to consider." noIndex>
   <div class="page-wrap section-space compose-page">
     <Button href="/proposals/" variant="ghost" size="sm">← Browse proposals</Button>
     <header class="compose-header">
       <div class="compose-header__top">
-        <h1>Suggest an idea</h1>
+        <h1>{isPolicyChange ? `${policyChangeLabel(changeType)}` : 'Suggest an idea'}</h1>
         <Badge variant="info">Step 1 takes ~60 sec</Badge>
       </div>
-      <p>Start with the core change you want to see. Other members will help refine the wording and commitments during deliberation.</p>
+      <p>{isPolicyChange
+        ? 'This proposal will be recorded against the published policy below. The policy does not change unless the proposal is successful, ratified and published.'
+        : 'Start with the core change you want to see. Other members will help refine the wording and commitments during deliberation.'}</p>
     </header>
+
+    {isPolicyChange && (
+      <section class="policy-change-context" aria-label="Policy being changed">
+        <div>
+          <span class="policy-change-context__eyebrow">Changing current policy</span>
+          <a class="policy-change-context__title" href={policyCanonicalPath(targetPolicy!)}>{targetPolicy!.title}</a>
+          <p>{targetPolicy!.summary}</p>
+        </div>
+        <Badge variant="outline">{targetPolicy!.jurisdiction ?? 'Jurisdiction not recorded'}</Badge>
+      </section>
+    )}
 
     {!user ? (
       <Alert className="callout">
         <AlertDescription>
           <p>Sign in with your passkey or a 1-click email link to suggest an idea—you’ll be returned right here.</p>
-          <Button href={`/member/?returnTo=${encodeURIComponent('/proposals/new/')}&intent=propose`}>
-            Sign in to suggest an idea
+          <Button href={`/member/?returnTo=${encodeURIComponent(signInReturnTo)}&intent=propose`}>
+            {isPolicyChange ? 'Sign in to propose a change' : 'Sign in to suggest an idea'}
           </Button>
         </AlertDescription>
       </Alert>
@@ -68,8 +106,19 @@ const quickTopics = [
       </Alert>
     ) : (
       <form id="new-proposal-form" class="compose-form">
+        {isPolicyChange && (
+          <>
+            <input type="hidden" name="targetPolicyId" value={targetPolicy!.policyId} />
+            <PolicyChangeTypeSelector
+              client:load
+              options={changeTypeOptions.map((option) => ({ value: option, label: policyChangeLabel(option) }))}
+              defaultValue={changeType}
+              hint="The current policy stays in force unless this proposal is successful, ratified and published."
+            />
+          </>
+        )}
         <Field label="Title" htmlFor="proposal-title">
-          <Input id="proposal-title" name="title" required minLength={4} maxLength={200} placeholder="A clear, concise title (e.g. Expand regional rail frequencies)" />
+          <Input id="proposal-title" name="title" required minLength={4} maxLength={200} defaultValue={defaultTitle} placeholder="A clear, concise title (e.g. Expand regional rail frequencies)" />
         </Field>
 
         <div class="topic-field-block">
@@ -85,7 +134,7 @@ const quickTopics = [
           </div>
         </div>
 
-        {showScopeSelector && (
+        {showScopeSelector && !isPolicyChange && (
           <ProposalScopeSelector
             client:load
             options={scopeOptions.map(({ key, label, kind, branchName, parentName }) => ({
@@ -101,7 +150,7 @@ const quickTopics = [
         )}
 
         <Field label="What would change? (Summary)" htmlFor="proposal-summary">
-          <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder="Describe the proposed change in 2–4 clear sentences." />
+          <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder={summaryPlaceholder} />
         </Field>
 
         <details class="optional-drawer">
@@ -228,11 +277,14 @@ const quickTopics = [
     const attachmentUrl = String(data.get('attachmentUrl') ?? '').trim();
     const attachmentDescription = String(data.get('attachmentDescription') ?? '').trim();
     const scopeKey = String(data.get('scope') ?? '').trim();
+    const targetPolicyId = String(data.get('targetPolicyId') ?? '').trim();
+    const changeType = String(data.get('changeType') ?? '').trim();
     const payload = {
       title: data.get('title'),
       space: data.get('space'),
       summary: data.get('summary'),
       details: data.get('details'),
+      ...(targetPolicyId && changeType ? { targetPolicyId, changeType } : {}),
       outcomes: String(data.get('outcomes') ?? '')
         .split('\n')
         .map((line) => line.trim())
@@ -391,6 +443,43 @@ const quickTopics = [
 
   .callout p {
     margin: 0 0 0.75rem;
+  }
+
+  .policy-change-context {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 0 1.25rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid var(--horizon-line);
+    border-left: 3px solid var(--horizon-purple);
+    border-radius: 0.55rem;
+    background: var(--horizon-surface);
+  }
+
+  .policy-change-context__eyebrow {
+    display: block;
+    color: var(--horizon-muted);
+    font-size: 0.78rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .policy-change-context__title {
+    display: inline-block;
+    margin: 0.2rem 0 0.35rem;
+    font-weight: 650;
+  }
+
+  .policy-change-context p {
+    margin: 0;
+    max-width: 62ch;
+    color: var(--horizon-muted);
+    font-size: 0.9rem;
+    line-height: 1.55;
   }
 
   @media (max-width: 640px) {

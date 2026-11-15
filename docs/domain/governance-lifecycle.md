@@ -247,6 +247,33 @@ Archiving preserves the record. Supersession links a published policy to a succe
 - Withdrawal requires a published policy, a reason and an idempotency key.
 - Neither deletes the registry record or its events.
 
+### Changing an adopted policy
+
+A published policy is changed by a normal proposal, not by editing the registry.
+
+| Change | Recorded as |
+|---|---|
+| Amend | New policy record at `/policies/<branch>/<slug>/`; predecessor `superseded` when the successor is published |
+| Replace | Same lineage, labelled a replacement |
+| Repeal | Predecessor `repealed`, with `repealedBy` naming the deciding proposal |
+
+- Creation requires a **currently published** policy. The proposal stores
+  `targetPolicyId`, `targetPolicyRevisionId` and `changeType`; these are fixed
+  at creation.
+- Governance authority, jurisdiction and publication scope are inherited from
+  the target policy, never chosen by the submitter.
+- Ratification requires the target policy to still be published at the exact
+  revision named by the proposal. If the wording changed, ratification fails
+  and a new change proposal is required.
+- An amendment or replacement leaves the predecessor published until the new
+  record is itself published, so the public registry never shows a gap. A
+  repeal takes effect at ratification because there is no successor wording.
+- Nothing about the current policy changes while the change proposal is a
+  draft, in deliberation, or awaiting a ballot. The policy page lists the
+  proposal separately and keeps showing the current wording.
+- Every transition writes a `policy.superseded` or `policy.repealed`
+  governance event with the proposal, revision, decision event and authority.
+
 ## Scheduled transitions and the lifecycle scheduler
 
 The schedule is defined once, in `src/lib/lifecycle-schedule.ts`:

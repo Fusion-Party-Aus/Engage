@@ -266,6 +266,8 @@ export function toPublicRevisionDto(r: Record<string, any>) {
   return {
     revisionId: String(r.revisionId ?? ""),
     proposalId: String(r.proposalId ?? ""),
+    policyId: r.policyId ? String(r.policyId) : undefined,
+    revisionType: r.revisionType ?? undefined,
     parentRevisionId: r.parentRevisionId ?? null,
     createdAt: r.createdAt,
     snapshot: r.snapshot,

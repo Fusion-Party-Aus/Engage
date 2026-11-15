@@ -1,0 +1,218 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import PolicyDetail from '../../components/policy/PolicyDetail.astro';
+import PolicyRegistry from '../../components/policy/PolicyRegistry.astro';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent } from '../../components/ui/card';
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { loadPolicyDetail } from '../../lib/policy-detail.ts';
+import {
+  findBranchBySlug,
+  findPolicyByBranchPath,
+  groupRegistryPolicies,
+  policyCanonicalPath,
+} from '../../lib/policy-registry.ts';
+import { isPolicyRegistryRecordForResolution } from '../../lib/store.ts';
+
+/**
+ * One route for:
+ *   /policies/<branch>/              branch registry
+ *   /policies/<branch>/<slug>/       branch policy
+ *   /policies/<policyId>/            legacy address (301 to the canonical path)
+ *
+ * A single dynamic route is used because Astro cannot have both /[slug] and
+ * /[branch] for the same segment in SSR mode.
+ */
+export const prerender = false;
+const segments = (Astro.params.path ?? '').split('/').filter(Boolean);
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([
+  getDatabase(env),
+  getSessionUser(Astro.request, env),
+]);
+
+const policyPageStates = ['published', 'withdrawn', 'superseded', 'repealed'];
+
+let branch: Record<string, any> | null = null;
+let detailContext: Awaited<ReturnType<typeof loadPolicyDetail>> = null;
+let legacyRow: Record<string, any> | null = null;
+let mode: 'branch' | 'detail' | 'missing' = 'missing';
+
+if (segments.length === 2) {
+  branch = await findBranchBySlug(db, segments[0]!);
+  if (branch) {
+    const row = await findPolicyByBranchPath(db, segments[0]!, segments[1]!);
+    if (
+      row &&
+      (!row.jurisdictionBranchId ||
+        String(row.jurisdictionBranchId) === String(branch.branchId))
+    )
+      detailContext = await loadPolicyDetail(db, user, row);
+  }
+} else if (segments.length === 1) {
+  branch = await findBranchBySlug(db, segments[0]!);
+  if (!branch) {
+    legacyRow = await db.collection('policy_registry').findOne({
+      policyId: segments[0]!,
+      publicationStatus: { $in: policyPageStates },
+    });
+    if (legacyRow?.branchSlug && legacyRow?.policySlug)
+      return Astro.redirect(policyCanonicalPath(legacyRow), 301);
+    detailContext = await loadPolicyDetail(db, user, legacyRow);
+  }
+}
+
+if (detailContext) mode = 'detail';
+else if (segments.length === 1 && branch) mode = 'branch';
+else mode = 'missing';
+if (mode === 'missing') Astro.response.status = 404;
+
+// ---- Branch registry data -------------------------------------------------
+const branchSlug = segments[0] ?? '';
+const basePath = `/policies/${encodeURIComponent(branchSlug)}/`;
+const q = (Astro.url.searchParams.get('q') ?? '').trim();
+const needle = q.toLowerCase();
+const showHistory = Astro.url.searchParams.get('history') === '1';
+const branchPage = mode === 'branch';
+const [rawRecords, branches, resolutionProposals] = branchPage && branch
+  ? await Promise.all([
+      db
+        .collection('policy_registry')
+        .find({
+          jurisdictionBranchId: branch.branchId,
+          publicationStatus: { $in: policyPageStates },
+        })
+        .sort({ title: 1 })
+        .toArray(),
+      db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
+      db.collection('proposals').find({}, { projection: { proposalId: 1, kind: 1 } }).toArray(),
+    ])
+  : [[], [], []];
+const proposalKindMap = new Map(
+  resolutionProposals.map((p: any) => [String(p.proposalId), { proposalId: String(p.proposalId), kind: p.kind ? String(p.kind) : undefined }]),
+);
+const records = rawRecords.filter(
+  (policy: any) =>
+    !isPolicyRegistryRecordForResolution(
+      policy,
+      proposalKindMap.get(String(policy.proposalId ?? policy.policyId ?? '')),
+    ),
+);
+const matches = (policy: any) =>
+  !needle ||
+  `${policy.title} ${policy.summary} ${policy.category ?? ''} ${policy.pillar ?? ''} ${policy.approvedWording ?? ''}`
+    .toLowerCase()
+    .includes(needle);
+const policies = records.filter(
+  (policy: any) =>
+    (showHistory ? policy.publicationStatus !== 'published' : policy.publicationStatus === 'published') &&
+    matches(policy),
+);
+const groupBy = showHistory ? 'status' as const : 'topic' as const;
+const sections = branch
+  ? [{ key: String(branch.branchId), label: null, groups: groupRegistryPolicies(policies, { groupBy }) }]
+  : [];
+const currentCount = records.filter((policy: any) => policy.publicationStatus === 'published').length;
+const pastCount = records.length - currentCount;
+const imported = records.filter((policy: any) => policy.recordOrigin === 'branch-import');
+const ratified = records.filter((policy: any) => policy.recordOrigin !== 'branch-import');
+const importedAt = imported
+  .map((policy: any) => policy.import?.importedAt)
+  .filter(Boolean)
+  .sort((a: any, b: any) => new Date(b).getTime() - new Date(a).getTime())[0];
+const importSource = imported.find((policy: any) => policy.import?.sourceUrl)?.import?.sourceUrl;
+const tabHref = (history: boolean) => {
+  const params = new URLSearchParams();
+  if (history) params.set('history', '1');
+  if (q) params.set('q', q);
+  const query = params.toString();
+  return query ? `${basePath}?${query}` : basePath;
+};
+const branchLabel = String(branch?.name ?? 'Branch');
+const sourceHref = branch?.websiteHref
+  ? `${String(branch.websiteHref).replace(/\/$/, '')}/policies`
+  : null;
+---
+
+{mode === 'detail' && detailContext ? (
+  <SiteLayout
+    title={`${detailContext.policy.title} · ${String(detailContext.authority?.name ?? detailContext.branch?.name ?? 'Fusion')} policy`}
+    description={detailContext.policy.summary ?? 'Published policy record.'}
+    canonical={policyCanonicalPath(detailContext.policy)}
+  >
+    <PolicyDetail
+      context={detailContext}
+      user={user}
+      backHref={branch ? basePath : '/policies/'}
+      backLabel={branch ? `← ${branchLabel} policy` : '← Policy registry'}
+    />
+  </SiteLayout>
+) : mode === 'branch' && branch ? (
+  <SiteLayout
+    title={`${branchLabel} policy · Engage`}
+    description={`Adopted policy of ${branchLabel}.`}
+    canonical={basePath}
+  >
+    <div class="page-wrap section-space policy-page">
+      <Button href="/policies/" variant="ghost" size="sm">← All policy</Button>
+
+      <header class="policy-intro">
+        <p class="policy-intro__eyebrow">{branchLabel}</p>
+        <h1>{showHistory ? 'Past policy records' : 'Policy'}</h1>
+        <p>{showHistory
+          ? `Withdrawn, superseded and repealed ${branchLabel} records. They are not current policy.`
+          : imported.length > 0
+            ? `${currentCount} ${currentCount === 1 ? 'policy' : 'policies'} adopted by the ${branchLabel} executive${ratified.length ? `, plus ${ratified.length} ratified through Engage` : ''}. Imported from the branch’s published policy record${importedAt ? ` on ${new Date(importedAt).toLocaleDateString('en-AU', { dateStyle: 'long' })}` : ''}.`
+            : `${currentCount} adopted ${currentCount === 1 ? 'policy' : 'policies'} under ${branchLabel} authority.`}</p>
+        <nav class="registry-tabs" aria-label="Policy status">
+          <Button href={tabHref(false)} variant={!showHistory ? 'default' : 'ghost'} size="sm">Current policy <span class="tabular">{currentCount}</span></Button>
+          <Button href={tabHref(true)} variant={showHistory ? 'default' : 'ghost'} size="sm">Past records <span class="tabular">{pastCount}</span></Button>
+        </nav>
+      </header>
+
+      <PolicyRegistry
+        sections={sections}
+        branches={branches}
+        showHistory={showHistory}
+        query={q}
+        branchFilter=""
+        action={basePath}
+        clearHref={basePath}
+        branch={branch}
+      />
+
+      {(sourceHref || importSource) && (
+        <p class="registry-footnote">
+          {sourceHref && <a href={sourceHref} target="_blank" rel="noreferrer noopener">Branch policy platform ↗</a>}
+          {sourceHref && importSource && <span>·</span>}
+          {importSource && <a href={importSource} target="_blank" rel="noreferrer noopener">Source feed used for import ↗</a>}
+        </p>
+      )}
+    </div>
+  </SiteLayout>
+) : (
+  <SiteLayout title="Policy not found · Engage" noIndex>
+    <div class="page-wrap section-space">
+      <Card>
+        <CardContent className="grid justify-items-start gap-3 py-10">
+          <h1>Policy not found</h1>
+          <p>This address is not a published policy or a recognised branch registry.</p>
+          <Button href="/policies/" variant="outline">Policy registry</Button>
+        </CardContent>
+      </Card>
+    </div>
+  </SiteLayout>
+)}
+
+<style>
+  .policy-page { max-width:84rem; }
+  .policy-intro { max-width:64rem; margin:1rem 0 2rem; }
+  .policy-intro__eyebrow { margin:0; color:var(--horizon-muted); font-size:.8rem; font-weight:650; letter-spacing:.06em; text-transform:uppercase; }
+  .policy-intro h1 { margin:.3rem 0 .65rem; font:700 clamp(2.1rem,3.5vw,3.2rem)/1.1 Outfit,sans-serif; color:var(--horizon-purple); }
+  .policy-intro > p:not(.policy-intro__eyebrow) { color:var(--horizon-muted); line-height:1.65; max-width:70ch; }
+  .registry-tabs { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.5rem; }
+  .registry-tabs :global(.tabular) { margin-left:.4rem; opacity:.7; font-size:.82em; }
+  .registry-footnote { display:flex; flex-wrap:wrap; gap:.5rem .8rem; margin:2.5rem 0 0; color:var(--horizon-muted); font-size:.85rem; }
+  .registry-footnote a { color:var(--horizon-muted); }
+</style>

@@ -44,6 +44,8 @@ Do not change a decision by editing code. Record the new maintainer decision her
 | D31 | Shared Fusion Auth / Fusion Core identity remains undecided. Define replaceable ports and seams; do not implement a new identity platform. | Deferred — architecture boundary only | RFC S6, L4 |
 | D32 | Cloudflare Turnstile is part of the security programme for abuse-prone unauthenticated actions. Server-side verification is mandatory. Routine challenges must not interrupt authenticated voting. | Approved | RFC I10; #38 |
 | D33 | Importing the existing National Neon policy baseline is **out of scope** for this programme. It must not be imported, mapped, backfilled or published without a separate provenance and reconciliation project. | Deferred — separate project | #36 |
+| D34 | Victoria's live branch policies, as published at `https://vic.fusionparty.org.au/api/policies.json`, are **ratified and adopted by the Victorian branch executive**. They may be imported as adopted, published policy under Victorian branch authority without an Engage ballot. The import must record the authority basis, preserve the exact source document as an immutable revision, and never overwrite adopted wording because a source feed changed. A changed source requires a new change proposal. | Approved — implemented | #89; #37 |
+| D35 | A ratified policy may be **amended, replaced or repealed** by a new proposal that declares `targetPolicyId` and a change type. The predecessor remains the published policy until the successor is ratified **and** published; a repeal takes effect when it is ratified, with the deciding proposal recorded as lineage. A change proposal is created against the exact published revision it names and fails rather than retargeting if that wording changes. | Approved — implemented | #37 |
 
 ## Consequences for implementation
 
@@ -87,6 +89,10 @@ Certification may block on procedural defects. It must not be used to reject a v
 ### National Neon import is deferred
 
 No code, migration, seed or documentation may claim that legacy Neon policies were adopted through Engage. The policy registry must remain able to support a future import, but no reconciliation work starts under this programme. Issue #36 is deferred.
+
+### The Victorian import does not generalise
+
+D34 is a branch-specific provenance decision. It does not authorise importing any other branch or national corpus, and it does not establish that a publisher field proves adoption. Another branch requires its own recorded authority basis. An imported record must remain distinguishable from Engage-ratified policy in the registry, the public page and the API.
 
 ## Open decisions requiring maintainer input
 

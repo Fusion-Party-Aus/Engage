@@ -15,11 +15,21 @@ export const GET: APIRoute = async ({ params, locals, request, url }) => {
     Math.max(1, Number(url.searchParams.get("limit")) || 50),
   );
   const cursor = url.searchParams.get("cursor");
-  const allRows: any[] = await db
-    .collection("proposal_revisions")
-    .find({ revisionId: { $in: p.revisionIds ?? [] } })
-    .sort({ revisionId: 1 })
-    .toArray();
+  // Engage-ratified policy revisions live with the proposal; imported and
+  // change revisions live in policy_revisions. Both are part of one history.
+  const [proposalRows, policyRows] = await Promise.all([
+    db
+      .collection("proposal_revisions")
+      .find({ revisionId: { $in: p.revisionIds ?? [] } })
+      .toArray(),
+    db
+      .collection("policy_revisions")
+      .find({ revisionId: { $in: p.revisionIds ?? [] } })
+      .toArray(),
+  ]);
+  const allRows = [...proposalRows, ...policyRows].sort((a, b) =>
+    String(a.revisionId) < String(b.revisionId) ? -1 : 1,
+  );
   const rows = allRows.filter(
     (row) => !cursor || String(row.revisionId) > cursor,
   );
