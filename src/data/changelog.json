@@ -1,5 +1,32 @@
 [
   {
+    "hash": "e9c625e",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "ops",
+    "summary": "Document two-tier warn and fail job thresholds",
+    "details": "Show cadence, warn and fail for each scheduled job, explain that warn is a small multiple of cadence (not one missed tick) and why a 24-hour-only alert hid 96 missed 15-minute ticks, and record the invalid-pair behaviour, per-state meanings and escalation timing. Refs #39"
+  },
+  {
+    "hash": "b93a81f",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ops",
+    "summary": "Warn before a scheduled job reaches its fail threshold",
+    "details": "A 15-minute job judged healthy for 24 hours leaves a full day blind to a complete outage. Each time-based check now has two tiers: degraded past warn (governance scheduler 2h, digest 1h, verification 2h) and failing past fail (26h, 24h, 24h). Within warn stays ok; a missing run stays failing; a failed last run stays failing. Warn and fail are configurable with the existing fail variables plus GOVERNANCE_SCHEDULER_WARN_HOURS, DIGEST_WARN_HOURS and MEMBERSHIP_VERIFICATION_WARN_HOURS. A warn value that is not below fail reports unknown with the conflicting values instead of trusting either. The report's thresholds block names both values and their source. Check ids, report shape, the ledger and route behaviour are unchanged; ops:health still exits 2 degraded and 1 failing. Refs #39"
+  },
+  {
+    "hash": "6bd5519",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for the operational observability slice",
+    "details": "Refs #39"
+  },
+  {
     "hash": "aa2de71",
     "date": "2026-11-15",
     "type": "docs",
@@ -641,21 +668,5 @@
     "category": "feature",
     "scope": "ui",
     "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
   }
 ]
