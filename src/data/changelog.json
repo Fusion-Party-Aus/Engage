@@ -1,5 +1,67 @@
 [
   {
+    "hash": "37f1fa4",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Record stray-reason refusal and display degradation",
+    "details": "Document that a reason supplied for a matching result is refused rather than dropped, that a broken key ring degrades admin displays to an explicit unavailable state with unreadable votes counted while certification stays strict, and keep the Terms-of-Use pointer and per-ballot closure precedence accurate. Refs #28."
+  },
+  {
+    "hash": "20e7e99",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "legal",
+    "summary": "Scope the outcome rule to ordinary Yes/No ballots",
+    "details": "Say that the computed simple-majority rule applies to ordinary Yes/No ballots on a matter, and that amendment endorsement ballots follow a separate procedure recorded by an authorised officer. The publication status and the inactive acceptance gate are unchanged; this stays inside the existing unreleased Terms version 1.1. Refs #28, #40."
+  },
+  {
+    "hash": "d177f27",
+    "date": "2026-11-15",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Cover closure precedence, per-ballot results and stray reasons",
+    "details": "Add pure cases for closure precedence (ballot row before matter) and outcome labels, and replica-set cases proving an unnecessary override reason is refused rather than silently dropped, that display reads tolerate unreadable votes while strict reads still fail, and that primary and sibling results resolve to their own ballots. Refs #28."
+  },
+  {
+    "hash": "ccc599d",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Derive the result and closure state from the balloted record",
+    "details": "Use the shared closure rule on both canvassing surfaces and the oversight page so the form is offered exactly when certification would accept it, including the case where a sibling ballot's close time differs from the matter's. Look up recorded results by the primary ballot, show \"N unreadable\" when the display tally is partial, and render computed outcomes in title case alongside recorded results. Refs #28."
+  },
+  {
+    "hash": "65a017b",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Key results by ballot, share closure state and reject stray override reasons",
+    "details": "Add `proposalBallotResultFilter` so the result attached to a matter's primary ballot is addressed by `ballotId` (legacy results without a ballotId still resolve). Apply it to the admin workspace, the proposal PDF, the public proposal and policy pages and the matter read model, so a result on one ballot no longer shadows another. Add `resolveBallotClosure` as the single closure rule used by the server gate and the pages: the addressed ballot's own status/close time first, the matter as the fallback. Add `ballotOutcomeLabel` for consistent title-case rendering and fix the quadratic vote grouping in `readBoundBallotTallies`. Refuse a written `overrideReason` when the result already matches the computed outcome (`RESULT_OVERRIDE_REASON_UNEXPECTED`, 400) instead of accepting it once and then failing an identical retry, so a reason is never silently discarded. Refs #28."
+  },
+  {
+    "hash": "c7a0303",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Let display reads degrade instead of failing on unreadable votes",
+    "details": "Add an opt-in `tolerateUnreadableVotes` read mode to `listProposals` and `getProposalDetail`. Admin pages use it so a broken key ring renders an explicit \"decryption unavailable\" state instead of returning 500, and affected rows carry `unreadableVoteCount` so the missing votes are counted and shown rather than quietly dropped. Every other read keeps today's loud failure, and certification is untouched. Refs #28."
+  },
+  {
+    "hash": "0177f7f",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Include the final verification commits"
+  },
+  {
     "hash": "2c7be22",
     "date": "2026-11-15",
     "type": "chore",
@@ -147,6 +209,24 @@
     "scope": "ballots",
     "summary": "Validate recorded outcomes against the bound tally",
     "details": "Record a formal ballot outcome only after comparing the officer's result with the outcome computed from the votes bound to that ballot and immutable revision (#28). The comparison is deliberately limited to what the decision register settles: Yes greater than No approves and a tie does not (D9); abstentions are recorded and excluded rather than given a denominator (D10, O1); no quorum, turnout or minimum-participation threshold applies (D8). The basis is versioned as `simple-majority-d9-v1`. A contradicting result is refused unless the officer supplies a written reason, and is then stored as an explicit override. The result keeps the tally at certification, the rule basis and the computed result; the `decision.recorded` event records the actor, reason, computed result and recorded result alongside the existing atomic result and ballot certification. Identical retries remain idempotent, conflicting replacements are refused, and historical results are returned unchanged and never rewritten. Both admin result forms now show the computed outcome and its tally before submission and require the override reason when the chosen result contradicts it, using the shared Field, Textarea and Badge primitives."
+  },
+  {
+    "hash": "2a52ef4",
+    "date": "2026-11-15",
+    "type": "feat",
+    "category": "feature",
+    "scope": "docs",
+    "summary": "Check documentation links in CI (#44) (#85)",
+    "details": "* fix(docs): repair broken relative links Point the deployment verification record at the canonical known-gaps page instead of the removed mvp-roadmap, and drop the link to the uncommitted UI-refinement screenshot directory. * docs(guides): point agents at document status labels Replace the stale-page list with a reference to docs/README.md, which defines the document status labels and canonical replacements, and list the new link check among the verification commands. * feat(docs): check documentation links in CI Add a dependency-free script that resolves relative links in docs/, README.md and AGENTS.md, ignoring external, anchor-only, template and fenced-code links. Wire it into the existing application check job as docs:check-links."
+  },
+  {
+    "hash": "6fd5562",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "platform",
+    "summary": "Reconcile stale historical documentation with the canonical set (#44) (#84)",
+    "details": "* docs(operations): correct removed endpoints, scripts and ballot closure model - Mark the page Superseded and link the canonical build/deploy guide. - Replace the removed /api/ballots check with /api/health and the removed seed-preview, backup-preview and restore-preview instructions with the behaviour that exists (startup seeding, host backup procedure). - Replace the ADR 0003 vote-admission and finalizeBallot description with the implemented deadline check, unique vote indexes and scheduler closure. - Correct the membership audit claim: no memberships.auditHistory or auditVersion exists. - Fix the missing release-gates link and stale preview/cookie statements. * docs(adr): record ballot-admission divergence in ADR 0003 Label the technology decision Current and the admission protocol Design-only, then record the verified implementation: castVote checks the deadline in application code before the transaction, uniqueness comes from the partial vote indexes, and closure writes ballotClosedAt without a tally. Notes that a vote passing the pre-check can commit after the cutoff. * docs(deploy): mark the Coolify deployment record historical Replace the 2026-11-08 cutover banner with a dated historical scope, point to the canonical deployment page, and correct the claim that no CI exists. * docs(engagement): correct the ballot deadline and label the UX record Replace the superseded 24 December 2026 deadline with the approved 30-day ballot period and the 2027-01-14 one-off expiry migration, and describe what the migration actually writes. Mark the dated UX journey record Historical so its old test counts are not read as current. * docs(governance): correct identifiable-ballot boundary and authority fields Identifiable ballots are limited to a national administrator or a holder of the national ballots.view_identifiable permission, not isAdmin alone. Record the ballots.bind and ballots.record_result gates, the current admin navigation, and mark the older governance API page Superseded. * docs(legal): reconcile the 2026-11-08 privacy review with shipped work Label the review Historical and correct the statements overtaken since: Plausible analytics, CRM membership verification, seconding and scheduled ballot closure are implemented, and the legal-acceptance enforcement and ballot privacy notice are applied. Record the delegated identifiable-ballot boundary and define the Current/Historical/Superseded/Design-only vocabulary in the index."
   },
   {
     "hash": "15f7ac5",
@@ -596,77 +676,5 @@
     "scope": "engagement",
     "summary": "Add proposal rankings, ballot deadlines and member reminders",
     "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
-  },
-  {
-    "hash": "0b8b375",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "settings",
-    "summary": "Save the configured source repository URL"
-  },
-  {
-    "hash": "6fad513",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record granular analytics improvements"
-  },
-  {
-    "hash": "2167573",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "analytics",
-    "summary": "Measure Engage navigation and participation outcomes"
-  },
-  {
-    "hash": "e41ac7d",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "analytics",
-    "summary": "Initialize Plausible tracking on production"
-  },
-  {
-    "hash": "71a98bb",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "analytics",
-    "summary": "Install Plausible tracker package"
-  },
-  {
-    "hash": "b98af1d",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "time",
-    "summary": "Display time in user's local timezone"
-  },
-  {
-    "hash": "5de3c91",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "participation",
-    "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
-  },
-  {
-    "hash": "46f1b9b",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Fix error on branch pages, and seed branches to database"
-  },
-  {
-    "hash": "c14ee07",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Add automatic passkey prompting, deep-link intent preservation, and post-vote activation loops"
   }
 ]
