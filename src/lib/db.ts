@@ -576,6 +576,10 @@ export function createMemoryDb(): Db {
         if (!cond.some((sub) => matchesFilter(doc, sub))) return false;
         continue;
       }
+      if (key === "$and" && Array.isArray(cond)) {
+        if (!cond.every((sub) => matchesFilter(doc, sub))) return false;
+        continue;
+      }
       const val = key
         .split(".")
         .reduce<any>(
@@ -670,6 +674,10 @@ export function createMemoryDb(): Db {
             },
             limit(n: number) {
               results = results.slice(0, n);
+              return cursor;
+            },
+            skip(n: number) {
+              results = results.slice(n);
               return cursor;
             },
             project() {
