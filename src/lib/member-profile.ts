@@ -23,7 +23,7 @@ import type {
  * Visibility is viewer-relative. A contribution appears only when the viewer
  * could already open its proposal, so a public profile cannot be used to
  * enumerate private or branch-only matters. Deleted comments and withdrawn
- * amendments are excluded from both the history and comment karma.
+ * amendments are excluded from both the history and comment score.
  *
  * `memberId` is the Better Auth user `_id`. It is opaque, stable and contains
  * no email address, CRM identifier or membership status. Historic comments keep
@@ -45,7 +45,7 @@ export interface MemberProfileStats {
   proposals: number;
   amendments: number;
   /** Sum of net comment scores across visible, non-deleted comments. */
-  karma: number;
+  commentScore: number;
 }
 
 export interface MemberProfileView {
@@ -376,7 +376,7 @@ async function loadProfileIdentity(
   return { name, bio: "", joinedAt: null, affiliations: [] };
 }
 
-async function commentKarma(
+async function commentScoreTotal(
   db: Db,
   filter: Record<string, unknown>,
 ): Promise<number> {
@@ -398,11 +398,11 @@ async function commentKarma(
             },
           },
         },
-        { $group: { _id: null, karma: { $sum: "$score" } } },
+        { $group: { _id: null, commentScore: { $sum: "$score" } } },
       ])
       .toArray();
     if (rows.length === 0) return 0;
-    if (typeof rows[0]?.karma === "number") return rows[0].karma;
+    if (typeof rows[0]?.commentScore === "number") return rows[0].commentScore;
   }
   const rows = await collection
     .find(filter)
@@ -619,10 +619,10 @@ export async function getMemberProfilePage(
         }
       : null;
 
-  const [commentTotal, karma] = commentFilter
+  const [commentTotal, commentScore] = commentFilter
     ? await Promise.all([
         db.collection<CommentRecord>("comments").countDocuments(commentFilter),
-        commentKarma(db, commentFilter),
+        commentScoreTotal(db, commentFilter),
       ])
     : [0, 0];
 
@@ -630,7 +630,7 @@ export async function getMemberProfilePage(
     comments: commentTotal,
     proposals: visibleAuthored.length,
     amendments: visibleAmendments.length,
-    karma,
+    commentScore,
   };
 
   const activeTotal =

@@ -136,7 +136,7 @@ Comments can be deleted by staff, but there is no moderation state, reason or au
 
 ### 14a. Public profile limitations
 
-**Implemented:** public profiles at `/members/<memberId>/` aggregate existing comments, proposals and amendments, with owner-editable biography and display-only comment karma ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)).
+**Implemented:** public profiles at `/members/<memberId>/` aggregate existing comments, proposals and amendments, with owner-editable biography and display-only comment score ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)).
 
 **Limits today:**
 
@@ -144,7 +144,7 @@ Comments can be deleted by staff, but there is no moderation state, reason or au
 - Avatars are initials only. There is no image upload, storage or external image fetch.
 - The profile URL contains the opaque Better Auth `memberId`. It is not an email address or CRM identifier, but it is stable and therefore linkable.
 - When the account document is gone but a visible contribution remains, the profile uses the author name stored on that contribution. A name that exists only on a private proposal does not create a profile.
-- Karma has no leaderboard, tier or permission effect by design.
+- The comment score has no leaderboard, tier or permission effect by design.
 
 ### 15. Perimeter security is incomplete
 

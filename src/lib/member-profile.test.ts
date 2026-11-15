@@ -382,7 +382,7 @@ describe("public profile header", () => {
       comments: 2,
       proposals: 1,
       amendments: 1,
-      karma: 2,
+      commentScore: 2,
     });
   });
 
@@ -462,7 +462,7 @@ describe("contribution visibility", () => {
       page.items.map((item) => item.id),
       ["cmt-legacy-key", "cmt-public-new", "cmt-public-old"],
     );
-    assert.equal(page.profile.stats.karma, 3);
+    assert.equal(page.profile.stats.commentScore, 3);
   });
 
   it("excludes private, branch, archived and deleted comments for anonymous visitors", async () => {
@@ -483,10 +483,10 @@ describe("contribution visibility", () => {
       commentDeepLink("public-proposal", "cmt-public-new"),
     );
     assert.equal(page.items[0]?.kind === "comment" && page.items[0].isReply, true);
-    assert.equal(page.profile.stats.karma, 2);
+    assert.equal(page.profile.stats.commentScore, 2);
   });
 
-  it("includes branch-scoped contributions and karma for a member of that branch", async () => {
+  it("includes branch-scoped contributions and comment score for a member of that branch", async () => {
     const seeded = await seed();
     const viewer = session("viewer-carol", {
       activeBranchIds: ["vic"],
@@ -503,7 +503,7 @@ describe("contribution visibility", () => {
       page.items.map((item) => item.id),
       ["cmt-branch", "cmt-public-new", "cmt-public-old"],
     );
-    assert.equal(page.profile.stats.karma, 12);
+    assert.equal(page.profile.stats.commentScore, 12);
     assert.equal(
       JSON.stringify(page).includes("Secret private proposal"),
       false,
