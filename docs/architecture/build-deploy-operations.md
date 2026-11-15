@@ -58,9 +58,25 @@ Some suites require real MongoDB and are skipped unless configured:
 
 - `voting-mongo.test.ts` (vote uniqueness, encryption, migration)
 - parts of `governance-api.test.ts` and migration suites
-- Playwright browser journeys (`scripts/*-browser.mjs`)
 
 CI provisions a single-node MongoDB 8.0 replica set. Use the same when changing persistence, indexes, transactions or vote storage. Do not claim a persistence change is verified from the in-memory fallback alone.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request to `main` and on pushes to `main`, `fix/**` and `codex/**`: install, an isolated MongoDB replica set, `pnpm check`, the documentation link check, `pnpm test`, `pnpm build`, the member lifecycle browser journey, then the perimeter security browser harness.
+
+The perimeter harness (`scripts/security-perimeter-browser.mjs`, also `pnpm perimeter:browser`) starts the built server on the in-memory database and drives real Chromium with Cloudflare and Plausible intercepted. It proves the response headers and CSP, that every allowed external host still reaches the network layer, that same-origin fetches and native form posts are accepted, and that cross-origin and cookie-without-Origin writes are refused. It has a hard 180-second deadline and always stops Chromium and the preview server, so a hung page fails the step instead of the job. Playwright is installed once per job and reused through `ENGAGE_PLAYWRIGHT_MODULE`; it is not an application dependency.
+
+`src/lib/ci-workflow.test.ts` enforces the wiring: the suite fails if the step disappears, moves before the build or before the Playwright install, installs a second copy, or if `perimeter:browser` and the harness file drift apart.
+
+Local use:
+
+```sh
+pnpm build
+ENGAGE_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs pnpm perimeter:browser
+```
+
+The gap: CI runs the production build directly on the runner, not through Cloudflare/Coolify or a real MongoDB. Proxy headers on static assets, Astro's early cross-site 403 and production responses are still deployment checks.
 
 ### Verification expectations
 
