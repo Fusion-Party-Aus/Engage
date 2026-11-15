@@ -30,7 +30,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 |---|---|---|
 | 1 | Homepage introduction/lifecycle wording; discussion heading and cross-references; sign-in discussion intent | Delivered in `2d25398`; validated and published in PR #98 |
 | 2a | Remaining homepage copy, its metadata and shared proposal highlights | Delivered in `8558e05`; remote tree verified |
-| 2b | How-it-works guide, default metadata, shared layout/navigation/footer | Validated; publishing checkpoint |
+| 2b | How-it-works guide, default metadata, shared layout/navigation/footer | Delivered in `17a0fac`; remote tree verified |
 | 3 | Proposal browse/create/detail, seconding, comments, forms, amendment and ballot interfaces | Not reviewed beyond batch 1 strings |
 | 4 | Policy registry, policy detail, provenance and change proposals; branch journeys and Sense Box | Not reviewed |
 | 5 | Onboarding, membership, My Engage, account, branch preferences, notifications | Not reviewed beyond discussion intent |
