@@ -1,0 +1,644 @@
+---
+import SiteLayout from '../../../layouts/SiteLayout.astro';
+import PortableText from '../../../components/PortableText.astro';
+import { Button } from '../../../components/ui/button';
+import { Badge } from '../../../components/ui/badge';
+import { Card, CardContent, CardHeader } from '../../../components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '../../../components/ui/alert';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../../../components/ui/table';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { BALLOT_OUTCOME_RULE_BASIS, ballotOutcomeLabel } from '../../../lib/ballots.ts';
+import {
+  buildDecisionRecord,
+  type AdoptedWording,
+  type AdoptedWordingReviewReason,
+  type DecisionRecordAmendment,
+} from '../../../lib/decision-record.ts';
+import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([
+  getDatabase(env),
+  getSessionUser(Astro.request, env),
+]);
+const record = await buildDecisionRecord(db, Astro.params.slug ?? '', user);
+if (!record) Astro.response.status = 404;
+
+const formatDate = (value: Date | null) =>
+  value
+    ? value.toLocaleDateString('en-AU', {
+        dateStyle: 'medium',
+        timeZone: 'Australia/Melbourne',
+      })
+    : 'Not recorded';
+const formatDateTime = (value: Date | null) =>
+  value
+    ? value.toLocaleString('en-AU', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Australia/Melbourne',
+      })
+    : 'Not recorded';
+const stageLabel = (stage: string) =>
+  stage === 'propose'
+    ? 'Draft'
+    : stage === 'deliberate'
+      ? 'In discussion'
+      : stage === 'decide'
+        ? 'Open vote'
+        : stage === 'implement'
+          ? 'Decided'
+          : 'Archived';
+const amendmentStatus: Record<
+  string,
+  { label: string; variant: 'success' | 'warning' | 'destructive' | 'info' | 'outline' | 'muted' }
+> = {
+  proposed: { label: 'Proposed', variant: 'outline' },
+  stale: { label: 'Stale', variant: 'warning' },
+  conflict: { label: 'Needs resolution', variant: 'destructive' },
+  ready: { label: 'Ready for review', variant: 'info' },
+  rejected: { label: 'Rejected', variant: 'muted' },
+  withdrawn: { label: 'Withdrawn', variant: 'muted' },
+  voting: { label: 'Endorsement vote open', variant: 'info' },
+  endorsed: { label: 'Endorsed, not applied', variant: 'success' },
+  'not-endorsed': { label: 'Not endorsed', variant: 'muted' },
+  inconclusive: { label: 'Inconclusive', variant: 'warning' },
+  accepted: { label: 'Accepted, not applied', variant: 'success' },
+  applied: { label: 'Applied', variant: 'success' },
+};
+const statusFor = (status: string) =>
+  amendmentStatus[status] ?? { label: status.replaceAll('-', ' '), variant: 'outline' as const };
+const endorsementLabel = (result: string | null) =>
+  result === 'endorsed'
+    ? 'Endorsed'
+    : result === 'not-endorsed'
+      ? 'Not endorsed'
+      : result === 'inconclusive'
+        ? 'Inconclusive'
+        : 'No endorsement ballot';
+const ballotStatusLabel = (status: string) =>
+  status === 'open' ? 'Open' : status === 'closed' ? 'Closed' : status === 'certified' ? 'Certified' : status === 'cancelled' ? 'Cancelled' : status;
+const publicationLabel = (status: string | null) =>
+  status === 'published'
+    ? 'Published'
+    : status === 'withdrawn'
+      ? 'Withdrawn'
+      : status === 'superseded'
+        ? 'Superseded'
+        : status === 'repealed'
+          ? 'Repealed'
+          : status === 'unpublished'
+            ? 'Adopted, not published'
+            : 'Not recorded';
+const publicationVariant = (status: string | null): 'success' | 'warning' | 'destructive' | 'info' | 'outline' =>
+  status === 'published'
+    ? 'success'
+    : status === 'unpublished'
+      ? 'info'
+      : status === 'withdrawn' || status === 'superseded' || status === 'repealed'
+        ? 'warning'
+        : 'outline';
+const publicationEventLabel = (transition: string) =>
+  transition === 'published'
+    ? 'Published'
+    : transition === 'withdrawn'
+      ? 'Withdrawn'
+      : transition === 'superseded'
+        ? 'Superseded'
+        : transition === 'repealed'
+          ? 'Repealed'
+          : transition;
+const reviewCopy: Record<AdoptedWordingReviewReason, string> = {
+  'multiple-applied-amendments':
+    'Two or more amendments were applied. An authorised collision review is required before adopted wording can be derived (D17–D18).',
+  'approved-amendment-not-applied':
+    'An amendment is endorsed or accepted but not applied. Adopted wording cannot be derived until the applied wording is recorded (D19–D20).',
+  'applied-revision-missing':
+    'An amendment is recorded as applied, but the wording revision it produced is missing. Adopted wording cannot be derived.',
+  'applied-revision-not-ballot-wording':
+    'The applied amendment did not produce the revision the ballot approved. Adopted wording cannot be derived without review (D20).',
+  'result-names-other-revision':
+    'The recorded result names a different wording revision from the one bound to the ballot. Review the binding before relying on this record (D20).',
+  'successful-result-without-bound-revision':
+    'A successful result is recorded, but no wording revision is bound to the ballot. Adopted wording cannot be derived.',
+};
+
+const adopted: AdoptedWording = record?.adoptedWording ?? { state: 'pending', reason: 'no-result' };
+const adoptedDerived = adopted.state === 'derived' ? adopted : null;
+const adoptedReview = adopted.state === 'review-required' ? adopted : null;
+const adoptedNotAdopted = adopted.state === 'not-adopted' ? adopted : null;
+const adoptedPending = adopted.state === 'pending' ? adopted : null;
+const adoptedRevision = adoptedDerived?.revision ?? null;
+const ballot = record?.ballot ?? null;
+const result = record?.result ?? null;
+const publication = record?.publication ?? null;
+const publicationRecorded = publication?.state === 'recorded' ? publication : null;
+const votedWording = record?.votedWording ?? null;
+const amendments = record?.amendments ?? [];
+const revisions = record?.revisionHistory ?? [];
+const appliedRevisionForAmendment = (amendment: DecisionRecordAmendment) =>
+  amendment.appliedRevisionId
+    ? { label: 'Proposal revision', id: amendment.appliedRevisionId }
+    : amendment.approvedAmendmentRevisionId
+      ? { label: 'Amendment revision, not applied', id: amendment.approvedAmendmentRevisionId }
+      : null;
+const amendmentNumberForRevision = (revisionId: string) =>
+  amendments.find((amendment) => amendment.appliedRevisionId === revisionId)?.ordinal ?? null;
+const ruleLabel = (basis: string | null) =>
+  basis === BALLOT_OUTCOME_RULE_BASIS
+    ? 'Simple majority: more approve than reject'
+    : basis
+      ? 'Recorded voting rule'
+      : 'Not recorded';
+---
+
+{!record ? (
+  <SiteLayout title="Decision record not found · Engage" noIndex>
+    <div class="page-wrap section-space">
+      <Card className="max-w-xl">
+        <CardContent className="grid justify-items-start gap-3 py-10">
+          <h1 class="text-2xl font-semibold">Decision record not found</h1>
+          <p class="text-muted-foreground">This decision record is not available.</p>
+          <Button href="/proposals/">Back to proposals</Button>
+        </CardContent>
+      </Card>
+    </div>
+  </SiteLayout>
+) : (
+  <SiteLayout
+    title={`Decision record · ${record.matter.title} · Engage`}
+    description={`The voted wording, amendment outcomes, ballot result and publication state for ${record.matter.title}.`}
+    noIndex
+  >
+    <div class="page-wrap section-space decision-record grid grid-cols-1 gap-6">
+      <div class="grid gap-4">
+        <nav aria-label="Breadcrumb" class="text-sm">
+          <a href={`/proposals/${record.matter.slug}/`} class="font-semibold text-muted-foreground hover:text-foreground">
+            ← {record.matter.title}
+          </a>
+        </nav>
+
+        <header class="grid gap-3">
+          <p class="text-sm font-semibold text-muted-foreground">Decision record</p>
+          <h1 class="font-heading text-3xl leading-tight text-foreground sm:text-4xl">{record.matter.title}</h1>
+          <div class="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{record.matter.matterType === 'resolution' ? 'Governance resolution' : 'Policy proposal'}</Badge>
+            <Badge variant="info">{stageLabel(record.matter.stage)}</Badge>
+            {result && (
+              <Badge variant={result.result === 'successful' ? 'success' : result.result === 'inconclusive' ? 'warning' : 'muted'}>
+                Ballot {ballotOutcomeLabel(result.result).toLowerCase()}
+              </Badge>
+            )}
+          </div>
+        </header>
+      </div>
+
+      <!-- Outcome -->
+      <Card>
+        <CardHeader>
+          <h2 class="text-lg font-semibold leading-none">Outcome</h2>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {adoptedDerived ? (
+            <>
+              <div class="flex flex-wrap items-center gap-2">
+                <Badge variant="success">Adopted wording</Badge>
+                <span class="text-sm text-muted-foreground">
+                  {adoptedDerived.rule === 'D15'
+                    ? 'No amendments were applied. The wording members voted on is the adopted wording (D15).'
+                    : 'One amendment was applied. The revision it produced is the wording members voted on, so it is the adopted wording (D16).'}
+                </span>
+              </div>
+              <dl class="grid gap-1 text-sm sm:grid-cols-[10rem_1fr]">
+                <dt class="text-muted-foreground">Revision ID</dt>
+                <dd><code class="break-all font-mono text-xs">{adoptedDerived.revision.revisionId}</code></dd>
+                <dt class="text-muted-foreground">Content hash</dt>
+                <dd><code class="break-all font-mono text-xs">{adoptedDerived.revision.contentHash || 'Not recorded'}</code></dd>
+                {adoptedDerived.viaAmendmentId && (
+                  <>
+                    <dt class="text-muted-foreground">Applied amendment</dt>
+                    <dd>Amendment #{amendments.find((item) => item.amendmentId === adoptedDerived.viaAmendmentId)?.ordinal ?? '—'}</dd>
+                  </>
+                )}
+                {adoptedDerived.viaAmendmentRevisionId && (
+                  <>
+                    <dt class="text-muted-foreground">Amendment revision</dt>
+                    <dd><code class="break-all font-mono text-xs">{adoptedDerived.viaAmendmentRevisionId}</code></dd>
+                  </>
+                )}
+              </dl>
+              <Button href="#voted-wording" variant="outline" size="sm" className="justify-self-start">Read the voted wording</Button>
+            </>
+          ) : adoptedReview ? (
+            <Alert variant="warning">
+              <AlertTitle>Adopted wording needs review</AlertTitle>
+              <AlertDescription>
+                <p>{reviewCopy[adoptedReview.reason]}</p>
+                {adoptedReview.amendmentIds.length > 0 && (
+                  <p>
+                    Amendments:{' '}
+                    {adoptedReview.amendmentIds
+                      .map((amendmentId) => `#${amendments.find((item) => item.amendmentId === amendmentId)?.ordinal ?? amendmentId}`)
+                      .join(', ')}
+                  </p>
+                )}
+              </AlertDescription>
+            </Alert>
+          ) : adoptedNotAdopted ? (
+            <Alert variant="info">
+              <AlertTitle>No adopted wording</AlertTitle>
+              <AlertDescription>
+                <p>
+                  {adoptedNotAdopted.result === 'inconclusive'
+                    ? 'The ballot was inconclusive, so no wording was adopted.'
+                    : 'The ballot was unsuccessful, so the proposal did not become policy.'}
+                </p>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert variant="info">
+              <AlertTitle>No adopted wording yet</AlertTitle>
+              <AlertDescription>
+                <p>
+                  {adoptedPending?.reason === 'no-result'
+                    ? 'A result has not been recorded for the ballot.'
+                    : 'No wording revision has been bound to a ballot.'}
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      <!-- Voted wording -->
+      <Card id="voted-wording">
+        <CardHeader>
+          <h2 class="text-lg font-semibold leading-none">Voted wording</h2>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {!votedWording ? (
+            <Alert variant="info">
+              <AlertTitle>No wording bound</AlertTitle>
+              <AlertDescription>
+                <p>No wording revision is bound to a ballot for this proposal.</p>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <div class="flex flex-wrap items-center gap-2">
+                {adoptedRevision?.revisionId === votedWording.revisionId && <Badge variant="success">Adopted wording</Badge>}
+                <Badge variant="outline">Ballot wording</Badge>
+              </div>
+              <dl class="grid gap-1 text-sm sm:grid-cols-[10rem_1fr]">
+                <dt class="text-muted-foreground">Revision ID</dt>
+                <dd><code class="break-all font-mono text-xs">{votedWording.revisionId}</code></dd>
+                <dt class="text-muted-foreground">Content hash</dt>
+                <dd><code class="break-all font-mono text-xs">{votedWording.contentHash || 'Not recorded'}</code></dd>
+                <dt class="text-muted-foreground">Recorded</dt>
+                <dd>{formatDate(votedWording.createdAt)}</dd>
+              </dl>
+              <div class="grid gap-2">
+                <h3 class="font-heading text-2xl leading-tight">{votedWording.title}</h3>
+                <p class="text-muted-foreground">{votedWording.summary}</p>
+              </div>
+              {votedWording.outcomes.length > 0 && (
+                <div class="grid gap-2">
+                  <h4 class="text-sm font-semibold">Outcomes</h4>
+                  <ul class="list-disc space-y-1 pl-5 text-sm">
+                    {votedWording.outcomes.map((outcome) => <li>{outcome}</li>)}
+                  </ul>
+                </div>
+              )}
+              {votedWording.details && <PortableText value={votedWording.details} />}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <!-- Ballot and result -->
+      <Card>
+        <CardHeader>
+          <h2 class="text-lg font-semibold leading-none">Ballot and result</h2>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {!ballot ? (
+            <Alert variant="info">
+              <AlertTitle>No ballot record</AlertTitle>
+              <AlertDescription>
+                <p>{result ? 'No ballot record is available. The recorded result below is the evidence for this decision.' : 'No ballot has been opened for this proposal.'}</p>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <dl class="grid gap-1 text-sm sm:grid-cols-[10rem_1fr]">
+              <dt class="text-muted-foreground">Ballot ID</dt>
+              <dd><code class="break-all font-mono text-xs">{ballot.ballotId}</code></dd>
+              <dt class="text-muted-foreground">Purpose</dt>
+              <dd>{ballot.purpose === 'matter_adoption' ? 'Decision on this proposal' : ballot.purpose === 'amendment' ? 'Amendment endorsement' : 'Consultation'}</dd>
+              <dt class="text-muted-foreground">Electorate</dt>
+              <dd>{ballot.electorateScope === 'national' ? 'Party-wide' : 'Branch'}</dd>
+              <dt class="text-muted-foreground">Status</dt>
+              <dd>{ballotStatusLabel(ballot.status)}</dd>
+              <dt class="text-muted-foreground">Wording</dt>
+              <dd class="flex flex-wrap items-center gap-2">
+                {ballot.revisionId ? <code class="break-all font-mono text-xs">{ballot.revisionId}</code> : 'Not bound'}
+                {ballot.boundToVotedWording ? <Badge variant="success">Bound to voted wording</Badge> : <Badge variant="warning">Not bound to voted wording</Badge>}
+              </dd>
+              <dt class="text-muted-foreground">Closes</dt>
+              <dd>{formatDateTime(ballot.closesAt)}</dd>
+            </dl>
+          )}
+
+          {!result ? (
+            <Alert variant="info">
+              <AlertTitle>No result recorded</AlertTitle>
+              <AlertDescription>
+                <p>The ballot has not been certified, so there is no recorded result.</p>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="text-sm font-semibold">Recorded result</h3>
+                <Badge variant={result.result === 'successful' ? 'success' : result.result === 'inconclusive' ? 'warning' : 'muted'}>
+                  {ballotOutcomeLabel(result.result)}
+                </Badge>
+                {result.overrideReason && <Badge variant="warning">Override</Badge>}
+              </div>
+              <Table>
+                <TableCaption>Result detail recorded when the ballot was certified.</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col">Item</TableHead>
+                    <TableHead scope="col">Recorded</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>Recorded result</TableCell>
+                    <TableCell>{ballotOutcomeLabel(result.result)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Votes computed</TableCell>
+                    <TableCell>{result.computedResult ? ballotOutcomeLabel(result.computedResult) : 'Not computed with this result'}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Voting rule</TableCell>
+                    <TableCell>{ruleLabel(result.ruleBasis)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Recorded</TableCell>
+                    <TableCell>{formatDateTime(result.recordedAt)}</TableCell>
+                  </TableRow>
+                  {result.tally ? (
+                    <>
+                      <TableRow>
+                        <TableCell>Approve</TableCell>
+                        <TableCell className="tabular">{result.tally.approve}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Abstain</TableCell>
+                        <TableCell className="tabular">{result.tally.abstain}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Reject</TableCell>
+                        <TableCell className="tabular">{result.tally.reject}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Total votes</TableCell>
+                        <TableCell className="tabular font-semibold">{result.tally.total}</TableCell>
+                      </TableRow>
+                    </>
+                  ) : (
+                    <TableRow>
+                      <TableCell>Vote totals</TableCell>
+                      <TableCell>Not stored with this result</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+              {result.recordedBeforeComputation && (
+                <Alert variant="info">
+                  <AlertTitle>Recorded before vote totals were checked</AlertTitle>
+                  <AlertDescription>
+                    <p>This result was recorded before vote totals and computed outcomes were stored. The original record is unchanged.</p>
+                  </AlertDescription>
+                </Alert>
+              )}
+              {result.overrideReason && (
+                <Alert variant="warning">
+                  <AlertTitle>Recorded by override</AlertTitle>
+                  <AlertDescription>
+                    <p>{result.overrideReason}</p>
+                    <p>The recorded result differs from the outcome computed from the votes.</p>
+                  </AlertDescription>
+                </Alert>
+              )}
+              <p class="text-xs text-muted-foreground">
+                Only totals are shown. Individual votes and voter details are not part of this record.
+              </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <!-- Amendments -->
+      <Card>
+        <CardHeader>
+          <h2 class="text-lg font-semibold leading-none">Amendments</h2>
+        </CardHeader>
+        <CardContent>
+          {amendments.length === 0 ? (
+            <p class="text-sm text-muted-foreground">No amendments were filed.</p>
+          ) : (
+            <Table>
+              <TableCaption>Amendment outcomes and the revision each applied amendment produced.</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead scope="col">Amendment</TableHead>
+                  <TableHead scope="col">Status</TableHead>
+                  <TableHead scope="col">Endorsement</TableHead>
+                  <TableHead scope="col">Resulting revision</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {amendments.map((amendment) => {
+                  const status = statusFor(amendment.status);
+                  const revision = appliedRevisionForAmendment(amendment);
+                  return (
+                    <TableRow>
+                      <TableCell className="whitespace-normal">
+                        <span class="font-semibold">#{amendment.ordinal}</span> · {amendment.title}
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <Badge variant={status.variant}>{status.label}</Badge>
+                        {amendment.reviewReason && (
+                          <span class="mt-1 block text-xs text-muted-foreground">{amendment.reviewReason}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-normal">{endorsementLabel(amendment.endorsementResult)}</TableCell>
+                      <TableCell className="whitespace-normal">
+                        {revision ? (
+                          <>
+                            <span class="block text-xs text-muted-foreground">{revision.label}</span>
+                            <code class="break-all font-mono text-xs">{revision.id}</code>
+                          </>
+                        ) : (
+                          <span class="text-muted-foreground">None</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <!-- Revision history -->
+      <Card>
+        <CardHeader>
+          <h2 class="text-lg font-semibold leading-none">Revision history</h2>
+        </CardHeader>
+        <CardContent>
+          {revisions.length === 0 ? (
+            <p class="text-sm text-muted-foreground">No wording revisions have been recorded.</p>
+          ) : (
+            <Table>
+              <TableCaption>Every revision is immutable. Later edits create a new revision.</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead scope="col">Revision</TableHead>
+                  <TableHead scope="col">Recorded</TableHead>
+                  <TableHead scope="col">Content hash</TableHead>
+                  <TableHead scope="col">Note</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {revisions.map((revision) => {
+                  const amendmentNumber = amendmentNumberForRevision(revision.revisionId);
+                  return (
+                    <TableRow>
+                      <TableCell className="whitespace-normal">
+                        <span class="block text-xs text-muted-foreground">
+                          {revisionDisplayLabel({ revisionId: revision.revisionId, createdAt: revision.createdAt, ordinal: revision.ordinal })}
+                        </span>
+                        <code class="break-all font-mono text-xs">{revision.revisionId}</code>
+                      </TableCell>
+                      <TableCell className="whitespace-normal">{formatDate(revision.createdAt)}</TableCell>
+                      <TableCell className="whitespace-normal">
+                        <code class="break-all font-mono text-xs">{revision.contentHash || 'Not recorded'}</code>
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <div class="flex flex-wrap gap-1">
+                          {revision.isBallotWording && <Badge variant="info">Ballot wording</Badge>}
+                          {amendmentNumber && <Badge variant="outline">From amendment #{amendmentNumber}</Badge>}
+                          {!revision.isBallotWording && !amendmentNumber && <span class="text-muted-foreground">—</span>}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <!-- Publication -->
+      <Card>
+        <CardHeader>
+          <h2 class="text-lg font-semibold leading-none">Publication</h2>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {publication?.state === 'not-applicable' ? (
+            <p class="text-sm text-muted-foreground">Governance resolutions are not published in the Policy Registry.</p>
+          ) : !publicationRecorded ? (
+            <>
+              <Badge variant="outline">Not published</Badge>
+              <p class="text-sm text-muted-foreground">No policy record exists for this proposal, so nothing has been ratified or published.</p>
+            </>
+          ) : (
+            <>
+              <div class="flex flex-wrap items-center gap-2">
+                <Badge variant={publicationVariant(publicationRecorded.publicationStatus)}>{publicationLabel(publicationRecorded.publicationStatus)}</Badge>
+                {publicationRecorded.policyTitle && publicationRecorded.policyTitle !== record.matter.title && (
+                  <span class="text-sm text-muted-foreground">{publicationRecorded.policyTitle}</span>
+                )}
+              </div>
+              <dl class="grid gap-1 text-sm sm:grid-cols-[10rem_1fr]">
+                <dt class="text-muted-foreground">Ratified</dt>
+                <dd>{formatDateTime(publicationRecorded.ratifiedAt)}</dd>
+                <dt class="text-muted-foreground">Ratified revision</dt>
+                <dd>
+                  {publicationRecorded.ratifiedRevisionId ? (
+                    <code class="break-all font-mono text-xs">{publicationRecorded.ratifiedRevisionId}</code>
+                  ) : 'Not recorded'}
+                </dd>
+                <dt class="text-muted-foreground">Revision hash</dt>
+                <dd><code class="break-all font-mono text-xs">{publicationRecorded.ratifiedRevisionHash || 'Not recorded'}</code></dd>
+                <dt class="text-muted-foreground">Published</dt>
+                <dd>{formatDateTime(publicationRecorded.publishedAt)}</dd>
+              </dl>
+              {publicationRecorded.events.length > 0 ? (
+                <Table>
+                  <TableCaption>Publication events for this policy record.</TableCaption>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead scope="col">Event</TableHead>
+                      <TableHead scope="col">Date</TableHead>
+                      <TableHead scope="col">Reason</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {publicationRecorded.events.map((event) => (
+                      <TableRow>
+                        <TableCell>{publicationEventLabel(event.transition)}</TableCell>
+                        <TableCell className="whitespace-normal">{formatDateTime(event.at)}</TableCell>
+                        <TableCell className="whitespace-normal">{event.reason || '—'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p class="text-sm text-muted-foreground">No publication events have been recorded.</p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <div class="flex flex-wrap gap-2">
+        <Button href={`/proposals/${record.matter.slug}/`} variant="outline">Back to proposal</Button>
+        <Button href="/proposals/" variant="ghost">All proposals</Button>
+      </div>
+    </div>
+  </SiteLayout>
+)}
+
+<style>
+  .decision-record h1 {
+    font-size: clamp(2rem, 3.4vw, 2.75rem);
+    line-height: 1.12;
+  }
+
+  .decision-record h2 {
+    font-family: var(--font-outfit);
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: normal;
+  }
+</style>
