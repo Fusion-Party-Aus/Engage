@@ -43,8 +43,11 @@ function runOpsHealth(
           APP_MODE: "test",
           ENGAGE_DIGEST_ENABLED: "true",
           ENGAGE_CRM_VERIFICATION_ENABLED: "true",
+          GOVERNANCE_SCHEDULER_WARN_HOURS: "",
           GOVERNANCE_SCHEDULER_STALE_HOURS: "",
+          DIGEST_WARN_HOURS: "",
           DIGEST_STALE_HOURS: "",
+          MEMBERSHIP_VERIFICATION_WARN_HOURS: "",
           MEMBERSHIP_VERIFICATION_STALE_HOURS: "",
           BALLOT_CLOSURE_GRACE_HOURS: "",
           EMAIL_DELIVERY_WINDOW_HOURS: "",
@@ -79,6 +82,20 @@ async function seedJobRuns(db: Db, jobs: JobName[]): Promise<void> {
   }
 }
 
+/** Age every run beyond the warn threshold but inside the fail threshold. */
+async function staleJobRuns(db: Db): Promise<void> {
+  const startedAt = new Date(Date.now() - 3 * 3_600_000);
+  await db.collection(JOB_RUNS_COLLECTION).updateMany(
+    {},
+    {
+      $set: {
+        startedAt,
+        finishedAt: new Date(startedAt.getTime() + 60_000),
+      },
+    },
+  );
+}
+
 describe("ops:health command", () => {
   it("exits 0 when healthy, 2 when degraded and 1 when failing", { skip: !uri }, async () => {
     const client = await new MongoClient(uri!).connect();
@@ -105,15 +122,11 @@ describe("ops:health command", () => {
       assert.equal(report.status, "healthy");
       assert.equal(healthy.stdout.includes("turnstile-secret-value"), false);
 
-      await db.collection("engagement_email_outbox").insertOne({
-        memberId: "member-private-identifier",
-        status: "failed",
-        createdAt: new Date(),
-      });
+      await staleJobRuns(db);
       const degraded = await runOpsHealth(["--human"], baseEnv);
       assert.equal(degraded.code, 2, degraded.stderr);
       assert.match(degraded.stdout, /Engage operational health: degraded/);
-      assert.equal(degraded.stdout.includes("member-private-identifier"), false);
+      assert.match(degraded.stdout, /warn threshold is 1 hour/);
 
       await db.collection(JOB_RUNS_COLLECTION).deleteMany({});
       const failing = await runOpsHealth(["--json"], baseEnv);

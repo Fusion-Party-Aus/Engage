@@ -61,15 +61,21 @@ export interface OperationalHealthReport {
   checks: OperationalCheck[];
 }
 
+export const GOVERNANCE_SCHEDULER_WARN_HOURS = 2;
 export const GOVERNANCE_SCHEDULER_STALE_HOURS = 26;
+export const DIGEST_WARN_HOURS = 1;
 export const DIGEST_STALE_HOURS = 24;
+export const MEMBERSHIP_VERIFICATION_WARN_HOURS = 2;
 export const MEMBERSHIP_VERIFICATION_STALE_HOURS = 24;
 export const BALLOT_CLOSURE_GRACE_HOURS = 2;
 export const EMAIL_DELIVERY_WINDOW_HOURS = 24;
 
 export const OPERATIONAL_THRESHOLD_ENV = {
+  governanceSchedulerWarnHours: "GOVERNANCE_SCHEDULER_WARN_HOURS",
   governanceSchedulerStaleHours: "GOVERNANCE_SCHEDULER_STALE_HOURS",
+  digestWarnHours: "DIGEST_WARN_HOURS",
   digestStaleHours: "DIGEST_STALE_HOURS",
+  membershipVerificationWarnHours: "MEMBERSHIP_VERIFICATION_WARN_HOURS",
   membershipVerificationStaleHours: "MEMBERSHIP_VERIFICATION_STALE_HOURS",
   ballotClosureGraceHours: "BALLOT_CLOSURE_GRACE_HOURS",
   emailDeliveryWindowHours: "EMAIL_DELIVERY_WINDOW_HOURS",
@@ -98,6 +104,10 @@ function describeAge(hours: number): string {
   if (hours < 1) return "less than an hour ago";
   const rounded = Math.round(hours);
   return `${rounded} hour${rounded === 1 ? "" : "s"} ago`;
+}
+
+function hourLabel(hours: number): string {
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
 }
 
 function countSummary(value: number): number {
@@ -137,24 +147,50 @@ export function operationalHealthExitCode(
   return 2;
 }
 
+interface RecencyThresholds {
+  warn: OperationalThreshold;
+  fail: OperationalThreshold;
+}
+
 interface JobRecencyOptions {
   id: OperationalCheckId;
   job: JobName;
-  staleThreshold: OperationalThreshold;
+  thresholds: RecencyThresholds;
   missingSummary: string;
   missingAction: string;
   failedAction: string;
+  invalidAction: string;
 }
 
 /**
- * Shared recency rule for a scheduled job: no run, a stale run, or a failed
- * run. Callers add job-specific evidence on top.
+ * Shared two-tier recency rule for a scheduled job.
+ *
+ * A job that runs every 15 minutes cannot be judged healthy for a day: a single
+ * missed tick is normal jitter, but a complete outage must be visible quickly.
+ * The warn threshold is a handful of ticks; the fail threshold is the point at
+ * which the job's guarantee has definitely not been met.
+ *
+ * States: no run → failing; older than fail → failing; last run failed →
+ * failing; older than warn → degraded; otherwise ok. A warn threshold that is
+ * not below the fail threshold is a configuration error, reported as unknown
+ * instead of silently trusting a value that could hide an outage.
  */
 async function jobRecencyCheck(
   db: Db,
   now: Date,
   options: JobRecencyOptions,
 ): Promise<OperationalCheck> {
+  const { warn, fail } = options.thresholds;
+  if (!(warn.hours < fail.hours)) {
+    return {
+      id: options.id,
+      status: "unknown",
+      summary: `The warn threshold (${hourLabel(warn.hours)}) must be less than the fail threshold (${hourLabel(fail.hours)}).`,
+      nextAction: options.invalidAction,
+      threshold: fail.name,
+    };
+  }
+
   const last = await latestJobRun(db, { job: options.job, mode: "apply" });
   if (!last) {
     return {
@@ -162,17 +198,17 @@ async function jobRecencyCheck(
       status: "failing",
       summary: options.missingSummary,
       nextAction: options.missingAction,
-      threshold: options.staleThreshold.name,
+      threshold: fail.name,
     };
   }
   const ageHours = hoursBetween(new Date(last.startedAt), now);
-  if (ageHours > options.staleThreshold.hours) {
+  if (ageHours > fail.hours) {
     return {
       id: options.id,
       status: "failing",
-      summary: `Last run was ${describeAge(ageHours)}; the schedule allows ${options.staleThreshold.hours} hours.`,
+      summary: `Last run was ${describeAge(ageHours)}; the fail threshold is ${hourLabel(fail.hours)}.`,
       nextAction: options.missingAction,
-      threshold: options.staleThreshold.name,
+      threshold: fail.name,
     };
   }
   if (!last.ok) {
@@ -181,7 +217,16 @@ async function jobRecencyCheck(
       status: "failing",
       summary: `The last run (${describeAge(ageHours)}) failed.`,
       nextAction: options.failedAction,
-      threshold: options.staleThreshold.name,
+      threshold: fail.name,
+    };
+  }
+  if (ageHours > warn.hours) {
+    return {
+      id: options.id,
+      status: "degraded",
+      summary: `Last run was ${describeAge(ageHours)}; the warn threshold is ${hourLabel(warn.hours)} and the fail threshold is ${hourLabel(fail.hours)}.`,
+      nextAction: options.missingAction,
+      threshold: fail.name,
     };
   }
   return {
@@ -189,24 +234,32 @@ async function jobRecencyCheck(
     status: "ok",
     summary: `Last run completed ${describeAge(ageHours)}.`,
     nextAction: "No action needed.",
-    threshold: options.staleThreshold.name,
+    threshold: fail.name,
   };
+}
+
+function invalidThresholdAction(warnName: string, failName: string): string {
+  return `Correct ${warnName} or ${failName} so the warn threshold is below the fail threshold.`;
 }
 
 async function governanceSchedulerCheck(
   db: Db,
   now: Date,
-  stale: OperationalThreshold,
+  thresholds: RecencyThresholds,
 ): Promise<OperationalCheck> {
   const base = await jobRecencyCheck(db, now, {
     id: "governance-scheduler",
     job: "governance-scheduler",
-    staleThreshold: stale,
+    thresholds,
     missingSummary: "No governance scheduler run has been recorded.",
     missingAction:
       "Enable the governance scheduler in the external scheduler and run it with --apply.",
     failedAction:
       "Read the scheduler report and log, fix the cause, then run it with --apply.",
+    invalidAction: invalidThresholdAction(
+      thresholds.warn.name,
+      thresholds.fail.name,
+    ),
   });
   if (base.status !== "ok") return base;
 
@@ -277,7 +330,7 @@ async function digestCheck(
   db: Db,
   env: PlatformEnv,
   now: Date,
-  stale: OperationalThreshold,
+  thresholds: RecencyThresholds,
 ): Promise<OperationalCheck> {
   if (env.ENGAGE_DIGEST_ENABLED !== "true") {
     return {
@@ -291,12 +344,16 @@ async function digestCheck(
   const base = await jobRecencyCheck(db, now, {
     id: "digest",
     job: "ballot-digest",
-    staleThreshold: stale,
+    thresholds,
     missingSummary: "No digest run has been recorded.",
     missingAction:
       "Schedule POST /api/email/digest in the external scheduler with ENGAGE_CRON_SECRET.",
     failedAction:
       "Inspect delivery holds in email administration, then run the digest again.",
+    invalidAction: invalidThresholdAction(
+      thresholds.warn.name,
+      thresholds.fail.name,
+    ),
   });
   if (base.status !== "ok") return base;
 
@@ -318,7 +375,7 @@ async function membershipVerificationCheck(
   db: Db,
   env: PlatformEnv,
   now: Date,
-  stale: OperationalThreshold,
+  thresholds: RecencyThresholds,
 ): Promise<OperationalCheck> {
   if (!crmVerificationEnabled(env as Record<string, string | undefined>)) {
     return {
@@ -332,12 +389,16 @@ async function membershipVerificationCheck(
   const base = await jobRecencyCheck(db, now, {
     id: "membership-verification",
     job: "membership-verification",
-    staleThreshold: stale,
+    thresholds,
     missingSummary: "No membership verification run has been recorded.",
     missingAction:
       "Schedule POST /api/cron/membership-verification in the external scheduler with its cron secret.",
     failedAction:
       "Check CRM availability and configuration, then run the cycle again. Existing memberships are unchanged by a failure.",
+    invalidAction: invalidThresholdAction(
+      thresholds.warn.name,
+      thresholds.fail.name,
+    ),
   });
   if (base.status !== "ok") return base;
 
@@ -466,15 +527,30 @@ export async function evaluateOperationalHealth(input: {
   const { db, env } = input;
   const now = input.now ?? new Date();
   const thresholds = {
+    governanceSchedulerWarnHours: threshold(
+      env,
+      OPERATIONAL_THRESHOLD_ENV.governanceSchedulerWarnHours,
+      GOVERNANCE_SCHEDULER_WARN_HOURS,
+    ),
     governanceSchedulerStaleHours: threshold(
       env,
       OPERATIONAL_THRESHOLD_ENV.governanceSchedulerStaleHours,
       GOVERNANCE_SCHEDULER_STALE_HOURS,
     ),
+    digestWarnHours: threshold(
+      env,
+      OPERATIONAL_THRESHOLD_ENV.digestWarnHours,
+      DIGEST_WARN_HOURS,
+    ),
     digestStaleHours: threshold(
       env,
       OPERATIONAL_THRESHOLD_ENV.digestStaleHours,
       DIGEST_STALE_HOURS,
+    ),
+    membershipVerificationWarnHours: threshold(
+      env,
+      OPERATIONAL_THRESHOLD_ENV.membershipVerificationWarnHours,
+      MEMBERSHIP_VERIFICATION_WARN_HOURS,
     ),
     membershipVerificationStaleHours: threshold(
       env,
@@ -495,25 +571,25 @@ export async function evaluateOperationalHealth(input: {
 
   const checks = await Promise.all([
     guarded("governance-scheduler", () =>
-      governanceSchedulerCheck(
-        db,
-        now,
-        thresholds.governanceSchedulerStaleHours,
-      ),
+      governanceSchedulerCheck(db, now, {
+        warn: thresholds.governanceSchedulerWarnHours,
+        fail: thresholds.governanceSchedulerStaleHours,
+      }),
     ),
     guarded("ballot-deadlines", () =>
       ballotDeadlineCheck(db, now, thresholds.ballotClosureGraceHours),
     ),
     guarded("digest", () =>
-      digestCheck(db, env, now, thresholds.digestStaleHours),
+      digestCheck(db, env, now, {
+        warn: thresholds.digestWarnHours,
+        fail: thresholds.digestStaleHours,
+      }),
     ),
     guarded("membership-verification", () =>
-      membershipVerificationCheck(
-        db,
-        env,
-        now,
-        thresholds.membershipVerificationStaleHours,
-      ),
+      membershipVerificationCheck(db, env, now, {
+        warn: thresholds.membershipVerificationWarnHours,
+        fail: thresholds.membershipVerificationStaleHours,
+      }),
     ),
     guarded("email-delivery", () =>
       emailDeliveryCheck(db, now, thresholds.emailDeliveryWindowHours),

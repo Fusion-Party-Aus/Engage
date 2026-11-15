@@ -10,7 +10,10 @@ import {
 } from "./job-runs.ts";
 import {
   DIGEST_STALE_HOURS,
+  DIGEST_WARN_HOURS,
   GOVERNANCE_SCHEDULER_STALE_HOURS,
+  GOVERNANCE_SCHEDULER_WARN_HOURS,
+  MEMBERSHIP_VERIFICATION_WARN_HOURS,
   evaluateOperationalHealth,
   operationalHealthExitCode,
   overallOperationalStatus,
@@ -107,49 +110,86 @@ describe("operational health evaluation", () => {
       assert.ok(entry.nextAction.length > 0);
     }
     assert.equal(report.jobRunRetentionDays, 90);
+    assert.deepEqual(report.thresholds.governanceSchedulerWarnHours, {
+      name: "GOVERNANCE_SCHEDULER_WARN_HOURS",
+      hours: GOVERNANCE_SCHEDULER_WARN_HOURS,
+      source: "default",
+    });
     assert.deepEqual(report.thresholds.governanceSchedulerStaleHours, {
       name: "GOVERNANCE_SCHEDULER_STALE_HOURS",
       hours: GOVERNANCE_SCHEDULER_STALE_HOURS,
       source: "default",
     });
+    assert.equal(report.thresholds.digestWarnHours.hours, DIGEST_WARN_HOURS);
     assert.equal(report.thresholds.digestStaleHours.hours, DIGEST_STALE_HOURS);
+    assert.equal(
+      report.thresholds.membershipVerificationWarnHours.hours,
+      MEMBERSHIP_VERIFICATION_WARN_HOURS,
+    );
     assert.equal(
       check(report, "governance-scheduler").threshold,
       "GOVERNANCE_SCHEDULER_STALE_HOURS",
     );
   });
 
-  it("applies the governance scheduler stale boundary exactly", async () => {
+  it("applies the governance scheduler warn and fail boundaries exactly", async () => {
     const fresh = createMemoryDb();
-    await seedRun(fresh, "governance-scheduler", { hoursAgo: 26 });
+    await seedRun(fresh, "governance-scheduler", {
+      hoursAgo: GOVERNANCE_SCHEDULER_WARN_HOURS,
+    });
     assert.equal(check(await evaluate(fresh), "governance-scheduler").status, "ok");
 
+    const warned = createMemoryDb();
+    await seedRun(warned, "governance-scheduler", {
+      hoursAgo: GOVERNANCE_SCHEDULER_WARN_HOURS + 0.1,
+    });
+    const warnedCheck = check(await evaluate(warned), "governance-scheduler");
+    assert.equal(warnedCheck.status, "degraded");
+    assert.match(warnedCheck.summary, /warn threshold is 2 hours/);
+
+    const atFail = createMemoryDb();
+    await seedRun(atFail, "governance-scheduler", {
+      hoursAgo: GOVERNANCE_SCHEDULER_STALE_HOURS,
+    });
+    assert.equal(check(await evaluate(atFail), "governance-scheduler").status, "degraded");
+
     const stale = createMemoryDb();
-    await seedRun(stale, "governance-scheduler", { hoursAgo: 26.1 });
+    await seedRun(stale, "governance-scheduler", {
+      hoursAgo: GOVERNANCE_SCHEDULER_STALE_HOURS + 0.1,
+    });
     const report = await evaluate(stale);
     assert.equal(check(report, "governance-scheduler").status, "failing");
-    assert.match(check(report, "governance-scheduler").summary, /allows 26 hours/);
+    assert.match(
+      check(report, "governance-scheduler").summary,
+      /fail threshold is 26 hours/,
+    );
     assert.equal(report.status, "failing");
   });
 
-  it("uses a configured threshold and ignores dry-run entries for recency", async () => {
+  it("uses configured warn and fail thresholds and ignores dry-run entries", async () => {
     const db = createMemoryDb();
     await seedRun(db, "governance-scheduler", {
       hoursAgo: 0.5,
       mode: "dry-run",
     });
-    await seedRun(db, "governance-scheduler", { hoursAgo: 3 });
+    await seedRun(db, "governance-scheduler", { hoursAgo: 1.5 });
 
     const report = await evaluate(db, {
       ...baseEnv,
+      GOVERNANCE_SCHEDULER_WARN_HOURS: "1",
       GOVERNANCE_SCHEDULER_STALE_HOURS: "2",
+    });
+    assert.deepEqual(report.thresholds.governanceSchedulerWarnHours, {
+      name: "GOVERNANCE_SCHEDULER_WARN_HOURS",
+      hours: 1,
+      source: "environment",
     });
     assert.deepEqual(report.thresholds.governanceSchedulerStaleHours, {
       name: "GOVERNANCE_SCHEDULER_STALE_HOURS",
       hours: 2,
       source: "environment",
     });
-    assert.equal(check(report, "governance-scheduler").status, "failing");
+    assert.equal(check(report, "governance-scheduler").status, "degraded");
   });
 
   it("fails a scheduler whose last run failed and degrades a partial run", async () => {
@@ -207,6 +247,12 @@ describe("operational health evaluation", () => {
     await seedRun(stale, "ballot-digest", { hoursAgo: 30 });
     assert.equal(check(await evaluate(stale), "digest").status, "failing");
 
+    const warned = createMemoryDb();
+    await seedRun(warned, "ballot-digest", { hoursAgo: 2 });
+    const warnedCheck = check(await evaluate(warned), "digest");
+    assert.equal(warnedCheck.status, "degraded");
+    assert.match(warnedCheck.summary, /warn threshold is 1 hour/);
+
     const disabled = await evaluate(await healthyDatabase(), {
       ...baseEnv,
       ENGAGE_DIGEST_ENABLED: "false",
@@ -259,6 +305,128 @@ describe("operational health evaluation", () => {
       check(await evaluate(missing), "membership-verification").status,
       "failing",
     );
+
+    const warned = await healthyDatabase();
+    await warned
+      .collection(JOB_RUNS_COLLECTION)
+      .deleteMany({ job: "membership-verification" });
+    await seedRun(warned, "membership-verification", { hoursAgo: 3 });
+    assert.equal(
+      check(await evaluate(warned), "membership-verification").status,
+      "degraded",
+    );
+
+    const stale = await healthyDatabase();
+    await stale
+      .collection(JOB_RUNS_COLLECTION)
+      .deleteMany({ job: "membership-verification" });
+    await seedRun(stale, "membership-verification", { hoursAgo: 25 });
+    assert.equal(
+      check(await evaluate(stale), "membership-verification").status,
+      "failing",
+    );
+  });
+
+  it("applies two-tier recency to every scheduled job", async () => {
+    const jobs: Array<{
+      id: "governance-scheduler" | "digest" | "membership-verification";
+      job: "governance-scheduler" | "ballot-digest" | "membership-verification";
+      warn: number;
+      fail: number;
+    }> = [
+      {
+        id: "governance-scheduler",
+        job: "governance-scheduler",
+        warn: GOVERNANCE_SCHEDULER_WARN_HOURS,
+        fail: GOVERNANCE_SCHEDULER_STALE_HOURS,
+      },
+      {
+        id: "digest",
+        job: "ballot-digest",
+        warn: DIGEST_WARN_HOURS,
+        fail: DIGEST_STALE_HOURS,
+      },
+      {
+        id: "membership-verification",
+        job: "membership-verification",
+        warn: MEMBERSHIP_VERIFICATION_WARN_HOURS,
+        fail: 24,
+      },
+    ];
+
+    for (const entry of jobs) {
+      for (const [hoursAgo, expected] of [
+        [entry.warn - 0.1, "ok"],
+        [entry.warn + 0.1, "degraded"],
+        [entry.fail + 0.1, "failing"],
+      ] as const) {
+        const db = createMemoryDb();
+        await seedRun(db, entry.job, { hoursAgo });
+        const result = check(await evaluate(db), entry.id);
+        assert.equal(
+          result.status,
+          expected,
+          `${entry.id} at ${hoursAgo} hours: ${result.summary}`,
+        );
+        if (expected === "degraded") {
+          assert.match(result.summary, new RegExp(`${entry.warn} hour`));
+        }
+      }
+    }
+  });
+
+  it("reports unknown rather than trusting invalid warn and fail thresholds", async () => {
+    const cases: Array<{
+      id: "governance-scheduler" | "digest" | "membership-verification";
+      job: "governance-scheduler" | "ballot-digest" | "membership-verification";
+      env: PlatformEnv;
+      envName: string;
+    }> = [
+      {
+        id: "governance-scheduler",
+        job: "governance-scheduler",
+        env: {
+          GOVERNANCE_SCHEDULER_WARN_HOURS: "30",
+          GOVERNANCE_SCHEDULER_STALE_HOURS: "26",
+        },
+        envName: "GOVERNANCE_SCHEDULER_WARN_HOURS",
+      },
+      {
+        id: "digest",
+        job: "ballot-digest",
+        env: { DIGEST_WARN_HOURS: "24", DIGEST_STALE_HOURS: "24" },
+        envName: "DIGEST_WARN_HOURS",
+      },
+      {
+        id: "membership-verification",
+        job: "membership-verification",
+        env: {
+          MEMBERSHIP_VERIFICATION_WARN_HOURS: "24",
+          MEMBERSHIP_VERIFICATION_STALE_HOURS: "12",
+        },
+        envName: "MEMBERSHIP_VERIFICATION_WARN_HOURS",
+      },
+    ];
+
+    for (const entry of cases) {
+      const db = await healthyDatabase();
+      await db
+        .collection(JOB_RUNS_COLLECTION)
+        .deleteMany({ job: entry.job });
+      await seedRun(db, entry.job, { hoursAgo: 0.1 });
+      const report = await evaluate(db, { ...baseEnv, ...entry.env });
+      const result = check(report, entry.id);
+      assert.equal(result.status, "unknown", entry.id);
+      assert.match(result.summary, /must be less than/);
+      assert.match(result.nextAction, new RegExp(entry.envName));
+      assert.equal(report.status, "unknown");
+      assert.equal(operationalHealthExitCode(report), 2);
+      // The thresholds block still names the configured values honestly.
+      const overridden = Object.values(report.thresholds).filter(
+        (value) => value.source === "environment",
+      );
+      assert.ok(overridden.length >= 2, entry.id);
+    }
   });
 
   it("reports recent failed or held email delivery only", async () => {
