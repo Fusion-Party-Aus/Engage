@@ -1,9 +1,9 @@
 # Rendering performance audit — RFC 0001 Phase 2
 
-**Status:** Current · **Measured:** 14 November 2026
+**Status:** Current · **Measured:** 14 November 2026; register follow-up measured 15 November 2026
 **Branch:** merged into `feat/rfc0001-sprint1-integration` (PR #51) · **Baseline commit:** `1bd4fd1` · **Measured after commit:** `b25e385`
 **Harness:** [`scripts/rendering-performance.mjs`](../../scripts/rendering-performance.mjs)
-**Data:** [`rendering-performance-baseline.json`](rendering-performance-baseline.json) · [`rendering-performance-after.json`](rendering-performance-after.json)
+**Data:** [`rendering-performance-baseline.json`](rendering-performance-baseline.json) · [`rendering-performance-after.json`](rendering-performance-after.json) · register follow-up: [`rendering-performance-register-before.json`](rendering-performance-register-before.json) · [`rendering-performance-register-after.json`](rendering-performance-register-after.json)
 
 This audit measures the server render cost and client experience of representative public, member and administrator pages, then removes duplicated and render-blocking work that does not affect governance authority. Local measurements are **indicative, not production SLA evidence**. See [Limitations](#limitations).
 
@@ -41,7 +41,7 @@ Reading the table:
 
 - The signed-in pages improve most because they previously resolved the same session in the layout and again in the page.
 - `/admin/` drops 43% of HTML because the recent-participation panel is now a server island with a stable fallback.
-- `/admin/proposals/` drops 75% of document database commands because the register read, unbound-revision read and amendment-revision read are batched instead of repeated per row. Its HTML remains ~1 MB; pagination is the next opportunity.
+- `/admin/proposals/` drops 75% of document database commands because the register read, unbound-revision read and amendment-revision read are batched instead of repeated per row. Its HTML was still ~1 MB at this point; a later slice paginated the register and removed its vote read (see [Register pagination and the tally-free list read](#register-pagination-and-the-tally-free-list-read-15-november-2026)).
 - Small increases on anonymous pages (for example `/policies/` TTFB 5.9 → 6.7 ms) are noise at this scale, not a regression caused by a code path on those pages.
 - LCP in this local setup is dominated by local asset delivery and is close to noise. It is reported for completeness, not as evidence of a field improvement.
 
@@ -57,7 +57,7 @@ Reading the table:
 | `/policies/` | Published/withdrawn/superseded registry rows, filters, branch names | None; no session data | Search/filter submit (normal GET) |
 | `/member/` | Identity and verification status; immediate next action; eligible outstanding ballots; branch membership summary | Participation log; catch-up digest; governance change log; notification/push preferences; passkey count; authored-idea list | Settings forms; branch follow/leave; passkey enrolment/removal |
 | `/admin/` | Authority check; attention queue; lifecycle counts; ballot progress; policy registry summary | **Recent member participation** (server island); activity timeline filtering | Timeline search/filter; sidebar collapse |
-| `/admin/proposals/` | Authority check; register rows, counts and filters; the editor only when `edit`/`revise`/`new` is requested | Amendment history and resolution forms; unbound-revision choices | Quick stage/ballot controls; ballot binding; outcome recording |
+| `/admin/proposals/` | Authority check; the requested register page, stage counts and filters; certified tallies for rows with a recorded result; the editor only when `edit`/`revise`/`new` is requested | Later pages; amendment history and resolution forms; unbound-revision choices | Quick stage/ballot controls; ballot binding; outcome recording and the live ballot tally (workspace) |
 
 Governance-critical data was **not** deferred: eligibility, voting authority, ballot binding, tally, the member's own vote, authorisation decisions and archived/private visibility all remain in the initial server response.
 
@@ -131,12 +131,96 @@ These are narrow changes to `src/lib/store.ts` and `src/lib/member-activity.ts`.
 
 These changes do not implement S1 (command layer), S2/S4 (read models) or I12's full pagination/tally projection. They reduce duplicate reads inside the current shape.
 
+## Register pagination and the tally-free list read (15 November 2026)
+
+`/admin/proposals/` was the largest document in this audit: it rendered every
+proposal, including its rationale, and decrypted every vote so the Decide rows
+could show live tallies. A follow-up slice closed the two remaining register
+opportunities from the first pass.
+
+**Method.** Same harness and synthetic data, `--filter admin-proposals --runs 3`.
+The before snapshot is the branch point `78c07c0`; the after snapshot records
+`c1f72c0` in its `git` block. Snapshots:
+[before](rendering-performance-register-before.json) ·
+[after](rendering-performance-register-after.json).
+
+| Metric | Before | After | Change |
+|---|---|---|---|
+| HTML bytes | 938,422 | 283,915 | −70% |
+| Document DB commands | 19 | 16 | −16% |
+| Document DB time | 28.7 ms | 15.0 ms | −48% |
+| Document duration | 171.0 ms | 58.7 ms | −66% |
+| TTFB | 103.1 ms | 56.1 ms | |
+| LCP | 196 ms | 136 ms | |
+| Transferred JS | 354.7 KB | 353.2 KB | unchanged |
+| Browser-phase DB commands | 26 | 23 | −12% |
+
+Reading the numbers:
+
+- The page now sends 25 rows instead of all 78. The HTML fall is almost entirely
+  rows and their inline management forms, not a change to the shell or styles.
+- Database commands fall less than HTML because the page still resolves the
+  session, branches, counts, one page of rows, page comment counts, certified
+  results, ballot closures, page amendments and page revisions. The multi-batch
+  vote cursor is gone: `getMore` batches fell from 4 to 1 (`find` 14 → 13).
+- JS is unchanged. The ~353 KB is the shared React runtime pulled in by the
+  header notification bell, not the register (opportunity 1 below).
+- LCP in this local setup is dominated by local asset delivery; treat the
+  difference as noise, as with the rest of this audit. Repeat runs of the same
+  build measured 15.0–16.2 ms of document DB time and 56–61 ms TTFB, so read the
+  deltas as direction, not precision.
+
+**Profiler evidence for the vote read.** MongoDB profiling (`profile: 2`) around
+the two reads on the same seeded database, with 1,200 synthetic votes:
+
+| Read | Collections touched |
+|---|---|
+| The register request | `proposals` (2 queries + 1 count), `comments` (+1 `getMore`), `ballot_results`, `ballots`, `amendments`, `proposal_revisions`, `branches`, `rbac_assignments`, `rbac_roles`, `branch_memberships`, `branch_subscriptions`, `site_settings`. **No `proposal_votes`.** |
+| The previous register read (`listProposals`) | `proposals`, `comments`, `proposal_votes` (1 query + 2 `getMore`) |
+
+The unit suite also proves this without a database: a spy around the collection
+factory asserts that `listProposalRegister` never asks for `proposal_votes` and
+that both proposal reads exclude `details` and `detailHtml`
+(`src/lib/proposal-register.test.ts`). Profiling is a local indication, not
+production evidence.
+
+**What the register shows now**
+
+- **Certified ballot:** the tally, computed result, recorded result and rule
+  basis stored on `ballot_results` at certification. An officer override is
+  labelled with its written reason.
+- **Open, uncertified ballot:** "Open — view ballot" with no vote numbers.
+- **Closed, uncertified ballot:** "Closed — record outcome", linking to the
+  workspace.
+- **No ballot:** "No ballot yet" or "No certified ballot", plus the row's
+  deliberation stance count.
+- **Pagination:** 25 rows per page, previous/next, the current page and a status
+  region announcing "Showing 1–25 of 78 proposals. Page 1 of 4." Filters stay in
+  the pagination links and reset to page 1 when changed. Invalid or
+  out-of-range pages clamp to the first or last page.
+
+**Trade-offs and deliberate limits**
+
+- Inline outcome recording was removed from the register. The workspace keeps
+  the live bound tally and the only result form. Recording from the list would
+  require decrypting every ballot on a list read, which is the cost this slice
+  removes.
+- "Open amendments" now counts the viewer's whole register rather than the
+  filtered subset, so it does not change while paging. That matches the label's
+  intent ("Across active records").
+- Search now runs in MongoDB. It still covers the identifier, title, topic
+  space, summary and rationale; rationale is matched in the query and never
+  returned.
+- Editing and revising load their one full record on demand, including
+  rationale, with the same branch scope and integrity lock as before. The
+  editor's vote count is a count query for that single proposal, not a
+  decryption.
+
 ## Deliberately left alone
 
-- **Per-vote decryption and full vote scans in `listProposals`.** List cards need approve/reject/abstain totals, and encrypted ballots can only be tallied after decryption. A tally read model is S4/I12 work, not a low-risk page change.
-- **Full-collection proposal search.** `/proposals/` searches `details` client-side for consistency with the existing UX. Moving search into MongoDB with the same semantics needs its own change and index review.
-- **Admin register pagination.** `/admin/proposals/` still renders all 78 rows (~1 MB HTML). Pagination changes an administrative workflow and was left as the top structural opportunity rather than slipped into this slice.
-- **Ballot authority, eligibility and tally.** All remain server-computed and in the initial response. The ballot island is still server-rendered; hydration timing changed only.
+- **Per-vote decryption and full vote scans in `listProposals`.** Member and public list cards still need approve/reject/abstain totals, and encrypted ballots can only be tallied after decryption. The admin register no longer does this; a tally read model for the remaining list pages is S4/I12 work.
+- **Full-collection proposal search.** `/proposals/` searches `details` client-side for consistency with the existing UX. Moving search into MongoDB with the same semantics needs its own change and index review. The admin register now searches in MongoDB because pagination requires it.
+- **Ballot authority, eligibility and tally.** All remain server-computed and in the initial response. The ballot island is still server-rendered; hydration timing changed only. The register shows certified tallies and the workspace keeps the live bound tally.
 - **Per-request session freshness.** No session caching across requests. No member-specific page or API caching was added.
 - **No SPA, skeleton screen, CDN, ISR or client-side data grid** was introduced.
 
@@ -149,23 +233,25 @@ These changes do not implement S1 (command layer), S2/S4 (read models) or I12's 
 - The harness runs without configured sign-in providers, so `/member/` reports a pre-existing `503` from `/api/auth/passkey/list-user-passkeys`. The same failure appears in the baseline and is a harness configuration limitation, not a rendering regression.
 - The harness does not profile CPU, memory or database query plans. It counts driver commands and measures wall time.
 - Server-island requests are asynchronous by design; the document-phase numbers intentionally exclude them.
+- The register follow-up measures one page/identity pair on the same synthetic data. Its profiler window is a separate local run, not part of the harness output.
+- The register's certified tally is only as complete as the stored `ballot_results` record. Legacy results recorded before tallies were stored show the outcome without counts.
+- Authorisation and eligibility were not re-tested at scale; the register keeps the same branch scope and permission checks, covered by unit and browser checks rather than load testing.
 
 ## Top remaining opportunities, by expected value
 
 1. **Remove React from the signed-in header path.** Replace `NotificationBell` with a lightweight native disclosure/popover that fetches on open, or hydrate it only on interaction. This removes ~330 KB of JavaScript from every signed-in page and is the largest client-side win available.
-2. **Paginate or virtualise `/admin/proposals/`.** ~1 MB HTML and 78 interactive rows are sent for a register that administrators scan a page at a time. Pagination or a bounded "load more" would cut transfer, parse and DOM cost together.
-3. **Tally/read model for list pages (S4/I12).** Store aggregate vote counts and comment counts per ballot/revision so list pages stop scanning every vote and decrypting every ballot. Pair with server-side filtering and pagination.
-4. **Remove `details` from the admin register list.** The register does not render rationale; only the edit/revise form needs it. Load the editor's full text on demand instead of sending every proposal's rationale in the list response.
-5. **Defer more `/member/` secondary data.** Notification inbox, passkey count, push subscriptions and branch profile can move behind small endpoints or server islands so the member's next action and outstanding ballots render without waiting for preference data.
-6. **Short-TTL caching for public, non-governance reads.** Branch directory, published policy counts and similar stable public reads can use a short cache or ETag. Never cache member-specific authority or ballot state.
-7. **Command layer and central route policy (S1).** A single request context would make session resolution, authorisation and query batching uniform rather than page-by-page.
+2. **Tally/read model for member list pages (S4/I12).** `/` and `/proposals/` still scan every vote and decrypt every ballot for approve/reject/abstain totals. Store aggregate counts per ballot/revision so those pages stop doing per-vote work. The admin register no longer needs it.
+3. **Pair the member lists with server-side filtering and pagination.** `/proposals/` still reads and filters the whole collection in the page. The register's projected, paginated read is a working pattern to reuse, including search semantics.
+4. **Defer more `/member/` secondary data.** Notification inbox, passkey count, push subscriptions and branch profile can move behind small endpoints or server islands so the member's next action and outstanding ballots render without waiting for preference data.
+5. **Command layer and central route policy (S1).** A single request context would make session resolution, authorisation and query batching uniform rather than page-by-page.
 
 ## Verification
 
-- `npm run check` — 0 errors, 0 warnings (22 pre-existing hints).
-- `npm test` with `VOTING_TEST_MONGODB_URI` — 306 tests pass, 0 fail (includes new session-reuse, list-visibility and shared-vote-read tests).
+- `npm run check` — 0 errors, 0 warnings (22 pre-existing hints at the time of the first pass; the register follow-up leaves 23 hints, none in the changed files).
+- `npm test` with `VOTING_TEST_MONGODB_URI` — 306 tests passed for the first pass; the register follow-up runs the full suite at 532 tests, 0 fail, including `proposal-register.test.ts` (pagination boundaries, filters, empty and out-of-range pages, stable ordering, no `proposal_votes` access, projection shape, certified and open ballot display, editing from a later page).
 - `npm run build` — production build succeeds.
-- Harness run against the committed code, three runs per page/identity; before/after JSON committed under `docs/status/`.
+- Harness run against the committed code, three runs per page/identity; before/after JSON committed under `docs/status/`. The register follow-up ran `--filter admin-proposals --runs 3` against `78c07c0` (before) and `c1f72c0` (after).
+- Register follow-up browser verification at 1440×1000 and 390×844: 65 checks passed, including 25-row pages, range text, filter preservation, keyboard focus on the pagination links with a visible ring, empty and out-of-range states, edit/revise/new resolving off-page proposals, no horizontal overflow, and no console, page or request errors.
 - Browser verification: `/admin/` server island replaces its fallback and its nested activity timeline hydrates on scroll with no console errors; the proposal ballot hydrates and responds to a click on desktop (member click-to-next-paint proxy 97 ms in the measured run).
 - Raw-control audit on changed files: no new raw `<button>`, `<select>`, `<input>`, `<textarea>`, `<table>` or `<dialog>` elements. The server island composes existing Card and timeline components.
 - No new arbitrary palette values or undefined Horizon custom properties were introduced.
