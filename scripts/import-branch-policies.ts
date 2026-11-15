@@ -7,6 +7,7 @@ import {
   planBranchPolicyImport,
   type BranchPolicySource,
 } from "../src/lib/policy-import.ts";
+import { branchPublicSlug } from "../src/lib/policy-registry.ts";
 
 /**
  * Import an external branch policy registry into Engage.
@@ -31,7 +32,7 @@ function arg(name: string): string | undefined {
 }
 
 const sourceArg = arg("source") ?? DEFAULT_SOURCE;
-const branchId = arg("branch") ?? "branch-vic";
+const branchArg = arg("branch") ?? "vic";
 const dryRun = process.argv.includes("--dry-run");
 const reportPath = arg("report");
 const authorityBasis = arg("authority-basis") || DEFAULT_AUTHORITY_BASIS;
@@ -60,20 +61,38 @@ const client = new MongoClient(uri);
 await client.connect();
 try {
   const db = client.db(dbName);
-  const branch = await db
+  // Accept either the internal branch identifier or its public slug. A branch
+  // that predates the standard identifiers (production Victoria) has a UUID,
+  // so the public slug is the stable input.
+  let branch = await db
     .collection("branches")
-    .findOne({ branchId, recognised: true });
+    .findOne({ branchId: branchArg, recognised: true });
+  if (!branch) {
+    const branches = await db
+      .collection("branches")
+      .find({ recognised: true })
+      .toArray();
+    branch =
+      branches.find(
+        (candidate: any) => branchPublicSlug(candidate) === branchArg,
+      ) ?? null;
+  }
   if (!branch)
     throw new Error(
-      `The recognised branch '${branchId}' was not found. Run \`pnpm branches:migrate\` first.`,
+      `No recognised branch matches '${branchArg}'. Pass the branch ID or its public slug.`,
+    );
+  const branchSlug = branchPublicSlug(branch);
+  if (!branchSlug)
+    throw new Error(
+      `Branch '${branch.branchId}' has no public slug. Set one before importing.`,
     );
   const plan = await planBranchPolicyImport(db, {
     source,
     sourceUrl: sourceArg,
     branch: {
-      branchId,
-      name: String(branch.name ?? branchId),
-      code: branchId.replace(/^branch-/, ""),
+      branchId: String(branch.branchId),
+      name: String(branch.name ?? branch.branchId),
+      slug: branchSlug,
     },
     authorityBasis,
     importedAt: new Date(),

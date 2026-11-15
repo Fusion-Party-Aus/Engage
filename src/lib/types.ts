@@ -17,6 +17,8 @@ export type MembershipStatus = "pending" | "verified" | "suspended";
 export type BranchKind = "national" | "state" | "territory" | "constituent";
 export interface BranchRecord {
   branchId: string;
+  /** Stable public slug, for example "vic". Defaults to the identifier suffix. */
+  slug?: string;
   name: string;
   kind: BranchKind;
   parentBranchId?: string;

@@ -6,7 +6,7 @@ import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { getSiteConfig } from '../../lib/site-config.ts';
 import { listProposals } from '../../lib/store.ts';
-import { branchSlugFor, policyBranchPath } from '../../lib/policy-registry.ts';
+import { branchPublicSlug, policyBranchPath } from '../../lib/policy-registry.ts';
 export const prerender = false;
 const env = runtimeEnv(Astro.locals);
 const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
@@ -50,8 +50,8 @@ const branchLinks = (branch: any) => ({
               </CardContent>
               <div class="flex flex-wrap gap-2">
                 <Button href={`/proposals/?branch=${encodeURIComponent(branch.branchId)}`} variant="outline" size="sm">View ideas →</Button>
-                {branchLinks(branch).policies > 0 && branchSlugFor(branch.branchId) && (
-                  <Button href={policyBranchPath(branchSlugFor(branch.branchId)!)} variant="outline" size="sm">Policy registry →</Button>
+                {branchLinks(branch).policies > 0 && branchPublicSlug(branch) && (
+                  <Button href={policyBranchPath(branchPublicSlug(branch)!)} variant="outline" size="sm">Policy registry →</Button>
                 )}
               </div>
             </Card>
@@ -74,8 +74,8 @@ const branchLinks = (branch: any) => ({
               </CardContent>
               <div class="flex flex-wrap gap-2">
                 <Button href={`/proposals/?branch=${encodeURIComponent(branch.branchId)}`} variant="outline" size="sm">View ideas →</Button>
-                {branchLinks(branch).policies > 0 && branchSlugFor(branch.branchId) && (
-                  <Button href={policyBranchPath(branchSlugFor(branch.branchId)!)} variant="outline" size="sm">Policy registry →</Button>
+                {branchLinks(branch).policies > 0 && branchPublicSlug(branch) && (
+                  <Button href={policyBranchPath(branchPublicSlug(branch)!)} variant="outline" size="sm">Policy registry →</Button>
                 )}
               </div>
             </Card>
