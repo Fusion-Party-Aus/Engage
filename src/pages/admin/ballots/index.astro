@@ -133,7 +133,7 @@ const formatDate = (value: unknown) =>
     <Alert variant="destructive">
       <ShieldAlert />
       <AlertTitle>Access required</AlertTitle>
-      <AlertDescription>Moderator or Administrator access is required to manage ballots.</AlertDescription>
+      <AlertDescription>You don’t have access to ballot administration.</AlertDescription>
     </Alert>
   ) : (
     <div class="admin-stack">
@@ -276,7 +276,7 @@ const formatDate = (value: unknown) =>
         <Card class="gap-0">
           <CardHeader class="border-b pb-4">
             <CardTitle class="text-base">Successful ballots awaiting next step</CardTitle>
-            <CardDescription>A successful vote does not automatically adopt policy or close a governance motion.</CardDescription>
+            <CardDescription>Successful decisions still need their adopted wording, publication or implementation recorded. Officers certify the process; they do not decide policy preference.</CardDescription>
             <CardAction>
               <Badge variant="info">{postBallotPending.length} open</Badge>
             </CardAction>

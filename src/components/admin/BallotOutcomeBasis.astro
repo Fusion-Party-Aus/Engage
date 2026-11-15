@@ -26,7 +26,7 @@ const { summary } = Astro.props;
   <div class="flex flex-wrap items-center gap-2 text-sm">
     <Badge variant="muted">No votes</Badge>
     <span class="admin-inline-note">
-      No votes recorded. The votes compute {summary.computedResult === 'successful' ? 'a successful' : 'an unsuccessful'} outcome.
+      No votes recorded. The recorded votes give {summary.computedResult === 'successful' ? 'a successful' : 'an unsuccessful'} outcome.
     </span>
   </div>
 ) : summary && summary.state === 'unbound' ? (

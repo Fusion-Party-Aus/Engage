@@ -101,8 +101,8 @@ for (const event of publicationEvents) {
 ---
 
 <AdminLayout
-  title="Policy Registry & Ratification"
-  description="Review successful ballots awaiting ratification, manage adopted policy records, and authorise public publication."
+  title="Policy registry and ratification"
+  description="Review successful ballots awaiting ratification, manage adopted policy records, and publish adopted policy."
   section="policies"
   isAdmin={user.isAdmin}
 >
@@ -154,7 +154,7 @@ for (const event of publicationEvents) {
             <div class="registry-section__head">
               <div>
                 <h2 id="ratification-heading">Successful ballots awaiting ratification</h2>
-                <p>Ballot success, formal ratification, and public publication are distinct governance steps.</p>
+                <p>Members decide the policy. Ratification records the adopted wording, and publication makes that record public. These procedural steps do not give officers a policy veto.</p>
               </div>
               <Badge variant={awaitingRatification.length ? 'warning' : 'success'}>
                 {awaitingRatification.length ? `${awaitingRatification.length} pending` : 'Up to date'}
@@ -243,7 +243,7 @@ for (const event of publicationEvents) {
             <div class="registry-section__head">
               <div>
                 <h2 id="records-heading">Ratified policy registry</h2>
-                <p>Only formally ratified revisions appear in this register. Publication requires a separate explicit action.</p>
+                <p>This register includes ratified policy and authorised branch imports. Publication is recorded separately.</p>
               </div>
             </div>
 
@@ -471,7 +471,7 @@ for (const event of publicationEvents) {
               ) : (
                 <p class="empty-registry-box">
                   {policies.length === 0
-                    ? 'No policy has been ratified yet. Successful ballots appear above when they are ready for formal ratification.'
+                    ? 'No policy records are listed yet. Successful ballots appear above for the adoption record to be completed.'
                     : 'No registry entries match this search.'}
                 </p>
               )}
@@ -484,7 +484,7 @@ for (const event of publicationEvents) {
           <div class="project-rail-block">
             <h3>Registry operations</h3>
             <p class="admin-inline-note">
-              Reconcile pending outbox publication events and verify that public registry records match ratified snapshots.
+              Check pending publication records and confirm that the public wording matches the adopted text.
             </p>
             <Button id="reconcile-publications" type="button" variant="outline" size="sm" className="w-full justify-center">
               <RefreshCw />Reconcile publication events
@@ -510,7 +510,7 @@ for (const event of publicationEvents) {
           </div>
 
           <div class="project-rail-block">
-            <h3>Public endpoints</h3>
+            <h3>Public policy and data</h3>
             <div class="project-rail-notes">
               <a href="/policies/" class="project-rail-note">
                 <span class="project-rail-note__icon"><BookOpen aria-hidden="true" /></span>

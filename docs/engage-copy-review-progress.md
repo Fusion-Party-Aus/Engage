@@ -7,7 +7,7 @@ Updated 15 November 2026. Source of truth: pushed branch and this document, not 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review`, based on main `20dfa90`.
 - PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
-- Next task: batch 7a, administration dashboard, proposal/ballot/policy review interfaces. Then 7b roles/members/branches/reports/settings/migrations/Sense Box admin, and batch 8 final API-error/legal/metadata sweep.
+- Next task: batch 7b, roles/members/branches/reports/settings/migrations/Sense Box/engagement administration. Then batch 8 final API-error/legal/metadata sweep.
 - This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
 
 ## Recovery and scope
@@ -37,7 +37,8 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 5a | Sign-in, My Engage shell/queues/activity and lifecycle guidance | Delivered in `515cf47`; validation checkpoint includes the label-assertion update |
 | 5b | Onboarding/settings, branch preferences, notification controls | Delivered in `9515e90`; remote tree verified |
 | 6 | Email templates/subjects, push/digest messages and unsubscribe flows | Delivered in `6a52a2a`; remote tree verified |
-| 7 | Administration, roles, membership, governance, moderation, integrations and operational errors | Not reviewed |
+| 7a | Admin dashboard, proposal registers/detail, ballots and policy ratification/publication | Validated; publishing checkpoint |
+| 7b | Roles/members/branches/reports/settings/migrations/Sense Box/engagement admin | Next |
 | 8 | API/form error responses shown to users, legal-copy consistency, metadata, empty/loading states and whole-site terminology sweep | Not reviewed |
 
 A page touched in batch 1 has NOT been reviewed in full. Audit `src/pages`, `src/components`, email libraries, legal/config data and API errors in later batches; do not rewrite policy motion text or imported adopted wording as interface copy.
@@ -117,3 +118,9 @@ Validation: `pnpm check` (0 errors/warnings, 20 hints), production build, diff w
 Reviewed all six shared email renderers in HTML/plain text, sign-in/verification messages, test-digest substitution, push confidentiality fallback, delivery preference handlers and unsubscribe confirmation. Simplified eligible-ballot reminders and contribution responses; “Inspect ballot” becomes “Read ballot”. Undated re-engagement items no longer claim they are open for discussion (they may be ballots). Unsubscribe confirmation explains exactly which category changes; invalid link explains recovery. Existing rendering/escaping, destinations, consent categories and delivery logic preserved. Several email types are template capability only: do not claim event fan-out has been implemented (#33).
 
 Validation: focused template/lifecycle/member-notification/PWA/engagement suites: 40 passed, 1 skipped. Existing template assertions updated for new response/CTA wording. Source contract caught missing explicit notification-category wording in onboarding; restored the precise category names and unsubscribe statement, rerun passed. Typecheck/build and diff whitespace pass. Email HTML presentation tables and existing standalone unsubscribe button retained for email-client/confirmation compatibility; no new raw controls or CSS. No sent emails or live inbox rendering claimed.
+
+## Batch 7a handover
+
+Reviewed administration dashboard and proposal/ballot/policy registers/detail plus BallotOutcomeBasis. Revised authority and ratification explanations against D13–D20; administrative access is not unrestricted political authority or ballot eligibility. Retained exact wording references, event references, override reasons and consequential confirmations where officers need them. Changed “separate decisions” to separate recorded procedural steps. Registry copy recognises branch imports. Proposal editor labels/examples invite background/evidence rather than design specifications. No certification, binding, override, publication or archive behaviour changed.
+
+Validation: 40 focused ballot-outcome/governance-API/policy-change/classification tests passed, none skipped; typecheck (0 errors/warnings, 20 hints), build and whitespace pass. Raw-control matches are hidden inputs only. Browser limitation remains. Legacy binding controls and their safeguards are deliberately retained; do not infer that the copy authorises reinterpretation of recorded votes.
