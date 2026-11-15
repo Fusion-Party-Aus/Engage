@@ -222,6 +222,7 @@ Every authorised run — success or failure — is recorded in the `job_runs` le
 | `ballot-migration.ts` | Legacy Decide-stage ballot inventory/migration |
 | `migrate-proposal-votes.mjs` / `.ts` | Move legacy votes into `proposal_votes` |
 | `migrate-encrypted-votes.ts` | Encrypt existing votes; supports dry run and rotation |
+| `ballot-tally-projection.ts` | `npm run ballots:tally-projection`: report, rebuild and verify the display-only `ballot_tallies` rows (dry-run by default, `--apply`, `--verify`) |
 | `schedule-open-ballots.ts` | One-off deadline assignment for open ballots |
 | `seed-branches.ts` | Seed standard branches |
 | `migrate-branch-participation.ts` | Branch participation migration |

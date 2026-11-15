@@ -1,6 +1,6 @@
 # Known gaps, defects and open decisions
 
-**Status:** Current · **Verified:** 13 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 > **RFC 0001 programme status.** The Sprint 1 integrity, lifecycle, rendering
 > performance and Turnstile slices were merged to `main` as `3b36947` (PR #51) on
@@ -105,6 +105,8 @@ Two amendments can edit the same field and both be `ready`. Conflict detection c
 ### 10. Results are checked against the tally but the voting rules are incomplete
 
 **Resolved on `main` (`762f76c`, PR #86):** `recordFormalDecision` computes the outcome from the votes bound to the ballot and exact revision at certification. Certification requires a closed ballot (`BALLOT_NOT_CLOSED` for a live one, and for a ballot with no recorded close). Unbound or mismatched-revision votes refuse with `BALLOT_TALLY_UNBOUND_VOTES`; unreadable encrypted votes with `BALLOT_TALLY_UNREADABLE`; missing keys with `BALLOT_DECRYPTION_UNAVAILABLE`. A contradicting officer result is refused unless an explicit override with a written reason is recorded. The result stores the tally, `ruleBasis: "simple-majority-d9-v1"` and `computedResult`; the `decision.recorded` event carries the actor, reason, computed result and recorded result. Historical results are returned unchanged. Admin pages and the proposal PDF show the computed result and override. Terms of Use §9 describes the rule (version 1.1); the Privacy Policy needed no change. Tests: `ballot-outcome.test.ts`, `ballot-outcome-mongo.test.ts`, `proposal-pdf.test.ts`.
+
+**Display tallies are a projection, not a result.** Public lists now read `ballot_tallies`, one aggregate row per `(ballotId, revisionId)` written after a committed vote, and show `Voting open — tally updating` when the row is missing or older than ten minutes. The projection stores no voter reference and is never read by certification, which still recomputes from the bound votes. It is eventually consistent: a stopped projection writer shows the neutral state rather than a wrong number, and `npm run ballots:tally-projection` reports and rebuilds rows. Existing ballots are not backfilled at startup, so deployments must run the tool once if they want immediate counts.
 
 **Still open:** the abstention denominator (decision register O1), quorum and turnout (none are authorised, D8), ranked choice (O2), confirmation ballots (O3) and election rules. Simple majority (D9) is the only rule encoded; a tie and zero votes are not successful. **Amendment endorsement ballots** (`src/pages/api/admin/amendments/close-ballot.ts`) remain officer-supplied and are not covered by this check, because the amendment-resolution method is undecided (O2/D18). Do not implement validation for them without that decision. Do not treat the computed check as a complete rule engine.
 
