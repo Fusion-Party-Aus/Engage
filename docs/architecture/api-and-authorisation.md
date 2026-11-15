@@ -146,7 +146,7 @@ Extracted governance acts are typed commands in `src/lib/governance-commands.ts`
 interface GovernanceCommand<TInput, TSubject> {
   id: GovernanceCommandId;              // e.g. "ballot.record_result"
   requiredPermission: PermissionKey;     // the one permission the act needs
-  preconditions: readonly string[];      // what must be true, enforced by the command
+  preconditions: readonly string[];      // documented; enforced by the delegated domain function
   effects: readonly string[];            // what succeeds changes
   events: readonly string[];             // audit events emitted
   fallbackMessage: string;
@@ -160,9 +160,11 @@ interface GovernanceCommand<TInput, TSubject> {
 
 The actor is always the resolved session member (`actor.memberId`), never a client-supplied identity.
 
+`preconditions` and `effects` are declarative documentation for readers. The command layer does not re-check them; the domain function it calls (`bindBallotToRevision`, `recordFormalDecision`) enforces the rules and raises the domain errors the route maps.
+
 ### Central route policy
 
-`src/lib/route-policy.ts` is the single declaration of which command a governance route runs and which permission it requires:
+`src/lib/route-policy.ts` is the single declaration of which command a governance route runs and which permission it requires. The table's `permission` mirrors the command's `requiredPermission`; the route enforces the command's value and a test fails if the two differ.
 
 | Route | Command | Permission |
 |---|---|---|
@@ -174,9 +176,9 @@ The actor is always the resolved session member (`actor.memberId`), never a clie
 1. **Role gate** (no `scope`): national administrator, branch administrator or permission holder. Ordinary moderators fail here.
 2. **Scope gate** (resolved `scope`): `hasPermission(user, permission, branchScope)` plus `canManageBranchBallot` over the ballot's governance authority and jurisdiction. A branch grant never exceeds its branch. A national permission holder satisfies the permission check; the ballot rule still requires a national grant or a matching branch.
 
-`runGovernanceRoute(route, { env, user, getDb }, body)` validates input, resolves the governing record and scope, authorises, then executes. `governanceRouteError(route, error)` maps domain errors to the status and message the route returned before extraction. Routes resolve the database lazily after validation so an invalid body still reports 400.
+Each route applies the coarse role gate (`authoriseGovernanceRouteRole`) before reading the body, so an unauthorised caller receives 403 rather than a 400 for malformed input. `runGovernanceRoute(route, { env, user, getDb }, body)` validates input, resolves the governing record and scope, applies the scope gate, then executes. It repeats the coarse gate deliberately so a caller that skips the route-level check still cannot reach a command. `governanceRouteError(route, error)` maps only the route's original domain error class to its status and message; anything else stays a 400. Routes resolve the database lazily after validation so an invalid body still reports 400.
 
-Route files carry no permission literals, no `hasPermission` calls and no role checks. `src/lib/route-policy.test.ts` fails if a route in `GOVERNED_ROUTE_DIRECTORIES` has no declaration, if a declared permission differs from the command's `requiredPermission`, or if a route file reintroduces an inline ballot permission.
+Route files carry no permission literals, no `hasPermission` calls and no role checks. `src/lib/route-policy.test.ts` walks `GOVERNED_ROUTE_DIRECTORIES` recursively (`.ts`, `.js`, `.mjs`), derives route keys from the path under `src/pages/api`, and fails if a route has no declaration, if a declared permission differs from the command's `requiredPermission`, or if a route file reintroduces an inline ballot permission.
 
 Extraction is incremental (#53). Only the ballot lifecycle is migrated so far; proposals, amendments and membership still authorise inside their routes. Add a directory to `GOVERNED_ROUTE_DIRECTORIES` as each domain moves.
 
