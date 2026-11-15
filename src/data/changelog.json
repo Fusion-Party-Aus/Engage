@@ -1,74 +1,39 @@
 [
   {
-    "hash": "ff2056e",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ops",
-    "summary": "Report a failing job as failing on the health probe"
-  },
-  {
-    "hash": "9f7abfe",
-    "date": "2026-11-15",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh snapshot for the two-tier thresholds",
-    "details": "Refs #39"
-  },
-  {
-    "hash": "2adcd9e",
+    "hash": "071607e",
     "date": "2026-11-15",
     "type": "docs",
     "category": "docs",
-    "scope": "ops",
-    "summary": "Document two-tier warn and fail job thresholds",
-    "details": "Show cadence, warn and fail for each scheduled job, explain that warn is a small multiple of cadence (not one missed tick) and why a 24-hour-only alert hid 96 missed 15-minute ticks, and record the invalid-pair behaviour, per-state meanings and escalation timing. Refs #39"
+    "scope": "security",
+    "summary": "Record the perimeter header set, CSP and origin rule",
+    "details": "Adds docs/security/perimeter.md as the operating contract for headers, CSP sources and the cross-site rule, with the exact values, every external host and its reason, the scoped style-src-attr allowance, verification commands and residual risk. Corrects the pages that said there is no middleware and that a CSP, HSTS, frame or content-type headers are absent, updates the Turnstile and API/authorisation contracts, and records the #38 and I10 state in the programme tracker and known gaps. Remaining work is explicit: proxy headers for static assets and Astro's early 403, a reporting endpoint, CSRF tokens, and production header observation. Refs #38"
   },
   {
-    "hash": "ce9b934",
+    "hash": "8d1bc44",
     "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ops",
-    "summary": "Warn before a scheduled job reaches its fail threshold",
-    "details": "A 15-minute job judged healthy for 24 hours leaves a full day blind to a complete outage. Each time-based check now has two tiers: degraded past warn (governance scheduler 2h, digest 1h, verification 2h) and failing past fail (26h, 24h, 24h). Within warn stays ok; a missing run stays failing; a failed last run stays failing. Warn and fail are configurable with the existing fail variables plus GOVERNANCE_SCHEDULER_WARN_HOURS, DIGEST_WARN_HOURS and MEMBERSHIP_VERIFICATION_WARN_HOURS. A warn value that is not below fail reports unknown with the conflicting values instead of trusting either. The report's thresholds block names both values and their source. Check ids, report shape, the ledger and route behaviour are unchanged; ops:health still exits 2 degraded and 1 failing. Refs #39"
-  },
-  {
-    "hash": "89b32c7",
-    "date": "2026-11-15",
-    "type": "chore",
+    "type": "test",
     "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh snapshot for the operational observability slice",
-    "details": "Refs #39"
+    "scope": "security",
+    "summary": "Verify the CSP and origin rule in a real browser",
+    "details": "The production build is served with a disposable in-memory database. Chromium checks the home, proposal, sign-in and Sense Box pages for CSP violations, console errors and failed requests; proves the Turnstile script and frame and the Plausible script and event endpoint reach the network layer; asserts the document and JSON header sets; and shows same-origin fetches and native form posts succeed while browser, JSON and cookie-without-Origin state-changing requests are refused. Cloudflare and Plausible are intercepted and answered locally; the script never contacts production. Refs #38"
   },
   {
-    "hash": "daac0bd",
+    "hash": "94ec5a9",
     "date": "2026-11-15",
-    "type": "docs",
-    "category": "docs",
-    "scope": "ops",
-    "summary": "Record job cadence, health command and runbook",
-    "details": "Document the job_runs ledger, the documented cadence and stale thresholds for each scheduled job, the ops:health command and exit codes, what each degraded state means, the maintainer escalation placeholder and the runbook actions. Record explicitly that production cron wiring and production verification are not done, so #39 remains partial. Update the tracker I10/S8 rows and known gap 21. Refs #39"
+    "type": "feat",
+    "category": "feature",
+    "scope": "security",
+    "summary": "Add perimeter headers, CSP and cross-site request rule",
+    "details": "Every response now carries nosniff, a strict referrer policy, frame denial, a minimal Permissions-Policy and a Content Security Policy. HSTS is sent only in production when HTTPS is provable. The policy keeps Astro's build-time script and style hashes and allows only the external hosts the app uses: Cloudflare Turnstile (script, frame, connect) and the first-party Plausible host (script, connect). Inline style attributes are allowed through style-src-attr only, because tally and progress bars use them; script-src has no unsafe-inline and no directive permits unsafe-eval. The service-worker registration was is:inline, which Astro does not hash, so it is now a processed script. Astro's form-post origin check is kept, and allowedDomains trusts the production host over HTTPS so its comparison uses the public origin behind the proxy. The middleware adds what Astro's check deliberately exempts: every state-changing method, JSON bodies, a cross-site Sec-Fetch-Site, an Origin that differs from the trusted public origin, and an absent Origin when a session or dev cookie is present. Bearer cron calls and webhooks carry no cookie and stay allowed. Refs #38"
   },
   {
-    "hash": "b737cec",
+    "hash": "23f88d8",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
     "scope": "ops",
-    "summary": "Add exit-coded operational health checks and ops:health",
-    "details": "Evaluate governance scheduler recency and errors, ballot deadlines that passed without closure, digest cadence and held deliveries, verification recency and due backlog, recent failed or held email, and Turnstile configuration. Every threshold is named in the report and settable by environment variable; checks are count-only and never expose secrets, provider responses, member identifiers or ballot choices. /api/health now publishes coarse governanceScheduler and jobs states. A database failure stays 503, while a degraded job stays 200 so a container restart loop cannot hide a missing external scheduler. npm run ops:health prints JSON (or --human) and exits 0 healthy, 2 degraded or unknown, 1 failing or unreachable, requiring MONGODB_URI. Refs #39"
-  },
-  {
-    "hash": "972e0fc",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ops",
-    "summary": "Record authorised scheduled runs in a durable job ledger",
-    "details": "Add a job_runs collection with a 90-day TTL on startedAt and a withJobRun helper that records success or failure after the job finishes. A failed ledger write or summariser is logged and never changes the job result or error, so observability cannot break the thing it observes. Wire the governance scheduler (apply and dry-run), the ballot digest endpoint and the membership verification endpoint. Only authorised runs are recorded: 401 and 409 responses are not scheduled runs. Status codes, bodies, secrets, scheduling and governance writes are unchanged. Refs #39"
+    "summary": "Durable job records and operational health checks (#39) (#99)",
+    "details": "* feat(ops): record authorised scheduled runs in a durable job ledger Add a job_runs collection with a 90-day TTL on startedAt and a withJobRun helper that records success or failure after the job finishes. A failed ledger write or summariser is logged and never changes the job result or error, so observability cannot break the thing it observes. Wire the governance scheduler (apply and dry-run), the ballot digest endpoint and the membership verification endpoint. Only authorised runs are recorded: 401 and 409 responses are not scheduled runs. Status codes, bodies, secrets, scheduling and governance writes are unchanged. Refs #39 * feat(ops): add exit-coded operational health checks and ops:health Evaluate governance scheduler recency and errors, ballot deadlines that passed without closure, digest cadence and held deliveries, verification recency and due backlog, recent failed or held email, and Turnstile configuration. Every threshold is named in the report and settable by environment variable; checks are count-only and never expose secrets, provider responses, member identifiers or ballot choices. /api/health now publishes coarse governanceScheduler and jobs states. A database failure stays 503, while a degraded job stays 200 so a container restart loop cannot hide a missing external scheduler. npm run ops:health prints JSON (or --human) and exits 0 healthy, 2 degraded or unknown, 1 failing or unreachable, requiring MONGODB_URI. Refs #39 * docs(ops): record job cadence, health command and runbook Document the job_runs ledger, the documented cadence and stale thresholds for each scheduled job, the ops:health command and exit codes, what each degraded state means, the maintainer escalation placeholder and the runbook actions. Record explicitly that production cron wiring and production verification are not done, so #39 remains partial. Update the tracker I10/S8 rows and known gap 21. Refs #39 * chore(changelog): refresh snapshot for the operational observability slice Refs #39 * fix(ops): warn before a scheduled job reaches its fail threshold A 15-minute job judged healthy for 24 hours leaves a full day blind to a complete outage. Each time-based check now has two tiers: degraded past warn (governance scheduler 2h, digest 1h, verification 2h) and failing past fail (26h, 24h, 24h). Within warn stays ok; a missing run stays failing; a failed last run stays failing. Warn and fail are configurable with the existing fail variables plus GOVERNANCE_SCHEDULER_WARN_HOURS, DIGEST_WARN_HOURS and MEMBERSHIP_VERIFICATION_WARN_HOURS. A warn value that is not below fail reports unknown with the conflicting values instead of trusting either. The report's thresholds block names both values and their source. Check ids, report shape, the ledger and route behaviour are unchanged; ops:health still exits 2 degraded and 1 failing. Refs #39 * docs(ops): document two-tier warn and fail job thresholds Show cadence, warn and fail for each scheduled job, explain that warn is a small multiple of cadence (not one missed tick) and why a 24-hour-only alert hid 96 missed 15-minute ticks, and record the invalid-pair behaviour, per-state meanings and escalation timing. Refs #39 * chore(changelog): refresh snapshot for the two-tier thresholds Refs #39 * fix(ops): report a failing job as failing on the health probe * chore(changelog): refresh after rewriting the synthetic token fixture"
   },
   {
     "hash": "20dfa90",
@@ -669,5 +634,37 @@
     "category": "feature",
     "scope": "deploy",
     "summary": "Automate production deployment gated on staging health"
+  },
+  {
+    "hash": "c6edce0",
+    "date": "2026-11-09",
+    "type": "docs",
+    "category": "docs",
+    "scope": "audit",
+    "summary": "Record product direction audit and UI refinement notes, and ignore local scratch assets"
+  },
+  {
+    "hash": "3098b44",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ui",
+    "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
+  },
+  {
+    "hash": "99f0153",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "changelog",
+    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
+  },
+  {
+    "hash": "71a6351",
+    "date": "2026-11-09",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "server",
+    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
   }
 ]
