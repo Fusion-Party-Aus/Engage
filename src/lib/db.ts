@@ -262,6 +262,11 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .collection("comments")
         .createIndex({ memberId: 1, createdAt: 1 })
         .catch(() => {}),
+      // Public profile history (#113): visible, non-deleted comments per member.
+      db
+        .collection("comments")
+        .createIndex({ memberId: 1, deletedAt: 1, createdAt: -1 })
+        .catch(() => {}),
       db
         .collection(PROPOSAL_VOTES)
         .createIndex({ proposalId: 1, updatedAt: -1 })
@@ -359,6 +364,11 @@ export async function initializeDatabase(db: Db): Promise<void> {
       db
         .collection("amendments")
         .createIndex({ proposalId: 1, status: 1, createdAt: 1 })
+        .catch(() => {}),
+      // Public profile history (#113): amendments authored by one member.
+      db
+        .collection("amendments")
+        .createIndex({ authorId: 1, createdAt: -1 })
         .catch(() => {}),
       db
         .collection("amendment_revisions")
