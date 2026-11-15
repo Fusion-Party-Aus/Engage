@@ -7,7 +7,7 @@ import {
   addComment,
   deleteComment,
   setCommentFeedback,
-  toggleUpvoteComment,
+  voteOnComment,
 } from "../../lib/store.ts";
 
 export const prerender = false;
@@ -46,27 +46,36 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   const user = await getSessionUser(request, env);
   if (!user)
     return privateJson(
-      { error: "Sign in to endorse a contribution." },
+      { error: "Sign in to vote on a contribution." },
       { status: 401 },
     );
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const commentId = String(body.commentId ?? "");
+    const action = body.action === "downvote" ? "downvote" : "upvote";
     const db = await getDatabase(env);
     const gate = await requireLegalAcceptance(db, user, env);
     if (gate) return gate;
-    const result = await toggleUpvoteComment(db, user, commentId);
+    const result = await voteOnComment(db, user, commentId, action);
+    // Aggregate signal only. Voter identities are never serialised.
     return privateJson({
-      count: result.count,
-      endorsed: result.endorsed,
+      count: result.score,
+      score: result.score,
+      upvoteCount: result.upvoteCount,
+      downvoteCount: result.downvoteCount,
+      upvotePercent: result.upvotePercent,
+      endorsed: result.hasUpvoted,
       hasUpvoted: result.hasUpvoted,
+      hasDownvoted: result.hasDownvoted,
     });
   } catch (error) {
     return privateJson(
       {
         error:
-          error instanceof Error ? error.message : "Could not endorse comment.",
+          error instanceof Error
+            ? error.message
+            : "Could not record comment vote.",
       },
       { status: 400 },
     );
@@ -85,8 +94,8 @@ export const DELETE: APIRoute = async ({ request, url, locals }) => {
       body?.commentId || url.searchParams.get("commentId") || "",
     );
     const db = await getDatabase(env);
-    await deleteComment(db, user, commentId);
-    return privateJson({ ok: true });
+    const result = await deleteComment(db, user, commentId);
+    return privateJson({ ok: true, ...result });
   } catch (error) {
     return privateJson(
       {

@@ -352,10 +352,22 @@ export interface CommentRecord {
   authorName: string;
   stance: CommentStance;
   body: string;
+  /** Comment this one replies to. Absent or null for a top-level contribution. */
+  parentCommentId?: string | null;
+  /** Nesting depth: 0 for a top-level contribution. */
+  depth?: number;
   upvotes: string[];
+  /** Member ids of downvotes. Aggregated only; never returned to a viewer. */
+  downvotes?: string[];
   upvoteEvents?: Array<{ memberId: string; at: Date }>;
   feedback?: ContributionFeedback;
   feedbackHistory?: ContributionFeedbackHistoryEntry[];
+  /**
+   * Set when the body was removed but replies still depend on the comment.
+   * The record is retained as a placeholder so replies stay in context.
+   */
+  deletedAt?: Date;
+  deletedBy?: string;
   createdAt: Date;
 }
 

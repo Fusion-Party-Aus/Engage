@@ -5,9 +5,8 @@ import { proposalBallotResultFilter } from '../../lib/ballots.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
 import SecondProposalButton from '../../components/ui/SecondProposalButton';
-import StanceSelector from '../../components/ui/stance-selector';
 import PortableText from '../../components/PortableText.astro';
-import { AlertCircle, FileText, MessageCircle, PenLine, ThumbsUp } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -16,10 +15,14 @@ import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { NativeSelect } from '../../components/ui/native-select';
 import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
+import DiscussionThread from '../../components/proposal/DiscussionThread';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { canRespondToContribution, canViewProposal, getProposalDetail, isGovernanceResolution, listOutstandingDecisions, normalizeProposalDoc, resolveContributionEvidenceMap } from '../../lib/store.ts';
 import { getProposalEligibility } from '../../lib/branch-participation.ts';
+import { hasPermission } from '../../lib/rbac.ts';
+import { commentUpvotePercent, compareComments } from '../../lib/comment-thread.ts';
+import type { DiscussionComment } from '../../lib/comment-thread.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import { policyCanonicalPath } from '../../lib/policy-registry.ts';
 import type { ProposalStage } from '../../lib/types.ts';
@@ -81,23 +84,6 @@ const [
 
 const supersededByProposal = supersededByDetail?.proposal ?? null;
 const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
-const feedbackStatusLabel = (status: string) =>
-  status === 'incorporated'
-    ? 'Incorporated'
-    : status === 'considered'
-      ? 'Considered'
-      : status === 'deferred'
-        ? 'Deferred'
-        : 'Declined';
-const feedbackStatusVariant = (status: string) =>
-  status === 'incorporated'
-    ? ('success' as const)
-    : status === 'considered'
-      ? ('info' as const)
-      : status === 'deferred'
-        ? ('warning' as const)
-        : ('outline' as const);
-
 const isResolution = proposal ? isGovernanceResolution(proposal) : false;
 const policyRecord = !isResolution ? rawPolicyRecord : null;
 
@@ -166,6 +152,63 @@ for (const amendment of amendmentRows) {
   if (current) amendment.changes = current.snapshot;
 }
 const comments = detail?.comments ?? [];
+const canModerateComments = Boolean(
+  user && (user.isStaff || hasPermission(user, 'comments.moderate', proposal?.originatingBranchId)),
+);
+const feedbackEvidence = (evidence?: { kind: string; recordId: string }) => {
+  if (!evidence) return undefined;
+  const resolved = evidenceMap.get(`${evidence.kind}:${evidence.recordId}`);
+  return resolved
+    ? { label: resolved.label, ...(resolved.href ? { href: resolved.href } : {}) }
+    : undefined;
+};
+const discussionComments: DiscussionComment[] = comments.map((comment) => {
+  const evidence = comment.feedback?.evidence;
+  const resolvedEvidence = feedbackEvidence(evidence);
+  return {
+    commentId: comment.commentId,
+    parentCommentId: comment.parentCommentId ?? null,
+    authorName: comment.authorName,
+    stance: comment.stance,
+    body: comment.body,
+    createdAt: new Date(comment.createdAt).toISOString(),
+    upvoteCount: comment.upvotes.length,
+    downvoteCount: (comment.downvotes ?? []).length,
+    score: comment.upvotes.length - (comment.downvotes ?? []).length,
+    upvotedByMe: Boolean(user && comment.upvotes.includes(user.memberId)),
+    downvotedByMe: Boolean(
+      user && (comment.downvotes ?? []).includes(user.memberId),
+    ),
+    isMine: Boolean(user && comment.memberId === user.memberId),
+    deleted: Boolean(comment.deletedAt),
+    ...(comment.feedback
+      ? {
+          feedback: {
+            status: comment.feedback.status,
+            ...(comment.feedback.note ? { note: comment.feedback.note } : {}),
+            updatedByName: comment.feedback.updatedByName,
+            updatedAt: new Date(comment.feedback.updatedAt).toISOString(),
+            ...(evidence ? { evidenceRef: `${evidence.kind}:${evidence.recordId}` } : {}),
+            ...(resolvedEvidence ? { evidence: resolvedEvidence } : {}),
+          },
+        }
+      : {}),
+    ...(comment.feedbackHistory?.length
+      ? {
+          feedbackHistory: comment.feedbackHistory.map((entry) => {
+            const historyEvidence = feedbackEvidence(entry.evidence);
+            return {
+              action: entry.action,
+              ...(entry.note ? { note: entry.note } : {}),
+              updatedByName: entry.updatedByName,
+              updatedAt: new Date(entry.updatedAt).toISOString(),
+              ...(historyEvidence ? { evidence: historyEvidence } : {}),
+            };
+          }),
+        }
+      : {}),
+  };
+});
 const myVote = detail?.myVote ?? null;
 const myReason = detail?.myReason ?? '';
 const myPendingVote = detail?.myPendingVote ?? null;
@@ -182,13 +225,13 @@ const nextBallotInfo = remainingBallots[0]
     }
   : null;
 
-const topSupportComment = [...comments]
+const topSupportComment = [...discussionComments]
   .filter((c) => c.stance === 'support')
-  .sort((a, b) => b.upvotes.length - a.upvotes.length || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  .sort((a, b) => compareComments(a, b, 'best'))[0] ?? null;
 
-const topConcernComment = [...comments]
+const topConcernComment = [...discussionComments]
   .filter((c) => c.stance === 'concern')
-  .sort((a, b) => b.upvotes.length - a.upvotes.length || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  .sort((a, b) => compareComments(a, b, 'best'))[0] ?? null;
 
 const stagePillLabel = (stage: ProposalStage) => {
   if (stage === 'propose') return 'New idea';
@@ -236,14 +279,6 @@ const proposalSocialImage = isRasterImageAttachment
 
 const stages: ProposalStage[] = ['propose', 'deliberate', 'decide', 'implement'];
 const currentStageIndex = proposal ? stages.indexOf(proposal.stage) : -1;
-
-const stanceCounts = {
-  all: comments.length,
-  support: comments.filter((c) => c.stance === 'support').length,
-  concern: comments.filter((c) => c.stance === 'concern').length,
-  amendment: comments.filter((c) => c.stance === 'amendment').length,
-  comment: comments.filter((c) => c.stance === 'comment').length,
-};
 
 const votes = proposal?.votes ?? { approve: 0, abstain: 0, reject: 0, total: 0 };
 
@@ -1061,39 +1096,10 @@ const initialsFor = (name: string) =>
                     <span class="doc-count tabular">{comments.length} {comments.length === 1 ? 'contribution' : 'contributions'}</span>
                   </div>
                   <p class="doc-section__sub">
-                    Share evidence, ask a question or suggest an improvement. Comments and endorsements do not count as ballot votes.
+                    Share evidence, ask a question or suggest an improvement. Discussion scores do not count as ballot votes.
                   </p>
                 </div>
 
-                <!-- Stance Filter Pills + Sort -->
-                <div class="deliberation-controls">
-                  <div class="stance-filters" role="group" aria-label="Filter contributions by stance">
-                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="all" aria-pressed="true">
-                      All <span class="tabular">{stanceCounts.all}</span>
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="support" aria-pressed="false">
-                      <ThumbsUp aria-hidden="true" /> Support <span class="tabular">{stanceCounts.support}</span>
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="concern" aria-pressed="false">
-                      <AlertCircle aria-hidden="true" /> Concern <span class="tabular">{stanceCounts.concern}</span>
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="amendment" aria-pressed="false">
-                      <PenLine aria-hidden="true" /> Wording <span class="tabular">{stanceCounts.amendment}</span>
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className="stance-pill" data-stance="comment" aria-pressed="false">
-                      <MessageCircle aria-hidden="true" /> Comment <span class="tabular">{stanceCounts.comment}</span>
-                    </Button>
-                  </div>
-                  {comments.length > 1 && (
-                    <div class="comment-sort">
-                      <NativeSelect id="comment-sort-select" data-comment-sort defaultValue="oldest" size="sm" wrapperClassName="w-auto" className="rounded-full" aria-label="Sort contributions">
-                        <option value="top">Top endorsed</option>
-                        <option value="newest">Newest first</option>
-                        <option value="oldest" selected>Oldest first</option>
-                      </NativeSelect>
-                    </div>
-                  )}
-                </div>
               </div>
 
               {(topSupportComment || topConcernComment) && (
@@ -1102,8 +1108,8 @@ const initialsFor = (name: string) =>
                     <div class="takeaway-box takeaway-box--support">
                       <div class="takeaway-box__head">
                         <Badge variant="success">Leading support</Badge>
-                        <span class="takeaway-meta tabular">
-                          {topSupportComment.authorName} · {topSupportComment.upvotes.length} {topSupportComment.upvotes.length === 1 ? 'endorsement' : 'endorsements'}
+                        <span class="takeaway-meta tabular" title={`${commentUpvotePercent(topSupportComment)}% upvoted from ${topSupportComment.upvoteCount + topSupportComment.downvoteCount} votes`}>
+                          {topSupportComment.authorName} · {topSupportComment.score} {topSupportComment.score === 1 || topSupportComment.score === -1 ? 'point' : 'points'}
                         </span>
                       </div>
                       <p class="takeaway-quote">{topSupportComment.body}</p>
@@ -1113,8 +1119,8 @@ const initialsFor = (name: string) =>
                     <div class="takeaway-box takeaway-box--concern">
                       <div class="takeaway-box__head">
                         <Badge variant="destructive">Leading concern</Badge>
-                        <span class="takeaway-meta tabular">
-                          {topConcernComment.authorName} · {topConcernComment.upvotes.length} {topConcernComment.upvotes.length === 1 ? 'endorsement' : 'endorsements'}
+                        <span class="takeaway-meta tabular" title={`${commentUpvotePercent(topConcernComment)}% upvoted from ${topConcernComment.upvoteCount + topConcernComment.downvoteCount} votes`}>
+                          {topConcernComment.authorName} · {topConcernComment.score} {topConcernComment.score === 1 || topConcernComment.score === -1 ? 'point' : 'points'}
                         </span>
                       </div>
                       <p class="takeaway-quote">{topConcernComment.body}</p>
@@ -1123,314 +1129,19 @@ const initialsFor = (name: string) =>
                 </div>
               )}
 
-              <!-- Reddit-style Top Contribution Composer -->
-              {user?.canParticipate ? (
-                <form id="comment-form" class="comment-composer" data-proposal-id={proposal.proposalId}>
-                  <div class="comment-composer__box">
-                    <label for="comment-body-input" class="sr-only">Join the discussion</label>
-                    <Textarea
-                      id="comment-body-input"
-                      name="body"
-                      required
-                      minLength={5}
-                      maxLength={4000}
-                      rows={3}
-                      placeholder="What would you like other members to consider?"
-                      className="focus-visible:ring-0"
-                    />
+              <DiscussionThread
+                client:idle
+                proposalId={proposal.proposalId}
+                proposalTitle={proposal.title}
+                proposalSlug={proposal.slug}
+                initialComments={discussionComments}
+                isSignedIn={Boolean(user)}
+                canParticipate={Boolean(user?.canParticipate)}
+                canModerate={canModerateComments}
+                canRespondToFeedback={canRespondToFeedback}
+                evidenceOptions={evidenceOptions}
+              />
 
-                    <div class="comment-composer__toolbar">
-                      <StanceSelector client:idle />
-
-                      <div class="comment-composer__submit">
-                        <span id="comment-char-count" class="comment-char-count tabular">0 / 4000</span>
-                        <span id="comment-status-msg" class="tabular form-status" role="status" aria-live="polite"></span>
-                        <Button type="submit" size="sm" id="comment-submit-btn">
-                          Post
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="stance-starters" aria-label="Quick stance starters">
-                    <span class="stance-starters__hint">Prompts:</span>
-                    <Button
-                      type="button"
-                      className="starter-chip"
-                      variant="outline"
-                      size="sm"
-                      data-starter-stance="support"
-                      data-starter-placeholder="What makes this proposal valuable or effective? Share the evidence or outcomes you support..."
-                    >
-                      I support this because…
-                    </Button>
-                    <Button
-                      type="button"
-                      className="starter-chip"
-                      variant="outline"
-                      size="sm"
-                      data-starter-stance="concern"
-                      data-starter-placeholder="What unintended consequence, cost, or implementation risk should members consider?"
-                    >
-                      I’m concerned about…
-                    </Button>
-                    <Button
-                      type="button"
-                      className="starter-chip"
-                      variant="outline"
-                      size="sm"
-                      data-starter-stance="amendment"
-                      data-starter-placeholder="Which sentence or commitment should be clarified, and what wording do you suggest?"
-                    >
-                      I suggest changing…
-                    </Button>
-                    <Button
-                      type="button"
-                      className="starter-chip"
-                      variant="outline"
-                      size="sm"
-                      data-starter-stance="comment"
-                      data-starter-placeholder="Ask a clarifying question or share context for other members..."
-                    >
-                      Clarifying question…
-                    </Button>
-                  </div>
-                </form>
-              ) : user ? (
-                <div class="participation-notice">
-                  <div>
-                    <strong>Check your membership status</strong>
-                    <p>This account cannot post contributions yet. Check your membership status in My Engage.</p>
-                  </div>
-                  <Button href="/member/" variant="outline" size="sm">Check status</Button>
-                </div>
-              ) : (
-                <div class="participation-notice">
-                  <div>
-                    <strong>Have a perspective on this proposal?</strong>
-                    <p>
-                      {comments.length > 0
-                        ? `Read the ${comments.length} ${comments.length === 1 ? 'contribution' : 'contributions'} below. Verified members can sign in to comment or endorse a contribution.`
-                        : 'Verified members can sign in to start the discussion.'}
-                    </p>
-                  </div>
-                  <Button
-                    href={`/member/?returnTo=${encodeURIComponent(`/proposals/${proposal.slug}/#deliberation`)}&intent=deliberate&title=${encodeURIComponent(proposal.title)}`}
-                    size="sm"
-                  >
-                    Sign in to participate
-                  </Button>
-                </div>
-              )}
-
-              <!-- Contributions Thread -->
-              <div id="comments-list" class="comments-thread">
-                {comments.length === 0 ? (
-                  <div class="empty-box">
-                    <p>No contributions yet. Verified members can start the discussion using the form above.</p>
-                  </div>
-                ) : (
-                  comments.map((c) => {
-                    const isAuthor = user && c.memberId === user.memberId;
-                    const canDelete = isAuthor || user?.isStaff;
-                    const hasEndorsed = user && c.upvotes.includes(user.memberId);
-                    return (
-                      <article
-                        class="comment-card"
-                        data-stance={c.stance}
-                        data-comment-id={c.commentId}
-                        data-upvotes={c.upvotes.length}
-                        data-created-at={new Date(c.createdAt).getTime()}
-                      >
-                        <span class="comment-avatar" aria-hidden="true">{initialsFor(c.authorName || 'Member')}</span>
-                        <div class="comment-box">
-                          <div class="comment-card__head">
-                            <div class="comment-author__meta">
-                              <strong class="author-name">{c.authorName}</strong>
-                              <Badge variant={c.stance === 'support' ? 'success' : c.stance === 'concern' ? 'destructive' : c.stance === 'amendment' ? 'warning' : 'muted'}>
-                                {c.stance === 'amendment' ? 'Wording suggestion' : c.stance[0]!.toUpperCase() + c.stance.slice(1)}
-                              </Badge>
-                              <time class="tabular comment-date" datetime={new Date(c.createdAt).toISOString()}>
-                                {new Date(c.createdAt).toLocaleDateString('en-AU', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                })}
-                              </time>
-                            </div>
-
-                            <div class="comment-card__actions">
-                              <Button
-                                type="button"
-                                variant={hasEndorsed ? 'secondary' : 'outline'}
-                                size="sm"
-                                className="endorse-btn"
-                                data-endorse-id={c.commentId}
-                                disabled={!user?.canParticipate}
-                                title={user?.canParticipate ? 'Endorse contribution' : 'Sign in to endorse'}
-                              >
-                                <ThumbsUp aria-hidden="true" />
-                                <span>Endorse</span>
-                                <span class="endorse-count tabular">{c.upvotes.length}</span>
-                              </Button>
-
-                              {user?.canParticipate && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="reply-btn"
-                                  data-reply-author={c.authorName}
-                                >
-                                  Reply
-                                </Button>
-                              )}
-
-                              {canDelete && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="delete-btn text-[var(--horizon-danger-ink)]"
-                                  data-delete-comment={c.commentId}
-                                >
-                                  Delete
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-
-                          <div class="comment-card__body">
-                            <p>{c.body}</p>
-                          </div>
-
-                          <div class="comment-feedback-slot" data-feedback-slot={c.commentId}>
-                            {c.feedback && (() => {
-                              const resolvedEvidence = c.feedback.evidence
-                                ? evidenceMap.get(`${c.feedback.evidence.kind}:${c.feedback.evidence.recordId}`)
-                                : undefined;
-                              return (
-                                <div class="comment-feedback">
-                                  <Badge variant={feedbackStatusVariant(c.feedback.status)}>
-                                    {feedbackStatusLabel(c.feedback.status)}
-                                  </Badge>
-                                  <div class="comment-feedback__copy">
-                                    {c.feedback.note && <p>{c.feedback.note}</p>}
-                                    {resolvedEvidence && (
-                                      <p class="comment-feedback__evidence">
-                                        <strong>Evidence:</strong>{' '}
-                                        {resolvedEvidence.href ? (
-                                          <a href={resolvedEvidence.href}>{resolvedEvidence.label}</a>
-                                        ) : (
-                                          <span>{resolvedEvidence.label}</span>
-                                        )}
-                                      </p>
-                                    )}
-                                    <small>
-                                      Response by {c.feedback.updatedByName} ·{' '}
-                                      {new Date(c.feedback.updatedAt).toLocaleDateString('en-AU', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                        year: 'numeric',
-                                      })}
-                                    </small>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
-
-                          {c.feedbackHistory && (c.feedbackHistory.length > 1 || (!c.feedback && c.feedbackHistory.length > 0)) && (
-                            <details class="comment-feedback-history">
-                              <summary>Response history ({c.feedbackHistory.length})</summary>
-                              <ul>
-                                {c.feedbackHistory.map((entry) => {
-                                  const histEvidence = entry.evidence
-                                    ? evidenceMap.get(`${entry.evidence.kind}:${entry.evidence.recordId}`)
-                                    : undefined;
-                                  return (
-                                    <li>
-                                      <strong>{entry.action === 'cleared' ? 'Cleared' : feedbackStatusLabel(entry.action)}</strong>
-                                      {entry.note ? ` — ${entry.note}` : ''}
-                                      {histEvidence ? (
-                                        <>
-                                          {' · '}
-                                          {histEvidence.href ? (
-                                            <a href={histEvidence.href}>{histEvidence.label}</a>
-                                          ) : (
-                                            <span>{histEvidence.label}</span>
-                                          )}
-                                        </>
-                                      ) : null}
-                                      {' · '}{entry.updatedByName} (
-                                      {new Date(entry.updatedAt).toLocaleDateString('en-AU', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                        year: 'numeric',
-                                      })})
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </details>
-                          )}
-
-                          {canRespondToFeedback && (
-                            <details class="comment-feedback-drawer">
-                              <summary>{c.feedback ? 'Update response' : 'Record response'}</summary>
-                              <form class="comment-feedback-form" data-comment-id={c.commentId}>
-                                <div class="comment-feedback-form__row">
-                                  <label for={`feedback-status-${c.commentId}`} class="sr-only">Contribution outcome</label>
-                                  <NativeSelect
-                                    id={`feedback-status-${c.commentId}`}
-                                    name="status"
-                                    defaultValue={c.feedback?.status ?? 'considered'}
-                                    size="sm"
-                                    wrapperClassName="w-auto"
-                                  >
-                                    <option value="incorporated" selected={(c.feedback?.status ?? 'considered') === 'incorporated'}>Incorporated</option>
-                                    <option value="considered" selected={(c.feedback?.status ?? 'considered') === 'considered'}>Considered</option>
-                                    <option value="deferred" selected={c.feedback?.status === 'deferred'}>Deferred</option>
-                                    <option value="declined" selected={c.feedback?.status === 'declined'}>Declined</option>
-                                    {c.feedback && <option value="clear">Clear response</option>}
-                                  </NativeSelect>
-                                  <label for={`feedback-note-${c.commentId}`} class="sr-only">Explanation for contributor (optional)</label>
-                                  <Input
-                                    id={`feedback-note-${c.commentId}`}
-                                    type="text"
-                                    name="note"
-                                    maxLength={500}
-                                    defaultValue={c.feedback?.note ?? ''}
-                                    placeholder="Short explanation for the contributor (optional)"
-                                  />
-                                  <Button type="submit" variant="outline" size="sm" className="comment-feedback-save">Save</Button>
-                                </div>
-                                {evidenceOptions.length > 0 && (
-                                  <div class="comment-feedback-form__evidence">
-                                    <label for={`feedback-evidence-${c.commentId}`} class="sr-only">Supporting evidence (optional)</label>
-                                    <NativeSelect
-                                      id={`feedback-evidence-${c.commentId}`}
-                                      name="evidenceRef"
-                                      defaultValue={c.feedback?.evidence ? `${c.feedback.evidence.kind}:${c.feedback.evidence.recordId}` : ''}
-                                      size="sm"
-                                    >
-                                      <option value="">Supporting evidence (optional) — None</option>
-                                      {evidenceOptions.map((opt) => (
-                                        <option value={opt.value} selected={c.feedback?.evidence ? `${c.feedback.evidence.kind}:${c.feedback.evidence.recordId}` === opt.value : false}>{opt.group}: {opt.label}</option>
-                                      ))}
-                                    </NativeSelect>
-                                  </div>
-                                )}
-                                <span class="comment-feedback-status" role="status" aria-live="polite"></span>
-                              </form>
-                            </details>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })
-                )}
-              </div>
             </section>
 
             <!-- Wording Revision Log & Provenance -->
@@ -1810,338 +1521,6 @@ const initialsFor = (name: string) =>
         }
       }),
     );
-  });
-
-  // Stance tab filter
-  const filterBtns = document.querySelectorAll<HTMLButtonElement>('.stance-pill');
-  const commentCards = document.querySelectorAll<HTMLElement>('.comment-card');
-
-  filterBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const stance = btn.dataset.stance;
-      filterBtns.forEach((b) => {
-        b.classList.toggle('is-active', b === btn);
-        b.setAttribute('aria-pressed', String(b === btn));
-      });
-
-      commentCards.forEach((card) => {
-        if (stance === 'all' || card.dataset.stance === stance) {
-          card.style.display = 'grid';
-        } else {
-          card.style.display = 'none';
-        }
-      });
-    });
-  });
-
-  // Quick Stance Starter chips (Cognitive Fluency & Micro-Commitments)
-  const starterChips = document.querySelectorAll<HTMLButtonElement>('[data-starter-stance]');
-  const commentBodyInput = document.getElementById('comment-body-input') as HTMLTextAreaElement | null;
-  starterChips.forEach((chip) => {
-    chip.addEventListener('click', () => {
-      const targetStance = chip.dataset.starterStance;
-      const placeholder = chip.dataset.starterPlaceholder;
-      if (targetStance) {
-        const stanceInput = document.querySelector<HTMLInputElement>('[data-stance-input]');
-        if (stanceInput) {
-          stanceInput.value = targetStance;
-          stanceInput.dataset.pendingStance = targetStance;
-        }
-        window.dispatchEvent(new CustomEvent('engage:stance', { detail: targetStance }));
-      }
-      if (commentBodyInput) {
-        if (placeholder) commentBodyInput.placeholder = placeholder;
-        commentBodyInput.focus();
-      }
-      starterChips.forEach((c) => c.classList.toggle('is-active', c === chip));
-    });
-  });
-
-  const escapeHtmlClient = (value: string) =>
-    value
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#39;');
-
-  // Post comment / deliberation stance (optimistic instant append — no full page reload)
-  const commentForm = document.getElementById('comment-form') as HTMLFormElement | null;
-  const commentSubmitBtn = document.getElementById('comment-submit-btn') as HTMLButtonElement | null;
-  const commentStatusMsg = document.getElementById('comment-status-msg');
-  const commentsList = document.getElementById('comments-list');
-
-  if (commentForm && commentSubmitBtn && commentStatusMsg) {
-    commentForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const proposalId = commentForm.dataset.proposalId;
-      const formData = new FormData(commentForm);
-      const stance = String(formData.get('stance') ?? 'comment');
-      const body = String(formData.get('body') ?? '').trim();
-      if (body.length < 5) return;
-      trackEngage('contribution_attempted', { action: 'deliberation' });
-
-      commentSubmitBtn.disabled = true;
-      commentStatusMsg.textContent = 'Posting…';
-
-      try {
-        const res = await fetch('/api/comments', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ proposalId, stance, body }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Could not post your contribution. Try again.');
-        trackEngage('contribution_result', { action: 'deliberation', outcome: 'success' });
-
-        const created = data.comment ?? {
-          commentId: `cmt-${Date.now()}`,
-          authorName: 'You',
-          stance,
-          body,
-          createdAt: new Date().toISOString(),
-          upvotes: [],
-        };
-        const emptyBox = commentsList?.querySelector('.empty-box');
-        emptyBox?.remove();
-
-        const initials = String(created.authorName || 'M')
-          .split(/\s+/)
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((p: string) => p[0]?.toUpperCase() ?? '')
-          .join('') || 'M';
-        const stanceText =
-          stance === 'amendment'
-            ? 'Wording suggestion'
-            : stance[0]!.toUpperCase() + stance.slice(1);
-        const article = document.createElement('article');
-        article.className = 'comment-card';
-        article.dataset.stance = stance;
-        article.dataset.commentId = String(created.commentId);
-        article.innerHTML = `
-          <span class="comment-avatar" aria-hidden="true">${escapeHtmlClient(initials)}</span>
-          <div class="comment-box">
-            <div class="comment-card__head">
-              <div class="comment-author__meta">
-                <strong class="author-name">${escapeHtmlClient(String(created.authorName || 'Verified Member'))}</strong>
-                <span class="stage-badge stage-badge--sm stage-badge--deliberate">${escapeHtmlClient(stanceText)}</span>
-                <time class="tabular comment-date">Just now</time>
-              </div>
-            </div>
-            <div class="comment-card__body">
-              <p>${escapeHtmlClient(String(created.body ?? body))}</p>
-            </div>
-          </div>
-        `;
-        commentsList?.prepend(article);
-        const textarea = document.getElementById('comment-body-input') as HTMLTextAreaElement | null;
-        if (textarea) {
-          textarea.value = '';
-          textarea.dispatchEvent(new Event('input'));
-        }
-        commentStatusMsg.textContent = 'Contribution posted.';
-      } catch (err: any) {
-        trackEngage('contribution_result', { action: 'deliberation', outcome: 'failed' });
-        commentStatusMsg.textContent = err.message || 'Could not post your contribution. Try again.';
-      } finally {
-        commentSubmitBtn.disabled = false;
-      }
-    });
-  }
-
-  // Reddit-style composer helpers: live character count, Cmd/Ctrl+Enter submit, Reply & Sort
-  const commentTextarea = document.getElementById('comment-body-input') as HTMLTextAreaElement | null;
-  const charCountEl = document.getElementById('comment-char-count');
-  if (commentTextarea && charCountEl) {
-    const syncCount = () => {
-      charCountEl.textContent = `${commentTextarea.value.length} / 4000`;
-    };
-    commentTextarea.addEventListener('input', syncCount);
-    commentTextarea.addEventListener('keydown', (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        commentForm?.requestSubmit();
-      }
-    });
-  }
-
-  document.querySelectorAll<HTMLButtonElement>('[data-reply-author]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const author = btn.dataset.replyAuthor;
-      if (!commentTextarea || !author) return;
-      const prefix = `@${author} `;
-      if (!commentTextarea.value.startsWith(prefix)) {
-        commentTextarea.value = `${prefix}${commentTextarea.value}`;
-        commentTextarea.dispatchEvent(new Event('input'));
-      }
-      commentTextarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      commentTextarea.focus();
-    });
-  });
-
-  const sortSelect = document.querySelector<HTMLSelectElement>('[data-comment-sort]');
-  sortSelect?.addEventListener('change', () => {
-    if (!commentsList) return;
-    const cards = Array.from(commentsList.querySelectorAll<HTMLElement>('.comment-card'));
-    const mode = sortSelect.value;
-    cards.sort((a, b) => {
-      if (mode === 'top') {
-        return Number(b.dataset.upvotes || 0) - Number(a.dataset.upvotes || 0);
-      }
-      if (mode === 'newest') {
-        return Number(b.dataset.createdAt || 0) - Number(a.dataset.createdAt || 0);
-      }
-      return Number(a.dataset.createdAt || 0) - Number(b.dataset.createdAt || 0);
-    });
-    for (const card of cards) commentsList.appendChild(card);
-  });
-
-  // Author / administrator contribution feedback (zero-reload)
-  document.querySelectorAll<HTMLFormElement>('.comment-feedback-form').forEach((form) => {
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const commentId = form.dataset.commentId;
-      const saveBtn = form.querySelector<HTMLButtonElement>('.comment-feedback-save');
-      const statusMsg = form.querySelector<HTMLElement>('.comment-feedback-status');
-      if (!commentId || !saveBtn) return;
-      const fields = new FormData(form);
-      const status = String(fields.get('status') ?? 'considered');
-      const note = String(fields.get('note') ?? '').trim();
-      const evidenceRef = String(fields.get('evidenceRef') ?? '').trim();
-      saveBtn.disabled = true;
-      if (statusMsg) statusMsg.textContent = 'Saving...';
-      try {
-        const res = await fetch('/api/comments', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ commentId, status, note, evidenceRef }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Could not save response.');
-        const slot = document.querySelector<HTMLElement>(`[data-feedback-slot="${commentId}"]`);
-        const drawer = form.closest('details');
-        const selectEl = form.querySelector<HTMLSelectElement>('select[name="status"]');
-        const noteInput = form.querySelector<HTMLInputElement>('input[name="note"]');
-        const evidenceSelect = form.querySelector<HTMLSelectElement>('select[name="evidenceRef"]');
-        const summaryEl = drawer?.querySelector<HTMLElement>('summary');
-        if (slot) {
-          if (!data.feedback) {
-            slot.innerHTML = '';
-            selectEl?.querySelector('option[value="clear"]')?.remove();
-            if (selectEl) selectEl.value = 'considered';
-            if (noteInput) noteInput.value = '';
-            if (evidenceSelect) evidenceSelect.value = '';
-            if (summaryEl) summaryEl.textContent = 'Record response';
-          } else {
-            const labelMap: Record<string, string> = {
-              incorporated: 'Incorporated',
-              considered: 'Considered',
-              deferred: 'Deferred',
-              declined: 'Declined',
-            };
-            const badgeClassMap: Record<string, string> = {
-              incorporated: 'border-transparent bg-[var(--horizon-success-bg)] text-[var(--horizon-success-ink)]',
-              considered: 'border-transparent bg-[var(--horizon-voting-bg)] text-[var(--horizon-voting-ink)]',
-              deferred: 'border-transparent bg-[var(--horizon-warn-bg)] text-[var(--horizon-warn-ink)]',
-              declined: 'border-border bg-background text-foreground',
-            };
-            const statusKey = String(data.feedback.status);
-            const label = labelMap[statusKey] ?? 'Considered';
-            const variantClasses = badgeClassMap[statusKey] ?? badgeClassMap.declined;
-            const noteHtml = data.feedback.note ? `<p>${escapeHtmlClient(String(data.feedback.note))}</p>` : '';
-            const ev = data.feedback.evidence;
-            let evidenceHtml = '';
-            if (ev && ev.recordId) {
-              const evHref =
-                ev.kind === 'amendment'
-                  ? `#amendment-${encodeURIComponent(String(ev.recordId))}`
-                  : ev.kind === 'revision'
-                    ? `#revision-${encodeURIComponent(String(ev.recordId))}`
-                    : ev.kind === 'decision'
-                      ? '#proposal-vote'
-                      : ev.kind === 'policy' && String(ev.label ?? '').startsWith('Adopted policy:')
-                        ? `/policies/${encodeURIComponent(String(ev.recordId))}/`
-                        : '';
-              const evLabel = escapeHtmlClient(String(ev.label || ev.recordId));
-              evidenceHtml = `<p class="comment-feedback__evidence"><strong>Evidence:</strong> ${evHref ? `<a href="${evHref}">${evLabel}</a>` : `<span>${evLabel}</span>`}</p>`;
-            }
-            slot.innerHTML = `
-              <div class="comment-feedback">
-                <span data-slot="badge" class="inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${variantClasses}">${escapeHtmlClient(label)}</span>
-                <div class="comment-feedback__copy">
-                  ${noteHtml}
-                  ${evidenceHtml}
-                  <small>Response by ${escapeHtmlClient(String(data.feedback.updatedByName || 'Author'))} · just now</small>
-                </div>
-              </div>
-            `;
-            if (selectEl && !selectEl.querySelector('option[value="clear"]')) {
-              const clearOpt = document.createElement('option');
-              clearOpt.value = 'clear';
-              clearOpt.textContent = 'Clear response';
-              selectEl.appendChild(clearOpt);
-            }
-            if (selectEl) selectEl.value = String(data.feedback.status);
-            if (summaryEl) summaryEl.textContent = 'Update response';
-          }
-        }
-        if (drawer) drawer.open = false;
-        if (statusMsg) statusMsg.textContent = 'Saved.';
-      } catch (err: any) {
-        if (statusMsg) statusMsg.textContent = err?.message || 'Could not save response.';
-      } finally {
-        saveBtn.disabled = false;
-      }
-    });
-  });
-
-  // Endorse contribution (+1)
-  document.querySelectorAll<HTMLButtonElement>('[data-endorse-id]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      trackEngage('contribution_attempted', { action: 'endorsement' });
-      const commentId = btn.dataset.endorseId;
-      btn.disabled = true;
-      try {
-        const res = await fetch('/api/comments', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ commentId, action: 'upvote' }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-
-        trackEngage('contribution_result', { action: 'endorsement', outcome: 'success' });
-        const countSpan = btn.querySelector('.endorse-count');
-        if (countSpan) countSpan.textContent = String(data.count ?? data.upvotes?.length ?? 0);
-        btn.classList.toggle('is-endorsed', data.hasUpvoted ?? data.endorsed);
-      } catch {
-        trackEngage('contribution_result', { action: 'endorsement', outcome: 'failed' });
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  });
-
-  // Delete contribution
-  document.querySelectorAll<HTMLButtonElement>('[data-delete-comment]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (!confirm('Delete this contribution?')) return;
-      const commentId = btn.dataset.deleteComment;
-      btn.disabled = true;
-
-      try {
-        const res = await fetch(`/api/comments?commentId=${encodeURIComponent(commentId ?? '')}`, {
-          method: 'DELETE',
-        });
-        if (!res.ok) throw new Error('Could not delete this contribution. Try again.');
-        const card = document.querySelector(`[data-comment-id="${commentId}"]`);
-        card?.remove();
-      } catch {
-        alert('Could not delete contribution.');
-        btn.disabled = false;
-      }
-    });
   });
 
   // Highlight active section in sticky jump nav
@@ -3124,33 +2503,30 @@ const initialsFor = (name: string) =>
     color: var(--horizon-muted);
   }
 
-  /* Member Discussion */
-  .stance-filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-  }
-
-  :global(.stance-pill[aria-pressed='true']) {
-    background: var(--horizon-purple);
-    border-color: var(--horizon-purple);
-    color: #ffffff;
-  }
-
+  /* Key deliberation takeaways */
   .deliberation-takeaways {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-    gap: 0.75rem;
-    margin-bottom: 1rem;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
   }
 
   .takeaway-box {
-    padding: 0.75rem 0.9rem;
-    border-radius: 0.75rem;
-    border: 1px solid var(--horizon-line);
-    background: #faf9fd;
+    padding: 0.5rem 0.7rem;
+    border: 0;
+    border-left: 3px solid var(--horizon-line-strong);
+    border-radius: 0 0.45rem 0.45rem 0;
+    background: var(--horizon-lavender-soft);
     display: grid;
-    gap: 0.4rem;
+    gap: 0.25rem;
+  }
+
+  .takeaway-box--support {
+    border-left-color: var(--horizon-success-ink);
+  }
+
+  .takeaway-box--concern {
+    border-left-color: var(--horizon-danger-ink);
   }
 
   .takeaway-box__head {
@@ -3162,261 +2538,20 @@ const initialsFor = (name: string) =>
   }
 
   .takeaway-meta {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 600;
     color: var(--horizon-muted);
   }
 
   .takeaway-quote {
     margin: 0;
-    font-size: 0.86rem;
-    line-height: 1.5;
+    font-size: 0.82rem;
+    line-height: 1.45;
     color: var(--horizon-purple-deep);
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-  }
-
-  .stance-starters {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-  }
-
-  .stance-starters__hint {
-    font-size: 0.76rem;
-    font-weight: 600;
-    color: var(--horizon-muted);
-    margin-right: 0.15rem;
-  }
-
-  .starter-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.24rem 0.6rem;
-    border-radius: 999px;
-    border: 1px solid var(--horizon-line);
-    background: #ffffff;
-    color: var(--horizon-purple-deep);
-    font: inherit;
-    font-size: 0.76rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color 120ms ease, border-color 120ms ease;
-  }
-
-  .starter-chip:hover,
-  .starter-chip.is-active {
-    background: var(--horizon-lavender);
-    border-color: var(--horizon-purple);
-  }
-
-  .comments-thread {
-    display: grid;
-    gap: 0.85rem;
-  }
-
-  .comment-card {
-    display: grid;
-    grid-template-columns: 2.25rem minmax(0, 1fr);
-    gap: 0.75rem;
-    align-items: start;
-  }
-
-  .comment-avatar {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 999px;
-    color: var(--horizon-purple);
-    font-size: 0.78rem;
-    font-weight: 700;
-  }
-
-  .comment-box {
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.85rem;
-    background: #ffffff;
-    overflow: hidden;
-  }
-
-  .comment-card__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.6rem 0.95rem;
-    background: #faf9fd;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-
-  .comment-author__meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.45rem;
-  }
-
-  .author-name {
-    font-size: 0.88rem;
-    color: var(--horizon-purple-deep);
-  }
-
-  .comment-date {
-    font-size: 0.78rem;
-    color: var(--horizon-muted);
-  }
-
-  .comment-card__actions {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-  }
-
-  .endorse-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.22rem 0.55rem;
-    border-radius: 999px;
-    border: 1px solid var(--horizon-line);
-    background: #ffffff;
-    color: var(--horizon-muted);
-    font: inherit;
-    font-size: 0.76rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .endorse-btn:hover:not(:disabled) {
-    border-color: var(--horizon-purple);
-    color: var(--horizon-purple);
-  }
-
-  .endorse-btn.is-endorsed {
-    background: #efeaf9;
-    border-color: var(--horizon-purple);
-    color: var(--horizon-purple);
-  }
-
-  .delete-btn {
-    border: 0;
-    background: transparent;
-    color: var(--horizon-danger-ink);
-    font-size: 0.76rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .comment-card__body {
-    padding: 0.85rem 0.95rem;
-  }
-
-  .comment-card__body p {
-    margin: 0;
-    font-size: 0.94rem;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    color: var(--horizon-purple-deep);
-  }
-
-  /* Comment Composer */
-  .comment-form {
-    margin-top: 1.25rem;
-    padding: 1rem 1.15rem;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.85rem;
-    background: #faf9fd;
-    display: grid;
-    gap: 0.85rem;
-  }
-
-  .comment-form__top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
-  }
-
-  .comment-form__label {
-    font-size: 0.9rem;
-    font-weight: 650;
-    color: var(--horizon-purple-deep);
-  }
-
-  :global(.stance-radio-group) {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-  }
-
-  :global(.stance-choice) {
-    height: auto;
-    min-width: 0;
-    padding: 0.28rem 0.65rem;
-    border-radius: 999px;
-    border: 1px solid var(--horizon-line);
-    background: var(--horizon-white);
-    color: var(--horizon-muted);
-    font-size: 0.78rem;
-    font-weight: 600;
-  }
-
-  :global(.stance-choice[data-state='on']) {
-    background: var(--horizon-purple);
-    border-color: var(--horizon-purple);
-    color: #ffffff;
-  }
-
-  :global(.starter-chip.is-active) {
-    background: var(--horizon-lavender);
-    border-color: var(--horizon-purple);
-  }
-
-  .sr-only-label :global([data-slot="field-label"]) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-  }
-
-  .comment-form__actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.75rem;
-  }
-
-  .participation-notice {
-    margin-top: 1.15rem;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.85rem;
-    padding: 1rem 1.15rem;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.85rem;
-    background: #faf9fd;
-  }
-
-  .participation-notice strong {
-    display: block;
-    font-size: 0.92rem;
-    color: var(--horizon-purple-deep);
-  }
-
-  .participation-notice p {
-    margin: 0.2rem 0 0;
-    font-size: 0.86rem;
-    color: var(--horizon-muted);
   }
 
   /* Wording Revision Log & Provenance */
@@ -3894,212 +3029,6 @@ const initialsFor = (name: string) =>
     color: var(--horizon-muted);
   }
 
-  .comment-feedback-slot :global(.comment-feedback) {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 0.6rem;
-    margin-top: 0.65rem;
-    padding: 0.65rem 0.8rem;
-    border-radius: 0.45rem;
-    background: var(--horizon-lavender-soft);
-    border: 1px solid var(--horizon-line);
-  }
-
-  .comment-feedback-slot :global(.comment-feedback__copy) {
-    flex: 1 1 14rem;
-    min-width: 0;
-  }
-
-  .comment-feedback-slot :global(.comment-feedback__copy p) {
-    margin: 0 0 0.2rem;
-    font-size: 0.86rem;
-    color: var(--horizon-purple-deep);
-  }
-
-  .comment-feedback-slot :global(.comment-feedback__evidence a) {
-    color: var(--horizon-purple);
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
-  .comment-feedback-form__evidence {
-    margin-top: 0.45rem;
-  }
-
-  .comment-feedback-slot :global(.comment-feedback__copy small) {
-    font-size: 0.76rem;
-    color: var(--horizon-muted);
-  }
-
-  .comment-feedback-drawer {
-    margin-top: 0.5rem;
-    font-size: 0.82rem;
-  }
-
-  .comment-feedback-drawer > summary {
-    cursor: pointer;
-    color: var(--horizon-purple);
-    font-weight: 600;
-  }
-
-  .comment-feedback-form {
-    margin-top: 0.5rem;
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .comment-feedback-form__row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    align-items: center;
-  }
-
-  .comment-feedback-form__row select,
-  .comment-feedback-form__row input {
-    height: 2rem;
-    padding: 0 0.55rem;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.4rem;
-    background: var(--horizon-white);
-    font-size: 0.82rem;
-  }
-
-  .comment-feedback-form__row input {
-    flex: 1 1 14rem;
-    min-width: 0;
-  }
-
-  .comment-feedback-save {
-    height: 2rem;
-    padding: 0 0.85rem;
-    border: 1px solid var(--horizon-purple);
-    border-radius: 999px;
-    background: var(--horizon-purple);
-    color: var(--horizon-white);
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .comment-feedback-status {
-    font-size: 0.78rem;
-    color: var(--horizon-muted);
-  }
-
-  .comment-feedback-history {
-    margin-top: 0.45rem;
-    font-size: 0.78rem;
-    color: var(--horizon-muted);
-  }
-
-  .comment-feedback-history > summary {
-    cursor: pointer;
-    font-weight: 600;
-  }
-
-  .comment-feedback-history ul {
-    margin: 0.35rem 0 0;
-    padding-left: 1.1rem;
-    display: grid;
-    gap: 0.2rem;
-  }
-
-  .deliberation-controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-
-  .comment-sort select {
-    height: 2rem;
-    padding: 0 0.65rem;
-    border: 1px solid var(--horizon-line);
-    border-radius: 999px;
-    background: var(--horizon-white);
-    color: var(--horizon-purple);
-    font-size: 0.8rem;
-    font-weight: 600;
-  }
-
-  .comment-composer {
-    display: grid;
-    gap: 0.6rem;
-    margin: 0.25rem 0 1.25rem;
-  }
-
-  .comment-composer__box {
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    background: var(--horizon-white);
-    overflow: hidden;
-    transition: border-color 0.15s ease;
-  }
-
-  .comment-composer__box:focus-within {
-    border-color: var(--horizon-focus);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--horizon-focus) 25%, transparent);
-  }
-
-  .comment-composer__box textarea {
-    display: block;
-    width: 100%;
-    min-height: 5.25rem;
-    padding: 0.85rem 1rem 0.6rem;
-    border: 0;
-    background: transparent;
-    color: var(--horizon-purple-deep);
-    font: inherit;
-    font-size: 0.94rem;
-    line-height: 1.55;
-    resize: vertical;
-  }
-
-  .comment-composer__box textarea:focus {
-    outline: none;
-  }
-
-  .comment-composer__toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
-    padding: 0.55rem 0.85rem;
-    border-top: 1px solid var(--horizon-line);
-    background: var(--horizon-lavender-soft);
-  }
-
-  .comment-composer__submit {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-  }
-
-  .comment-char-count {
-    font-size: 0.76rem;
-    color: var(--horizon-muted);
-  }
-
-  .reply-btn {
-    border: 0;
-    background: transparent;
-    padding: 0.2rem 0.45rem;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--horizon-muted);
-    cursor: pointer;
-  }
-
-  .reply-btn:hover {
-    background: var(--horizon-lavender);
-    color: var(--horizon-purple);
-  }
 </style>
 
 

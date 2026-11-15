@@ -82,10 +82,17 @@ export async function loadMemberActivityInputs(
   const [votes, ownComments, endorsedComments, amendments, authoredProposals] =
     await Promise.all([
       findAllMemberVotes(db, memberId),
-      db.collection("comments").find({ memberId }).toArray(),
       db
         .collection("comments")
-        .find({ "upvoteEvents.memberId": memberId, memberId: { $ne: memberId } })
+        .find({ memberId, deletedAt: { $exists: false } })
+        .toArray(),
+      db
+        .collection("comments")
+        .find({
+          "upvoteEvents.memberId": memberId,
+          memberId: { $ne: memberId },
+          deletedAt: { $exists: false },
+        })
         .toArray(),
       db.collection("amendments").find({ authorId: memberId }).toArray(),
       db.collection("proposals").find({ authorId: memberId }).toArray(),
@@ -114,10 +121,17 @@ export async function listMemberActivityStream(
         ]
       : await Promise.all([
           findAllMemberVotes(db, memberId),
-          db.collection("comments").find({ memberId }).toArray(),
           db
             .collection("comments")
-            .find({ "upvoteEvents.memberId": memberId, memberId: { $ne: memberId } })
+            .find({ memberId, deletedAt: { $exists: false } })
+            .toArray(),
+          db
+            .collection("comments")
+            .find({
+              "upvoteEvents.memberId": memberId,
+              memberId: { $ne: memberId },
+              deletedAt: { $exists: false },
+            })
             .toArray(),
           db.collection("amendments").find({ authorId: memberId }).toArray(),
           db.collection("proposals").find({ authorId: memberId }).toArray(),
@@ -511,10 +525,17 @@ export async function buildMemberCatchUp(
         ]
       : await Promise.all([
           findAllMemberVotes(db, memberId),
-          db.collection("comments").find({ memberId }).toArray(),
           db
             .collection("comments")
-            .find({ "upvoteEvents.memberId": memberId, memberId: { $ne: memberId } })
+            .find({ memberId, deletedAt: { $exists: false } })
+            .toArray(),
+          db
+            .collection("comments")
+            .find({
+              "upvoteEvents.memberId": memberId,
+              memberId: { $ne: memberId },
+              deletedAt: { $exists: false },
+            })
             .toArray(),
           db.collection("amendments").find({ authorId: memberId }).toArray(),
           db.collection("proposals").find({ authorId: memberId }).toArray(),

@@ -145,6 +145,13 @@ export const VALID_STANCES: CommentStance[] = [
   "comment",
 ];
 
+/**
+ * Hard ceiling on stored reply nesting. The interface caps visual indentation
+ * far earlier; this only stops a corrupted or scripted chain from growing
+ * without bound.
+ */
+export const MAX_COMMENT_DEPTH = 20;
+
 export function isValidStage(value: unknown): value is ProposalStage {
   if (typeof value !== "string") return false;
   const raw = value.trim().toLowerCase();
@@ -648,6 +655,14 @@ export async function getProposalDetail(
     ...c,
     stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
     upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
+    downvotes: Array.isArray(c.downvotes) ? c.downvotes : [],
+    parentCommentId:
+      typeof c.parentCommentId === "string" && c.parentCommentId
+        ? c.parentCommentId
+        : null,
+    depth: Number.isFinite(c.depth) ? Number(c.depth) : 0,
+    // Deleted contributions keep their place in the thread, never their text.
+    ...(c.deletedAt ? { body: "" } : {}),
   }));
   // Read-only path: tolerate a broken key ring so the page can render an
   // operational message instead of failing before it is read.
@@ -2198,6 +2213,36 @@ export async function addComment(
     ? (rawStance as CommentStance)
     : "comment";
 
+  // Replies are bound to a parent comment in the same proposal. The parent is
+  // verified server-side so a client cannot attach a reply to another thread
+  // or to a comment it cannot see.
+  const parentCommentIdInput =
+    typeof body.parentCommentId === "string"
+      ? body.parentCommentId.trim()
+      : "";
+  let parentCommentId: string | null = null;
+  let depth = 0;
+  if (parentCommentIdInput) {
+    const parent = await db
+      .collection<CommentRecord>("comments")
+      .findOne({ commentId: parentCommentIdInput });
+    if (!parent || parent.proposalId !== proposal.proposalId) {
+      throw new Error(
+        "The comment you are replying to is no longer available.",
+      );
+    }
+    const parentDepth = Number.isFinite(parent.depth)
+      ? Number(parent.depth)
+      : 0;
+    if (parentDepth + 1 > MAX_COMMENT_DEPTH) {
+      throw new Error(
+        "This conversation is nested too deeply to reply here. Reply to an earlier comment instead.",
+      );
+    }
+    parentCommentId = parent.commentId;
+    depth = parentDepth + 1;
+  }
+
   const record: CommentRecord = {
     commentId: `cmt-${crypto.randomUUID()}`,
     proposalId: proposal.proposalId,
@@ -2205,7 +2250,10 @@ export async function addComment(
     authorName: user.name || "Verified Member",
     stance,
     body: text,
+    ...(parentCommentId ? { parentCommentId } : {}),
+    depth,
     upvotes: [],
+    downvotes: [],
     createdAt: new Date(),
   };
 
@@ -2213,22 +2261,46 @@ export async function addComment(
   return record;
 }
 
-export async function toggleUpvoteComment(
+export interface CommentVoteResult {
+  /** Net score (upvotes minus downvotes). */
+  count: number;
+  score: number;
+  upvoteCount: number;
+  downvoteCount: number;
+  upvotePercent: number;
+  upvoted: boolean;
+  downvoted: boolean;
+  hasUpvoted: boolean;
+  hasDownvoted: boolean;
+}
+
+const COMMENT_VOTE_ACTIONS = ["upvote", "downvote"] as const;
+export type CommentVoteAction = (typeof COMMENT_VOTE_ACTIONS)[number];
+
+/**
+ * Apply one member's upvote or downvote to a comment.
+ *
+ * A member can have at most one active vote per comment: the opposite vote is
+ * removed when they switch, and a second click on the same vote clears it.
+ * Only aggregate counts and the caller's own choice are ever returned. Voter
+ * identities stay in the record and are never serialised to a client.
+ */
+export async function voteOnComment(
   db: Db,
   user: SessionUser,
   commentId: string,
-): Promise<{
-  upvotes: string[];
-  count: number;
-  endorsed: boolean;
-  hasUpvoted: boolean;
-}> {
+  action: CommentVoteAction,
+): Promise<CommentVoteResult> {
   if (!user.canParticipate) {
     throw new Error(
-      "Your membership must be verified to endorse deliberation points.",
+      "Your membership must be verified to vote on deliberation points.",
     );
   }
+  if (!COMMENT_VOTE_ACTIONS.includes(action)) {
+    throw new Error("Choose upvote or downvote.");
+  }
   const id = commentId.trim();
+  if (!id) throw new Error("Comment ID is required.");
   const col = db.collection<CommentRecord>("comments");
   const existing = await col.findOne({ commentId: id });
   if (!existing) throw new Error("Comment not found.");
@@ -2239,27 +2311,92 @@ export async function toggleUpvoteComment(
   if (!proposal || !canViewProposal(normalizeProposalDoc(proposal), user))
     throw new Error("Comment not found.");
 
-  const current = Array.isArray(existing.upvotes) ? existing.upvotes : [];
-  const hasEndorsed = current.includes(user.memberId);
-  const updated = hasEndorsed
-    ? current.filter((m) => m !== user.memberId)
-    : [...current, user.memberId];
-  const currentEvents = Array.isArray(existing.upvoteEvents)
-    ? existing.upvoteEvents
+  const upvotes = Array.isArray(existing.upvotes) ? [...existing.upvotes] : [];
+  const downvotes = Array.isArray(existing.downvotes)
+    ? [...existing.downvotes]
     : [];
-  const updatedEvents = hasEndorsed
-    ? currentEvents.filter((event) => event.memberId !== user.memberId)
-    : [...currentEvents, { memberId: user.memberId, at: new Date() }];
+  const upvoteEvents = Array.isArray(existing.upvoteEvents)
+    ? [...existing.upvoteEvents]
+    : [];
+  const hasUpvoted = upvotes.includes(user.memberId);
+  const hasDownvoted = downvotes.includes(user.memberId);
+  let upvoted = false;
+  let downvoted = false;
+
+  const removeUpvote = () => {
+    const index = upvotes.indexOf(user.memberId);
+    if (index >= 0) upvotes.splice(index, 1);
+    for (let i = upvoteEvents.length - 1; i >= 0; i -= 1) {
+      if (upvoteEvents[i]!.memberId === user.memberId) upvoteEvents.splice(i, 1);
+    }
+  };
+  const removeDownvote = () => {
+    const index = downvotes.indexOf(user.memberId);
+    if (index >= 0) downvotes.splice(index, 1);
+  };
+
+  if (action === "upvote") {
+    removeDownvote();
+    if (hasUpvoted) {
+      removeUpvote();
+    } else {
+      upvotes.push(user.memberId);
+      upvoteEvents.push({ memberId: user.memberId, at: new Date() });
+      upvoted = true;
+    }
+  } else {
+    removeUpvote();
+    if (hasDownvoted) {
+      removeDownvote();
+    } else {
+      downvotes.push(user.memberId);
+      downvoted = true;
+    }
+  }
 
   await col.updateOne(
     { commentId: id },
-    { $set: { upvotes: updated, upvoteEvents: updatedEvents } },
+    { $set: { upvotes, downvotes, upvoteEvents } },
   );
+
+  const score = upvotes.length - downvotes.length;
+  const total = upvotes.length + downvotes.length;
   return {
-    upvotes: updated,
-    count: updated.length,
-    endorsed: !hasEndorsed,
-    hasUpvoted: !hasEndorsed,
+    count: score,
+    score,
+    upvoteCount: upvotes.length,
+    downvoteCount: downvotes.length,
+    upvotePercent: total > 0 ? Math.round((upvotes.length / total) * 100) : 0,
+    upvoted,
+    downvoted,
+    hasUpvoted: upvoted,
+    hasDownvoted: downvoted,
+  };
+}
+
+/**
+ * Backwards-compatible single-direction vote used by older callers and tests.
+ * New code should call `voteOnComment` so downvotes and switching are explicit.
+ */
+export async function toggleUpvoteComment(
+  db: Db,
+  user: SessionUser,
+  commentId: string,
+): Promise<{
+  upvotes: string[];
+  count: number;
+  endorsed: boolean;
+  hasUpvoted: boolean;
+}> {
+  const result = await voteOnComment(db, user, commentId, "upvote");
+  const stored = await db
+    .collection<CommentRecord>("comments")
+    .findOne({ commentId: commentId.trim() });
+  return {
+    upvotes: Array.isArray(stored?.upvotes) ? stored.upvotes : [],
+    count: result.score,
+    endorsed: result.hasUpvoted,
+    hasUpvoted: result.hasUpvoted,
   };
 }
 
@@ -2267,7 +2404,7 @@ export async function deleteComment(
   db: Db,
   user: SessionUser,
   commentId: string,
-): Promise<void> {
+): Promise<{ deleted: boolean; tombstoned: boolean; replyCount: number }> {
   const id = commentId.trim();
   if (!id) throw new Error("Comment ID is required.");
   const col = db.collection<CommentRecord>("comments");
@@ -2285,7 +2422,48 @@ export async function deleteComment(
   ) {
     throw new Error("You can only delete your own contributions.");
   }
+
+  const replyCount = await col.countDocuments({ parentCommentId: id });
+  if (replyCount > 0) {
+    // Replies depend on this comment for context. Remove the text but keep a
+    // placeholder so the surviving conversation is not silently re-parented
+    // or reordered.
+    await col.updateOne(
+      { commentId: id },
+      {
+        $set: {
+          body: "",
+          deletedAt: new Date(),
+          deletedBy: user.memberId,
+        },
+      },
+    );
+    return { deleted: false, tombstoned: true, replyCount };
+  }
+
   await col.deleteOne({ commentId: id });
+
+  // Remove any chain of empty placeholders that no longer has replies to
+  // preserve. A placeholder is only kept while a surviving reply depends on it.
+  let parentId =
+    typeof existing.parentCommentId === "string"
+      ? existing.parentCommentId
+      : "";
+  while (parentId) {
+    const parent = await col.findOne({ commentId: parentId });
+    if (!parent?.deletedAt) break;
+    const remainingReplies = await col.countDocuments({
+      parentCommentId: parent.commentId,
+    });
+    if (remainingReplies > 0) break;
+    await col.deleteOne({ commentId: parent.commentId });
+    parentId =
+      typeof parent.parentCommentId === "string"
+        ? parent.parentCommentId
+        : "";
+  }
+
+  return { deleted: true, tombstoned: false, replyCount: 0 };
 }
 
 const VALID_FEEDBACK_STATUSES: ContributionFeedbackStatus[] = [

@@ -530,7 +530,10 @@ export async function listProposalRegister(
     const commentRows = await db
       .collection("comments")
       .find(
-        { $or: [{ proposalId: { $in: pageIds } }, { policyId: { $in: pageIds } }] },
+        {
+          $or: [{ proposalId: { $in: pageIds } }, { policyId: { $in: pageIds } }],
+          deletedAt: { $exists: false },
+        },
         { projection: { _id: 0, proposalId: 1, policyId: 1 } },
       )
       .toArray();

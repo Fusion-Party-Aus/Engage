@@ -1,0 +1,598 @@
+/*
+ * Horizon discussion thread.
+ *
+ * Dense, hierarchical comments: one recursive component, no per-comment
+ * cards. Vertical rules carry the thread structure; indentation stops growing
+ * at MAX_VISUAL_DEPTH so deep conversations stay readable on narrow screens.
+ */
+
+.discussion-thread {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+/* Composer ------------------------------------------------------------- */
+
+.discussion-composer {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.discussion-composer__box {
+  border: 1px solid var(--horizon-line);
+  border-radius: 0.75rem;
+  background: var(--horizon-white);
+  overflow: hidden;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.discussion-composer__box:focus-within {
+  border-color: var(--horizon-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--horizon-focus) 22%, transparent);
+}
+
+.discussion-composer__input {
+  min-height: 4.75rem;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  font-size: 0.94rem;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.discussion-composer__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-top: 1px solid var(--horizon-line);
+  background: var(--horizon-lavender-soft);
+}
+
+.discussion-composer__submit {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-left: auto;
+}
+
+.discussion-composer__count {
+  font-size: 0.72rem;
+  color: var(--horizon-muted);
+}
+
+.discussion-starters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.discussion-starters__hint {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--horizon-muted);
+}
+
+.discussion-starter {
+  height: 1.7rem;
+  padding: 0 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.discussion-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.65rem;
+  background: var(--horizon-lavender-soft);
+}
+
+.discussion-notice strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--horizon-purple-deep);
+}
+
+.discussion-notice p {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--horizon-muted);
+}
+
+/* Filters and sorting -------------------------------------------------- */
+
+.discussion-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding-top: 0.2rem;
+}
+
+.discussion-stances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  border-radius: 0;
+  box-shadow: none;
+  width: auto;
+}
+
+.discussion-stance {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 1.75rem;
+  padding: 0 0.55rem;
+  border: 1px solid var(--horizon-line);
+  border-radius: 999px;
+  background: var(--horizon-white);
+  color: var(--horizon-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.discussion-stance svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.discussion-stance[data-state='on'] {
+  background: var(--horizon-purple);
+  border-color: var(--horizon-purple);
+  color: var(--horizon-white);
+}
+
+.discussion-stance__count {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.discussion-empty {
+  margin: 0.25rem 0 0;
+  padding: 0.85rem 0.9rem;
+  border-radius: 0.65rem;
+  background: var(--horizon-lavender-soft);
+  color: var(--horizon-muted);
+  font-size: 0.86rem;
+}
+
+/* Thread --------------------------------------------------------------- */
+
+.comment-thread,
+.comment__children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.comment-thread {
+  display: grid;
+  gap: 0.35rem;
+  border-top: 1px solid var(--horizon-line);
+  padding-top: 0.35rem;
+}
+
+/* Separate top-level conversations without boxing each one. */
+.comment-thread > .comment + .comment {
+  border-top: 1px solid var(--horizon-line);
+  padding-top: 0.55rem;
+  margin-top: 0.1rem;
+}
+
+.comment {
+  margin: 0;
+  padding: 0.35rem 0 0;
+}
+
+.comment__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: start;
+}
+
+.comment__avatar {
+  margin-top: 0.1rem;
+  background: var(--horizon-lavender);
+  color: var(--horizon-purple);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.comment__main {
+  min-width: 0;
+}
+
+.comment__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.comment__author {
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--horizon-purple-deep);
+}
+
+.comment__time,
+.comment__deleted-label,
+.comment__context {
+  color: var(--horizon-muted);
+  font-size: 0.72rem;
+}
+
+.comment__context strong {
+  font-weight: 600;
+  color: var(--horizon-purple);
+}
+
+.comment__body {
+  margin: 0.2rem 0 0.1rem;
+}
+
+.comment__body p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--horizon-purple-deep);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment__deleted {
+  color: var(--horizon-muted);
+  font-style: italic;
+}
+
+.comment__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1rem;
+  margin-top: 0.1rem;
+}
+
+.comment__action {
+  height: 1.75rem;
+  padding: 0 0.4rem;
+  gap: 0.3rem;
+  border-radius: 0.45rem;
+  color: var(--horizon-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.comment__action svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.comment__action:hover:not(:disabled) {
+  background: var(--horizon-lavender);
+  color: var(--horizon-purple);
+}
+
+.comment__action--overflow {
+  padding: 0 0.3rem;
+}
+
+/* Upvote / downvote: score is aggregate, voter identities are never exposed. */
+.comment__votes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  margin-right: 0.1rem;
+}
+
+.comment__vote {
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border-radius: 0.4rem;
+  color: var(--horizon-muted);
+}
+
+.comment__vote svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.comment__vote:hover:not(:disabled) {
+  background: var(--horizon-lavender);
+  color: var(--horizon-purple);
+}
+
+.comment__vote[data-direction='up'][data-active='true'] {
+  background: var(--horizon-lavender);
+  color: var(--horizon-purple);
+}
+
+.comment__vote[data-direction='up'][data-active='true'] svg {
+  fill: currentColor;
+}
+
+.comment__vote[data-direction='down'][data-active='true'] {
+  background: var(--horizon-danger-bg);
+  color: var(--horizon-danger-ink);
+}
+
+.comment__vote[data-direction='down'][data-active='true'] svg {
+  fill: currentColor;
+}
+
+.comment__score {
+  min-width: 1.4rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--horizon-purple-deep);
+}
+
+.comment__children {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0.1rem 0 0 1.25rem;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--horizon-line);
+}
+
+.comment__children[hidden] {
+  display: none;
+}
+
+/* Deeper replies keep a small offset after the visual cap so a reply never
+   appears to belong to the wrong parent, without compounding the indent. */
+.comment__children[data-capped='true'] {
+  margin-left: 0.3rem;
+  padding-left: 0.45rem;
+  border-left-width: 1px;
+}
+
+.comment[data-deep='true'] .comment__row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.comment[data-deep='true'] .comment__avatar {
+  display: none;
+}
+
+.comment__error {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  color: var(--horizon-danger-ink);
+}
+
+.comment__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.35rem 0 0.15rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--horizon-line);
+  border-radius: 0.5rem;
+  background: var(--horizon-danger-bg);
+}
+
+.comment__confirm p {
+  margin: 0;
+  flex: 1 1 13rem;
+  font-size: 0.8rem;
+  color: var(--horizon-danger-ink);
+}
+
+.comment__confirm-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+/* Official response ---------------------------------------------------- */
+
+.comment__response {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0.2rem;
+  padding: 0.35rem 0.55rem;
+  border-left: 3px solid var(--horizon-line-strong);
+  background: var(--horizon-lavender-soft);
+  border-radius: 0 0.4rem 0.4rem 0;
+}
+
+.comment__response-copy {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.comment__response-copy p {
+  margin: 0 0 0.15rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--horizon-purple-deep);
+}
+
+.comment__response-evidence a {
+  color: var(--horizon-purple);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.comment__response-meta {
+  font-size: 0.72rem;
+  color: var(--horizon-muted);
+}
+
+.comment__history {
+  margin: 0.35rem 0 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--horizon-muted);
+}
+
+.comment__history a {
+  color: var(--horizon-purple);
+}
+
+/* Reply composer ------------------------------------------------------- */
+
+.reply-composer {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0.2rem;
+  padding: 0.5rem;
+  border-radius: 0.55rem;
+  background: var(--horizon-lavender-soft);
+}
+
+.reply-composer__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--horizon-purple);
+}
+
+.reply-composer__input {
+  min-height: 4rem;
+  background: var(--horizon-white);
+  font-size: 0.88rem;
+}
+
+.reply-composer__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.reply-composer__count {
+  margin-right: auto;
+  font-size: 0.7rem;
+  color: var(--horizon-muted);
+}
+
+/* Overflow menu -------------------------------------------------------- */
+
+.comment__menu {
+  width: 13.5rem;
+  padding: 0.3rem;
+}
+
+.comment__menu-list {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.comment__menu-item {
+  width: 100%;
+  height: 2rem;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.comment__menu-item--danger {
+  color: var(--horizon-danger-ink);
+}
+
+/* Moderation / feedback form ------------------------------------------ */
+
+.response-form {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.4rem 0 0.25rem;
+  padding: 0.6rem;
+  border-radius: 0.55rem;
+  background: var(--horizon-lavender-soft);
+}
+
+.response-form__row {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.response-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+/* Mobile --------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .discussion-thread {
+    gap: 0.75rem;
+  }
+
+  .discussion-composer__toolbar {
+    align-items: flex-start;
+  }
+
+  .discussion-stance {
+    height: 1.7rem;
+    padding: 0 0.45rem;
+    font-size: 0.72rem;
+  }
+
+  .comment__row {
+    gap: 0.45rem;
+  }
+
+  .comment__children {
+    margin-left: 0.5rem;
+    padding-left: 0.5rem;
+  }
+
+  .comment__children[data-capped='true'] {
+    margin-left: 0.15rem;
+    padding-left: 0.3rem;
+  }
+
+  .comment__body p {
+    font-size: 0.9rem;
+  }
+
+  .comment__action {
+    height: 2rem;
+    padding: 0 0.35rem;
+  }
+
+  .reply-composer__footer {
+    justify-content: space-between;
+  }
+
+  .response-form__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 641px) {
+  .response-form__row {
+    grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}
