@@ -1,134 +1,77 @@
 # Engage copy review — issue #97
 
-Updated 15 November 2026. Source of truth: pushed branch and this document, not conversation history.
-
-## Resume here
+Updated 15 November 2026. Resume from the pushed repository and GitHub, not conversation history.
 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
-- Branch: `copy/97-editorial-review`, based on main `20dfa90`.
-- PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
-- Next task: batch 8, final API/form-error, legal/privacy, metadata and whole-site terminology sweep. Reconcile latest main and run final checks. Public Sense Box implementation is separately tracked in #101.
-- This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
+- Branch: `copy/97-editorial-review` (started from main `20dfa90`).
+- Single review PR: https://github.com/Fusion-Party-Aus/Engage/pull/98
+- Next concrete task: confirm batch 8 is remotely visible, integrate latest main if needed, run final checks and update PR/#97. Do not repeat completed journeys. Do not close #97 before final delivery is verified.
 
-## Recovery and scope
+## Editorial principles and decisions
 
-Recovered #97 with no comments, clean working tree and no editorial implementation branch found among fetched remote refs. No prior changes were assumed. Read `AGENTS.md`, canonical product, governance and agent docs, known gaps and decision register before editing.
+- Natural Australian English. Explain what people can do and why it matters; avoid SaaS promotion, artificial enthusiasm and descriptions of software internals.
+- Keep useful political terms: proposal, seconder, deliberation, amendment, ballot, ratification. Explain exact ballot wording in ordinary language; retain identifiers where officers need evidence.
+- Members decide policy. Officers certify procedure and record adoption/publication; these are separate acts, not discretionary policy vetoes. Do not promise unfinished automatic ratification or amendment-collision handling (D13–D20).
+- Use **Discussion**, not **Member discussion**, as the public section heading. Readership, contribution permissions, branch membership and ballot eligibility are separate facts.
+- Maintainer direction (D36): participation records should be publicly readable. **Sense Box becomes public after authorised review, never immediately on submission. Its visibility change is explicitly out of scope for this copy PR**; #101 owns implementation. Historical private-review promises must be respected.
+- Individual identifiable ballot choices and private account/security data remain restricted. Notices must mention national administrators and specifically authorised national identifiable-ballot access; branch administration/moderation alone does not grant it.
+- Do not rewrite imported policy wording, motions, historical events or commit history as interface copy. D33 defers legacy National Neon import; references to earlier policy do not prove adoption. Authorised branch imports are distinct from Engage ballots (D34/D35).
 
-Deliver one independently reviewable batch at a time. Inspect functionality, edit strings, check accuracy, validate, commit/publish, then update #97 and this document. Use this single PR; no unrelated refactoring, design changes or governance changes.
+## Coverage and delivery
 
-## Editorial decisions
+A touched page was not assumed reviewed in full until its journey batch below. All work is in PR #98; checkpoints also update generated changelog history.
 
-- Natural Australian English; invite people to contribute to political decisions. Explain actions and consequences rather than software architecture.
-- Retain legitimate terms: proposal, deliberation, amendment, seconder, ballot, ratification. Explain exact wording without hashes or revision IDs unless needed for evidence.
-- Members decide policy; officers certify procedure and publish. Do not imply an executive policy veto. Separate voting, certification, ratification and publication; do not promise unfinished automation.
-- Maintainer clarification (15 November): proposals, discussion, amendments, revisions and decision records should be publicly readable. Membership determines contribution and voting rights, not readership. Use **Discussion**, not **Member discussion**, as the section heading. Preserve individual ballot confidentiality (D26/D29) and personal account security.
-- **Implementation mismatch:** `canViewProposal` in `src/lib/store.ts` still restricts private and branch scopes; `getProposalDetail` additionally restricts archived records. Comments are returned after those gates, with no extra membership-only read gate on public proposals. Do not claim all records are already public or silently change permissions in this editorial PR. Historical #2 also requests member-only deliberation; this conflicts with the maintainer's new direction and must be reconciled in access-policy work.
-
-## Coverage / batches
-
-| Batch | Area | State |
+| Batch | Reviewed area | Delivery |
 |---|---|---|
-| 1 | Homepage introduction/lifecycle wording; discussion heading and cross-references; sign-in discussion intent | Delivered in `2d25398`; validated and published in PR #98 |
-| 2a | Remaining homepage copy, its metadata and shared proposal highlights | Delivered in `8558e05`; remote tree verified |
-| 2b | How-it-works guide, default metadata, shared layout/navigation/footer | Delivered in `17a0fac`; remote tree verified |
-| 3a | Proposal browsing and new-proposal forms, scope/change selectors | Delivered in `0a4a86f`; remote tree verified |
-| 3b | Proposal detail, seconding, comments, amendment and ballot interfaces | Delivered in `1f4ca17`; remote tree verified |
-| 4 | Public policy registry/detail, provenance/change notices, branch directory and Sense Box | Delivered in `7314b06`; remote tree verified |
-| 5a | Sign-in, My Engage shell/queues/activity and lifecycle guidance | Delivered in `515cf47`; validation checkpoint includes the label-assertion update |
-| 5b | Onboarding/settings, branch preferences, notification controls | Delivered in `9515e90`; remote tree verified |
-| 6 | Email templates/subjects, push/digest messages and unsubscribe flows | Delivered in `6a52a2a`; remote tree verified |
-| 7a | Admin dashboard, proposal registers/detail, ballots and policy ratification/publication | Delivered in `7308475`; remote tree verified |
-| 7b | Roles/members/branches/reports/settings/migrations/Sense Box/engagement admin | Delivered in `bd0f204`; remote tree verified |
-| 8 | API/form error responses shown to users, legal-copy consistency, metadata, empty/loading states and whole-site terminology sweep | Not reviewed |
+| 1 | Homepage introduction; discussion heading/cross-references; sign-in discussion intent | `2d25398` |
+| 2a | Remaining homepage/member queues, metadata, proposal highlights | `8558e05` |
+| 2b | Full how-it-works prose, shared header/footer/layout/default metadata | `17a0fac` |
+| 3a | Proposal browsing/search/filters/empty states; new-proposal form and scope/change selectors | `0a4a86f` |
+| 3b | Proposal detail, seconding, discussion, amendments, ballot widget and wording/source history | `1f4ca17` |
+| 4 | Public policy registry/detail, branch imports/change notices, branch directory and Sense Box | `7314b06` |
+| 5a | Sign-in, My Engage shell/activity/queues and lifecycle guidance | `515cf47` + assertion checkpoint `59c2745` |
+| 5b | Onboarding, profile/passkeys/sessions, branch membership/following and notification controls/bell | `9515e90` |
+| 6 | Six email renderers (subjects/HTML/plain text), sign-in/verification notices, push/digest messages, preferences/unsubscribe | `6a52a2a` |
+| 7a | Admin dashboard, proposal registers/detail, ballot certification and policy ratification/publication | `7308475` |
+| 7b | Roles/members/branches/reports/settings/migrations/Sense Box/engagement admin; shared operational components | `bd0f204` |
+| 8 | Final legal/privacy, API/form-error, metadata, error/changelog pages, shared-helper and terminology sweep | Validated; publishing checkpoint |
 
-A page touched in batch 1 has NOT been reviewed in full. Audit `src/pages`, `src/components`, email libraries, legal/config data and API errors in later batches; do not rewrite policy motion text or imported adopted wording as interface copy.
+No journey area remains unreviewed once batch 8 is verified remotely. Already-clear strings were retained, including standard primitive labels, auth messages, source/API references and actionable validation. Protocol field names and diagnostic identifiers remain where integrators/officers need them. Existing independent product/UX issues are not solved by copy changes.
 
-## Actual examples (batch 1)
+## Important changes and evidence
 
-| Before | After |
+| Before | After / correction |
 |---|---|
 | Member discussion | Discussion |
-| Eligible verified members vote on an immutable bound wording snapshot. | Eligible members vote on the exact wording shown on the ballot. |
-| Successful ballots proceed to formal party ratification and registry publication. | Members decide the policy. Officers certify the process and publish the adopted wording. |
-| Engage is where Fusion members propose ideas, deliberate on policy wording, and vote on bound revisions. Anyone can inspect every proposal, revision, and ballot tally publicly. | Bring an idea, help improve a policy, or vote on what Fusion should do next. You can read public proposals and discussions without an account. Verified members can contribute and vote where eligible. |
+| Vote on an immutable bound wording snapshot | Vote on the exact wording shown on the ballot |
+| Proposal scope | Who should consider this idea? |
+| Put idea on the record | Submit proposal |
+| Most approved | Highest approval share (ranking unchanged; Approve/Reject-only minimum made explicit) |
+| Inspect ballot | Read ballot |
+| Ballot success and ratification are separate decisions | Members decide policy; ratification records the adopted wording |
+| Prior approval / constitutional lineage headings | Sources/background, with uncertainty and adoption provenance kept distinct |
+| Guaranteed one-tap/setup/voting times | Practical actions without guessed completion times |
+| Pending votes will count after verification | Only if verified/eligible, still open and on matching ballot wording |
+
+Accuracy checked against `store.ts` (visibility, seconding, voting and pending-preference promotion), amendment routes, lifecycle scheduler, branch participation, policy import/change/registry, RBAC, notification/email preferences and the decision register. Undated email items no longer assume discussion. The pulse-poll flag is inert: guide and settings now say the poll is not available. Backup/handover text no longer promises instant transfer, encryption guarantees or that secrets are in Git.
+
+Legal drafts advance to version 1.2, still **owner-authorised/publication pending**, with unchanged effective-date placeholders and acceptance gate. Factual descriptions corrected for CRM/manual verification, implemented seconding/timing, delegated national identifiable-ballot access, vote changes and member authority. No new legal authority, privacy access or ballot control is implemented. Operator/registration/legal-framework assertions were retained; this was not an external legal review.
 
 ## Validation
 
-Batch 1: `pnpm install --frozen-lockfile`; `pnpm check` passes (324 files, zero errors/warnings, 23 existing hints); `pnpm build` passes; `git diff --check` passes; changed-page raw-control audit has no matches. Only text changed: no controls, CSS, permissions, data or governance behaviour. Changelog generated after editorial commit. No browser/mobile or live signed-in journey verification performed. No new tests for static text substitutions.
+- Latest full suite before final integration: **391 passed, 35 skipped, 426 total**; no failures. Skipped suites require optional persistence infrastructure. Focused batch suites also passed (policy/Sense Box 37; member shell/auth 27 + 3 skipped; preferences 15; email 40 + 1 skipped; governance admin 40; remaining admin 35).
+- `pnpm check`: 324 files, zero errors/warnings, 20 existing hints. Production build passes.
+- `pnpm docs:check-links`: 183 relative links in 80 files, zero broken. `git diff --check` passes.
+- Existing source assertions pinned to old accessible labels/CTA/legal wording were updated without removing behavioural checks. Legal acceptance tests confirm publication gating remains inactive for these drafts.
+- Raw-control audit: ordinary changed pages use primitives/hidden inputs. Deliberately retained existing Share button in ProposalBallot, standalone unsubscribe confirmation button and email HTML presentation tables; this copy PR preserves those interactions/email compatibility. Native confirmation/revocation/image/link prompts remain separate UX work.
+- No CSS/palette/design-system changes. No payload, permission, ranking/reporting formula, consent category, migration, delivery or governance-command changes. Closed-ballot header/caption now reflects the existing deadline check; SSR fallback deadline correctly labels Melbourne time before browser localisation.
+- Chromium launch attempted but blocked by environment socket permissions. No rendered/mobile/keyboard, live signed-in, real-inbox or production deployment verification is claimed.
+- Changelog generator still truncates history (#96). Regenerate after meaningful commits, then preserve prior real entries rather than silently deleting older history. Do not fabricate hashes or regenerate recursively for snapshot-only commits.
 
-## Outstanding questions
+## Remaining issues outside the editorial changes
 
-- All-public access direction needs an explicit migration/access-policy implementation, including previously restricted/archived records. Public Sense Box is explicitly confirmed by the maintainer (D36, #101). Current consent/API still promise private organiser review; preserve historical submissions and implement new public consent/listing separately. This PR does not expose them.
-- Reclaim and legacy national provenance are separate (D33); never imply legacy national policies are being re-ratified. The guide now explains that references alone do not establish adoption.
-- Review legal text carefully; do not silently change privacy promises or enable acceptance gates.
-- Production deployment has not been performed.
-
-## Batch 2a handover
-
-Homepage member queues now invite discussion, explain vote changes and avoid implying voting is compulsory. The membership warning no longer assumes every non-participating account is awaiting verification (the condition also includes suspended accounts). The stage summary introduces seconding and separates ratification/publication from the vote. Proposal highlights call individual choices “votes”, and label the approval statistic as a share rather than an adopted result. Data, ranking formula, controls, CSS and permissions are unchanged.
-
-Examples: “Open for stances” → “Join the discussion”; “Put an idea on the record” → “What would you like to change?”; “Most approved proposal” → “Highest approval share”.
-
-Evidence checked: `getProposalDetail`, `secondProposal`, `listOutstandingDecisions` in `src/lib/store.ts`; `proposalMetrics`/`rankProposals`; decision register D3, D11, D13–D20. Public discussion is readable only after proposal visibility/archive gates. Earlier product docs contain stale claims; use code and decision register.
-
-Validation: `pnpm check` passes, 324 files, zero errors/warnings, 23 existing hints. `pnpm build` passes. `git diff --check` and changed-file raw-control audit pass. No live signed-in/browser/mobile checks. Changelog regeneration exposed the known truncation in #96; preserve earlier entries when recording this batch rather than fixing the generator here.
-
-## Batch 2b handover
-
-Rewrote all guide prose and metadata, retained its existing sections, anchors, cards and CSS. Removed unsupported promises of instant transfer, atomic voting transactions and a working public poll. The pulse-poll flag is only stored/read in configuration: there is no poll interface or submission handler. Operating section now explains what must be protected and links the canonical guide instead of showing obsolete commands and secrets-transfer instructions. No environment/config values exposed. Footer copy and fallback metadata aligned; configured site copy remains administrator-controlled.
-
-Accuracy checked against `secondProposal`, proposal/amendment stage gates, lifecycle scheduler, decision register D3–D20/D33–D35, policy-import docs and build/deploy operations. Formal amendments currently require Propose/Deliberate; later-stage amendments remain separate implementation work. Normal timing is described as usual, actual proposal dates take precedence; no hardcoded first-round promise.
-
-Validation: `pnpm check` passes (0 errors/warnings, 20 hints), production build passes, diff whitespace and changed-markup raw-control audit pass. Browser launch was attempted but blocked by the environment’s socket permissions; no rendered/mobile/keyboard result is claimed. No CSS or controls changed. Shared header reviewed and retained. Default metadata in `site-config.ts` changed because it overrides the layout fallback. Existing persisted settings are not migrated.
-
-## Batch 3a handover
-
-Reviewed proposal list/search/filter/empty-state labels, submission form, selectors and inline submission errors. “Proposal scope” becomes “Who should consider this idea?”; optional details ask for background/evidence instead of design rationale. Replaced unverified submission speed claim with “New proposal”. The account warning no longer assumes every blocked account is pending verification. Voting is optional (“I haven’t voted yet”); list actions invite reading before voting. Approval share/split sorting labels reflect Approve/Reject-only minimums in `proposalMetrics`, not adoption. Repeal timing corrected against D35: ratification takes effect without a later publication step; amendments/replacements require publication. No form payload, constraints, links, gates or ranking changed.
-
-Validation: `pnpm check`, `pnpm build` and whitespace audit pass; raw-control matches are existing hidden form inputs only. No rendered/mobile check: Chromium unavailable due socket permissions as recorded above. Existing native image/link prompts are retained; replacing controls is outside this editorial slice. API error text and other journeys remain batch 8.
-
-## Batch 3b handover
-
-Reviewed proposal detail notices, stage guidance, comment/amendment copy, revision/provenance labels, participant prompts and ballot widget. Removed arbitrary completion-time promises and compulsory-voting phrasing. A saved pending choice is not a recorded vote: qualification now matches `promotePendingVotePreferences` (verified/eligible, same revision, still open). Display-only closed-ballot heading/caption now follows the existing deadline check instead of calling expired Decide ballots open. Pre-hydration deadline labels say Melbourne time; client-side local time remains unchanged. Policy-source headings no longer imply prior adoption. Ratification/publication and repeal text aligned with D35. Stance selector reviewed and retained; legal ballot privacy notice retained for batch 8.
-
-Validation: full `pnpm test` passes: 391 passed, 35 skipped (426 total); no real MongoDB configured for optional suites. First run found a source assertion pinned to the old accessible scope label; updated that assertion without weakening the selector/hidden-input checks. `pnpm check` passes (0 errors/warnings, 20 hints), production build and diff whitespace pass. No browser claim. Raw-control audit finds one pre-existing Share button in ProposalBallot; retained in this copy-only review to preserve interaction/design (no new raw control). Native confirmation prompts also retained. Exact revisions, vote payloads, permissions and governance operations unchanged.
-
-## Batch 4 handover
-
-Reviewed policy index, branch-policy route, shared registry/detail, branch directory and Sense Box (including success/error copy). Adoption explanations allow authorised branch imports, without pretending every record passed an Engage ballot. Branch-registry introduction no longer double-counts Engage-ratified records as executive-adopted policy. Proposed change notices retain the distinction between repeal at ratification and amendment/replacement at publication. Missing source proposal now means “not recorded”, not proof there was no proposal. No adopted policy wording/import data altered.
-
-Sense Box asks “Where does this apply?” because National is a valid destination. Removed guessed completion time. Private-submission/consent promises and authorised organiser gates retained; the public-default direction is now explicitly confirmed (D36, #101), with access implementation still pending. Public branch-directory counts are described as proposals, not ideas in a particular stage.
-
-Validation: typecheck and production build pass; focused policy-registry/change/import/Sense Box tests pass (37 passed, none skipped); diff whitespace and raw-control audit pass (hidden history input only). No browser/mobile claim; no controls/CSS changed. PolicyDetail status labels avoid claiming an Implement-stage proposal has necessarily passed or is only awaiting publication; actual decision record remains authoritative.
-
-## Batch 5a handover
-
-Sign-in and dashboard shell/queues/activity prose reviewed. Replaced speed claims with practical sign-in explanations, clarified membership/branch eligibility and optional email defaults. Public browsing wording respects current visibility limits. Queues describe votes cast rather than tasks completed; pending-choice language reflects eligibility, deadline and revision conditions. CatchUpDigest reviewed and retained; governance log description simplified. Dev-only sign-in remains explicitly labelled, and authentication handling/return destinations unchanged.
-
-Validation: `pnpm check`, production build, diff whitespace and raw-control audit pass (no matches). First focused run found an assertion pinned to the old membership-status link label. Updated it; rerun passed (27 passed, 3 optional suites skipped). No browser claim. Automatic membership-verification promises removed from public copy; no CRM or auth behaviour changed.
-
-## Batch 5b handover
-
-Reviewed MemberOnboarding, MemberSettings, BranchChooser/BranchMemberships and NotificationCenter; notification bell reviewed and retained. Removed guessed setup times and instant/one-tap promises. Branch-following actions now say follow rather than suggesting membership. Membership changes explicitly affect the next vote cast/updated, including open ballots (D2). Profile explanation distinguishes public contribution names from private ballot records. Notification controls use discussion/response language and avoid implying closed-browser delivery is guaranteed. Onboarding guide remains optional; no passkey/participation prerequisite introduced.
-
-Validation: `pnpm check` (0 errors/warnings, 20 hints), production build, diff whitespace and raw-control audit pass (existing hidden category input only). Focused branch membership/participation/member-notification tests: 15 passed, none skipped. No browser claim. Payloads, enrolment, consent and notification delivery unchanged.
-
-## Batch 6 handover
-
-Reviewed all six shared email renderers in HTML/plain text, sign-in/verification messages, test-digest substitution, push confidentiality fallback, delivery preference handlers and unsubscribe confirmation. Simplified eligible-ballot reminders and contribution responses; “Inspect ballot” becomes “Read ballot”. Undated re-engagement items no longer claim they are open for discussion (they may be ballots). Unsubscribe confirmation explains exactly which category changes; invalid link explains recovery. Existing rendering/escaping, destinations, consent categories and delivery logic preserved. Several email types are template capability only: do not claim event fan-out has been implemented (#33).
-
-Validation: focused template/lifecycle/member-notification/PWA/engagement suites: 40 passed, 1 skipped. Existing template assertions updated for new response/CTA wording. Source contract caught missing explicit notification-category wording in onboarding; restored the precise category names and unsubscribe statement, rerun passed. Typecheck/build and diff whitespace pass. Email HTML presentation tables and existing standalone unsubscribe button retained for email-client/confirmation compatibility; no new raw controls or CSS. No sent emails or live inbox rendering claimed.
-
-## Batch 7a handover
-
-Reviewed administration dashboard and proposal/ballot/policy registers/detail plus BallotOutcomeBasis. Revised authority and ratification explanations against D13–D20; administrative access is not unrestricted political authority or ballot eligibility. Retained exact wording references, event references, override reasons and consequential confirmations where officers need them. Changed “separate decisions” to separate recorded procedural steps. Registry copy recognises branch imports. Proposal editor labels/examples invite background/evidence rather than design specifications. No certification, binding, override, publication or archive behaviour changed.
-
-Validation: 40 focused ballot-outcome/governance-API/policy-change/classification tests passed, none skipped; typecheck (0 errors/warnings, 20 hints), build and whitespace pass. Raw-control matches are hidden inputs only. Browser limitation remains. Legacy binding controls and their safeguards are deliberately retained; do not infer that the copy authorises reinterpretation of recorded votes.
-
-## Batch 7b handover
-
-Reviewed remaining admin routes, RolesManager, BranchWork, PlatformSettings, AdminMigrations and reporting components. Retained already-clear operational/migration and scope explanations. Simplified membership-review, reports and participation follow-up wording. Corrected settings’ false promise that the inert pulse-poll flag displays a working poll, and removed a claim that documentation cannot drift. Backup/handover defaults no longer imply encryption/recovery guarantees or that secrets are version-controlled. Raw permission-key presentation/native revocation prompt remain existing UX work (#41/#59); this copy review does not redesign authority controls.
-
-Maintainer follow-up explicitly confirms publicly readable Sense Box, not only public intake. Recorded D36 and #101 with public-listing/consent/minimisation tests and protection of historical private submissions. Direction is settled; implementation remains separate from this copy PR. No private submissions exposed.
-
-Validation: 35 focused settings/branch-access/RBAC/admin-reporting/engagement tests passed, none skipped. Typecheck/build, whitespace and raw-control audits pass (hidden role inputs only). No browser claim. No role catalogue, permission checks, reporting formula, migration or feature-switch behaviour changed.
+- Public Sense Box after review: #101. Current form/consent/API remain private; do not falsely describe a shipped public listing or expose historical private entries.
+- Private/branch-scoped/archived proposal gates and unpublished policy records still restrict reads; D36 describes direction, not shipped access behaviour. Historical #2’s member-only deliberation requirement conflicts with the new direction.
+- Automatic ratification and competing-amendment rules remain incomplete (#27/#34); template capability is not completed notification fan-out (#33).
+- Existing raw permission-key UI/native prompts remain #41/#59. No account/authority redesign here.
+- Legal publication/effective dates and operational recovery/key-custody questions remain release-owner work (#40); acceptance was not enabled.

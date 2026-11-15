@@ -1888,7 +1888,7 @@ const initialsFor = (name: string) =>
           body: JSON.stringify({ proposalId, stance, body }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to post');
+        if (!res.ok) throw new Error(data.error || 'Could not post your contribution. Try again.');
         trackEngage('contribution_result', { action: 'deliberation', outcome: 'success' });
 
         const created = data.comment ?? {
@@ -2131,7 +2131,7 @@ const initialsFor = (name: string) =>
         const res = await fetch(`/api/comments?commentId=${encodeURIComponent(commentId ?? '')}`, {
           method: 'DELETE',
         });
-        if (!res.ok) throw new Error('Failed to delete');
+        if (!res.ok) throw new Error('Could not delete this contribution. Try again.');
         const card = document.querySelector(`[data-comment-id="${commentId}"]`);
         card?.remove();
       } catch {

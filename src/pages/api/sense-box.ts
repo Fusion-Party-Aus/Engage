@@ -22,7 +22,7 @@ async function handle(context: Parameters<APIRoute>[0]) {
     if (raw.length > 16000) throw new SenseError('Please shorten your submission.',413);
     let body;
     try { body = JSON.parse(raw); } catch { throw new SenseError('Could not read the form. Try again.'); }
-    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new SenseError('Invalid form.');
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new SenseError('Could not read the form. Reload it and try again.');
     if (request.method === 'PATCH') {
       const user = await getSessionUser(request,env);
       if (!user) throw new SenseError('Sign in required.',401);

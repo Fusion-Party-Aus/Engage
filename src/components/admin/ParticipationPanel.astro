@@ -169,7 +169,7 @@ const adminTimeline = buildActivityTimeline(adminTimelineEvents);
 <Card class="gap-0">
   <CardHeader class="border-b pb-4">
     <CardTitle class="text-base">Recent member participation</CardTitle>
-    <CardDescription>Verified votes, deliberation stances, and new proposals over the last 7 days.</CardDescription>
+    <CardDescription>Votes, comments and new proposals over the last 7 days.</CardDescription>
     <CardAction>
       <Button href="/admin/proposals/" variant="outline" size="sm">Proposals &amp; motions</Button>
     </CardAction>
@@ -182,7 +182,7 @@ const adminTimeline = buildActivityTimeline(adminTimelineEvents);
       </div>
       <div>
         <strong class="tabular">{commentActivities.length}</strong>
-        <span>Deliberation stances</span>
+        <span>Comments</span>
       </div>
       <div>
         <strong class="tabular">{firstParticipants.size}</strong>
