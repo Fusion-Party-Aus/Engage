@@ -1,21 +1,39 @@
 [
   {
-    "hash": "f65f00c",
+    "hash": "d62ddc8",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "status",
+    "summary": "Record register pagination and the tally-free list read",
+    "details": "Adds the before/after harness snapshots for `/admin/proposals/` (base `78c07c0`, after `c1f72c0`) and records what the register now reads and shows: one 25-row projected page, no `proposal_votes` access, certified tallies from `ballot_results`, and links instead of live counts for uncertified ballots. Records the trade-offs honestly: inline outcome recording moved to the workspace, \"Open amendments\" counts the whole register rather than the filtered subset, and search moved into MongoDB while still matching rationale. Updates I12/#52 without claiming the member-facing vote scans are done, and notes the small in-memory database fidelity improvements from this slice."
+  },
+  {
+    "hash": "c1f72c0",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Keep legacy register records keyed by policyId and status",
+    "details": "Legacy proposal documents store the identifier, stage and topic space under `policyId`, `status` and `category`. The register's narrow projection only asked for the current field names, so the shared normaliser would have seen an empty identifier and defaulted the stage to Deliberate. Project the alias fields too (still excluding rationale and ballot data), and match the stage filter against a stored `status` when a document has no `stage`. Adds a regression case for a legacy-shaped record: it keeps its identifier, its normalised stage, its space, and remains searchable by rationale without returning it. Refs #52."
+  },
+  {
+    "hash": "b12e812",
+    "date": "2026-11-15",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "admin",
+    "summary": "Paginate the proposal register and stop reading ballots",
+    "details": "The proposals register loaded every proposal, including its rationale, and decrypted every vote for the rows in Decide so it could show live tallies. It sent ~1 MB of HTML and did per-vote work on a list read. The register now reads a bounded page of 25 rows from MongoDB, ordered by proposal id, with search, stage and branch filters applied server-side and the viewer's branch scope preserved. Page links keep the active filters; changing a filter starts at page 1; invalid or out-of-range pages clamp. Pagination uses the existing Button primitive with previous/next, the current page and a status region announcing the visible range. `listProposalRegister` projects the register fields only (no `details` or `detailHtml`) and never touches `proposal_votes`, so no ballot is decrypted on a list read. For a certified ballot it shows the tally, computed result and rule basis stored on `ballot_results` at certification. An open ballot shows \"Open — view ballot\" instead of live counts, and a closed but uncertified ballot links to the workspace to record the outcome. The detail workspace keeps the live bound tally and the result form unchanged; recording from the list would require decrypting every vote. Editing, revising and creating still resolve their full record, including rationale, from any page, with the same scope and lock checks. Measured with `npm run perf:render` (78 synthetic proposals, 1200 votes, 3 runs, administrator): HTML 938,422 B → 283,915 B (−69.7%); document DB commands 19 → 16; document DB time 28.7 ms → 16.0 ms; TTFB 103.1 ms → 57.6 ms. A MongoDB profiler window shows the register request reads proposals, comments, ballot_results, ballots, amendments and revisions, and no `proposal_votes`. Refs #52."
+  },
+  {
+    "hash": "78c07c0",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
     "scope": "notifications",
-    "summary": "Wire ballot opened and closing soon through a durable outbox",
-    "details": "Add notification_outbox, written immediately after a committed lifecycle transition and drained by npm run notifications:drain (dry-run by default, --apply to send). Two events are wired: a ballot opened by the lifecycle scheduler (new_ballots) and an open ballot inside the approved seven-day window (closing_deadlines). The audience is the voting electorate. Candidates are confirmed with getProposalEligibility and canViewProposal, the same predicate and visibility gate used when casting a vote, and eligibility is checked again at drain time so a revoked membership is suppressed rather than notified. Rows carry one unique dedupeKey per member, ballot and event; the drain claims with a conditional lease, retries at 1/2/4/8 minutes and stops at five attempts. Terminal rows carry a two-year retention TTL. Enqueue and delivery can never fail, block or alter a governance transition, and the scheduler report is unchanged. governance_outcomes and contribution_responses stay unwired: the result route is being refactored and the comment-outcome event needs a product decision."
-  },
-  {
-    "hash": "681c18e",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "notifications",
-    "summary": "Write the delivery dedupe key the unique index requires",
-    "details": "The notification_deliveries unique index is on dedupeKey, but in-app and push delivery documents only set a composite _id. Every insert after the first therefore collided on a missing dedupeKey and was swallowed as a duplicate, so production could create at most one inbox item in total. Write the composite value to dedupeKey (and a push equivalent), keeping the existing _id dedupe contract and index shape unchanged."
+    "summary": "Durable outbox for ballot opened and closing soon (#33) (#102)",
+    "details": "* fix(notifications): write the delivery dedupe key the unique index requires The notification_deliveries unique index is on dedupeKey, but in-app and push delivery documents only set a composite _id. Every insert after the first therefore collided on a missing dedupeKey and was swallowed as a duplicate, so production could create at most one inbox item in total. Write the composite value to dedupeKey (and a push equivalent), keeping the existing _id dedupe contract and index shape unchanged. * feat(notifications): wire ballot opened and closing soon through a durable outbox Add notification_outbox, written immediately after a committed lifecycle transition and drained by npm run notifications:drain (dry-run by default, --apply to send). Two events are wired: a ballot opened by the lifecycle scheduler (new_ballots) and an open ballot inside the approved seven-day window (closing_deadlines). The audience is the voting electorate. Candidates are confirmed with getProposalEligibility and canViewProposal, the same predicate and visibility gate used when casting a vote, and eligibility is checked again at drain time so a revoked membership is suppressed rather than notified. Rows carry one unique dedupeKey per member, ballot and event; the drain claims with a conditional lease, retries at 1/2/4/8 minutes and stops at five attempts. Terminal rows carry a two-year retention TTL. Enqueue and delivery can never fail, block or alter a governance transition, and the scheduler report is unchanged. governance_outcomes and contribution_responses stay unwired: the result route is being refactored and the comment-outcome event needs a product decision. * chore(changelog): refresh snapshot for the notification outbox"
   },
   {
     "hash": "0aea7b5",
@@ -650,21 +668,5 @@
     "category": "feature",
     "scope": "ui",
     "summary": "Add route-aware page skeletons and navigation progress bar for instant transition feedback"
-  },
-  {
-    "hash": "99f0153",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "changelog",
-    "summary": "Add git-backed /changelog/ page and mandatory agent git rules"
-  },
-  {
-    "hash": "71a6351",
-    "date": "2026-11-09",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "server",
-    "summary": "Cache Better Auth and DB fallback, parallelize queries, and add hover link prefetching"
   }
 ]
