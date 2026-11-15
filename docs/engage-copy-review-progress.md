@@ -33,7 +33,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 2b | How-it-works guide, default metadata, shared layout/navigation/footer | Delivered in `17a0fac`; remote tree verified |
 | 3a | Proposal browsing and new-proposal forms, scope/change selectors | Delivered in `0a4a86f`; remote tree verified |
 | 3b | Proposal detail, seconding, comments, amendment and ballot interfaces | Delivered in `1f4ca17`; remote tree verified |
-| 4 | Public policy registry/detail, provenance/change notices, branch directory and Sense Box | Validated; publishing checkpoint |
+| 4 | Public policy registry/detail, provenance/change notices, branch directory and Sense Box | Delivered in `7314b06`; remote tree verified |
 | 5 | Onboarding, membership, My Engage, account, branch preferences, notifications | Not reviewed beyond discussion intent |
 | 6 | Emails, push, digests and unsubscribe flows | Not reviewed |
 | 7 | Administration, roles, membership, governance, moderation, integrations and operational errors | Not reviewed |
@@ -97,4 +97,4 @@ Reviewed policy index, branch-policy route, shared registry/detail, branch direc
 
 Sense Box asks “Where does this apply?” because National is a valid destination. Removed guessed completion time. Private-submission/consent promises and authorised organiser gates retained; their conflict with all-public direction is an explicit access-policy question. Public branch-directory counts are described as proposals, not ideas in a particular stage.
 
-Validation: typecheck and production build pass; focused policy-registry/change/import/Sense Box tests pass (see issue for counts); diff whitespace and raw-control audit pass (hidden history input only). No browser/mobile claim; no controls/CSS changed. PolicyDetail status labels avoid claiming an Implement-stage proposal has necessarily passed or is only awaiting publication; actual decision record remains authoritative.
+Validation: typecheck and production build pass; focused policy-registry/change/import/Sense Box tests pass (37 passed, none skipped); diff whitespace and raw-control audit pass (hidden history input only). No browser/mobile claim; no controls/CSS changed. PolicyDetail status labels avoid claiming an Implement-stage proposal has necessarily passed or is only awaiting publication; actual decision record remains authoritative.
