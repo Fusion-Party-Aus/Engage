@@ -4,7 +4,7 @@
 
 ## Surface map
 
-All routes are `prerender = false`. There is no `src/middleware.ts`; each route is responsible for authentication and authorisation.
+All routes are `prerender = false`. `src/middleware.ts` is a perimeter layer only: it applies security headers and refuses cross-origin or cookie-authenticated state-changing requests without a matching origin. It does **not** authenticate or authorise routes; each route remains responsible for its own checks.
 
 | Group | Routes | Purpose |
 |---|---|---|
@@ -70,13 +70,14 @@ Messages should tell a person what to do next. Do not leak stack traces, interna
 
 ### CSRF and origin
 
-Three layers exist:
+Four layers exist:
 
-1. Astro `security.checkOrigin: true` for form posts.
-2. Explicit `Origin` equality against the resolved public origin in selected handlers (settings, roles, test email, email preferences, member branches, notifications, Sense Box).
-3. Better Auth `trustedOrigins` limited to `BETTER_AUTH_URL`.
+1. Astro `security.checkOrigin: true` for form posts. It compares the `Origin` header with the request URL origin and refuses form-like cross-site submissions. `security.allowedDomains` trusts `engage.fusionparty.org.au` over HTTPS so a TLS-terminating proxy still compares against the public origin.
+2. `src/middleware.ts` covers every state-changing method (`POST`, `PUT`, `PATCH`, `DELETE`) on every route, including JSON APIs. It refuses `Sec-Fetch-Site: cross-site`, an `Origin` that differs from the resolved public origin, and an absent `Origin` when a session or dev cookie is present. Bearer cron jobs and provider webhooks carry no cookie and are allowed. Rejections are a plain 403 with no request data logged or echoed.
+3. Explicit `Origin` equality against the resolved public origin in selected handlers (settings, roles, test email, email preferences, member branches, notifications, Sense Box). These remain as defence in depth; the middleware does not replace them.
+4. Better Auth `trustedOrigins` limited to `BETTER_AUTH_URL`.
 
-Coverage is partial. Most JSON APIs rely on `SameSite=Lax` cookies. Do not add a state-changing endpoint without an origin or CSRF check.
+There are no per-request CSRF tokens; the design relies on Origin, `Sec-Fetch-Site` and `SameSite=Lax` cookies. See [security/perimeter.md](../security/perimeter.md) for the full rule, exemptions and residual risk.
 
 The abuse-prone unauthenticated routes (`POST /api/sense-box` and the Better Auth
 email routes) also require Cloudflare Turnstile and a shared rate-limit slot. See
@@ -231,3 +232,9 @@ Fix these by consolidating on the catalogue and service-level checks, with tests
 9. Map domain errors to a human-readable status.
 10. Add a test for the unauthorised, invalid, failure and success paths.
 11. Update this page and the capability matrix if behaviour changed.
+
+Every state-changing endpoint inherits the cross-site rule from
+`src/middleware.ts`. That is not permission to skip authorisation, and it does
+not provide CSRF tokens. If a route accepts a browser submission with a
+non-standard origin or authentication scheme, add an explicit Origin check and
+a test.

@@ -25,6 +25,7 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Add or change an API route | [architecture/api-and-authorisation.md](architecture/api-and-authorisation.md) |
 | Work on email, notifications or PWA | [architecture/notifications-and-jobs.md](architecture/notifications-and-jobs.md) |
 | Protect sign-in and public submissions | [security/turnstile.md](security/turnstile.md) |
+| Review headers, CSP and origin checks | [security/perimeter.md](security/perimeter.md) |
 | Build, test or deploy | [architecture/build-deploy-operations.md](architecture/build-deploy-operations.md) |
 | Migrate a database index | [ballot-results-index-migration.md](ballot-results-index-migration.md) |
 | Import an existing branch policy registry | [guides/branch-policy-import.md](guides/branch-policy-import.md) |
@@ -62,7 +63,8 @@ docs/
 ├── governance/
 │   └── decision-register.md          # Maintainer-approved governance rules
 ├── security/
-│   └── turnstile.md                  # Turnstile, abuse protection, rate limits
+│   ├── turnstile.md                  # Turnstile, abuse protection, rate limits
+│   └── perimeter.md                  # Headers, CSP and origin/CSRF rules
 ├── status/
 │   ├── capability-matrix.md          # Implemented / partial / planned
 │   ├── known-gaps.md                 # Defects, risks and open decisions

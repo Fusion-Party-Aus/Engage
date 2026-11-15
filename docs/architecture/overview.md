@@ -17,7 +17,7 @@
 | Package manager | pnpm 10.28 |
 | Tests | `node --test --experimental-strip-types`; Playwright journeys in CI |
 
-There is no ORM, no schema validation library, no job queue, no middleware layer and no separate backend service. The application is one Node process serving SSR pages and API routes.
+There is no ORM, no schema validation library, no job queue, no route-guard middleware and no separate backend service. `src/middleware.ts` applies perimeter headers and the cross-site request rule only; it does not authenticate or authorise routes. The application is one Node process serving SSR pages and API routes.
 
 ## Runtime shape
 
@@ -101,7 +101,7 @@ These are real and should be considered before adding code:
 2. **`store.ts` is a god module.** It spans proposals, deliberation, ballots, members and RBAC checks, and is imported by email, PDF, reporting and membership-verification services. A change to proposal internals can affect unrelated send paths.
 3. **Service-to-infrastructure inversion.** `engagement-email.ts` imports `store.ts` for `listMembers` / `listProposals`. Digest sending is therefore sensitive to any store change.
 4. **Auth cycle break by dynamic import.** `branch-participation.ts` imports `canAdministerBranch` from `auth.ts`; `auth.ts` lazily imports branch participation. `store.ts` also lazily imports eligibility. There is no static cycle today, but it depends on these dynamic imports remaining lazy.
-5. **No route guard layer.** There is no `src/middleware.ts`, so every route authenticates and authorises itself. Some routes use `requireApiPermission`; many hand-roll `isAdmin` / `isStaff` checks. A new endpoint inherits nothing by default.
+5. **No route guard layer.** `src/middleware.ts` is a perimeter layer, not a guard: it sets headers and refuses cross-origin state-changing requests, but every route still authenticates and authorises itself. Some routes use `requireApiPermission`; many hand-roll `isAdmin` / `isStaff` checks. A new endpoint inherits nothing by default except the perimeter rule.
 6. **In-memory database fidelity.** The development fallback implements a subset of the driver. `project()` and `createIndex()` are no-ops and there are no transactions. Tests that depend on projections, unique indexes or transactions are meaningful only against real MongoDB.
 
 ## Request lifecycle
@@ -160,9 +160,9 @@ Handlers return `{ error: string }` with a status. Typed domain errors (`BallotB
 
 ### Security posture
 
-Implemented: Better Auth rate limiting, Origin checks on selected state-changing routes, Astro `checkOrigin` for form posts, DTO minimisation, partial unique vote indexes, ballot encryption option, secret-redacting operational logs, signed email webhooks and one-click unsubscribe.
+Implemented: the perimeter header set and conditional HSTS (`src/middleware.ts`), a hash-based Content Security Policy with `challenges.cloudflare.com` and the first-party Plausible host allowed (`astro.config.mjs`), Astro `checkOrigin` plus a middleware rule for every state-changing method, Origin checks on selected routes, Better Auth rate limiting, DTO minimisation, partial unique vote indexes, ballot encryption option, secret-redacting operational logs, signed email webhooks and one-click unsubscribe. See [security/perimeter.md](../security/perimeter.md).
 
-Not implemented: a Content Security Policy, HSTS, `X-Frame-Options`, `X-Content-Type-Options`, general API rate limiting, CSRF tokens on every route, and a central route guard. Any perimeter headers must come from the reverse proxy or tunnel; they are not in this repository.
+Not implemented: general API rate limiting, per-request CSRF tokens, a violation reporting endpoint, and a central route guard. Static assets are served by the Node adapter before middleware, so proxy headers are still required for complete coverage.
 
 ### Observability
 
