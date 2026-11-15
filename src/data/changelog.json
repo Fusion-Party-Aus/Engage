@@ -1,15 +1,6 @@
 [
   {
-    "hash": "04d1156",
-    "date": "2026-11-16",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "profiles",
-    "summary": "Rename comment karma to comment score",
-    "details": "Use the accurate product term for the sum of net scores on visible comments, and remove the always-visible explanatory note. Rename the internal field and function so the old term cannot return through future UI work. Refs #113"
-  },
-  {
-    "hash": "8182a79",
+    "hash": "8a36c4a",
     "date": "2026-11-16",
     "type": "test",
     "category": "ops",
@@ -18,16 +9,7 @@
     "details": "Assert that the action selector announces the choice, the page updates the title and question from the chosen action, repeal hides commitments, and the form inherits the policy topic while showing existing change proposals. Refs #114"
   },
   {
-    "hash": "1d70ff0",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record policy change proposal UX",
-    "details": "Refresh the public snapshot for the action-led policy-change form. Preserve the older entries outside the generator's 80-commit window so the public history is not shortened. Refs #114"
-  },
-  {
-    "hash": "ef19ab0",
+    "hash": "3358ff3",
     "date": "2026-11-16",
     "type": "feat",
     "category": "feature",
@@ -36,16 +18,16 @@
     "details": "The policy-change form now treats amend, replace and repeal as distinct member tasks. The selected action drives the page heading, default title, primary question, effect timing and visible fields. Repeal asks for a rationale and hides commitments; an amendment can name the part to change; a replacement can carry proposed wording. Policy changes inherit the published policy's topic and governance context, so members no longer re-enter a topic or scope. Open change proposals for the same policy are shown before the form so members can join the discussion. The action-specific fields are stored with the proposal, included in the revision snapshot and locked once voting begins. Fixes the stale Amend title when Repeal is selected. Refs #114, #97"
   },
   {
-    "hash": "22f0373",
+    "hash": "34ec685",
     "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record public member profiles",
-    "details": "Refresh the public changelog for the profile read model, author links, tests including the MongoDB aggregation check, and documentation. Keep the generator's older entries that fall outside its 80-commit window so the public history is not shortened. Refs #113"
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "profiles",
+    "summary": "Rename comment karma to comment score",
+    "details": "Use the accurate product term for the sum of net scores on visible comments, and remove the always-visible explanatory note. Rename the internal field and function so the old term cannot return through future UI work. Refs #113"
   },
   {
-    "hash": "4248e94",
+    "hash": "29f328e",
     "date": "2026-11-16",
     "type": "test",
     "category": "ops",
@@ -54,7 +36,7 @@
     "details": "Exercise the profile read model against MongoDB so the database-side karma sum is verified, not only the in-memory fallback. The suite skips when VOTING_TEST_MONGODB_URI is not configured and uses a unique database name. Refs #113"
   },
   {
-    "hash": "402a1da",
+    "hash": "1135e41",
     "date": "2026-11-16",
     "type": "docs",
     "category": "docs",
@@ -63,7 +45,7 @@
     "details": "Record the profile read model, owner biography field, viewer-relative filtering, profile indexes, biography route, browser harness, capability rows and the remaining privacy limits. Explicitly state that karma never affects eligibility, permissions or proposal authority. Refs #113"
   },
   {
-    "hash": "2ffe4ee",
+    "hash": "3e367bd",
     "date": "2026-11-16",
     "type": "test",
     "category": "ops",
@@ -72,7 +54,7 @@
     "details": "Add in-memory read-model tests for private, branch and archived visibility, deleted comments, withdrawn amendments, legacy policyId comments, karma, deterministic pagination, disabled accounts, historic authors and owner-only biography writes. Add route checks for session and origin enforcement. Add a Chromium harness that follows an author link from a discussion, checks profile tabs and statistics, follows a comment deep link, verifies empty tabs and the 404 page on desktop and mobile, and wire it into CI after the production build. Refs #113"
   },
   {
-    "hash": "2958b1d",
+    "hash": "d9dcb26",
     "date": "2026-11-16",
     "type": "feat",
     "category": "feature",
@@ -81,7 +63,7 @@
     "details": "Comment names and avatars, the proposal author and amendment authors now link to the public profile when a member id establishes authorship. Disabled accounts render as plain text and truncated historic records without a displayable name are not linked, so the interface never invents an author or offers a dead profile link. Top support and concern takeaways use the same link, and the proposal activity timeline targets the exact amendment anchor. Refs #113"
   },
   {
-    "hash": "459bbf7",
+    "hash": "934b666",
     "date": "2026-11-16",
     "type": "feat",
     "category": "feature",
@@ -90,12 +72,13 @@
     "details": "Build a viewer-relative profile read model over existing accounts, comments, proposals, amendments and branch memberships. Profile pages show an initials avatar, optional biography, geographic affiliation, contribution statistics and display-only comment karma, with paginated Comments, Proposals and Amendments tabs and deep links to the exact discussion anchor. Deleted comments, withdrawn amendments and proposals the viewer cannot open are excluded from history, counts and karma. Owners edit a plain-text biography through an origin-checked member route; no separate profile or contribution collection is introduced. Adds profile lookup indexes for comments and amendments. Refs #113"
   },
   {
-    "hash": "ca28f84",
+    "hash": "9235057",
     "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
+    "type": "feat",
+    "category": "feature",
     "scope": "discussion",
-    "summary": "Guard tombstoned comments, empty menus, and vote actions"
+    "summary": "Thread comments with Reddit-style voting and Best ranking (#110)",
+    "details": "* feat(discussion): render threaded replies with confidence-weighted voting Proposal discussion now stores parentCommentId and depth, renders one recursive comment component instead of a flat list, and keeps replies inside their parent's subtree when sorting. Deleting a comment that still has replies clears the body and keeps a placeholder so the thread does not lose context. Comments take upvotes and downvotes with one active vote per member. Responses return aggregate score, counts and percentage plus the caller's own choice; voter identities are never serialised. The default Best sort applies a Wilson score lower bound to every sibling group, with Top score, Newest and Oldest as alternatives and deterministic tie-breaking. Refs #57. * chore(ci): verify threaded discussion in a real browser Runs the isolated Playwright harness after the perimeter check. It proves parent-first nesting, sibling sorting, deep mobile layout, reply/delete interactions and that the comment API returns aggregate signal only. Refs #57. * docs(discussion): document threading, comment votes and Best ranking Updates the canonical model, API contract, capability matrix and known gaps. Records that comment votes are display ranking only, that voter identities are never returned, and the residual risks around rate limiting, audit and exact aggregate downvote counts. Refs #57. * chore(changelog): record threaded discussion and comment voting Refreshes the public snapshot after the discussion feature, CI verification and documentation commits. The generator's existing 80-commit window still drops older entries (#96); no history was edited by hand. Refs #57. * fix(discussion): make comment vote writes atomic under concurrency Adds a voteVersion compare-and-swap to comment vote updates. A concurrent vote bumps the version, so a stale write is retried against the latest state rather than overwriting it. Covers 25 simultaneous voters and same-member double clicks against both the in-memory database and a real MongoDB replica set. Refs #57. * chore(changelog): record atomic comment vote updates Refs #57. * fix(activity): show the comment's net score, not upvotes alone Member activity previously labelled a contribution with its upvote count, which is misleading now that comments can be downvoted. Show the net score as points, consistent with the discussion thread, and keep vote identities out of the feed. Refs #57. * chore(changelog): record the activity score fix Refs #57. * chore(changelog): regenerate after merging main * fix(discussion): guard tombstoned comments, empty menus, and vote actions"
   },
   {
     "hash": "57402f0",
@@ -105,86 +88,6 @@
     "scope": "header",
     "summary": "Replace the notification React island with a native disclosure (#52) (#111)",
     "details": "* perf(header): replace the notification React island with a native disclosure The signed-in header fetched unread notifications from a React island hydrated with client:idle, which shipped the React runtime (~330 KB) on every signed-in page for one small bell. The bell is now a native <details>/<summary> disclosure backed by a small vanilla module. It reads the same read-only inbox endpoint without caching, only after idle or first open, and renders the latest five notifications. Escape closes it and restores summary focus, outside clicks close it, and only one header panel stays open. Without JavaScript the summary's anchor still opens the notification centre. Marking notifications as read remains in the member notification centre. Refs #52 * fix(header): match the notification panel to the established header shadow * docs(perf): record the React-free header measurements and remaining #52 scope The audit now reports the signed-in header before/after harness snapshots, the pages that no longer ship React, the unchanged database command counts and the inline-script trade-off on anonymous pages. The tracker's I12 line records the header slice as done while leaving the tally read model and member-list pagination as the remaining #52 work. Refs #52 * chore(changelog): refresh the snapshot for the header performance work * fix(header): keep a retry from issuing duplicate inbox reads * chore(changelog): refresh the snapshot for the header retry guard * chore(changelog): record the header performance work after merging main"
-  },
-  {
-    "hash": "b9c3c7e",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Regenerate after merging main"
-  },
-  {
-    "hash": "6d93797",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the activity score fix",
-    "details": "Refs #57."
-  },
-  {
-    "hash": "f4d94d0",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "activity",
-    "summary": "Show the comment's net score, not upvotes alone",
-    "details": "Member activity previously labelled a contribution with its upvote count, which is misleading now that comments can be downvoted. Show the net score as points, consistent with the discussion thread, and keep vote identities out of the feed. Refs #57."
-  },
-  {
-    "hash": "6602f6e",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record atomic comment vote updates",
-    "details": "Refs #57."
-  },
-  {
-    "hash": "49a4562",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "discussion",
-    "summary": "Make comment vote writes atomic under concurrency",
-    "details": "Adds a voteVersion compare-and-swap to comment vote updates. A concurrent vote bumps the version, so a stale write is retried against the latest state rather than overwriting it. Covers 25 simultaneous voters and same-member double clicks against both the in-memory database and a real MongoDB replica set. Refs #57."
-  },
-  {
-    "hash": "9fa8fb0",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record threaded discussion and comment voting",
-    "details": "Refreshes the public snapshot after the discussion feature, CI verification and documentation commits. The generator's existing 80-commit window still drops older entries (#96); no history was edited by hand. Refs #57."
-  },
-  {
-    "hash": "be9e23c",
-    "date": "2026-11-16",
-    "type": "docs",
-    "category": "docs",
-    "scope": "discussion",
-    "summary": "Document threading, comment votes and Best ranking",
-    "details": "Updates the canonical model, API contract, capability matrix and known gaps. Records that comment votes are display ranking only, that voter identities are never returned, and the residual risks around rate limiting, audit and exact aggregate downvote counts. Refs #57."
-  },
-  {
-    "hash": "0ba7114",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "ci",
-    "summary": "Verify threaded discussion in a real browser",
-    "details": "Runs the isolated Playwright harness after the perimeter check. It proves parent-first nesting, sibling sorting, deep mobile layout, reply/delete interactions and that the comment API returns aggregate signal only. Refs #57."
-  },
-  {
-    "hash": "29f04b3",
-    "date": "2026-11-16",
-    "type": "feat",
-    "category": "feature",
-    "scope": "discussion",
-    "summary": "Render threaded replies with confidence-weighted voting",
-    "details": "Proposal discussion now stores parentCommentId and depth, renders one recursive comment component instead of a flat list, and keeps replies inside their parent's subtree when sorting. Deleting a comment that still has replies clears the body and keeps a placeholder so the thread does not lose context. Comments take upvotes and downvotes with one active vote per member. Responses return aggregate score, counts and percentage plus the caller's own choice; voter identities are never serialised. The default Best sort applies a Wilson score lower bound to every sibling group, with Top score, Newest and Oldest as alternatives and deterministic tie-breaking. Refs #57."
   },
   {
     "hash": "29c794d",
@@ -777,5 +680,93 @@
     "scope": "notifications",
     "summary": "Separate email preferences and explain rollout defaults",
     "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
+  },
+  {
+    "hash": "ca28f84",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discussion",
+    "summary": "Guard tombstoned comments, empty menus, and vote actions"
+  },
+  {
+    "hash": "b9c3c7e",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Regenerate after merging main"
+  },
+  {
+    "hash": "6d93797",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the activity score fix",
+    "details": "Refs #57."
+  },
+  {
+    "hash": "f4d94d0",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "activity",
+    "summary": "Show the comment's net score, not upvotes alone",
+    "details": "Member activity previously labelled a contribution with its upvote count, which is misleading now that comments can be downvoted. Show the net score as points, consistent with the discussion thread, and keep vote identities out of the feed. Refs #57."
+  },
+  {
+    "hash": "6602f6e",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record atomic comment vote updates",
+    "details": "Refs #57."
+  },
+  {
+    "hash": "49a4562",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discussion",
+    "summary": "Make comment vote writes atomic under concurrency",
+    "details": "Adds a voteVersion compare-and-swap to comment vote updates. A concurrent vote bumps the version, so a stale write is retried against the latest state rather than overwriting it. Covers 25 simultaneous voters and same-member double clicks against both the in-memory database and a real MongoDB replica set. Refs #57."
+  },
+  {
+    "hash": "9fa8fb0",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record threaded discussion and comment voting",
+    "details": "Refreshes the public snapshot after the discussion feature, CI verification and documentation commits. The generator's existing 80-commit window still drops older entries (#96); no history was edited by hand. Refs #57."
+  },
+  {
+    "hash": "be9e23c",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "discussion",
+    "summary": "Document threading, comment votes and Best ranking",
+    "details": "Updates the canonical model, API contract, capability matrix and known gaps. Records that comment votes are display ranking only, that voter identities are never returned, and the residual risks around rate limiting, audit and exact aggregate downvote counts. Refs #57."
+  },
+  {
+    "hash": "0ba7114",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "ci",
+    "summary": "Verify threaded discussion in a real browser",
+    "details": "Runs the isolated Playwright harness after the perimeter check. It proves parent-first nesting, sibling sorting, deep mobile layout, reply/delete interactions and that the comment API returns aggregate signal only. Refs #57."
+  },
+  {
+    "hash": "29f04b3",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discussion",
+    "summary": "Render threaded replies with confidence-weighted voting",
+    "details": "Proposal discussion now stores parentCommentId and depth, renders one recursive comment component instead of a flat list, and keeps replies inside their parent's subtree when sorting. Deleting a comment that still has replies clears the body and keeps a placeholder so the thread does not lose context. Comments take upvotes and downvotes with one active vote per member. Responses return aggregate score, counts and percentage plus the caller's own choice; voter identities are never serialised. The default Best sort applies a Wilson score lower bound to every sibling group, with Top score, Newest and Oldest as alternatives and deterministic tie-breaking. Refs #57."
   }
 ]
