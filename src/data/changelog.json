@@ -1,5 +1,21 @@
 [
   {
+    "hash": "0a4a86f",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "copy",
+    "summary": "Make proposal discovery and submission clearer (#97)"
+  },
+  {
+    "hash": "a4376ac",
+    "date": "2026-11-15",
+    "type": "docs",
+    "category": "docs",
+    "scope": "copy",
+    "summary": "Record guide delivery and preserve changelog history (#97)"
+  },
+  {
     "hash": "17a0fac",
     "date": "2026-11-15",
     "type": "fix",
