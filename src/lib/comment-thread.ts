@@ -68,6 +68,8 @@ export interface DiscussionFeedbackEntry {
 /** Serialisable comment shape passed from the proposal page to the island. */
 export interface DiscussionComment extends ThreadComment {
   authorName: string;
+  /** Public profile path when the author's account can be established. */
+  authorProfileHref?: string | null;
   body: string;
   score: number;
   upvotedByMe: boolean;
