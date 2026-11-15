@@ -185,10 +185,10 @@ export default function ProposalBallot({
               <Badge variant="secondary">Recorded: {choiceLabel(savedChoice)}</Badge>
             ) : savedPendingChoice ? (
               <Badge variant="warning">
-                Queued: {choiceLabel(savedPendingChoice)} (Pending verification)
+                Saved choice: {choiceLabel(savedPendingChoice)} (awaiting verification)
               </Badge>
             ) : canVote ? (
-              <Badge variant="warning">Unrecorded · ~30 sec</Badge>
+              <Badge variant="warning">You haven’t voted yet</Badge>
             ) : isPendingMember ? (
               <Badge variant="outline">Verification pending</Badge>
             ) : (
@@ -218,7 +218,7 @@ export default function ProposalBallot({
                 >
                   {clientNow
                     ? formatLocalDeadline(ballotClosesAt)
-                    : `${ballotDeadlineDateLabel(ballotClosesAt)} (your local time)`}
+                    : `${ballotDeadlineDateLabel(ballotClosesAt)} (Melbourne time)`}
                 </time>
               </div>
             </div>
@@ -293,7 +293,7 @@ export default function ProposalBallot({
                       Sign in to save your &ldquo;{choiceLabel(selected)}&rdquo; vote
                     </strong>
                     <p className="m-0 text-xs leading-relaxed text-[var(--horizon-muted)]">
-                      Verified membership is required. If verification is pending, your choice is saved until it can be recorded.
+                      Verified membership and ballot eligibility are required. A saved choice does not count as a vote while verification is pending.
                     </p>
                   </div>
                 </div>
@@ -346,9 +346,9 @@ export default function ProposalBallot({
                     </>
                   ) : isPendingMember && !canVote ? (
                     savedPendingChoice ? (
-                      'Update queued vote'
+                      'Update saved choice'
                     ) : (
-                      'Save vote pending verification'
+                      'Save choice pending verification'
                     )
                   ) : savedChoice ? (
                     'Update vote'
@@ -359,7 +359,7 @@ export default function ProposalBallot({
                 {!canVote && !isPendingMember && (
                   <p className="m-0 text-sm text-muted-foreground">
                     {ineligibleReason ||
-                      'You can read this ballot but are not eligible to vote in this branch electorate.'}
+                      'You can read this ballot but are not eligible to vote in it.'}
                   </p>
                 )}
               </div>
@@ -419,7 +419,7 @@ export default function ProposalBallot({
                 </span>
               </p>
               <p className="m-0 text-xs leading-relaxed text-[var(--horizon-muted)]">
-                Your vote will be recorded when your membership is verified, provided voting is still open.
+                Your saved choice can count after verification only if you are eligible, voting is still open and the ballot wording still matches.
               </p>
             </div>
           ) : (
@@ -436,10 +436,10 @@ export default function ProposalBallot({
                 {savedChoice ? 'Read next proposal' : 'Skip for now'}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </a>
-              <span className="text-sm text-muted-foreground">{nextBallot.remainingCount + (savedChoice ? 0 : 1)} need your vote · Next: {nextBallot.title}</span>
+              <span className="text-sm text-muted-foreground">{nextBallot.remainingCount + (savedChoice ? 0 : 1)} you haven’t voted on · Next: {nextBallot.title}</span>
             </>
           ) : (
-            <p className="m-0 text-sm">{savedChoice ? "You're up to date" : 'This is your last outstanding ballot.'}</p>
+            <p className="m-0 text-sm">{savedChoice ? "You're up to date" : 'This is the last open ballot you are eligible for and haven’t voted on.'}</p>
           )}
           <a href="/proposals/?stage=decide&focus=all" className="text-sm underline underline-offset-4">All active ballots</a>
         </nav>
@@ -455,9 +455,9 @@ export default function ProposalBallot({
       )}
       <Separator />
 
-      <section aria-label="Ballot results" className="flex flex-col gap-2">
+      <section aria-label="Ballot totals" className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-2">
-          <h4 className="m-0 text-sm font-semibold">Results</h4>
+          <h4 className="m-0 text-sm font-semibold">Vote totals</h4>
           {tally.total > 0 && (
             <span className="text-xs text-muted-foreground tabular-nums">
               {tally.total} verified {tally.total === 1 ? 'vote' : 'votes'}
