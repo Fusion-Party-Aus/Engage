@@ -21,6 +21,18 @@ export function branchSlugFor(branchId: string | null | undefined): string | nul
   return String(branchId).replace(/^branch-/, "").toLowerCase() || null;
 }
 
+/**
+ * The public slug for a branch record. A branch may predate the standard
+ * identifier scheme (production's Victorian branch has a UUID), so the record
+ * carries an explicit slug. Fall back to the identifier suffix.
+ */
+export function branchPublicSlug(branch: Record<string, any> | null | undefined): string | null {
+  if (!branch) return null;
+  const explicit = typeof branch.slug === "string" ? branch.slug.trim().toLowerCase() : "";
+  if (explicit) return explicit;
+  return branchSlugFor(branch.branchId);
+}
+
 export function policyCanonicalPath(
   policy: Record<string, any> | { policyId?: unknown; branchSlug?: unknown; policySlug?: unknown },
 ): string {
@@ -207,7 +219,7 @@ export function groupRegistryByBranch(
       const branchSlug =
         typeof items[0]?.branchSlug === "string" && items[0].branchSlug
           ? String(items[0].branchSlug)
-          : branchSlugFor(branchId);
+          : branchPublicSlug(branch);
       return {
         key: branchId,
         label: branch ? String(branch.name) : "Branch not recorded",
@@ -281,7 +293,7 @@ export async function findBranchBySlug(
     .find({ recognised: true })
     .toArray();
   return (
-    branches.find((branch: any) => branchSlugFor(branch.branchId) === branchSlug) ??
+    branches.find((branch: any) => branchPublicSlug(branch) === branchSlug) ??
     null
   );
 }

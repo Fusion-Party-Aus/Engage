@@ -31,6 +31,8 @@ export type MigrationId =
 
 export interface StandardBranchDefinition {
   branchId: string;
+  /** Stable public slug used in policy addresses. */
+  slug: string;
   name: string;
   kind: "national" | "state" | "territory";
   parentBranchId: string | null;
@@ -51,6 +53,7 @@ export const STANDARD_BRANCHES: StandardBranchDefinition[] = DEFAULT_STATE_SITES
     const territory = site.code === "ACT" || site.code === "NT";
     return {
       branchId: `branch-${site.code.toLowerCase()}`,
+      slug: site.code.toLowerCase(),
       name: standardBranchName(site.code, site.name),
       kind: national ? "national" : territory ? "territory" : "state",
       parentBranchId: national ? null : NATIONAL_BRANCH_ID,
@@ -104,13 +107,27 @@ export async function seedStandardBranches(db: Db): Promise<{
   const matches=new Map(STANDARD_BRANCHES.map(branch=>[branch.branchId,matchingStandardBranch(rows,branch)]));
   const nationalId=String(matches.get("branch-nat")?.branchId ?? "branch-nat");
   for (const branch of STANDARD_BRANCHES) {
-    if(matches.get(branch.branchId)) { existing++; continue; }
+    const matched = matches.get(branch.branchId);
+    if (matched) {
+      // Backfill the public slug on a branch that predates the field without
+      // renaming, re-parenting or re-recognising it.
+      if (!matched.slug)
+        await db
+          .collection("branches")
+          .updateOne(
+            { branchId: matched.branchId },
+            { $set: { slug: branch.slug } },
+          );
+      existing++;
+      continue;
+    }
     try {
       const result = await db.collection("branches").updateOne(
         { branchId: branch.branchId },
         {
           $setOnInsert: {
             branchId: branch.branchId,
+            slug: branch.slug,
             name: branch.name,
             kind: branch.kind,
             ...(branch.parentBranchId

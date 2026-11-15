@@ -1,11 +1,12 @@
 [
   {
-    "hash": "ead59ab",
+    "hash": "7e3d243",
     "date": "2026-11-15",
     "type": "docs",
     "category": "docs",
     "scope": "status",
-    "summary": "Record merged outcome validation and replica-set governance coverage"
+    "summary": "Record merged outcome validation and replica-set coverage (#92)",
+    "details": "* docs(status): record merged outcome validation and replica-set governance coverage * chore(changelog): refresh the snapshot after the phase 1 merges"
   },
   {
     "hash": "10146b9",

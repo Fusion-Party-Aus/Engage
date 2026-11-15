@@ -2,7 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryDb } from "./db.ts";
 import {
+  branchPublicSlug,
   branchSlugFor,
+  findBranchBySlug,
   findPolicyByBranchPath,
   groupRegistryByBranch,
   groupRegistryPolicies,
@@ -39,6 +41,12 @@ describe("policy registry routing", () => {
   it("addresses branch policy as /policies/<branch>/<slug>/", () => {
     assert.equal(branchSlugFor("branch-vic"), "vic");
     assert.equal(branchSlugFor("branch-nat"), "nat");
+    assert.equal(
+      branchPublicSlug({ branchId: "f6d3c0b9-legacy", slug: "vic" }),
+      "vic",
+      "a legacy branch record can hold the stable public slug",
+    );
+    assert.equal(branchPublicSlug({ branchId: "branch-nsw" }), "nsw");
     assert.equal(policyCanonicalPath(policy({})), "/policies/vic/open-government/");
     assert.equal(
       policyCanonicalPath({ policyId: "PROP-001-AB12" }),
@@ -77,6 +85,20 @@ describe("policy registry routing", () => {
     const legacy = await findPolicyByBranchPath(db, "vic", "legacy-only");
     assert.equal(legacy?.policyId, "vic-legacy-only");
     assert.equal(await findPolicyByBranchPath(db, "vic", "absent"), null);
+  });
+
+  it("resolves a branch by its explicit slug even when its ID is legacy", async () => {
+    const db = createMemoryDb();
+    await db.collection("branches").insertOne({
+      branchId: "f6d3c0b9-legacy",
+      slug: "vic",
+      name: "Fusion Victoria",
+      kind: "state",
+      recognised: true,
+    });
+    const branch = await findBranchBySlug(db, "vic");
+    assert.equal(branch?.branchId, "f6d3c0b9-legacy");
+    assert.equal(await findBranchBySlug(db, "nsw"), null);
   });
 });
 

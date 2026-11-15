@@ -460,7 +460,7 @@ describe("post-ratification policy lifecycle", () => {
         ],
       },
       sourceUrl: "https://vic.example.org/api/policies.json",
-      branch: { branchId: "branch-vic", name: "Fusion Victoria", code: "vic" },
+      branch: { branchId: "branch-vic", name: "Fusion Victoria", slug: "vic" },
       authorityBasis: "Adopted by the Victorian branch executive.",
       importedAt: new Date("2026-11-15T00:00:00Z"),
       importedBy: "system:branch-policy-import",
