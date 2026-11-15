@@ -1,6 +1,14 @@
 [
   {
-    "hash": "f1626cf",
+    "hash": "c9ddc45",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "store",
+    "summary": "Enforce acyclic dependency graph across domain modules (#115)"
+  },
+  {
+    "hash": "f03e255",
     "date": "2026-11-16",
     "type": "docs",
     "category": "docs",
@@ -663,13 +671,5 @@
     "category": "feature",
     "scope": "participation",
     "summary": "Add pending-verification ballot queueing, stance starters, topic chips, and ballot progress bars"
-  },
-  {
-    "hash": "46f1b9b",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Fix error on branch pages, and seed branches to database"
   }
 ]
