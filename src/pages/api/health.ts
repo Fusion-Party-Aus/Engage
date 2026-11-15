@@ -72,8 +72,10 @@ export const GET: APIRoute = async ({ locals }) => {
       // continues; report the gap rather than failing the probe.
     }
 
-    const status =
-      governanceScheduler === "ok" && jobs === "ok" ? "healthy" : "degraded";
+    const status = (() => {
+      const worst = worstStatus([governanceScheduler, jobs]);
+      return worst === "ok" ? "healthy" : worst;
+    })();
     return Response.json(
       {
         ok: true,

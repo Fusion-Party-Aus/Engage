@@ -76,7 +76,7 @@ describe("/api/health", () => {
     const { response, body } = await health();
     assert.equal(response.status, 200);
     assert.equal(body.ok, true);
-    assert.equal(body.status, "degraded");
+    assert.equal(body.status, "failing");
     assert.equal(body.checks.database, "ok");
     assert.equal(body.checks.governanceScheduler, "failing");
     assert.equal(body.checks.jobs, "failing");
