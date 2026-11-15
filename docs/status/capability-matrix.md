@@ -177,8 +177,8 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Seed baseline proposals | Implemented | 78 records, insert-only |
 | DTO-minimised APIs | Implemented | `api-contracts.ts` |
 | Public ETag API | Implemented | `/api/v1/` |
-| Request middleware / central guard | Not implemented | No `src/middleware.ts` |
-| CSP and standard security headers | Not implemented in app | Perimeter responsibility |
+| Perimeter middleware | Implemented | `src/middleware.ts` — headers and cross-site rule only; no route guard |
+| CSP and standard security headers | Implemented | `src/lib/security-perimeter.ts`, `astro.config.mjs`; static assets still rely on the proxy |
 | General API rate limiting | Not implemented | Auth and Sense Box only |
 | Structured logging | Partial | Redacting operational logger |
 | Metrics/tracing | Not implemented | — |

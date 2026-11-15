@@ -123,6 +123,10 @@ magic-link sign-in form.
   would always fail.
 - Errors are announced by an `alert` region; the verification prompt is
   associated with the widget group for screen readers.
+- The perimeter CSP allows `https://challenges.cloudflare.com` in
+  `script-src`, `frame-src` and `connect-src`. The real-browser check in
+  [perimeter security](perimeter.md) proves the script and frame are not
+  blocked.
 
 ## Privacy: what is sent to Cloudflare
 
@@ -199,14 +203,16 @@ real-MongoDB cases run when `VOTING_TEST_MONGODB_URI` is set, as in CI.
 
 ## Not implemented
 
-- **CSP, HSTS, `X-Frame-Options`, `X-Content-Type-Options`.** Separate issue
-  #38. Turnstile works without them; adding a CSP requires allowing
-  `https://challenges.cloudflare.com` in `script-src` and `frame-src` and must
-  not break the widget.
+- **CSP, HSTS and the other perimeter headers.** Implemented in the
+  [perimeter security](perimeter.md) slice: the policy allows
+  `https://challenges.cloudflare.com` in `script-src`, `frame-src` and
+  `connect-src`, and a real-browser check confirms the widget is not blocked.
 - **General API rate limiting.** Only the actions above are limited. Reads, the
   public `/api/v1` catalogue and authenticated writes are not.
-- **CSRF/origin coverage for every state-changing route.** Only some handlers
-  compare `Origin`. See [known gap 15](../status/known-gaps.md).
+- **Per-request CSRF tokens.** The application now rejects cross-origin and
+  cookie-authenticated requests without an `Origin` for every state-changing
+  method; it still relies on `SameSite=Lax` rather than tokens. See
+  [perimeter security](perimeter.md).
 - **Metrics and alerting.** Failures appear in structured logs; there is no
   dashboard or alert on `turnstile_misconfigured` or on 429 volume.
 - **Email verification and password reset.** Not enabled, therefore not

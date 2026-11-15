@@ -128,11 +128,31 @@ Comments can be deleted by staff, but there is no moderation state, reason or au
 
 ### 15. Perimeter security is incomplete
 
-No CSP, HSTS, `X-Frame-Options` or `X-Content-Type-Options`; no general API rate limiting; CSRF/Origin checks are partial. Cookies rely on `SameSite=Lax` for many routes.
+**Addressed on `feat/security-headers-csrf` (issue #38), pending merge.** A
+perimeter middleware now sets `X-Content-Type-Options`, `Referrer-Policy`,
+`X-Frame-Options`, a minimal `Permissions-Policy`, conditional HSTS and a
+hash-based Content Security Policy. Astro's form-post origin check is kept and
+extended for every state-changing method: cross-site `Sec-Fetch-Site`, a
+mismatched `Origin`, and an absent `Origin` with a session cookie are refused.
+A real-browser check covers the home, proposal, sign-in and Sense Box pages,
+Turnstile, Plausible, same-origin writes and cross-origin rejection. See
+[security/perimeter.md](../security/perimeter.md).
 
-Cloudflare Turnstile and a shared MongoDB fixed-window limiter now protect the abuse-prone unauthenticated actions (Sense Box submission and magic-link sign-in) — see [security/turnstile.md](../security/turnstile.md). Authenticated voting is deliberately not challenged. General API rate limiting, the security headers and complete CSRF coverage remain.
+Before this slice, the application had no CSP, HSTS, frame or content-type
+headers, CSRF/Origin coverage was partial, and many routes relied on
+`SameSite=Lax` cookies. Cloudflare Turnstile and a shared MongoDB fixed-window
+limiter protect the abuse-prone unauthenticated actions (Sense Box submission
+and magic-link sign-in) — see [security/turnstile.md](../security/turnstile.md).
 
-**Direction:** Add headers at the reverse proxy or app boundary, then extend origin checks to every state-changing route. Document residual risk.
+**Still missing:** general API rate limiting, per-request CSRF tokens, a CSP
+violation reporting endpoint, and perimeter headers on static assets (served by
+the Node adapter before middleware) and on Astro's own early cross-site 403. The
+reverse proxy should add the same headers. Production headers have not been
+observed through Cloudflare/Coolify.
+
+**Direction:** Keep the unit tests and the browser script as the regression
+evidence. Add proxy headers for static assets, decide whether to add CSRF tokens
+for same-origin script compromise, and verify the deployed header set.
 
 ### 16. The legal acceptance gate is inactive
 

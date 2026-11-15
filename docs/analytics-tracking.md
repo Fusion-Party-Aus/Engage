@@ -58,6 +58,10 @@ are non-interactive so observation alone does not reduce bounce rate.
 
 ## Privacy and reliability
 
+- The Content Security Policy allows `https://analytics.fusionparty.org.au` in
+  `connect-src` (event POST) and `script-src` (hosted tracker). Removing or
+  changing the collector requires updating the policy and the perimeter browser
+  check; see [security/perimeter.md](security/perimeter.md).
 - One shared initializer uses the installed tracker; automatic pageviews remain
   enabled. No additional manual pageviews or generic automatic form submissions.
 - Production hostname only, including calls from React components; server imports

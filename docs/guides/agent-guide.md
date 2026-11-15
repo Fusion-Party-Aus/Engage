@@ -96,9 +96,9 @@ The member-facing Terms of Use §9 describes this rule. Do not change the counti
 
 `proposals.delete`, `comments.moderate`, `proposals.view_archived`, `proposals.manage_supersession`, `amendments.resolve`, `amendments.apply`, `branches.manage` and `sense_box.review` are declared but several routes use legacy flags. Do not assume granting a custom role those keys changes behaviour. If you wire one, test it and update the RBAC docs.
 
-### No middleware
+### No route guard middleware
 
-There is no `src/middleware.ts`. Every route authenticates itself. A new endpoint without an explicit check is public. There is no default deny.
+`src/middleware.ts` is a perimeter layer only. It applies security headers and refuses cross-origin state-changing requests, but it does not authenticate or authorise routes. Every route authenticates itself. A new endpoint without an explicit check is public. There is no default deny.
 
 ### In-memory database lies
 
