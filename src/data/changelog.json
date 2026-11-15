@@ -1,30 +1,30 @@
 [
   {
-    "hash": "071607e",
+    "hash": "f65f00c",
     "date": "2026-11-15",
-    "type": "docs",
-    "category": "docs",
-    "scope": "security",
-    "summary": "Record the perimeter header set, CSP and origin rule",
-    "details": "Adds docs/security/perimeter.md as the operating contract for headers, CSP sources and the cross-site rule, with the exact values, every external host and its reason, the scoped style-src-attr allowance, verification commands and residual risk. Corrects the pages that said there is no middleware and that a CSP, HSTS, frame or content-type headers are absent, updates the Turnstile and API/authorisation contracts, and records the #38 and I10 state in the programme tracker and known gaps. Remaining work is explicit: proxy headers for static assets and Astro's early 403, a reporting endpoint, CSRF tokens, and production header observation. Refs #38"
+    "type": "feat",
+    "category": "feature",
+    "scope": "notifications",
+    "summary": "Wire ballot opened and closing soon through a durable outbox",
+    "details": "Add notification_outbox, written immediately after a committed lifecycle transition and drained by npm run notifications:drain (dry-run by default, --apply to send). Two events are wired: a ballot opened by the lifecycle scheduler (new_ballots) and an open ballot inside the approved seven-day window (closing_deadlines). The audience is the voting electorate. Candidates are confirmed with getProposalEligibility and canViewProposal, the same predicate and visibility gate used when casting a vote, and eligibility is checked again at drain time so a revoked membership is suppressed rather than notified. Rows carry one unique dedupeKey per member, ballot and event; the drain claims with a conditional lease, retries at 1/2/4/8 minutes and stops at five attempts. Terminal rows carry a two-year retention TTL. Enqueue and delivery can never fail, block or alter a governance transition, and the scheduler report is unchanged. governance_outcomes and contribution_responses stay unwired: the result route is being refactored and the comment-outcome event needs a product decision."
   },
   {
-    "hash": "8d1bc44",
+    "hash": "681c18e",
     "date": "2026-11-15",
-    "type": "test",
-    "category": "ops",
-    "scope": "security",
-    "summary": "Verify the CSP and origin rule in a real browser",
-    "details": "The production build is served with a disposable in-memory database. Chromium checks the home, proposal, sign-in and Sense Box pages for CSP violations, console errors and failed requests; proves the Turnstile script and frame and the Plausible script and event endpoint reach the network layer; asserts the document and JSON header sets; and shows same-origin fetches and native form posts succeed while browser, JSON and cookie-without-Origin state-changing requests are refused. Cloudflare and Plausible are intercepted and answered locally; the script never contacts production. Refs #38"
+    "type": "fix",
+    "category": "fix",
+    "scope": "notifications",
+    "summary": "Write the delivery dedupe key the unique index requires",
+    "details": "The notification_deliveries unique index is on dedupeKey, but in-app and push delivery documents only set a composite _id. Every insert after the first therefore collided on a missing dedupeKey and was swallowed as a duplicate, so production could create at most one inbox item in total. Write the composite value to dedupeKey (and a push equivalent), keeping the existing _id dedupe contract and index shape unchanged."
   },
   {
-    "hash": "94ec5a9",
+    "hash": "0aea7b5",
     "date": "2026-11-15",
     "type": "feat",
     "category": "feature",
     "scope": "security",
-    "summary": "Add perimeter headers, CSP and cross-site request rule",
-    "details": "Every response now carries nosniff, a strict referrer policy, frame denial, a minimal Permissions-Policy and a Content Security Policy. HSTS is sent only in production when HTTPS is provable. The policy keeps Astro's build-time script and style hashes and allows only the external hosts the app uses: Cloudflare Turnstile (script, frame, connect) and the first-party Plausible host (script, connect). Inline style attributes are allowed through style-src-attr only, because tally and progress bars use them; script-src has no unsafe-inline and no directive permits unsafe-eval. The service-worker registration was is:inline, which Astro does not hash, so it is now a processed script. Astro's form-post origin check is kept, and allowedDomains trusts the production host over HTTPS so its comparison uses the public origin behind the proxy. The middleware adds what Astro's check deliberately exempts: every state-changing method, JSON bodies, a cross-site Sec-Fetch-Site, an Origin that differs from the trusted public origin, and an absent Origin when a session or dev cookie is present. Bearer cron calls and webhooks carry no cookie and stay allowed. Refs #38"
+    "summary": "Response headers, hash-based CSP and cross-origin enforcement (#38) (#100)",
+    "details": "* feat(security): add perimeter headers, CSP and cross-site request rule Every response now carries nosniff, a strict referrer policy, frame denial, a minimal Permissions-Policy and a Content Security Policy. HSTS is sent only in production when HTTPS is provable. The policy keeps Astro's build-time script and style hashes and allows only the external hosts the app uses: Cloudflare Turnstile (script, frame, connect) and the first-party Plausible host (script, connect). Inline style attributes are allowed through style-src-attr only, because tally and progress bars use them; script-src has no unsafe-inline and no directive permits unsafe-eval. The service-worker registration was is:inline, which Astro does not hash, so it is now a processed script. Astro's form-post origin check is kept, and allowedDomains trusts the production host over HTTPS so its comparison uses the public origin behind the proxy. The middleware adds what Astro's check deliberately exempts: every state-changing method, JSON bodies, a cross-site Sec-Fetch-Site, an Origin that differs from the trusted public origin, and an absent Origin when a session or dev cookie is present. Bearer cron calls and webhooks carry no cookie and stay allowed. Refs #38 * test(security): verify the CSP and origin rule in a real browser The production build is served with a disposable in-memory database. Chromium checks the home, proposal, sign-in and Sense Box pages for CSP violations, console errors and failed requests; proves the Turnstile script and frame and the Plausible script and event endpoint reach the network layer; asserts the document and JSON header sets; and shows same-origin fetches and native form posts succeed while browser, JSON and cookie-without-Origin state-changing requests are refused. Cloudflare and Plausible are intercepted and answered locally; the script never contacts production. Refs #38 * docs(security): record the perimeter header set, CSP and origin rule Adds docs/security/perimeter.md as the operating contract for headers, CSP sources and the cross-site rule, with the exact values, every external host and its reason, the scoped style-src-attr allowance, verification commands and residual risk. Corrects the pages that said there is no middleware and that a CSP, HSTS, frame or content-type headers are absent, updates the Turnstile and API/authorisation contracts, and records the #38 and I10 state in the programme tracker and known gaps. Remaining work is explicit: proxy headers for static assets and Astro's early 403, a reporting endpoint, CSRF tokens, and production header observation. Refs #38 * chore(changelog): refresh snapshot for the perimeter security slice Refs #38 * docs(security): clarify origin-check exemptions and deployment requirements States the form-like and safe-method exemptions precisely, scopes includeSubDomains to the sending host rather than fusionparty.org.au, and records that production must configure PUBLIC_ORIGIN or BETTER_AUTH_URL or browser writes are refused against the proxy's localhost origin. Refs #38"
   },
   {
     "hash": "23f88d8",

@@ -29,7 +29,8 @@ export const JOB_RUN_RETENTION_DAYS = 90;
 export type JobName =
   | "governance-scheduler"
   | "ballot-digest"
-  | "membership-verification";
+  | "membership-verification"
+  | "notification-outbox-drain";
 
 /** A dry-run is a real run for observability, but it performed no writes. */
 export type JobRunMode = "apply" | "dry-run";
@@ -60,6 +61,11 @@ export interface WithJobRunOptions<T> {
   mode?: JobRunMode;
   /** Counts worth keeping. Return only non-sensitive values. */
   summarise?: (result: T) => JobRunSummary | undefined;
+  /**
+   * Decide the ledger success flag for a job that reports partial failures in
+   * its result instead of throwing. Defaults to success.
+   */
+  ok?: (result: T) => boolean;
 }
 
 const MAXIMUM_ERROR_LENGTH = 300;
@@ -186,7 +192,20 @@ export async function withJobRun<T>(
         });
       }
     }
-    await finish(true, { summary });
+    let ok = true;
+    if (options.ok) {
+      try {
+        ok = options.ok(result);
+      } catch (error) {
+        // A broken success check must not change the job's result either.
+        logOperationalEvent("error", "job_run_ok_check_failed", {
+          job,
+          runId,
+          message: jobErrorMessage(error),
+        });
+      }
+    }
+    await finish(ok, { summary });
     return result;
   } catch (error) {
     await finish(false, { error });
