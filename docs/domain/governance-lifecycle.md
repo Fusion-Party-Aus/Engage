@@ -369,6 +369,41 @@ Prints a JSON report, and writes nothing, listing:
 
 Recovery is manual and audited: an officer sets an explicit future deadline, closes an amendment ballot through its close action, or advances a never-seconded matter explicitly with `ballots.bind`. Backfilling a seconder or a deliberation deadline would fabricate a governance act and is not performed by any script. The report states these options in its own output.
 
+### 15. Decision record
+
+Every matter has a member-facing decision record at `/proposals/<slug>/record/`, linked from the proposal page. It is a read-only composition of evidence that is already recorded; it never mutates a revision, amendment, result or publication record.
+
+The record shows:
+
+- the matter title, slug, stage and type;
+- the **voted wording** — the bound revision's exact `revisionId`, `contentHash`, title, summary, outcomes and text;
+- **revision history** in order, with every immutable revision identifier, hash and timestamp;
+- **amendments and outcomes** — each amendment's status, endorsement result and the proposal revision it produced, if any;
+- the **ballot and certified result** — ballot identifier, purpose, wording binding, close time, aggregate tally, recorded result, computed outcome, rule basis, recorded time, and any explicit override reason;
+- the **publication state** — the policy record's status plus its publication, withdrawal, supersession or repeal events.
+
+`buildDecisionRecord` (`src/lib/decision-record.ts`) enforces the same visibility rule as the proposal page (`canViewProposal`, plus the archived-review rule). A viewer who may not see the matter receives a null record and the page responds 404, so a private draft is not disclosed. The read model never reads individual votes: the tally comes from the certified result, and author, voter and officer identifiers are dropped at the boundary. Only aggregate counts are shown.
+
+#### Adopted wording derivation
+
+The record derives adopted wording from immutable evidence, or refuses to derive it. The rule is enforced in `deriveAdoptedWording`:
+
+| Evidence | Record state |
+|---|---|
+| Successful result, no applied amendment | The bound revision is the adopted wording (**D15**) |
+| Successful result, exactly one applied amendment | The revision that application produced is the adopted wording, provided it is the revision the ballot approved (**D16**) |
+| Successful result, two or more applied amendments | **Collision review required (D17–D18)**. No wording is derived |
+| Amendment endorsed or accepted but not applied | Review required (D19–D20) |
+| Applied revision missing, not the ballot revision, or the result names another revision | Review required (D20) |
+| Unsuccessful or inconclusive result | No adopted wording |
+| No result, or no bound revision | No adopted wording yet |
+
+An amendment that was rejected, not endorsed or withdrawn does not change the adopted wording. A successful result with no bound revision, or a result recorded against different wording, is a review state rather than an adoption. Legacy results recorded before tallies and computed outcomes were stored remain readable unchanged; they are labelled as such and are not backfilled.
+
+The multi-amendment case is deliberately not guessed. Applying two amendments may be compatible or conflicting, and D18 leaves the resolution method, tie handling and original-wording treatment unspecified. The record names the amendments and requires the authorised collision review; it does not produce a composite text.
+
+The administrator responsibility queue and the resolution of multi-amendment collisions remain outstanding in #54 (see [the programme tracker](../status/rfc0001-programme-tracker.md)).
+
 ## Variants
 
 ### Policy proposal
