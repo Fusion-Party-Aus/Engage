@@ -23,7 +23,14 @@ import {
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
-import { loadBallotTallyCryptoConfig, readBoundBallotTallies } from '../../../lib/ballots.ts';
+import {
+  ballotOutcomeLabel,
+  loadBallotTallyCryptoConfig,
+  proposalBallotResultFilter,
+  readBoundBallotTallies,
+  resolveBallotClosure,
+} from '../../../lib/ballots.ts';
+import { proposalBallotId } from '../../../lib/vote-storage.ts';
 
 import { ballotDeadlineLabel } from '../../../lib/ballot-deadline.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
@@ -52,7 +59,9 @@ if (!user.isStaff && !user.isBranchAdmin) Astro.response.status = 403;
 
 const db = await getDatabase(env);
 const slug = Astro.params.slug ?? '';
-let detail = user.isStaff || user.isBranchAdmin ? await getProposalDetail(db, slug, user) : null;
+let detail = user.isStaff || user.isBranchAdmin
+  ? await getProposalDetail(db, slug, user, { tolerateUnreadableVotes: true })
+  : null;
 let forbidden = false;
 if (detail && !user.isStaff && !user.isAdmin) {
   const allowed = Boolean(
@@ -88,15 +97,19 @@ for (const amendment of amendmentRows) {
   const current = amendment.revisionHistory.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
 }
-const [ballotResult, rawPolicy, relatedProposals, branches, visibleOtherProposals] = proposal
+const [ballotResult, ballotRow, rawPolicy, relatedProposals, branches, visibleOtherProposals] = proposal
   ? await Promise.all([
-      db.collection('ballot_results').findOne({ proposalId: proposal.proposalId }),
+      db.collection('ballot_results').findOne(proposalBallotResultFilter(proposal.proposalId)),
+      db.collection('ballots').findOne(
+        { ballotId: proposalBallotId(proposal.proposalId) },
+        { projection: { status: 1, closesAt: 1 } },
+      ),
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
       db.collection('proposals').find({ space: proposal.space, proposalId: { $ne: proposal.proposalId } }).limit(4).toArray(),
       db.collection('branches').find({}).sort({ name: 1 }).toArray(),
-      listProposals(db, { includeArchived: true, user }),
+      listProposals(db, { includeArchived: true, user, tolerateUnreadableVotes: true }),
     ])
-  : [null, null, [], [], []];
+  : [null, null, null, [], [], []];
 const allOtherProposals = proposal
   ? visibleOtherProposals.filter(
       (other) =>
@@ -165,21 +178,20 @@ const computedOutcome = boundTally?.computedResult ?? null;
 const tallyBlocked = Boolean(
   boundTally && ['unbound', 'decryption-unavailable', 'unreadable'].includes(boundTally.state),
 );
-const closeTime = proposal?.ballotClosedAt
-  ? new Date(proposal.ballotClosedAt)
-  : proposal?.ballotClosesAt
-    ? new Date(proposal.ballotClosesAt)
-    : null;
-const closeTimeIsReadable = Boolean(closeTime && Number.isFinite(closeTime.getTime()));
-const ballotIsClosed = Boolean(proposal?.ballotClosedAt) || Boolean(closeTimeIsReadable && closeTime!.getTime() <= Date.now());
-const outcomeLabel = (value: string | null | undefined) =>
-  value === 'successful' ? 'Successful' : value === 'unsuccessful' ? 'Unsuccessful' : value === 'inconclusive' ? 'Inconclusive' : 'Not recorded';
+// Same precedence as certification: the ballot row first, then the matter.
+const ballotClosure = resolveBallotClosure({
+  ballot: ballotRow as { status?: string; closesAt?: Date } | null,
+  matter: proposal,
+});
+const ballotIsClosed = ballotClosure.closed;
+const closeTime = ballotClosure.closesAt ?? null;
+const closeTimeIsReadable = Boolean(closeTime);
 const recordedOutcome = ballotResult
   ? {
-      result: outcomeLabel(String(ballotResult.result)),
+      result: ballotOutcomeLabel(String(ballotResult.result)),
       rawResult: String(ballotResult.result),
       recordedAt: ballotResult.recordedAt ? new Date(ballotResult.recordedAt) : null,
-      computed: ballotResult.computedResult ? outcomeLabel(String(ballotResult.computedResult)) : null,
+      computed: ballotResult.computedResult ? ballotOutcomeLabel(String(ballotResult.computedResult)) : null,
       tally: ballotResult.tally
         ? `${Number((ballotResult.tally as any).approve ?? 0)} approve · ${Number((ballotResult.tally as any).abstain ?? 0)} abstain · ${Number((ballotResult.tally as any).reject ?? 0)} reject`
         : null,
@@ -670,7 +682,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                 ))}
               </ol>
 
-              {proposal.votes.total > 0 ? (
+              {proposal.votes.total > 0 || proposal.unreadableVoteCount ? (
                 <div class="admin-tally" aria-label="Recorded ballot tally">
                   <div class="admin-tally__bar" aria-hidden="true">
                     <span style={`width:${pct(proposal.votes.approve)}%;background:var(--horizon-success-ink)`}></span>
@@ -683,6 +695,11 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                     <span><strong class="tabular">{proposal.votes.reject}</strong> reject ({pct(proposal.votes.reject)}%)</span>
                     <span><strong class="tabular">{proposal.votes.total}</strong> total verified votes</span>
                   </div>
+                  {proposal.unreadableVoteCount ? (
+                    <p class="admin-inline-note">
+                      {proposal.unreadableVoteCount} recorded vote{proposal.unreadableVoteCount === 1 ? '' : 's'} could not be read; totals exclude {proposal.unreadableVoteCount === 1 ? 'it' : 'them'}.
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <p class="admin-inline-note">No member votes have been recorded for this ballot yet.</p>
@@ -690,7 +707,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 
               <dl class="admin-property-grid">
                 <div><dt>Bound ballot wording</dt><dd>{proposal.ballotRevisionId ? ballotRevisionLabel : 'Needs binding before outcome'}</dd></div>
-                <div><dt>Recorded outcome</dt><dd>{ballotResult ? `${outcomeLabel(String(ballotResult.result))} · ${formatDate(ballotResult.recordedAt)}` : 'Not recorded'}</dd></div>
+                <div><dt>Recorded outcome</dt><dd>{ballotResult ? `${ballotOutcomeLabel(String(ballotResult.result))} · ${formatDate(ballotResult.recordedAt)}` : 'Not recorded'}</dd></div>
                 <div><dt>Decision event ref</dt><dd>{ballotResult?.decisionEventId ?? 'Not recorded'}</dd></div>
                 <div><dt>Policy registry state</dt><dd>{policyState}</dd></div>
               </dl>

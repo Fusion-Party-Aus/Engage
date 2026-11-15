@@ -1,21 +1,22 @@
 ---
 import { Badge } from '../ui/badge';
-import type { BoundBallotTallySummary } from '../../lib/ballots.ts';
+import {
+  ballotOutcomeLabel,
+  type BoundBallotTallySummary,
+} from '../../lib/ballots.ts';
 
 interface Props {
   summary: BoundBallotTallySummary | null;
 }
 
 const { summary } = Astro.props;
-const outcomeLabel = (value: string) =>
-  value === 'successful' ? 'Successful' : 'Unsuccessful';
 ---
 
 {summary && summary.state === 'computed' ? (
   <div class="flex flex-wrap items-center gap-2 text-sm">
     <span class="admin-inline-note">Computed from the votes:</span>
     <Badge variant={summary.computedResult === 'successful' ? 'success' : 'warning'}>
-      {outcomeLabel(String(summary.computedResult))}
+      {ballotOutcomeLabel(summary.computedResult)}
     </Badge>
     <span class="admin-inline-note tabular">
       {summary.tally.approve} approve · {summary.tally.abstain} abstain · {summary.tally.reject} reject · simple majority

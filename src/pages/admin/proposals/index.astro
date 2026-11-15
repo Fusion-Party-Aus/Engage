@@ -7,7 +7,13 @@ import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, Shiel
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { listProposals, normalizeStage } from '../../../lib/store.ts';
-import { loadBallotTallyCryptoConfig, readBoundBallotTallies } from '../../../lib/ballots.ts';
+import {
+  ballotOutcomeLabel,
+  loadBallotTallyCryptoConfig,
+  readBoundBallotTallies,
+  resolveBallotClosure,
+} from '../../../lib/ballots.ts';
+import { proposalBallotId } from '../../../lib/vote-storage.ts';
 
 import { ballotDeadlineLabel } from '../../../lib/ballot-deadline.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
@@ -49,7 +55,7 @@ const [branches, scopedProposals] = await Promise.all([
       ? db.collection('branches').find({ branchId: { $in: branchAdminIds } }).sort({ name: 1 }).toArray()
       : db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
   user.isStaff || user.isBranchAdmin
-    ? listProposals(db, { includeArchived: true }).then((proposals) =>
+    ? listProposals(db, { includeArchived: true, tolerateUnreadableVotes: true }).then((proposals) =>
         proposals.filter(
           (proposal) =>
             user.isStaff ||
@@ -97,15 +103,31 @@ if (unboundProposalIds.length) {
 }
 const proposalIds = allProposals.map((proposal) => proposal.proposalId);
 // A result can only be recorded once the ballot is closed, and the tally shown
-// to the officer must be the bound tally certification enforces.
+// to the officer must be the bound tally certification enforces. Both follow the
+// same closure precedence: the ballot row first, then the matter.
 const decisionProposals = user.isAdmin || user.isBranchAdmin
   ? allProposals.filter((proposal) => proposal.stage === 'decide')
   : [];
-const [decideBallotResults, boundBallotTallies] = await Promise.all([
-  decisionProposals.length
+const mainBallotIds = decisionProposals.map((proposal) => proposalBallotId(proposal.proposalId));
+const [decideBallotResults, decideBallotRows, boundBallotTallies] = await Promise.all([
+  mainBallotIds.length
     ? db
         .collection('ballot_results')
-        .find({ proposalId: { $in: decisionProposals.map((proposal) => proposal.proposalId) } })
+        .find({
+          $or: [
+            { ballotId: { $in: mainBallotIds } },
+            {
+              proposalId: { $in: decisionProposals.map((proposal) => proposal.proposalId) },
+              ballotId: { $exists: false },
+            },
+          ],
+        })
+        .toArray()
+    : Promise.resolve([]),
+  mainBallotIds.length
+    ? db
+        .collection('ballots')
+        .find({ ballotId: { $in: mainBallotIds } }, { projection: { ballotId: 1, status: 1, closesAt: 1 } })
         .toArray()
     : Promise.resolve([]),
   readBoundBallotTallies(db, {
@@ -115,18 +137,22 @@ const [decideBallotResults, boundBallotTallies] = await Promise.all([
     cryptoConfig: loadBallotTallyCryptoConfig(env),
   }),
 ]);
-const decideResultsByProposal = new Map(decideBallotResults.map((row: any) => [String(row.proposalId), row]));
-const isBallotClosed = (item: any) => {
-  if (item.ballotClosedAt) return true;
-  if (!item.ballotClosesAt) return false;
-  const closesAt = new Date(item.ballotClosesAt).getTime();
-  return Number.isFinite(closesAt) && closesAt <= Date.now();
-};
+const decideResultsByBallot = new Map(
+  decideBallotResults.map((row: any) => [
+    String(row.ballotId ?? proposalBallotId(String(row.proposalId))),
+    row,
+  ]),
+);
+const decideBallotRowsById = new Map(decideBallotRows.map((row: any) => [String(row.ballotId), row]));
+const closureFor = (item: any) =>
+  resolveBallotClosure({
+    ballot: decideBallotRowsById.get(proposalBallotId(item.proposalId)) ?? null,
+    matter: item,
+    now: new Date(),
+  });
 const closingLabel = (item: any) => {
-  const value = item.ballotClosedAt ?? item.ballotClosesAt;
-  if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime()) ? ballotDeadlineLabel(parsed) : null;
+  const closesAt = closureFor(item).closesAt;
+  return closesAt ? ballotDeadlineLabel(closesAt) : null;
 };
 const amendmentRows = proposalIds.length ? await db.collection('amendments').find({ proposalId: { $in: proposalIds }, status: { $nin: ['withdrawn', 'rejected', 'applied', 'not-endorsed', 'inconclusive'] } }).sort({ createdAt: 1 }).toArray() : [];
 const amendmentRevisionsByAmendment = new Map<string, any[]>();
@@ -613,6 +639,9 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
 
                       <p class="admin-register-row__stats tabular">
                         <span><strong>{item.votes.total}</strong> votes ({item.votes.approve} approve · {item.votes.reject} reject)</span>
+                        {item.unreadableVoteCount ? (
+                          <span><strong>{item.unreadableVoteCount}</strong> unreadable</span>
+                        ) : null}
                         <span aria-hidden="true">·</span>
                         <span><strong>{item.commentCount}</strong> deliberation stances</span>
                       </p>
@@ -687,16 +716,16 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                         <summary><Gavel className="size-4" aria-hidden="true" />Record ballot outcome</summary>
                         <div class="admin-disclosure__body">
                           {(() => {
-                            const recorded = decideResultsByProposal.get(item.proposalId);
+                            const recorded = decideResultsByBallot.get(proposalBallotId(item.proposalId));
                             if (recorded) {
                               const overrideReason = typeof recorded.override?.reason === 'string' ? recorded.override.reason : null;
                               return (
                                 <div class="grid gap-2">
                                   <div class="flex flex-wrap items-center gap-2 text-sm">
-                                    <Badge variant={recorded.result === 'successful' ? 'success' : 'warning'}>{String(recorded.result) === 'successful' ? 'Successful' : String(recorded.result) === 'inconclusive' ? 'Inconclusive' : 'Unsuccessful'}</Badge>
+                                    <Badge variant={recorded.result === 'successful' ? 'success' : 'warning'}>{ballotOutcomeLabel(String(recorded.result))}</Badge>
                                     {overrideReason && <Badge variant="warning">Overridden</Badge>}
                                     <span class="admin-inline-note">
-                                      {recorded.computedResult ? `Votes computed ${String(recorded.computedResult)}` : 'Recorded before outcomes were computed'}
+                                      {recorded.computedResult ? `Votes computed ${ballotOutcomeLabel(String(recorded.computedResult))}` : 'Recorded before outcomes were computed'}
                                     </span>
                                   </div>
                                   {overrideReason && (
@@ -709,7 +738,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                             if (!item.ballotRevisionId) {
                               return <p class="admin-inline-note">Bind a reviewed wording revision before recording the outcome.</p>;
                             }
-                            if (!isBallotClosed(item)) {
+                            if (!closureFor(item).closed) {
                               const closesAt = closingLabel(item);
                               return (
                                 <div class="grid gap-2">
