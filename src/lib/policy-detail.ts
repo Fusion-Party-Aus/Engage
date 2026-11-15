@@ -4,7 +4,7 @@ import { listPolicyChangeProposals } from "./policy-change.ts";
 import {
   canViewProposal,
   isPolicyRegistryRecordForResolution,
-} from "./store.ts";
+} from "./proposal-helpers.ts";
 import type { SessionUser } from "./types.ts";
 
 export interface PolicyDetailContext {

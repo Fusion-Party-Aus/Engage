@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 import { policyCanonicalPath } from "./policy-registry.ts";
 import type { ActivityTimelineEvent } from "./activity-timeline.ts";
-import { canViewProposal } from "./store.ts";
+import { canViewProposal } from "./proposal-helpers.ts";
 import type { ProposalRecord, SessionUser } from "./types.ts";
 import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
 import { findMemberVotes, proposalBallotId } from "./vote-storage.ts";

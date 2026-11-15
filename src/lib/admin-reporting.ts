@@ -4,7 +4,7 @@ import {
   canReviewArchivedProposal,
   canViewProposal,
   isGovernanceResolution,
-} from "./store.ts";
+} from "./proposal-helpers.ts";
 import type { BranchRecord, ProposalSummaryView, SessionUser } from "./types.ts";
 
 /**

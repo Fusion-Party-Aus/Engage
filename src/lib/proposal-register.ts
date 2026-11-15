@@ -5,7 +5,7 @@ import {
   type ComputedBallotOutcome,
   type FormalDecisionRecord,
 } from "./ballots.ts";
-import { normalizeProposalDoc, normalizeStage } from "./store.ts";
+import { normalizeProposalDoc, normalizeStage } from "./proposal-helpers.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 import type {
   PolicyProvenance,

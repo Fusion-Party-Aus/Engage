@@ -4,7 +4,8 @@ import {
   proposalBallotResultFilter,
   type BallotRecord,
 } from "./ballots.ts";
-import { canViewProposal, getProposalDetail } from "./store.ts";
+import { canViewProposal } from "./proposal-helpers.ts";
+import { getProposalDetail } from "./proposals-store.ts";
 import { normalizeMatterType, type MatterTypeId } from "./matters.ts";
 import { hasPermission } from "./rbac.ts";
 import type { ProposalRevision, SessionUser, VoteTally } from "./types.ts";

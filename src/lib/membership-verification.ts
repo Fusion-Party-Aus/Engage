@@ -4,7 +4,8 @@ import { applyExternalMembership } from "./branch-participation.ts";
 import { recordLifecycle } from "./member-lifecycle.ts";
 import { createInAppNotification } from "./notifications.ts";
 import { logOperationalEvent } from "./resilience.ts";
-import { listMembers, promotePendingVotePreferences } from "./store.ts";
+import { listMembers } from "./members-store.ts";
+import { promotePendingVotePreferences } from "./voting-store.ts";
 import { sendVerificationNotice } from "./verification-email.ts";
 import {
   CRM_APPLICATION,
