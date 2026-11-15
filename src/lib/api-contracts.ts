@@ -136,6 +136,8 @@ export function toProposalDetailDto(p: ProposalSummaryView) {
       ? { supersededByProposalId: p.supersededByProposalId }
       : {}),
     ...(p.supersededByNote ? { supersededByNote: p.supersededByNote } : {}),
+    ...(p.targetSection ? { targetSection: p.targetSection } : {}),
+    ...(p.proposedWording ? { proposedWording: p.proposedWording } : {}),
     ...(p.authorName ? { authorName: p.authorName } : {}),
   };
 }

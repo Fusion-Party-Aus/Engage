@@ -49,6 +49,69 @@ export function policyChangeLabel(changeType: PolicyChangeType): string {
   }
 }
 
+/**
+ * Member-facing guidance for each way of changing a published policy.
+ *
+ * The action is the organising principle of the proposal form, so the label,
+ * the question the member answers and the effect of adoption live together.
+ * Repeal deliberately asks for a rationale and offers no new commitments.
+ */
+export interface PolicyChangeGuidance {
+  /** Short action name used on the choice and in the default title. */
+  label: string;
+  /** One line explaining what the action does. */
+  description: string;
+  /** The primary question the member answers. */
+  summaryLabel: string;
+  summaryPlaceholder: string;
+  summaryHint: string;
+  /** When an adopted change takes effect. */
+  effect: string;
+}
+
+export const POLICY_CHANGE_GUIDANCE: Record<
+  PolicyChangeType,
+  PolicyChangeGuidance
+> = {
+  amend: {
+    label: "Amend",
+    description: "Change part of the existing policy",
+    summaryLabel: "What should change?",
+    summaryPlaceholder: "Describe what should change and why it matters.",
+    summaryHint: "Other members will refine the wording during discussion.",
+    effect:
+      "If adopted, the amendment takes effect when the updated policy is published. This policy stays in place until then.",
+  },
+  replace: {
+    label: "Replace",
+    description: "Propose a different policy in its place",
+    summaryLabel: "What should the new policy do?",
+    summaryPlaceholder: "Outline the policy that should replace this one, and why.",
+    summaryHint: "Other members will refine the wording during discussion.",
+    effect:
+      "If adopted, the replacement takes effect when the new policy is published. This policy stays in place until then.",
+  },
+  repeal: {
+    label: "Repeal",
+    description: "Remove this policy",
+    summaryLabel: "Why should this policy be repealed?",
+    summaryPlaceholder:
+      "Explain what this policy gets wrong and why removing it is better than amending it.",
+    summaryHint:
+      "Other members will be able to discuss your proposal before it goes to a vote.",
+    effect:
+      "If adopted, the repeal takes effect when the result is ratified. This policy stays in place until then.",
+  },
+};
+
+/** The editable starting title for a change proposal. */
+export function defaultPolicyChangeTitle(
+  changeType: PolicyChangeType,
+  policyTitle: string,
+): string {
+  return `${POLICY_CHANGE_GUIDANCE[changeType].label}: ${policyTitle}`;
+}
+
 export interface RatifiedPolicyChange {
   proposalId: string;
   revisionId: string;

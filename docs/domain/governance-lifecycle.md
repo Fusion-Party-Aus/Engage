@@ -277,8 +277,14 @@ A published policy is changed by a normal proposal, not by editing the registry.
 - Creation requires a **currently published** policy. The proposal stores
   `targetPolicyId`, `targetPolicyRevisionId` and `changeType`; these are fixed
   at creation.
+- The proposal form follows the chosen action. An amendment may name the
+  commitment or section to change, a replacement may carry proposed wording, and
+  a repeal asks for a rationale instead of new commitments. Detailed
+  commitments and supporting material stay optional.
 - Governance authority, jurisdiction and publication scope are inherited from
-  the target policy, never chosen by the submitter.
+  the target policy, never chosen by the submitter. The policy's existing topic
+  is inherited too, so a change proposal does not ask the member to select it
+  again.
 - Ratification requires the target policy to still be published at the exact
   revision named by the proposal. If the wording changed, ratification fails
   and a new change proposal is required.
