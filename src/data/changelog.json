@@ -1,5 +1,21 @@
 [
   {
+    "hash": "b1bafb9",
+    "date": "2026-11-15",
+    "type": "fix",
+    "category": "fix",
+    "scope": "policies",
+    "summary": "Clear search and branch filters together in the registry"
+  },
+  {
+    "hash": "04787cc",
+    "date": "2026-11-15",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh public changelog for policy registry work"
+  },
+  {
     "hash": "175df5d",
     "date": "2026-11-15",
     "type": "feat",
@@ -643,23 +659,5 @@
     "category": "feature",
     "scope": "settings",
     "summary": "Add live-configurable platform settings, OpenGraph preview card, and state/social directory"
-  },
-  {
-    "hash": "e7d793a",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record Engage production cutover and verification",
-    "details": "Record the approved cutover of 4660690... to the prebuilt image, the final quiescent backup and off-host checksum, the 37-ballot/194-vote migration and preservation comparison, image and route verification, and the retained rollback state."
-  },
-  {
-    "hash": "4660690",
-    "date": "2026-11-08",
-    "type": "docs",
-    "category": "docs",
-    "scope": "release",
-    "summary": "Record member ballot refinement verification",
-    "details": "Record the approved ballot hierarchy: segmented control, single results block, zero-vote empty state, compact privacy line, full-width action and 390px browser validation. Full route matrix 109/109 and dedicated ballot checks 14/14."
   }
 ]
