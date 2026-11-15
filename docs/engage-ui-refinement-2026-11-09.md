@@ -63,7 +63,7 @@ Local screenshots use the in-memory seeded database. The registry is empty in th
 - New catch-up digest (`src/components/member/CatchUpDigest.astro`): persisted discussion, wording, amendment, ballot-result and policy events on proposals the member voted on, discussed, endorsed, amended or authored.
 - New status change log (`src/components/member/GovernanceLog.astro`) on the Activity tab: recorded decisions, amendment milestones and policy events.
 - Activity tab keeps the existing action timeline and adds the digest and governance log above it.
-- Last-visit tracking uses a first-party functional cookie (`engage_member_last_seen`) that advances at most once every 30 minutes. With no prior visit it reads “In the last seven days”; nothing is presented as a notification.
+- Last-visit tracking uses a first-party functional cookie (`engage_member_last_seen`) that advances at most once every 30 minutes. With no prior visit it reads “In the last seven days”; nothing is presented as a notification. **Updated 16 November 2026:** reading My Engage no longer advances the cursor. Updates persist across navigation until the member chooses **Mark updates as seen**; see [member engagement](member-engagement.md) and issue #108.
 
 ### Library and tests
 

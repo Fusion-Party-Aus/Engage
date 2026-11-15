@@ -6,70 +6,65 @@ export interface ParticipationActivity {
   date: Date;
   proposalTitle: string;
   proposalSlug: string;
-  firstParticipation?: boolean;
+  /**
+   * Stable identity for one recorded act, used to drop replay/backfill
+   * duplicates. A vote is identified by its ballot and, where the storage
+   * model keeps it, the member. Separate ballots stay separate rows.
+   */
+  dedupeKey?: string;
 }
 
-export type ParticipationFeedEntry =
-  | {
-      kind: "votes";
-      actorId: string;
-      actorName: string;
-      count: number;
-      firstDate: Date;
-      lastDate: Date;
-      proposals: Array<{ title: string; slug: string }>;
-      firstParticipation: boolean;
-    }
-  | (ParticipationActivity & { firstParticipation: boolean });
+export type ParticipationFeedEntry = ParticipationActivity & {
+  firstParticipation: boolean;
+};
 
-const VOTE_GROUP_WINDOW_MS = 10 * 60 * 1000;
+export interface ParticipationSummary {
+  votes: number;
+  contributions: number;
+  proposals: number;
+  firstTimeParticipants: number;
+}
 
-/** Groups only adjacent vote activity by the same identified member. Contributions remain individual. */
-export function groupParticipationFeed(
+/**
+ * Produce one feed row per recorded act, newest first, without collapsing
+ * distinct votes on different ballots. Votes from encrypted ballot records have
+ * no actor identity and keep their anonymised actor label.
+ */
+export function buildParticipationFeed(
   activities: ParticipationActivity[],
   firstParticipants: Set<string>,
 ): ParticipationFeedEntry[] {
+  const seen = new Set<string>();
+  const feed: ParticipationFeedEntry[] = [];
   const sorted = [...activities].sort(
     (a, b) => b.date.getTime() - a.date.getTime(),
   );
-  const feed: ParticipationFeedEntry[] = [];
   for (const activity of sorted) {
-    const firstParticipation = Boolean(
-      activity.actorId && firstParticipants.has(activity.actorId),
-    );
-    const previous = feed.at(-1);
-    if (
-      activity.kind === "vote" &&
-      activity.actorId &&
-      previous?.kind === "votes" &&
-      previous.actorId === activity.actorId &&
-      previous.firstDate.getTime() - activity.date.getTime() <=
-        VOTE_GROUP_WINDOW_MS
-    ) {
-      previous.count++;
-      previous.firstDate = activity.date;
-      previous.proposals.push({
-        title: activity.proposalTitle,
-        slug: activity.proposalSlug,
-      });
-      previous.firstParticipation ||= firstParticipation;
-    } else if (activity.kind === "vote" && activity.actorId) {
-      feed.push({
-        kind: "votes",
-        actorId: activity.actorId,
-        actorName: activity.actorName,
-        count: 1,
-        firstDate: activity.date,
-        lastDate: activity.date,
-        proposals: [
-          { title: activity.proposalTitle, slug: activity.proposalSlug },
-        ],
-        firstParticipation,
-      });
-    } else {
-      const { actorId: _actorId, ...entry } = activity;
-      feed.push({ ...entry, firstParticipation });
-    }
+    const key = activity.dedupeKey ?? activity.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    feed.push({
+      ...activity,
+      firstParticipation: Boolean(
+        activity.actorId && firstParticipants.has(activity.actorId),
+      ),
+    });
   }
   return feed;
+}
+
+/** Counts for the summary strip. They are derived from the same rows as the tabs. */
+export function summarizeParticipation(
+  feed: ParticipationFeedEntry[],
+): ParticipationSummary {
+  return {
+    votes: feed.filter((entry) => entry.kind === "vote").length,
+    contributions: feed.filter((entry) => entry.kind === "contribution").length,
+    proposals: feed.filter((entry) => entry.kind === "proposal").length,
+    firstTimeParticipants: new Set(
+      feed
+        .filter((entry) => entry.firstParticipation && entry.actorId)
+        .map((entry) => entry.actorId),
+    ).size,
+  };
 }
