@@ -232,7 +232,7 @@ const hasActiveFilters =
         <div class="workflow-tabs-row">
           <nav class="workflow-tabs" aria-label="Filter proposals by stage">
             {stageTabs.map((tab) => {
-              const isCurrent = initialStage === tab.id;
+              const isCurrent = tab.id === 'all' ? initialStage === '' : initialStage === tab.id;
               return (
                 <a
                   href={buildFilterUrl({ stage: tab.id, focus: null, needsVote: null, page: '1' })}

@@ -372,10 +372,8 @@ async function loadPublicTallyContext(
     (row): row is ProposalRecord & { ballotRevisionId: string } =>
       Boolean(row.ballotRevisionId),
   );
-  const proposalIds = withBallot.map((row) => row.proposalId);
-  const ballotIds = withBallot.map((row) =>
-    proposalBallotId(row.proposalId),
-  );
+  const proposalIds = rows.map((row) => row.proposalId);
+  const ballotIds = rows.map((row) => proposalBallotId(row.proposalId));
   const [projections, resultRows] = await Promise.all([
     readBallotTallyProjections(
       db,
