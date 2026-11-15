@@ -168,6 +168,10 @@ Projections and indexes are no-ops and there are no transactions. Development an
 
 Digest and CRM verification endpoints exist, but no scheduler is configured. No email digest or verification cycle runs by default.
 
+**Partially resolved (operational observability slice, #39):** authorised runs now record a durable `job_runs` ledger entry (90-day TTL) for the governance scheduler, digest and CRM verification, including failures, with no secrets or member data. `npm run ops:health` evaluates governance scheduling, ballot deadlines, digest cadence, verification backlog, recent email delivery and Turnstile, with named thresholds and exit codes `0` healthy, `2` degraded, `1` failing. `/api/health` publishes coarse `governanceScheduler` and `jobs` states and stays 200 when only a job is degraded.
+
+**Still missing:** the external scheduler itself is not configured in Coolify production, no run has been observed in production, there is no metrics/tracing backend, no alert delivery and no admin health page. `ops:health` is the input an external monitor would alert on.
+
 **Direction:** Configure and monitor an external scheduler. Treat missing jobs as an operational incident.
 
 ## Priority 3 — product and documentation gaps

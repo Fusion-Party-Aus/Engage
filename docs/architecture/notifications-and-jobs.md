@@ -95,6 +95,8 @@ Consequences of missing schedulers:
 - No ballot opens or closes automatically; closure is enforced by deadline at vote time.
 - No reminder is sent unless a digest job is run.
 
+Every authorised run — success or failure — is recorded in the `job_runs` ledger, and `npm run ops:health` turns that evidence into exit-coded states. See [job cadence and health](../architecture/build-deploy-operations.md#job-cadence). A dry run is recorded but never counts as a scheduled run for health.
+
 ## Scripts
 
 `scripts/` contains operational and migration tooling, not application runtime code.
@@ -109,6 +111,7 @@ Consequences of missing schedulers:
 | `seed-branches.ts` | Seed standard branches |
 | `migrate-branch-participation.ts` | Branch participation migration |
 | `membership-verification.ts` | CRM verification/reconcile/backfill CLI |
+| `operational-health.ts` | `npm run ops:health`: scheduled-work health, JSON or `--human`, exit codes |
 | `grant-engage-admin.mjs` | Grant platform administrator |
 | `preview-emails.ts` | Render templates locally |
 | `admin-engagement-http.mjs` | Mock-provider HTTP harness |
