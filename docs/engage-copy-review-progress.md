@@ -37,7 +37,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 5a | Sign-in, My Engage shell/queues/activity and lifecycle guidance | Delivered in `515cf47`; validation checkpoint includes the label-assertion update |
 | 5b | Onboarding/settings, branch preferences, notification controls | Delivered in `9515e90`; remote tree verified |
 | 6 | Email templates/subjects, push/digest messages and unsubscribe flows | Delivered in `6a52a2a`; remote tree verified |
-| 7a | Admin dashboard, proposal registers/detail, ballots and policy ratification/publication | Validated; publishing checkpoint |
+| 7a | Admin dashboard, proposal registers/detail, ballots and policy ratification/publication | Delivered in `7308475`; remote tree verified |
 | 7b | Roles/members/branches/reports/settings/migrations/Sense Box/engagement admin | Next |
 | 8 | API/form error responses shown to users, legal-copy consistency, metadata, empty/loading states and whole-site terminology sweep | Not reviewed |
 
