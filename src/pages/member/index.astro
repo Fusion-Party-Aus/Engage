@@ -283,12 +283,12 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 
           <header class="signin-hero">
             <div class="signin-hero__badges">
-              <Badge variant="info">Passwordless member access</Badge>
+              <Badge variant="info">Member sign-in</Badge>
               <Badge variant="outline">Passkey · Email link · Google</Badge>
             </div>
             <h1>{intentLabel ? `${intentLabel}.` : 'Sign in to take part.'}</h1>
             <p class="signin-hero__lead">
-              Explore proposals, shape policy wording, and vote on bound revisions. Returning members can sign in with a passkey or email link; first-time members only need the email and full name on their Fusion Party membership.
+              Sign in to discuss ideas, propose changes and vote where eligible. Use the email address on your Fusion membership. If this is your first visit, we’ll also ask for your full name.
             </p>
           </header>
 
@@ -303,14 +303,14 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 <div class="signin-card__header">
                   <div>
                     <h2 id="primary-signin-heading">Member sign-in</h2>
-                    <p id="signin-card-subtitle">No password to remember—choose your fastest sign-in method below.</p>
+                    <p id="signin-card-subtitle">Choose a passkey, Google or an email sign-in link where available.</p>
                   </div>
-                  <Badge variant="secondary" id="signin-speed-badge">Takes 30 sec</Badge>
+                  <Badge variant="secondary" id="signin-speed-badge">No password needed</Badge>
                 </div>
 
                 {/* Fast 1-Tap Methods: Passkey & Google */}
                 {(passkeyAvailable || googleAvailable) && (
-                  <div class="signin-quick-actions" aria-label="One-tap sign-in options">
+                  <div class="signin-quick-actions" aria-label="Sign-in options">
                     {passkeyAvailable && (
                       <div class="signin-quick-block">
                         <Button id="passkey-signin" type="button" variant="outline" className="signin-passkey-btn">
@@ -322,7 +322,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                           <p id="passkey-status" class="form-status" role="status" aria-live="polite"></p>
                           <label class="signin-autoprompt-toggle" id="passkey-autoprompt-wrap" hidden>
                             <Checkbox id="passkey-autoprompt" defaultChecked />
-                            <span>Auto-prompt passkey on this device</span>
+                            <span>Ask for my passkey automatically on this device</span>
                           </label>
                         </div>
                       </div>
@@ -333,7 +333,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                         <Button id="google-signin" type="button" variant="outline" className="signin-google-btn">
                           <KeyRound className="size-4" aria-hidden="true" />
                           <span>Continue with Google</span>
-                          <span class="signin-btn-hint">Verified matching membership email</span>
+                          <span class="signin-btn-hint">Use your membership email</span>
                         </Button>
                         <p id="google-status" class="form-status" role="status" aria-live="polite"></p>
                       </div>
@@ -343,7 +343,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 
                 {emailAvailable && (passkeyAvailable || googleAvailable) && (
                   <div class="signin-divider" role="separator">
-                    <span>or receive a one-click email link</span>
+                    <span>or receive an email sign-in link</span>
                   </div>
                 )}
 
@@ -372,17 +372,17 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                           name="name"
                           autoComplete="name"
                           aria-label="Full name (first sign-in only)"
-                          placeholder="Required on your first sign-in so an admin can verify your membership"
+                          placeholder="Your full name as it appears on your membership"
                           minLength={2}
                           maxLength={100}
                         />
                         <p class="signin-field-hint">
-                          Already signed in before? Leave your name blank—we’ll recognise your email automatically.
+                          If you’ve signed in before, you can leave your name blank.
                         </p>
                       </div>
                     </details>
 
-                    <p class="signin-expiry-note">New accounts have optional Engage digests off. After signing in, choose whether to receive ballot reminders in onboarding or My Engage → Notifications. Verification and sign-in messages are separate.</p>
+                    <p class="signin-expiry-note">Optional digests are off for new accounts. Choose reminders in My Engage → Notifications. Sign-in and membership messages are separate.</p>
                     <Turnstile client:load siteKey={turnstileSiteKey} action="signin" />
                     <div class="signin-submit-row">
                       <Button type="submit" className="signin-submit-btn">
@@ -415,7 +415,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                         <option value="administrator">National Administrator (admin@local.test)</option>
                       </NativeSelect>
                     </Field>
-                    <p class="signin-expiry-note">New accounts have optional Engage digests off. After signing in, choose whether to receive ballot reminders in onboarding or My Engage → Notifications. Verification and sign-in messages are separate.</p>
+                    <p class="signin-expiry-note">Optional digests are off for new accounts. Choose reminders in My Engage → Notifications. Sign-in and membership messages are separate.</p>
                     <div class="signin-submit-row">
                       <Button type="submit" variant="outline">Sign in locally</Button>
                       <p id="dev-status" class="form-status" role="status" aria-live="polite"></p>
@@ -449,28 +449,28 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 <span class="onboarding-roadmap__num tabular">1</span>
                 <div>
                   <strong>Sign in without a password</strong>
-                  <p>Request a 1-click email link or continue with Google using your Fusion membership email.</p>
+                  <p>Use your Fusion membership email to request a sign-in link or continue with Google.</p>
                 </div>
               </li>
               <li class="onboarding-roadmap__step">
                 <span class="onboarding-roadmap__num tabular">2</span>
                 <div>
-                  <strong>Save a passkey for 1-tap return access</strong>
-                  <p>Enroll Face ID, Touch ID, Windows Hello, or your password manager in 15 seconds from your dashboard.</p>
+                  <strong>Add a passkey for next time</strong>
+                  <p>Once signed in, you can add a passkey using your device or password manager.</p>
                 </div>
               </li>
               <li class="onboarding-roadmap__step">
                 <span class="onboarding-roadmap__num tabular">3</span>
                 <div>
-                  <strong>Automatic membership &amp; branch check</strong>
-                  <p>An administrator confirms your Fusion membership and branch electorate so you can comment, amend, and vote.</p>
+                  <strong>Check your membership</strong>
+                  <p>Your Fusion membership must be verified before you can contribute. Branch ballots also require membership of that branch.</p>
                 </div>
               </li>
               <li class="onboarding-roadmap__step">
                 <span class="onboarding-roadmap__num tabular">4</span>
                 <div>
-                  <strong>Shape wording &amp; vote on bound revisions</strong>
-                  <p>Post stances during Stage 2 (Deliberate) and cast your ballot on frozen wording in Stage 3 (Decide).</p>
+                  <strong>Discuss the idea, then vote</strong>
+                  <p>Help improve the wording during deliberation. When voting opens, read the exact ballot text and decide whether to take part.</p>
                 </div>
               </li>
             </ol>
@@ -480,12 +480,12 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 <Compass className="size-4 shrink-0 text-[var(--horizon-purple)]" aria-hidden="true" />
                 <div>
                   <strong>Just browsing today? No account needed.</strong>
-                  <p>All public proposals, revision diffs, ballot tallies, and published policies are open to everyone.</p>
+                  <p>Read public proposals, discussions, wording changes and ballot totals without signing in.</p>
                 </div>
               </div>
               <div class="onboarding-public-links">
                 <Button href="/proposals/" variant="outline" size="sm">Browse proposals</Button>
-                <Button href="/how-it-works/" variant="ghost" size="sm">60-second walkthrough →</Button>
+                <Button href="/how-it-works/" variant="ghost" size="sm">How it works →</Button>
               </div>
             </div>
           </div>
@@ -496,7 +496,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         <header class="member-header">
           <div class="member-header__main">
             <div class="member-header__title-row">
-              <h1>{memberView === 'activity' ? 'Activity & Governance Log' : memberView === 'account' ? 'My Account' : memberView === 'notifications' ? 'Notifications' : memberView === 'branches' ? 'My branches' : 'My Engage'}</h1>
+              <h1>{memberView === 'activity' ? 'Your activity' : memberView === 'account' ? 'My account' : memberView === 'notifications' ? 'Notifications' : memberView === 'branches' ? 'My branches' : 'My Engage'}</h1>
               <Badge variant={user.status === 'verified' ? 'success' : user.status === 'suspended' ? 'destructive' : 'warning'}>
                 {user.status === 'verified' ? 'Verified member' : user.status === 'suspended' ? 'Suspended' : 'Verification pending'}
               </Badge>
@@ -535,7 +535,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 </>
               ) : (
                 <>
-                  <strong>Membership verification pending.</strong> You can browse all proposals and decisions while an administrator confirms your Fusion Party membership.
+                  <strong>Membership verification pending.</strong> You can read public proposals and decisions while your Fusion membership is checked.
                 </>
               )}
             </AlertDescription>
@@ -547,9 +547,9 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           <p>{nextAction?.detail}</p>
           <Button href={nextAction?.href}>{nextAction?.title} <ArrowRight className="size-4" aria-hidden="true" /></Button>
           <div class="engage-bookmark">
-            <label for="engage-url">Find Engage again — bookmark or copy this address</label>
+            <label for="engage-url">Save this address for next time</label>
             <Input id="engage-url" readOnly defaultValue={persistentEngageUrl} />
-            <Button type="button" id="copy-engage-url" variant="outline" size="sm">Copy Engage URL</Button>
+            <Button type="button" id="copy-engage-url" variant="outline" size="sm">Copy address</Button>
             <p id="copy-engage-status" role="status" aria-live="polite"></p>
           </div>
         </section>
@@ -616,7 +616,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             <span class="member-stat__label">Your contributions</span>
             <div class="member-stat__bottom">
               <strong class="member-stat__value tabular">{(activity?.votes.length ?? 0) + (activity?.comments.length ?? 0) + (activity?.proposals.length ?? 0)}</strong>
-              <span class="member-stat__hint tabular">{activity?.votes.length ?? 0} votes · {activity?.comments.length ?? 0} stances</span>
+              <span class="member-stat__hint tabular">{activity?.votes.length ?? 0} votes · {activity?.comments.length ?? 0} comments</span>
             </div>
           </a>
         </div>
@@ -627,7 +627,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             Overview
           </a>
           <a href="/member/?view=activity" class="member-tab" aria-current={memberView === 'activity' ? 'page' : undefined}>
-            Activity &amp; Log
+            Your activity
             <span class="member-tab__count tabular">{memberTimelineCount}</span>
           </a>
           <a href="/member/?view=notifications" class="member-tab" aria-current={memberView === 'notifications' ? 'page' : undefined}>
@@ -641,7 +641,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             {memberBranches.length > 0 && <span class="member-tab__count tabular">{memberBranches.length}</span>}
           </a>
           <a href="/member/?view=account" class="member-tab" aria-current={memberView === 'account' ? 'page' : undefined}>
-            Account &amp; Access
+            Account and sign-in
           </a>
         </nav>
 
@@ -770,16 +770,16 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               <div class="member-panel__head">
                 <div>
                   <div class="member-panel__title-row">
-                    <h2 id="opportunities-heading">Open for deliberation &amp; amendments</h2>
+                    <h2 id="opportunities-heading">Join a discussion</h2>
                     <Badge variant="secondary" className="tabular">{deliberationOpportunities.length}</Badge>
                   </div>
-                  <p>Proposals currently in Stage 2 (Deliberate) where your stance or wording suggestion can shape the final ballot.</p>
+                  <p>Ask a question, share evidence or propose a wording change before voting begins.</p>
                 </div>
                 <Button href="/proposals/?stage=deliberate" variant="ghost" size="sm">All discussions</Button>
               </div>
 
               {deliberationOpportunities.length === 0 ? (
-                <p class="member-panel__empty">No proposals are currently in active deliberation.</p>
+                <p class="member-panel__empty">No proposals are in deliberation right now.</p>
               ) : (
                 <>
                   <ul class="opportunity-list">
@@ -789,7 +789,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                           <div class="opportunity-row__meta">
                             <span class="tabular opportunity-id">{item.proposalId}</span>
                             <span class="opportunity-space">{item.space}</span>
-                            <span class="tabular opportunity-count">{item.commentCount} {item.commentCount === 1 ? 'stance' : 'stances'}</span>
+                            <span class="tabular opportunity-count">{item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}</span>
                           </div>
                           <a class="opportunity-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
                         </div>
@@ -816,7 +816,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 <div class="member-panel__head">
                   <div>
                     <h2 id="branch-activity-heading">Activity in your branches</h2>
-                    <p>Proposals originating in or governed by branches you follow or where your membership is verified.</p>
+                    <p>Ideas and decisions involving branches you follow or belong to.</p>
                   </div>
                 </div>
                 <div class="branch-groups">
@@ -856,8 +856,8 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               <section class="member-panel" aria-labelledby="proposals-heading">
                 <div class="member-panel__head">
                   <div>
-                    <h2 id="proposals-heading">Ideas you authored ({activity.proposals.length})</h2>
-                    <p>Proposals you submitted to the platform.</p>
+                    <h2 id="proposals-heading">Ideas you put forward ({activity.proposals.length})</h2>
+                    <p>Revisit the proposals you submitted.</p>
                   </div>
                 </div>
                 <ul class="opportunity-list">
@@ -1099,10 +1099,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
       passkeyBtnLabel.textContent = 'Sign in with your saved passkey';
     }
     if (signinSubtitle) {
-      signinSubtitle.textContent = 'Welcome back—use your saved device passkey for 1-tap access.';
+      signinSubtitle.textContent = 'Welcome back. You can use your saved passkey to sign in.';
     }
     if (signinSpeedBadge) {
-      signinSpeedBadge.textContent = '1-tap passkey ready';
+      signinSpeedBadge.textContent = 'Saved passkey';
     }
     if (passkeyAutoWrap && passkeyAutoCheckbox) {
       passkeyAutoWrap.hidden = false;
@@ -1139,7 +1139,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         const errCode = 'code' in result.error ? result.error.code : undefined;
         if (errCode === 'PASSKEY_NOT_FOUND') {
           passkeyStatus.textContent =
-            'No Engage passkey matched that credential. Sign in with an email link first, then add a passkey in Account & Access.';
+            'No Engage passkey matched that credential. Sign in with an email link first, then add a passkey in Account and sign-in.';
         } else if (
           errCode === 'AUTH_CANCELLED' ||
           errCode === 'ERROR_CEREMONY_ABORTED'
@@ -1250,7 +1250,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         window.dispatchEvent(new Event('engage:turnstile-reset'));
         if (result.error.code === 'NAME_REQUIRED') {
           setEmailMessage(
-            'Welcome! Because this is your first sign-in with this email, please enter your full name so an administrator can verify your Fusion membership.',
+            'Please enter your full name as it appears on your Fusion membership. We need it for your first sign-in with this email.',
             'error',
           );
           if (nameDetails) {
@@ -1276,7 +1276,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           // Ignore
         }
         setEmailMessage(
-          `Check ${emailValue} for your sign-in link (valid for 10 minutes, single use). Tip: once signed in, we’ll help you save a passkey for 1-tap access next time.`,
+          `Check ${emailValue} for your sign-in link. It works once and expires after 10 minutes.`,
           'success',
         );
       }

@@ -31,7 +31,6 @@ const {
 const visible = items.slice(0, 6);
 const remaining = items.slice(6);
 const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalEligibleCount) * 100) : 0;
-const estMins = Math.max(1, Math.ceil((items.length * 45) / 60));
 ---
 
 <section class="member-attention" aria-labelledby="awaiting-heading">
@@ -40,24 +39,24 @@ const estMins = Math.max(1, Math.ceil((items.length * 45) / 60));
       <div class="attention-title-row">
         <h2 id="awaiting-heading">Open ballots for you</h2>
         <Badge variant={items.length ? 'warning' : 'success'}>
-          {items.length ? `${items.length} remaining` : 'All complete'}
+          {items.length ? `${items.length} remaining` : 'None waiting'}
         </Badge>
       </div>
       <p class="attention-lead">
         {canParticipate
           ? totalEligibleCount > 0
-            ? `${completedCount} of ${totalEligibleCount} eligible ballots completed (${progressPct}%)${items.length ? ` · ~${estMins} min to finish` : ''}. ${eligibilityNote}`
+            ? `You have voted in ${completedCount} of ${totalEligibleCount} open ballots you are eligible for. ${eligibilityNote}`
             : eligibilityNote
-          : 'Verify your membership before you can cast a formal ballot (you can still preview and queue your choice on any open ballot).'}
+          : 'You need verified membership and ballot eligibility to vote. You can still read public ballots.'}
       </p>
     </div>
     <div class="attention-head__right">
       {canParticipate && totalEligibleCount > 0 && (
-        <div class="attention-progress" aria-label={`${completedCount} of ${totalEligibleCount} ballots completed`}>
+        <div class="attention-progress" aria-label={`${completedCount} of ${totalEligibleCount} ballots voted in`}>
           <div class="attention-progress__bar" aria-hidden="true">
             <span style={`width: ${progressPct}%`}></span>
           </div>
-          <span class="attention-progress__label tabular">{completedCount}/{totalEligibleCount} done</span>
+          <span class="attention-progress__label tabular">{completedCount}/{totalEligibleCount} voted in</span>
         </div>
       )}
       {items.length > 0 && (
@@ -70,7 +69,7 @@ const estMins = Math.max(1, Math.ceil((items.length * 45) / 60));
 
   {!canParticipate ? (
     <div class="attention-empty">
-      <p>Your account is awaiting membership verification. You can preview and save your ballot choices now and they will be recorded once verified.</p>
+      <p>Check your membership status in My Engage. If verification is pending, you can save a choice on an open ballot. It can count after verification only if you are eligible and the ballot is still open on matching wording.</p>
       <Button href="/proposals/?stage=decide" variant="outline" size="sm">Browse open ballots</Button>
     </div>
   ) : items.length === 0 ? (
@@ -100,7 +99,7 @@ const estMins = Math.max(1, Math.ceil((items.length * 45) / 60));
               {item.ballotClosesAt && <p><time datetime={new Date(item.ballotClosesAt).toISOString()} data-ballot-deadline data-prefix="Closes">Closes {ballotDeadlineLabel(item.ballotClosesAt)}</time></p>}
             </div>
             <Button href={`/proposals/${item.slug}/#proposal-vote`} size="sm" variant="outline">
-              Vote (~45s)
+              Read ballot
               <ArrowRight aria-hidden="true" />
             </Button>
           </li>

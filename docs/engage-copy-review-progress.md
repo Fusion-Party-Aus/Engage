@@ -7,7 +7,7 @@ Updated 15 November 2026. Source of truth: pushed branch and this document, not 
 - Issue: https://github.com/Fusion-Party-Aus/Engage/issues/97
 - Branch: `copy/97-editorial-review`, based on main `20dfa90`.
 - PR: https://github.com/Fusion-Party-Aus/Engage/pull/98 (draft).
-- Next task: batch 5, member sign-in/onboarding, My Engage, settings, branch preferences and notification interfaces. Email/admin/error/legal sweeps remain.
+- Next task: batch 5b, MemberOnboarding, MemberSettings, BranchChooser/BranchMemberships and notification interfaces. Sign-in and dashboard shell/queues are reviewed; email/admin/error/legal sweeps remain.
 - This is an incomplete site-wide review. Keep #97 open. Never mark a batch delivered until its commit is remotely visible and validation is recorded.
 
 ## Recovery and scope
@@ -34,7 +34,8 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 3a | Proposal browsing and new-proposal forms, scope/change selectors | Delivered in `0a4a86f`; remote tree verified |
 | 3b | Proposal detail, seconding, comments, amendment and ballot interfaces | Delivered in `1f4ca17`; remote tree verified |
 | 4 | Public policy registry/detail, provenance/change notices, branch directory and Sense Box | Delivered in `7314b06`; remote tree verified |
-| 5 | Onboarding, membership, My Engage, account, branch preferences, notifications | Not reviewed beyond discussion intent |
+| 5a | Sign-in, My Engage shell/queues/activity and lifecycle guidance | Validated; publishing checkpoint |
+| 5b | Onboarding/settings, branch preferences, notifications | Next |
 | 6 | Emails, push, digests and unsubscribe flows | Not reviewed |
 | 7 | Administration, roles, membership, governance, moderation, integrations and operational errors | Not reviewed |
 | 8 | API/form error responses shown to users, legal-copy consistency, metadata, empty/loading states and whole-site terminology sweep | Not reviewed |
@@ -98,3 +99,9 @@ Reviewed policy index, branch-policy route, shared registry/detail, branch direc
 Sense Box asks “Where does this apply?” because National is a valid destination. Removed guessed completion time. Private-submission/consent promises and authorised organiser gates retained; their conflict with all-public direction is an explicit access-policy question. Public branch-directory counts are described as proposals, not ideas in a particular stage.
 
 Validation: typecheck and production build pass; focused policy-registry/change/import/Sense Box tests pass (37 passed, none skipped); diff whitespace and raw-control audit pass (hidden history input only). No browser/mobile claim; no controls/CSS changed. PolicyDetail status labels avoid claiming an Implement-stage proposal has necessarily passed or is only awaiting publication; actual decision record remains authoritative.
+
+## Batch 5a handover
+
+Sign-in and dashboard shell/queues/activity prose reviewed. Replaced speed claims with practical sign-in explanations, clarified membership/branch eligibility and optional email defaults. Public browsing wording respects current visibility limits. Queues describe votes cast rather than tasks completed; pending-choice language reflects eligibility, deadline and revision conditions. CatchUpDigest reviewed and retained; governance log description simplified. Dev-only sign-in remains explicitly labelled, and authentication handling/return destinations unchanged.
+
+Validation: `pnpm check`, production build, diff whitespace and raw-control audit pass (no matches). Focused member-lifecycle/activity/auth/boundary suites passed; optional persistence suites follow their existing skip rules. No browser claim. Automatic membership-verification promises removed from public copy; no CRM or auth behaviour changed.

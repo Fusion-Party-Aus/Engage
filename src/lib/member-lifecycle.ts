@@ -20,9 +20,9 @@ export async function recordParticipation(db: Db, memberId: string, at = new Dat
 }
 export function memberNextAction(status: string, canParticipate: boolean, votes: number, outstanding: number) {
   if (status === 'suspended') return {title:'Review your membership status', detail:'Contact an administrator about restoring participation.', href:'/member/?view=account'};
-  if (!canParticipate) return {title:'View application status', detail:'Your Fusion membership is awaiting administrator verification. Check your account details are correct.', href:'/member/?view=account'};
+  if (!canParticipate) return {title:'Check membership status', detail:'Your Fusion membership needs to be checked before you can participate. Check that your account details match your membership.', href:'/member/?view=account'};
   if (outstanding && !votes) return {title:'Cast your first vote', detail:'Your membership is verified. Review the wording of a ballot below before deciding.', href:'/member/#outstanding-ballots'};
-  if (outstanding) return {title:'Review outstanding ballots', detail:'These open ballots still need your attention.', href:'/member/#outstanding-ballots'};
+  if (outstanding) return {title:'Review outstanding ballots', detail:'These ballots are open and you haven’t voted in them. Read the wording before deciding whether to take part.', href:'/member/#outstanding-ballots'};
   if (!votes) return {title:'Explore open ballots', detail:'No eligible outstanding ballots are available right now. You can explore proposals and return when a ballot opens.', href:'/proposals/?stage=decide'};
   return {title:'View participation history', detail:'You are caught up on eligible open ballots.', href:'/member/?view=activity'};
 }
