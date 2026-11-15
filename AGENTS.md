@@ -325,6 +325,14 @@ Prefer the simplest maintainable implementation that satisfies the requirements.
 - Avoid adding dependencies for functionality adequately supported by the existing stack.
 - Do not silently increase operational complexity to solve a minor interface problem.
 
+### Module boundaries (no god modules)
+
+Keep `src/lib/` modules scoped to a single domain responsibility rather than accumulating cross-domain catch-all files.
+
+- **Do not add logic to `src/lib/store.ts`.** It is a deprecated compatibility barrel only, re-exporting from `proposal-helpers.ts`, `proposals-store.ts`, `comments-store.ts`, `contribution-feedback.ts`, `voting-store.ts`, and `members-store.ts`.
+- **Import from the specific domain module.** Production modules in `src/lib/` must import from the narrow domain module they need, never from `./store.ts`.
+- **Decompose before growing.** Avoid multi-domain modules or oversized functions; extract focused helpers or a new domain module rather than letting a single `src/lib/` file grow into a cross-domain god module (enforced by `src/lib/store-architecture.test.ts`).
+
 ## 8. Git & Changelog Discipline
 
 Every meaningful slice of work must be committed to Git using clear Conventional Commits.
