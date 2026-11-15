@@ -70,7 +70,7 @@ test('funnel deduplicates first vote and uses mature cohorts and subsequent part
  assert.equal(lifecycleConversion(events,new Date('2026-10-03')).sevenDayEligible,0);
 });
 test('lifecycle actions never promise voting to pending or suspended members',()=>{
- assert.equal(memberNextAction('pending',false,0,9).title,'View application status');
+ assert.equal(memberNextAction('pending',false,0,9).title,'Check membership status');
  assert.equal(memberNextAction('suspended',false,0,9).title,'Review your membership status');
  assert.equal(memberNextAction('verified',true,0,1).title,'Cast your first vote');
  assert.equal(memberNextAction('verified',true,0,0).title,'Explore open ballots');

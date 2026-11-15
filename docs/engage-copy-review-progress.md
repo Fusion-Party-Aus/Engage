@@ -34,7 +34,7 @@ Deliver one independently reviewable batch at a time. Inspect functionality, edi
 | 3a | Proposal browsing and new-proposal forms, scope/change selectors | Delivered in `0a4a86f`; remote tree verified |
 | 3b | Proposal detail, seconding, comments, amendment and ballot interfaces | Delivered in `1f4ca17`; remote tree verified |
 | 4 | Public policy registry/detail, provenance/change notices, branch directory and Sense Box | Delivered in `7314b06`; remote tree verified |
-| 5a | Sign-in, My Engage shell/queues/activity and lifecycle guidance | Validated; publishing checkpoint |
+| 5a | Sign-in, My Engage shell/queues/activity and lifecycle guidance | Delivered in `515cf47`; validation checkpoint includes the label-assertion update |
 | 5b | Onboarding/settings, branch preferences, notifications | Next |
 | 6 | Emails, push, digests and unsubscribe flows | Not reviewed |
 | 7 | Administration, roles, membership, governance, moderation, integrations and operational errors | Not reviewed |
@@ -104,4 +104,4 @@ Validation: typecheck and production build pass; focused policy-registry/change/
 
 Sign-in and dashboard shell/queues/activity prose reviewed. Replaced speed claims with practical sign-in explanations, clarified membership/branch eligibility and optional email defaults. Public browsing wording respects current visibility limits. Queues describe votes cast rather than tasks completed; pending-choice language reflects eligibility, deadline and revision conditions. CatchUpDigest reviewed and retained; governance log description simplified. Dev-only sign-in remains explicitly labelled, and authentication handling/return destinations unchanged.
 
-Validation: `pnpm check`, production build, diff whitespace and raw-control audit pass (no matches). Focused member-lifecycle/activity/auth/boundary suites passed; optional persistence suites follow their existing skip rules. No browser claim. Automatic membership-verification promises removed from public copy; no CRM or auth behaviour changed.
+Validation: `pnpm check`, production build, diff whitespace and raw-control audit pass (no matches). First focused run found an assertion pinned to the old membership-status link label. Updated it; rerun passed (27 passed, 3 optional suites skipped). No browser claim. Automatic membership-verification promises removed from public copy; no CRM or auth behaviour changed.
