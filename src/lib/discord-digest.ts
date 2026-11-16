@@ -14,6 +14,18 @@ const DAY = 86_400_000;
 const MAX_ITEMS = 5;
 const DISCORD_DIGEST_RUNS = "discord_digest_runs";
 
+interface DiscordDeliveryRecord {
+  _id: string;
+  kind: "weekly" | "test";
+  status: "sending" | "sent" | "held";
+  createdAt: Date;
+  featuredIds: string[];
+  messageId?: string;
+  acceptedAt?: Date;
+  heldAt?: Date;
+}
+
+
 export type DigestStage = "deliberate" | "decide";
 export interface DigestCandidate {
   proposalId: string;
@@ -173,7 +185,7 @@ function safeTitle(value: string): string {
     .trim()
     .slice(0, 115)
     .replace(/@/g, "@\u200b")
-    .replace(/([\\*_`~|>\[\]()/])/g, "\\$1");
+    .replace(/[\\*_`~|>\[\]()]/g, "\\$&");
 }
 
 export function validateDiscordWebhook(value: string): URL {
@@ -242,7 +254,7 @@ async function historicalExposures(db: Db, now: Date): Promise<Map<string, {
   count: number;
   last: Date | null;
 }>> {
-  const history = await db.collection(DISCORD_DIGEST_RUNS)
+  const history = await db.collection<DiscordDeliveryRecord>(DISCORD_DIGEST_RUNS)
     .find({
       kind: "weekly",
       status: { $in: ["sent", "held", "sending"] },
@@ -378,14 +390,14 @@ export async function runWeeklyDiscordDigest(
     throw new Error("Test and live Discord webhooks must differ.");
   }
   const preview = await previewWeeklyDiscordDigest(db, env, now);
-  const outbox = db.collection(DISCORD_DIGEST_RUNS);
+  const outbox = db.collection<DiscordDeliveryRecord>(DISCORD_DIGEST_RUNS);
   const id = `discord:weekly:${preview.weekKey}`;
   if (!preview.candidates.length) {
     return { status: "empty", featured: 0 };
   }
   try {
     await outbox.insertOne({
-      _id: id as never,
+      _id: id,
       kind: "weekly",
       status: "sending",
       createdAt: now,
@@ -434,10 +446,10 @@ export async function sendTestDiscordDigest(
   const preview = await previewWeeklyDiscordDigest(db, env, now, true);
   const minute = Math.floor(now.getTime() / 60_000);
   const id = `discord:test:${actorId}:${minute}`;
-  const outbox = db.collection(DISCORD_DIGEST_RUNS);
+  const outbox = db.collection<DiscordDeliveryRecord>(DISCORD_DIGEST_RUNS);
   try {
     await outbox.insertOne({
-      _id: id as never,
+      _id: id,
       kind: "test",
       status: "sending",
       createdAt: now,
