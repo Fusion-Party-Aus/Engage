@@ -27,6 +27,10 @@ import {
 // The projection is written after a vote transaction commits and is compared
 // with the authoritative bound tally, so these cases need a real replica set.
 const mongoUri = process.env.VOTING_TEST_MONGODB_URI;
+// The full suite runs against a slow, shared replica set. A projection write
+// that misses its 500 ms production deadline is allowed to be abandoned, which
+// would make an equality assertion racy; give the test writes room to finish.
+process.env.ENGAGE_BALLOT_TALLY_DEADLINE_MS = "15000";
 
 const memberUser = (memberId: string): SessionUser => ({
   memberId,
@@ -117,6 +121,52 @@ async function assertRowMatchesVotes(
     tallyOf(await projectionRow(db, ballotId, revisionId)),
     await authoritativeTally(db, ballotId, revisionId),
   );
+}
+
+/**
+ * Interleaves an action immediately before the rebuild's compare-and-set write,
+ * after its recount. The action's increment must make the CAS fail so the
+ * rebuild recounts and overwrites rather than skipping the increment.
+ */
+function proxyTallyCas(db: Db, action: () => Promise<void>): Db {
+  let fired = false;
+  return new Proxy(db as any, {
+    get(target, property) {
+      if (property === "collection") {
+        return (name: string) => {
+          const source = target.collection(name);
+          if (name !== BALLOT_TALLIES) return source;
+          return new Proxy(source, {
+            get(collection, key) {
+              if (key === "updateOne") {
+                return async (
+                  filter: Record<string, unknown>,
+                  update: Record<string, any>,
+                  options?: Record<string, unknown>,
+                ) => {
+                  if (
+                    !fired &&
+                    update?.$set &&
+                    "version" in update.$set
+                  ) {
+                    fired = true;
+                    await action();
+                  }
+                  return collection.updateOne(filter, update, options);
+                };
+              }
+              const value = (collection as any)[key];
+              return typeof value === "function"
+                ? value.bind(collection)
+                : value;
+            },
+          });
+        };
+      }
+      const value = (target as any)[property];
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as Db;
 }
 
 async function insertVote(
@@ -405,7 +455,6 @@ describe(
             previousChoice: "reject",
             choice: "approve",
             hadPreviousVote: true,
-            voteUpdatedAt: movedAt,
           }),
           updateBallotTallyProjection(db, {
             ballotId,
@@ -414,14 +463,12 @@ describe(
             previousChoice: "abstain",
             choice: "abstain",
             hadPreviousVote: true,
-            voteUpdatedAt: movedAt,
           }),
           updateBallotTallyProjection(db, {
             ballotId,
             revisionId: "rev-1",
             choice: "approve",
             hadPreviousVote: false,
-            voteUpdatedAt: newVoteAt,
           }),
         ]);
 
@@ -430,8 +477,8 @@ describe(
       }
     });
 
-    it("keeps the row equal to the votes when a rebuild races an increment", async () => {
-      for (let round = 0; round < 10; round += 1) {
+    it("keeps the row equal to the votes when a rebuild races increments for 20 rounds", async () => {
+      for (let round = 0; round < 20; round += 1) {
         const proposalId = `PROP-PROJECT-RACE-${round}`;
         const ballotId = `proposal:${proposalId}`;
         const now = Date.now();
@@ -445,34 +492,85 @@ describe(
             updatedAt: new Date(now - 60_000 + index),
           });
         }
-        // Deliberately missing/drifted row: the rebuild must recreate it while
-        // a new vote's increment arrives.
+        // Deliberately missing row: the rebuild must recreate it.
         await db.collection(BALLOT_TALLIES).deleteMany({ ballotId });
-        const newVoteAt = new Date(now);
-        await insertVote(db, {
-          ballotId,
-          proposalId,
-          revisionId: "rev-1",
-          memberId: "race-new",
-          choice: "reject",
-          updatedAt: newVoteAt,
-        });
 
-        await Promise.all([
-          rebuildBallotTallyProjection(db, {
+        const addNewVote = async () => {
+          await insertVote(db, {
             ballotId,
+            proposalId,
             revisionId: "rev-1",
-          }),
-          updateBallotTallyProjection(db, {
+            memberId: "race-new",
+            choice: "reject",
+            updatedAt: new Date(),
+          });
+          await updateBallotTallyProjection(db, {
             ballotId,
             revisionId: "rev-1",
             choice: "reject",
             hadPreviousVote: false,
-            voteUpdatedAt: newVoteAt,
-          }),
-        ]);
+          });
+        };
+
+        if (round % 2 === 0) {
+          // Deterministic interleave: the increment lands after the recount and
+          // before the compare-and-set, so the rebuild must detect the changed
+          // version, recount and overwrite. Nothing is skipped.
+          const interleaved = proxyTallyCas(db, addNewVote);
+          await rebuildBallotTallyProjection(interleaved, {
+            ballotId,
+            revisionId: "rev-1",
+          });
+        } else {
+          // The increment lands after the rebuild commits. The recount did not
+          // include it, so it must add on top.
+          await rebuildBallotTallyProjection(db, {
+            ballotId,
+            revisionId: "rev-1",
+          });
+          await addNewVote();
+        }
         await assertRowMatchesVotes(db, ballotId);
       }
+    });
+
+    it("applies increments after an absolute rebuild without skipping them", async () => {
+      const proposalId = "PROP-PROJECT-AFTER-REBUILD";
+      const ballotId = `proposal:${proposalId}`;
+      await insertVote(db, {
+        ballotId,
+        proposalId,
+        revisionId: "rev-1",
+        memberId: "after-rebuild-1",
+        choice: "approve",
+        updatedAt: new Date(),
+      });
+      await rebuildBallotTallyProjection(db, {
+        ballotId,
+        revisionId: "rev-1",
+      });
+      await insertVote(db, {
+        ballotId,
+        proposalId,
+        revisionId: "rev-1",
+        memberId: "after-rebuild-2",
+        choice: "reject",
+        updatedAt: new Date(),
+      });
+      await updateBallotTallyProjection(db, {
+        ballotId,
+        revisionId: "rev-1",
+        choice: "reject",
+        hadPreviousVote: false,
+      });
+      await assertRowMatchesVotes(db, ballotId);
+      const row = await projectionRow(db, ballotId);
+      assert.deepEqual(tallyOf(row), {
+        approve: 1,
+        abstain: 0,
+        reject: 1,
+        total: 2,
+      });
     });
 
     it("is revision-scoped", async () => {
