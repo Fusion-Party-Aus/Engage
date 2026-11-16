@@ -66,9 +66,11 @@ export interface DiscordSettingsPatch {
 }
 
 export class DiscordSettingsError extends Error {
-  constructor(message: string, public status = 422) {
+  status: number;
+  constructor(message: string, status = 422) {
     super(message);
     this.name = "DiscordSettingsError";
+    this.status = status;
   }
 }
 
