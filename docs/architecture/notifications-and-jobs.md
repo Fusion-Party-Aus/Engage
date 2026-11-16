@@ -49,6 +49,24 @@ Provider: Resend REST API, called directly.
 
 Governance events reach the inbox through the notification outbox described below. The in-app inbox is the baseline delivery channel for a formal ballot notice: the preference model has no per-topic in-app opt-out.
 
+### Discord (one-way weekly digest)
+
+Public proposal digest through a Discord webhook, with a deliberately **neglect-first**
+Attention Debt selection algorithm. Unlike per-member email reminders, this is a
+server-wide, non-personalised invitation to contribute; it is not tied to individual
+vote status or email notification consent.
+
+- Candidate selection is public national Deliberate/Decide proposals only.
+- The inaugural cohort opened together, so historical proposal creation dates
+  have no effect on the score.
+- Low activity, unfeatured proposals and time-critical ballots receive more
+  exposure through a seeded weighted lottery with repeat cooldown.
+- Only credible fresh public aggregate turnout is shown; never a private vote
+  or identifiable ballot choice.
+- An admin-only preview and explicit test send target a separate test Discord
+  server; live sending is disabled by default.
+- See [Discord weekly digest setup](../integrations/discord-weekly-digest.md).
+
 ### Web Push
 
 - `push_subscriptions` stores endpoints keyed by a hash of `memberId\0endpoint`.
@@ -184,6 +202,8 @@ produces a notification.
 | `/api/email/unsubscribe` | GET, POST | HMAC token | One-click unsubscribe |
 | `/api/email/webhook` | POST | Svix signature | Delivery/bounce/complaint events |
 | `/api/email/digest` | POST | Bearer `ENGAGE_CRON_SECRET` | Send due digest batches |
+| `/api/admin/discord-digest` | GET / POST | Admin session; Origin required on POST | Preview and explicitly test-send to separate Discord server |
+| `/api/cron/discord-digest` | POST | Bearer `ENGAGE_CRON_SECRET` | Run one public Discord digest per Melbourne week |
 
 ## Scheduled work
 
@@ -192,6 +212,7 @@ There is **no in-process scheduler**. `setInterval` is not used. Scheduled work 
 | Job | Endpoint | Secret | Gate |
 |---|---|---|---|
 | Ballot digest email | `POST /api/email/digest` | `ENGAGE_CRON_SECRET` | `ENGAGE_DIGEST_ENABLED === "true"` |
+| Discord weekly digest | `POST /api/cron/discord-digest` | `ENGAGE_CRON_SECRET` | `ENGAGE_DISCORD_DIGEST_ENABLED === "true"` |
 | CRM membership verification | `POST /api/cron/membership-verification` | `ENGAGE_CRM_VERIFICATION_CRON_SECRET` | CRM verification enabled (409 when off) |
 | Health probe | `GET /api/health` | None | Always available |
 
