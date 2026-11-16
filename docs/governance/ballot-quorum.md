@@ -55,6 +55,8 @@ If the platform has fewer than 30 eligible registered members, no ballot can pro
 
 The square-root term scales with the electorate. The `min(30, ceil(N/2))` term protects small electorates by requiring a proportional share. The rule is not a permanent 50% quorum: above 60 active members the square-root requirement is equal to or greater than the proportional term.
 
+When `N` is 0 the formula yields 0. The platform quorum is still a separate test, and the approval test still applies: a ballot with no votes is not successful. The implementation records the zero-active case explicitly rather than hiding it.
+
 ## What counts as participation
 
 Participation is any recorded `approve`, `abstain` or `reject` on the ballot. Each eligible member counts once, even if they change their vote while the ballot is open.
