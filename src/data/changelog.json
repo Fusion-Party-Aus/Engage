@@ -1,11 +1,38 @@
 [
   {
-    "hash": "50e9d30",
+    "hash": "34c8d17",
     "date": "2026-11-17",
     "type": "test",
     "category": "ops",
     "scope": "quorum",
-    "summary": "Drop each replica-set database and document test hygiene"
+    "summary": "Stop leaking per-case replica-set databases (#132)",
+    "details": "* test(quorum): drop each replica-set database and document test hygiene * chore(changelog): record the test database hygiene fix"
+  },
+  {
+    "hash": "8fd534f",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the configuration rule and projection deadline removal"
+  },
+  {
+    "hash": "de4c71d",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Remove the tally projection deadline environment override",
+    "details": "ENGAGE_BALLOT_TALLY_DEADLINE_MS let the deployment stretch the 500 ms display-projection deadline, which is operational tuning in an environment variable. The wrapper already takes an explicit deadlineMs, so production now uses the fixed constant and callers with different needs pass a value. The projection suite no longer sets the variable. It waits a bounded time for the projection to equal the authoritative tally and, where a best-effort write was abandoned on the slow shared replica set, reconciles the row through the documented repair path before asserting. Encrypted ballots pass the explicit expected tally and decryption keys. Equality assertions are unchanged. Refs #128"
+  },
+  {
+    "hash": "bd2701e",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "config",
+    "summary": "Make product ownership of configuration a standing rule",
+    "details": "Configuration belongs to the product, not the deployment. Adds AGENTS.md section 11: admin settings in MongoDB with validation, audit and defaults; environment variables reserved for secrets, the database, the public origin and deployment topology; every new variable justified in the change and in .env.example; operational thresholds, retry limits, cadences, toggles and policy timings are settings; tests inject values instead of tuning the deployment. Routes agents to the rule from the agent guide. The remaining operational environment knobs are tracked in #128."
   },
   {
     "hash": "e27a109",
@@ -653,31 +680,5 @@
     "scope": "email",
     "summary": "Let administrators send themselves a sample digest",
     "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
-  },
-  {
-    "hash": "cfbf459",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record notification preferences and digest rollout defaults"
-  },
-  {
-    "hash": "bc6409f",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Separate email preferences and explain rollout defaults",
-    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
   }
 ]
