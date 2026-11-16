@@ -1,30 +1,21 @@
 [
   {
-    "hash": "25b1422",
+    "hash": "8897b43",
     "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the compare-and-set-only tally projection",
-    "details": "Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52"
+    "type": "fix",
+    "category": "fix",
+    "scope": "discussion",
+    "summary": "Bound comment vote retries by time with backoff (#123)",
+    "details": "The comment vote compare-and-swap gave up after 12 fixed attempts with a 2-8 ms jitter. On a cold replica set the first write can take hundreds of milliseconds, so 25 concurrent voters exhausted the attempts and valid votes failed with 'Comment votes changed at the same time. Try again.' Retry on a five-second time budget instead, with exponential backoff and jitter (4 ms doubling to a 250 ms cap). Legitimate contention converges even when writes are slow; a genuinely stuck writer still fails in bounded time. Exactly-once is unchanged. The write is still one version-filtered compare-and-swap of the whole vote state, so a lost race writes nothing and retries against the committed state. Voter arrays, switching between upvotes and downvotes, and the persisted shape are untouched. Expiry now logs comment_vote_retry_budget_exhausted with the comment ID, attempt count and budget only - never member IDs or vote choices - before throwing. Tests add a deterministic cold-write case (40 ms per comment write) that fails under the old attempt count and passes now, plus a stuck-writer case proving the budget is bounded and the warning is emitted without identities."
   },
   {
-    "hash": "e663539",
-    "date": "2026-11-16",
-    "type": "docs",
-    "category": "docs",
-    "scope": "status",
-    "summary": "Record the compare-and-set-only projection rebuild",
-    "details": "Removes the appliedThrough watermark description and records the merged under-count it caused. Documents the current contract: unconditional atomic increments, transactional revision moves, and an absolute recount that writes only when the row version is unchanged, retries when it moved, and writes nothing at its deadline. Records the 20-round interleaved race test, the 12-test projection suite run ten times, both 713-test full-suite runs, the residual delayed-increment window, and the configurable test deadline. Refs #52"
-  },
-  {
-    "hash": "0fb6e18",
+    "hash": "8693fbb",
     "date": "2026-11-16",
     "type": "fix",
     "category": "fix",
     "scope": "ballots",
-    "summary": "Make the tally projection rebuild compare-and-set only",
-    "details": "The merged projection skipped increments whose vote timestamp was at or below an appliedThrough watermark that a rebuild believed it had counted. Under concurrency that watermark was wrong: a vote could be visible to the increment but not the recount, so the increment was skipped and the row under-counted. The full suite failed on main with 7 votes in the row against 8 votes. Remove appliedThrough and its timestamp guard entirely. Increments always apply: each is one atomic upsert of the choice, total and an internal monotonic version. Nothing is skipped. The rebuild is now absolute and compare-and-set only. It reads the row version (0 when the row is missing), recounts every bound vote, and writes absolute counts only if the version is unchanged, advancing it by one. A mismatch recounts and retries, bounded. A concurrent increment either lands before the recount (the absolute write is correct) or after the compare-and-set (it adds on top). The 500 ms deadline still writes nothing, leaving the row for the repair CLI. Revision moves remain transactional deltas and certification still never reads the projection. Tests: 20 rounds that deterministically interleave an increment between the rebuild's recount and its compare-and-set (and after it), asserting exact equality with the authoritative bound tally every round; an increment after an absolute rebuild is applied; the concurrent first-vote, change and revision-move cases remain. The projection test file raises its write deadline under load because a timed-out write is allowed to be abandoned; the timeout case still asserts that nothing is written. Refs #52"
+    "summary": "Remove the tally projection watermark and make rebuilds compare-and-set only (#124)",
+    "details": "* fix(ballots): make the tally projection rebuild compare-and-set only The merged projection skipped increments whose vote timestamp was at or below an appliedThrough watermark that a rebuild believed it had counted. Under concurrency that watermark was wrong: a vote could be visible to the increment but not the recount, so the increment was skipped and the row under-counted. The full suite failed on main with 7 votes in the row against 8 votes. Remove appliedThrough and its timestamp guard entirely. Increments always apply: each is one atomic upsert of the choice, total and an internal monotonic version. Nothing is skipped. The rebuild is now absolute and compare-and-set only. It reads the row version (0 when the row is missing), recounts every bound vote, and writes absolute counts only if the version is unchanged, advancing it by one. A mismatch recounts and retries, bounded. A concurrent increment either lands before the recount (the absolute write is correct) or after the compare-and-set (it adds on top). The 500 ms deadline still writes nothing, leaving the row for the repair CLI. Revision moves remain transactional deltas and certification still never reads the projection. Tests: 20 rounds that deterministically interleave an increment between the rebuild's recount and its compare-and-set (and after it), asserting exact equality with the authoritative bound tally every round; an increment after an absolute rebuild is applied; the concurrent first-vote, change and revision-move cases remain. The projection test file raises its write deadline under load because a timed-out write is allowed to be abandoned; the timeout case still asserts that nothing is written. Refs #52 * docs(status): record the compare-and-set-only projection rebuild Removes the appliedThrough watermark description and records the merged under-count it caused. Documents the current contract: unconditional atomic increments, transactional revision moves, and an absolute recount that writes only when the row version is unchanged, retries when it moved, and writes nothing at its deadline. Records the 20-round interleaved race test, the 12-test projection suite run ten times, both 713-test full-suite runs, the residual delayed-increment window, and the configurable test deadline. Refs #52 * chore(changelog): record the compare-and-set-only tally projection Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52 * chore(changelog): record the projection race fix after merging main"
   },
   {
     "hash": "2767fcc",
@@ -680,5 +671,13 @@
     "scope": "engagement",
     "summary": "Add proposal rankings, ballot deadlines and member reminders",
     "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
+  },
+  {
+    "hash": "0b8b375",
+    "date": "2026-11-09",
+    "type": "fix",
+    "category": "fix",
+    "scope": "settings",
+    "summary": "Save the configured source repository URL"
   }
 ]
