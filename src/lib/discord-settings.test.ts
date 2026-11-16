@@ -131,6 +131,7 @@ describe("in-app Discord integration configuration", () => {
     assert.equal(discordWeeklyDigestDue(schedule, new Date("2026-11-16T06:59:00Z")), false);
     assert.equal(discordWeeklyDigestDue(schedule, new Date("2026-11-16T07:00:00Z")), true);
     assert.equal(discordWeeklyDigestDue(schedule, new Date("2026-11-17T00:00:00Z")), true);
-    assert.equal(discordWeeklyDigestDue(schedule, new Date("2026-11-15T12:00:00Z")), false);
+    // Late weekly catch-up: Sunday still belongs to the preceding Melbourne week.
+    assert.equal(discordWeeklyDigestDue(schedule, new Date("2026-11-15T12:00:00Z")), true);
   });
 });
