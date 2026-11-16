@@ -1,21 +1,12 @@
 [
   {
-    "hash": "3f0e183",
+    "hash": "2a76bf1",
     "date": "2026-11-17",
     "type": "feat",
     "category": "feature",
     "scope": "discord",
     "summary": "Post the weekly digest as an embed (#129)",
     "details": "Replace the plain-text weekly post with one Discord embed: a Horizon accent rule, an intro line, a linked field per featured proposal showing its stage and activity, and a short footer. The embed title links to Engage; the test post is labelled in the embed title and footer. Proposal titles remain escaped and mention-neutralised inside the embed, and allowed_mentions still permits only the configured role. The admin preview now renders the embed wording and links instead of the raw payload."
-  },
-  {
-    "hash": "6fd53c3",
-    "date": "2026-11-17",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the Discord test hardening",
-    "details": "Refs #125"
   },
   {
     "hash": "14ce5fa",
