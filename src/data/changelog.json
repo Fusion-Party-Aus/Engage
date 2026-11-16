@@ -1,5 +1,23 @@
 [
   {
+    "hash": "a861497",
+    "date": "2026-11-17",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "discussion",
+    "summary": "Inject the comment vote retry budget instead of an environment variable (#123)",
+    "details": "Configuration belongs in the administration panel; environment variables are reserved for secrets, bootstrap and deployment topology. Remove ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS from the vote path. The production budget stays a fixed 5000 ms module constant. Tests pass an explicit optional fifth argument to voteOnComment, an injection point that is validated and clamped to 250-60000 ms; production callers omit it. The expiry warning still records the effective budget. The concurrency tests pass 15000 ms so a loaded runner cannot turn a machine stall into a false failure, and the stuck-writer test passes 1 ms (clamped to the 250 ms floor) so it stays fast. Exactly-once assertions, the persisted shape and the privacy boundary are unchanged. Docs remove the environment-override wording."
+  },
+  {
+    "hash": "dbddefa",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the configurable comment vote retry budget (#123)",
+    "details": "Regenerates the public snapshot so the stabilisation commit appears on /changelog/."
+  },
+  {
     "hash": "27e8bf8",
     "date": "2026-11-17",
     "type": "fix",
@@ -662,23 +680,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record notification preferences and digest rollout defaults"
-  },
-  {
-    "hash": "bc6409f",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Separate email preferences and explain rollout defaults",
-    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
   }
 ]
