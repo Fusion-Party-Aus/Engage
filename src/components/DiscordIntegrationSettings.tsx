@@ -3,7 +3,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { NativeSelect } from "./ui/native-select";
 import { Switch } from "./ui/switch";
-import { SectionCard } from "./admin-kit";
+import { ConfirmDialog, SectionCard, type ConfirmRequest } from "./admin-kit";
 
 interface SettingsSummary {
   enabled: boolean;
@@ -73,6 +73,7 @@ export default function DiscordIntegrationSettings() {
   const [busy, setBusy] = useState<"save" | "preview" | "test" | "remove" | null>(null);
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
   const [preview, setPreview] = useState("");
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
   const showError = (error: unknown) => {
     setNotice({
@@ -129,19 +130,29 @@ export default function DiscordIntegrationSettings() {
     }
   };
 
-  const remove = async (type: "live" | "test") => {
+  const remove = (type: "live" | "test") => {
     if (busy || !config) return;
-    const confirmed = window.confirm(`Remove the ${type} Discord webhook?`);
-    if (!confirmed) return;
-    setBusy("remove");
-    try {
-      await persist(type === "live" ? { clearLiveWebhook: true } : { clearTestWebhook: true });
-      setNotice({ text: `The ${type} webhook was removed.` });
-    } catch (error) {
-      showError(error);
-    } finally {
-      setBusy(null);
-    }
+    setConfirm({
+      title: `Remove the ${type} Discord webhook?`,
+      description: type === "live"
+        ? "Live weekly posting will be switched off. The test webhook will be unaffected."
+        : "The test webhook will be removed. The live webhook will be unaffected.",
+      confirmLabel: "Remove webhook",
+      destructive: true,
+      onConfirm: async () => {
+        setBusy("remove");
+        try {
+          await persist(type === "live"
+            ? { clearLiveWebhook: true }
+            : { clearTestWebhook: true });
+          setNotice({ text: `The ${type} webhook was removed.` });
+        } catch (error) {
+          showError(error);
+        } finally {
+          setBusy(null);
+        }
+      },
+    });
   };
 
   const showPreview = async () => {
@@ -329,6 +340,7 @@ export default function DiscordIntegrationSettings() {
           </p>
         )}
       </div>
+      <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
     </SectionCard>
   );
 }
