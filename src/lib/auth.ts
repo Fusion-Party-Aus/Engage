@@ -1,4 +1,5 @@
 import { recordLifecycle } from "./member-lifecycle.ts";
+import { recordAuthenticatedActivity } from "./member-presence.ts";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { passkey } from "@better-auth/passkey";
@@ -458,6 +459,10 @@ async function resolveSessionUser(
       const {ensureNationalMembership} = await import('./branch-participation.ts');
       await ensureNationalMembership(db,memberId);
     }
+    // A signed-in visit is genuine use of Engage. Record at most one activity
+    // day per member so the rolling active electorate is not inflated by page
+    // views and does not depend on whether the member votes in a ballot.
+    await recordAuthenticatedActivity(db, memberId);
     const verifiedBranchIds = branchMembershipRows.map((row) => row.branchId);
     const followedBranchIds = subscriptionRows.map((row) => row.branchId);
     // Discovery uses the union: a verified member keeps branch visibility even

@@ -289,6 +289,18 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .collection("ballots")
         .createIndex({ matterId: 1, status: 1 })
         .catch(() => {}),
+      // One immutable quorum closure record per ballot.
+      db
+        .collection("ballot_quorum_records")
+        .createIndex(
+          { ballotId: 1 },
+          { unique: true, name: "ballot_quorum_ballot_unique" },
+        )
+        .catch(() => {}),
+      db
+        .collection("ballot_quorum_records")
+        .createIndex({ matterId: 1, closedAt: -1 })
+        .catch(() => {}),
       db
         .collection("governance_events")
         .createIndex({ eventId: 1 }, { unique: true })
