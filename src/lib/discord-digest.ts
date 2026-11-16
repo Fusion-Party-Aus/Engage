@@ -57,13 +57,17 @@ function clamp(n: number, min: number, max: number): number {
 
 /** ISO Monday in Melbourne, even across DST. The same week always has one key. */
 export function melbourneWeekKey(now: Date): string {
-  const localDate = new Intl.DateTimeFormat("en-CA", {
+  const parts = new Intl.DateTimeFormat("en-AU", {
     timeZone: "Australia/Melbourne",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(now);
-  const [year, month, day] = localDate.split("-").map(Number);
+  }).formatToParts(now);
+  const value = (part: "year" | "month" | "day") =>
+    Number(parts.find((p) => p.type === part)?.value);
+  const year = value("year");
+  const month = value("month");
+  const day = value("day");
   const utc = new Date(Date.UTC(year, month - 1, day, 12));
   const sinceMonday = (utc.getUTCDay() + 6) % 7;
   utc.setUTCDate(utc.getUTCDate() - sinceMonday);
