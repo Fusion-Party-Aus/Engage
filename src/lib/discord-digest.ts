@@ -71,24 +71,22 @@ export function melbourneWeekKey(now: Date): string {
 }
 
 /**
- * Attention Debt: proposals accumulate attention debt as they age without
- * participation. Exposure pays down debt; a fortnight cooldown stops repeats.
- * Urgency matters, but cannot turn this into a popularity leaderboard.
+ * Attention Debt: rank by lack of participation, with a cost for repeated
+ * exposure. All inaugural proposals opened together, so creation timestamps
+ * must NOT distort their priority. A future age-based model would require
+ * trustworthy stage-entry timestamps and a separately versioned rollout.
  *
  * No title, subject, author, branch, voting choice or policy position enters
- * the score. This is about distributing opportunities to participate.
+ * the score. This distributes opportunities to take part, not voting outcomes.
  */
 export function attentionScore(candidate: DigestCandidate, now: Date): number {
-  const ageDays = clamp(
-    (now.getTime() - candidate.createdAt.getTime()) / DAY,
-    0,
-    365,
-  );
-  const maturity = 1 - Math.exp(-ageDays / 14);
-  const observed = candidate.stage === "decide"
-    ? candidate.participation ?? candidate.commentCount
-    : candidate.commentCount;
-  const quiet = 1 / Math.sqrt(1 + Math.max(0, observed));
+  // A missing/stale aggregate is *unknown*, not evidence of zero votes.
+  // For such ballots, use a conservative fallback informed by discussion.
+  const quiet = candidate.stage === "decide"
+    ? candidate.participation === null
+      ? 0.5 / Math.sqrt(1 + Math.max(0, candidate.commentCount))
+      : 1 / Math.sqrt(1 + Math.max(0, candidate.participation))
+    : 1 / Math.sqrt(1 + Math.max(0, candidate.commentCount));
   const exposureDebt = 1 / (1 + Math.max(0, candidate.exposures) * 1.5);
   const daysLeft = candidate.closesAt
     ? (candidate.closesAt.getTime() - now.getTime()) / DAY
@@ -101,7 +99,7 @@ export function attentionScore(candidate: DigestCandidate, now: Date): number {
     : Infinity;
   const cooldown = daysSinceFeatured < 14 ? 0.15 : 1;
   return Math.round(
-    (55 * quiet * maturity + 30 * exposureDebt + 15 * urgency) *
+    (65 * quiet + 25 * exposureDebt + 10 * urgency) *
       cooldown * 100,
   ) / 100;
 }
