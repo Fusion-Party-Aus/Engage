@@ -222,7 +222,8 @@ describe("Sprint 1 governance integrity", () => {
       .collection("proposals")
       .updateOne(
         { proposalId: opened.proposalId },
-        { $set: { ballotClosedAt: new Date() } },
+        // Pre-rule closure keeps this case about certification mechanics.
+        { $set: { ballotClosedAt: new Date("2026-11-10T00:00:00.000Z") } },
       );
 
     // The zero-vote ballot computes unsuccessful, so a successful result is only
@@ -409,7 +410,7 @@ test(
         title: "Multi-ballot fixture",
         stage: "decide",
         ballotRevisionId: "rev-1",
-        ballotClosedAt: new Date(),
+        ballotClosedAt: new Date("2026-11-10T00:00:00.000Z"),
       });
       await recordFormalDecision(db, {
         ballotId: "proposal:PROP-MULTI-1",
