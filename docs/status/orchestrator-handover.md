@@ -107,7 +107,7 @@ if every test still passes because the test was changed to match.
 9. **Historical governance records are not deleted.** Matters with revisions beyond the initial draft, votes, ballots, results or registry records cannot be hard-deleted (I1).
 10. **Identifiable ballot choices stay behind `canViewIdentifiableBallots`.** No public API, log, list, export or UI may expose them (D26).
 11. **Server-side authorisation is authoritative.** UI visibility is not authority.
-12. **No invented governance rules.** Do not invent quorum, turnout, abstention effects, ranked-choice method, notice periods, confirmation ballots, election procedure or publication authority. Use O1–O10 and stop at the seam.
+12. **No invented governance rules.** Quorum and turnout are now recorded in D37–D39 for ballots closing on or after 16 November 2026; do not invent a different threshold, an abstention denominator, ranked-choice method, notice period, confirmation ballot, election procedure or publication authority. Use O1–O11 and stop at the seam.
 13. **No fabricated history.** Do not backfill adoption dates, ballots, results or publication events. Do not import or map National Neon policy (#36, D33).
 14. **Ambiguous wording is never automatically ratified.** Every adopted text must derive reproducibly from immutable revisions and amendment outcomes (D19, D20).
 
@@ -176,7 +176,7 @@ its own branch, tests, docs and PR sized for review.
 
 ### Stage 1 — finish Phase 1 correctness
 
-3. **Computed outcome validation (#28).** Compare the stored tally: Yes greater than No is successful, a tie is not. Require an audited override to record a contradicting result. Do **not** decide abstentions or quorum.
+3. **Computed outcome validation (#28, #122).** Compare the stored tally: Yes greater than No is successful, a tie is not. Require an audited override to record a contradicting approval result. For ballots closing on or after 16 November 2026, apply the recorded two-tier quorum at closure and refuse to override a quorum failure. Do **not** decide the abstention denominator.
 4. **Real-MongoDB governance coverage.** Add replica-set cases for the deletion guard, transition-event atomicity and result idempotency where they are currently only exercised in memory.
 
 ### Stage 2 — architecture, serially

@@ -1,30 +1,450 @@
 [
   {
-    "hash": "25b1422",
+    "hash": "14ce5fa",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Assert webhook fields are absent, not substrings",
+    "details": "Resolve CodeQL's incomplete URL substring sanitization alerts in the secret-redaction test without weakening the assertion. Refs #125"
+  },
+  {
+    "hash": "0bbad77",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh for the consolidated branch",
+    "details": "Refs #122, #125"
+  },
+  {
+    "hash": "27fa381",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the projection test fix",
+    "details": "Refs #122"
+  },
+  {
+    "hash": "608e07c",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Keep projection certification case pre-quorum",
+    "details": "Refs #122"
+  },
+  {
+    "hash": "c9d4e0a",
     "date": "2026-11-16",
     "type": "chore",
     "category": "ops",
     "scope": "changelog",
-    "summary": "Record the compare-and-set-only tally projection",
-    "details": "Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52"
+    "summary": "Record the quorum edge-case note",
+    "details": "Refs #122"
   },
   {
-    "hash": "e663539",
+    "hash": "255ab3c",
     "date": "2026-11-16",
     "type": "docs",
     "category": "docs",
-    "scope": "status",
-    "summary": "Record the compare-and-set-only projection rebuild",
-    "details": "Removes the appliedThrough watermark description and records the merged under-count it caused. Documents the current contract: unconditional atomic increments, transactional revision moves, and an absolute recount that writes only when the row version is unchanged, retries when it moved, and writes nothing at its deadline. Records the 20-round interleaved race test, the 12-test projection suite run ten times, both 713-test full-suite runs, the residual delayed-increment window, and the configurable test deadline. Refs #52"
+    "scope": "governance",
+    "summary": "State the zero-active quorum edge case",
+    "details": "Refs #122"
   },
   {
-    "hash": "0fb6e18",
+    "hash": "7d90e0d",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the quorum activity-window fix",
+    "details": "Refs #122"
+  },
+  {
+    "hash": "5e56fdd",
     "date": "2026-11-16",
     "type": "fix",
     "category": "fix",
     "scope": "ballots",
-    "summary": "Make the tally projection rebuild compare-and-set only",
-    "details": "The merged projection skipped increments whose vote timestamp was at or below an appliedThrough watermark that a rebuild believed it had counted. Under concurrency that watermark was wrong: a vote could be visible to the increment but not the recount, so the increment was skipped and the row under-counted. The full suite failed on main with 7 votes in the row against 8 votes. Remove appliedThrough and its timestamp guard entirely. Increments always apply: each is one atomic upsert of the choice, total and an internal monotonic version. Nothing is skipped. The rebuild is now absolute and compare-and-set only. It reads the row version (0 when the row is missing), recounts every bound vote, and writes absolute counts only if the version is unchanged, advancing it by one. A mismatch recounts and retries, bounded. A concurrent increment either lands before the recount (the absolute write is correct) or after the compare-and-set (it adds on top). The 500 ms deadline still writes nothing, leaving the row for the repair CLI. Revision moves remain transactional deltas and certification still never reads the projection. Tests: 20 rounds that deterministically interleave an increment between the rebuild's recount and its compare-and-set (and after it), asserting exact equality with the authoritative bound tally every round; an increment after an absolute rebuild is applied; the concurrent first-vote, change and revision-move cases remain. The projection test file raises its write deadline under load because a timed-out write is allowed to be abandoned; the timeout case still asserts that nothing is written. Refs #52"
+    "summary": "Close the activity window at the ballot deadline",
+    "details": "Cap every activity source at the closure timestamp and anchor the snapshot to the official deadline rather than a late scheduler run. Post-deadline browsing must not enlarge the active electorate. Refs #122"
+  },
+  {
+    "hash": "610a1bd",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the two-tier quorum work",
+    "details": "Refs #122"
+  },
+  {
+    "hash": "e4d6965",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "discord",
+    "summary": "Clarify same-week scheduling catch-up behaviour (#125)"
+  },
+  {
+    "hash": "4048a34",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Allow same-week catch-up when the scheduled slot was missed (#125)"
+  },
+  {
+    "hash": "f9aa26a",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "proposals",
+    "summary": "Clarify zero active electorate in quorum displays",
+    "details": "Show 'No active electorate yet' rather than a zero participant target, and show recorded participation without a misleading 'of 0'. This keeps the formula exact while making the small-electorate state understandable. Refs #122"
+  },
+  {
+    "hash": "3e59a58",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discord",
+    "summary": "Use accessible confirmation for removing saved webhooks (#125)"
+  },
+  {
+    "hash": "b8d20c7",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Cover quorum boundaries and closure evidence",
+    "details": "Cover the published formula and its transitions, platform boundaries, approval and quorum separation, abstentions, vote changes, duplicate participation, zero active members, legacy pre-rule closures, open ballots at rollout, membership changes after closure, participation mismatch, missing snapshots and concurrent closure with a membership update. Move existing certification mechanics fixtures to pre-rule closures so they keep testing the approval rule. Refs #122"
+  },
+  {
+    "hash": "1bac187",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "Record the two-tier quorum decision and basis",
+    "details": "Record D37–D39 and the rule 36 adaptation: platform quorum, ballot formula, the 90-day active member definition, closure immutability, inconclusive failure and the no-override rule. Note that rule 30(4)(e) AGM obligations continue and that rule 98 confirmation is still needed before the first post-adoption closure is treated as binding. Update the public explanation, legal Terms wording, lifecycle, data model, capability and known-gap records, and add the quorum procedure page. Refs #122"
+  },
+  {
+    "hash": "b0257f9",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discord",
+    "summary": "Support Node strip-only TypeScript test runtime (#125)"
+  },
+  {
+    "hash": "771f579",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "discord",
+    "summary": "Document in-app settings endpoint (#125)"
+  },
+  {
+    "hash": "7ec522e",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Type string-keyed MongoDB settings fixture (#125)"
+  },
+  {
+    "hash": "f946ed7",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "proposals",
+    "summary": "Explain quorum to members and officers",
+    "details": "Show the current eligible registered membership, active electorate, estimated requirement, participation and the closure caveat on every ballot page. After closure, show the recorded calculation and whether each test was met. Give administrators the same calculation and any closure anomaly on the proposal workspace and inline outcome control. Inconclusive ballots are presented as neither adopted nor rejected, and a quorum failure can only be recorded as inconclusive. Refs #122"
+  },
+  {
+    "hash": "a09752c",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballots",
+    "summary": "Add two-tier constitutional-style quorum",
+    "details": "Evaluate platform quorum (30 eligible registered members) and ballot quorum (max(ceil(sqrt(N)), min(30, ceil(N/2)))) once at closure, inside the closure transaction. Persist one immutable ballot_quorum_records snapshot with the electorate, thresholds, participation, tally and verdict. Certification refuses a missing, unreadable or mismatched snapshot and cannot override a quorum failure into approval or rejection. Ballots closed before the rule keep the approval-only basis. Record genuine signed-in use as a daily activity signal for the 90-day active electorate. Refs #122"
+  },
+  {
+    "hash": "cafa722",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "discord",
+    "summary": "Align scheduled jobs and settings architecture (#125)"
+  },
+  {
+    "hash": "56a3011",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "discord",
+    "summary": "Document in-app encrypted settings and configurable schedule (#125)"
+  },
+  {
+    "hash": "3b2bc55",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Cover encrypted in-app settings, removal, isolation and schedule (#125)"
+  },
+  {
+    "hash": "09727db",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Exercise isolated sending through stored encrypted config (#125)"
+  },
+  {
+    "hash": "1c01137",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discord",
+    "summary": "Actually remove saved secrets from MongoDB on clear (#125)"
+  },
+  {
+    "hash": "a1ab4c9",
+    "date": "2026-11-16",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "discord",
+    "summary": "Remove superseded engagement dashboard controls (#125)"
+  },
+  {
+    "hash": "881155e",
+    "date": "2026-11-16",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "discord",
+    "summary": "Centralise setup and testing in Platform settings (#125)"
+  },
+  {
+    "hash": "12f66a3",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Move integration configuration out of environment variables (#125)"
+  },
+  {
+    "hash": "36fdd31",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Move integration configuration out of environment variables (#125)"
+  },
+  {
+    "hash": "f58306d",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discord",
+    "summary": "Report saved config and enforce settings authority (#125)"
+  },
+  {
+    "hash": "b868756",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Integrate Discord configuration into Platform settings (#125)"
+  },
+  {
+    "hash": "99ad9f5",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Add in-app webhook, role and schedule configuration UI (#125)"
+  },
+  {
+    "hash": "732ad81",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Add admin-only encrypted integration settings API (#125)"
+  },
+  {
+    "hash": "5270de0",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discord",
+    "summary": "Preserve immutable settings record key during updates (#125)"
+  },
+  {
+    "hash": "5b73f80",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Read in-app settings and enforce editable weekly schedule (#125)"
+  },
+  {
+    "hash": "2e94bbf",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Persist encrypted, audited webhook and schedule settings in Engage (#125)"
+  },
+  {
+    "hash": "8b404d1",
+    "date": "2026-11-16",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "discord",
+    "summary": "Isolate safe webhook URL validation (#125)"
+  },
+  {
+    "hash": "e192837",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discord",
+    "summary": "Link directly to eligible open ballots and discussions (#125)"
+  },
+  {
+    "hash": "073fd8b",
+    "date": "2026-11-16",
+    "type": "style",
+    "category": "improvement",
+    "scope": "discord",
+    "summary": "Format read-only message preview (#125)"
+  },
+  {
+    "hash": "2f3ab5d",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "discord",
+    "summary": "Register digest channel and scheduled endpoint (#125)"
+  },
+  {
+    "hash": "fb69d2a",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "discord",
+    "summary": "Document launch cohort, algorithm and test-server rollout (#125)"
+  },
+  {
+    "hash": "3e4e1b0",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discord",
+    "summary": "Escape titles safely and type delivery ledger (#125)"
+  },
+  {
+    "hash": "597febf",
+    "date": "2026-11-16",
+    "type": "test",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Cover attention-debt fairness, launch cohort and isolated webhook delivery (#125)"
+  },
+  {
+    "hash": "2c9c6ef",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discord",
+    "summary": "Determine Melbourne digest week independent of locale formatting (#125)"
+  },
+  {
+    "hash": "7adb478",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discord",
+    "summary": "Rank inaugural proposals by attention, not legacy creation date (#125)"
+  },
+  {
+    "hash": "c2fcbbd",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Wire admin preview and safe test-send controls (#125)"
+  },
+  {
+    "hash": "2fab4fb",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Add digest preview and test-send to engagement admin (#125)"
+  },
+  {
+    "hash": "6adbbfe",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Expose guarded weekly scheduler and admin test API (#125)"
+  },
+  {
+    "hash": "63592dd",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Expose guarded weekly scheduler and admin test API (#125)"
+  },
+  {
+    "hash": "e766727",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Configure safe opt-in digest settings (#125)"
+  },
+  {
+    "hash": "c0494e9",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Configure safe opt-in digest settings (#125)"
+  },
+  {
+    "hash": "253aad4",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "discord",
+    "summary": "Configure safe opt-in digest settings (#125)"
+  },
+  {
+    "hash": "3105fd9",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "discord",
+    "summary": "Add attention-debt ranking and safe weekly webhook delivery (#125)"
+  },
+  {
+    "hash": "8693fbb",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Remove the tally projection watermark and make rebuilds compare-and-set only (#124)",
+    "details": "* fix(ballots): make the tally projection rebuild compare-and-set only The merged projection skipped increments whose vote timestamp was at or below an appliedThrough watermark that a rebuild believed it had counted. Under concurrency that watermark was wrong: a vote could be visible to the increment but not the recount, so the increment was skipped and the row under-counted. The full suite failed on main with 7 votes in the row against 8 votes. Remove appliedThrough and its timestamp guard entirely. Increments always apply: each is one atomic upsert of the choice, total and an internal monotonic version. Nothing is skipped. The rebuild is now absolute and compare-and-set only. It reads the row version (0 when the row is missing), recounts every bound vote, and writes absolute counts only if the version is unchanged, advancing it by one. A mismatch recounts and retries, bounded. A concurrent increment either lands before the recount (the absolute write is correct) or after the compare-and-set (it adds on top). The 500 ms deadline still writes nothing, leaving the row for the repair CLI. Revision moves remain transactional deltas and certification still never reads the projection. Tests: 20 rounds that deterministically interleave an increment between the rebuild's recount and its compare-and-set (and after it), asserting exact equality with the authoritative bound tally every round; an increment after an absolute rebuild is applied; the concurrent first-vote, change and revision-move cases remain. The projection test file raises its write deadline under load because a timed-out write is allowed to be abandoned; the timeout case still asserts that nothing is written. Refs #52 * docs(status): record the compare-and-set-only projection rebuild Removes the appliedThrough watermark description and records the merged under-count it caused. Documents the current contract: unconditional atomic increments, transactional revision moves, and an absolute recount that writes only when the row version is unchanged, retries when it moved, and writes nothing at its deadline. Records the 20-round interleaved race test, the 12-test projection suite run ten times, both 713-test full-suite runs, the residual delayed-increment window, and the configurable test deadline. Refs #52 * chore(changelog): record the compare-and-set-only tally projection Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52 * chore(changelog): record the projection race fix after merging main"
   },
   {
     "hash": "2767fcc",
@@ -257,428 +677,5 @@
     "category": "docs",
     "scope": "agents",
     "summary": "Require checking open issues before implementation (#48)"
-  },
-  {
-    "hash": "52ffaf6",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "platform",
-    "summary": "Canonical documentation set and known-gap tracking (#46)",
-    "details": "* docs(research): add cross-industry product and UX research Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence. * chore(changelog): record cross-industry research * fix(api): enforce minimal response DTOs, ballot privacy, and bounded pagination * feat(proposals): separate geographic scope from branch identity Add a canonical proposal scope model with stable keys (national, nsw, vic, ...) and consistent labels from the site's state configuration. Branch records remain the organisational identity; legacy records resolve to the canonical scope without being rewritten. Server validation now rejects display labels, non-string or conflicting scopes and ambiguous duplicate geography, and enforces branch administration independently of the rendered controls. * feat(proposals): use an accessible scope selector Replace the native proposal-scope dropdown with the existing ToggleGroup primitive, giving a single National option, consistently named states and territories, visible focus, keyboard navigation and responsive wrapping. Default to the member's authorised branch where one applies and submit the canonical scope key rather than a display label. * chore(changelog): refresh snapshot after proposal scope changes * fix(security): harden RBAC boundaries, CSRF origin checks, and markdown links * feat(ballots): add AES-256-GCM encrypted vote storage, blind indexing, and migration * refactor(auth): unify legacy administrative permission resolution * chore(changelog): record permission resolution consolidation * fix(security): handle rotated blind-index upserts and proxy-safe CSRF origins * feat(site): add branded 403, 404 and 500 error pages * chore(changelog): refresh snapshot after status pages * feat(auth): separate participation, voting and administration Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work. * chore(changelog): record authorisation consolidation * test(ci): update member lifecycle browser check for unified notification center * feat(site): open notifications in a header popover The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu. * chore(changelog): refresh snapshot after notification popover * fix(security): allow national RBAC grants in branch search and preserve scope on read * feat(auth): support multiple roles and a grouped scope select Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips. * chore(changelog): record multi-role and grouped scope select * feat(verification): verify members from Underground CRM * chore(changelog): record CRM membership verification * docs: establish canonical product, domain and architecture documentation * chore(changelog): record documentation sprint * docs(status): link known gaps to GitHub issues * chore(changelog): record known-gap tracking * chore(changelog): refresh snapshot before merge"
-  },
-  {
-    "hash": "db6d4b8",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ballots",
-    "summary": "Show single relative ballot deadline in viewer's local timezone (#47)"
-  },
-  {
-    "hash": "14ae304",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ballots",
-    "summary": "Look up encrypted votes by blind index in member queues and activity (#45)"
-  },
-  {
-    "hash": "32edbcc",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "research",
-    "summary": "Cross-industry product and UX research (#25)",
-    "details": "* docs(research): add cross-industry product and UX research Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence. * chore(changelog): record cross-industry research * fix(api): enforce minimal response DTOs, ballot privacy, and bounded pagination * feat(proposals): separate geographic scope from branch identity Add a canonical proposal scope model with stable keys (national, nsw, vic, ...) and consistent labels from the site's state configuration. Branch records remain the organisational identity; legacy records resolve to the canonical scope without being rewritten. Server validation now rejects display labels, non-string or conflicting scopes and ambiguous duplicate geography, and enforces branch administration independently of the rendered controls. * feat(proposals): use an accessible scope selector Replace the native proposal-scope dropdown with the existing ToggleGroup primitive, giving a single National option, consistently named states and territories, visible focus, keyboard navigation and responsive wrapping. Default to the member's authorised branch where one applies and submit the canonical scope key rather than a display label. * chore(changelog): refresh snapshot after proposal scope changes * fix(security): harden RBAC boundaries, CSRF origin checks, and markdown links * feat(ballots): add AES-256-GCM encrypted vote storage, blind indexing, and migration * refactor(auth): unify legacy administrative permission resolution * chore(changelog): record permission resolution consolidation * fix(security): handle rotated blind-index upserts and proxy-safe CSRF origins * feat(site): add branded 403, 404 and 500 error pages * chore(changelog): refresh snapshot after status pages * feat(auth): separate participation, voting and administration Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work. * chore(changelog): record authorisation consolidation * test(ci): update member lifecycle browser check for unified notification center * feat(site): open notifications in a header popover The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu. * chore(changelog): refresh snapshot after notification popover * fix(security): allow national RBAC grants in branch search and preserve scope on read * feat(auth): support multiple roles and a grouped scope select Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips. * chore(changelog): record multi-role and grouped scope select"
-  },
-  {
-    "hash": "787160a",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branding",
-    "summary": "Remove internal Horizon label from public and verification emails (#24)",
-    "details": "* fix(branding): remove internal Horizon label from public and verification emails * chore(changelog): update changelog snapshot"
-  },
-  {
-    "hash": "baae42d",
-    "date": "2026-11-13",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Governance transparency, extensibility hardening, notifications, PWA & Web Push (#23)",
-    "details": "* docs(governance): specify historical access, reporting privacy, and AI briefing design * feat(governance): add evidence-backed contribution outcomes and historical safety checks * fix(reporting): enforce branch admin scope and add PDF confidentiality disclosures * chore(changelog): record governance transparency sprint * docs(rbac): document RBAC audit, permission matrix, and configurable roles spec * fix(security): enforce archived proposal review permission on GET /api/amendments * feat(rbac): add configurable scoped roles, permission evaluation, and admin UI * chore(changelog): record RBAC audit and configurable roles * fix(governance): exclude governance resolutions from policy ratification and publication workflows * docs(governance): document safe policy registry reconciliation for misclassified resolutions * chore(changelog): record governance resolution classification fix * feat(ballots): add 14 Jan 2027 open ballot expiry migration and prominent deadline display * feat(governance): add extensible matter registry and type-aware lifecycle validation * feat(governance): decouple ballot/decision records and add provenance relationship validation * fix(security): enforce scoped RBAC permissions across admin API endpoints * feat(architecture): add integration seams, authorised read models, resilience helpers, and indexes * chore(changelog): record extensibility sprint and ballot expiry migration * feat(email): add responsive Horizon email templates for all lifecycle notifications * feat(email): add explicit approval-gated batch re-engagement workflow * feat(pwa): add installable Engage manifest, Horizon icons, and safe service worker * fix(pwa): generate app icons from Horizon SVG logo * feat(notifications): add self-hosted VAPID Web Push, in-app inbox, and unified preferences * feat(member): add unified NotificationCenter UI for inbox, email, and push * test(notifications): add notification/PWA tests, preview script, and docs * chore(changelog): update changelog snapshot * fix(deploy): stop repeated Coolify deployments after health failures * chore(changelog): record Coolify deployment fix"
-  },
-  {
-    "hash": "b271a70",
-    "date": "2026-11-13",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Feat/usability governance sprint (#22)",
-    "details": "* feat(admin): redesign navigation, overview, ballots and reporting IA * feat(admin): overhaul proposal workspace with progressive disclosure and feedback * feat(reports): add on-demand proposal PDF report generation * test(admin): add proposal PDF tests, CSV scope fix and changelog * docs(agents): enforce shadcn primitive usage * refactor(ui): migrate custom controls to shadcn primitives * chore(changelog): record shadcn primitive migration"
-  },
-  {
-    "hash": "94c0caa",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Usability, governance lifecycle, contributor feedback & admin reporting (#20)",
-    "details": "* feat(platform): redirect reclaim.fusionparty.org.au to Engage The Reclaim policy site is retired. A Worker bound to the reclaim custom domain now answers every request with a 301 to the same path on engage.fusionparty.org.au, preserving query strings so Engage's existing legacy redirects (pending-vote, all-policies, reclaim-our-*) still resolve. The previous reclaim Worker is left deployed for rollback. * chore(changelog): record Reclaim domain redirect * feat(platform): map Reclaim division paths to Engage proposals Old links to /reclaim-our-economy/<proposal>/ and /reclaim-our-future/<proposal>/ now land on /proposals/<proposal>/ instead of a 404 on Engage. Retired section index pages, whose names are not proposal slugs, resolve to the proposal list. Other paths and query strings are unchanged. * chore(changelog): record Reclaim path mapping * feat(discovery): surface Sense Box and next actions when caught up on ballots * feat(policies): link empty policy registry directly to fusionparty.org.au/policy * feat(governance): add contributor feedback, proposal supersession, and resolution lifecycle support * feat(admin): add ballot progress, branch summary, and privacy-preserving CSV export * chore(changelog): record usability, governance and reporting updates * fix(governance): address review findings and add Reddit-style comment composer * chore(changelog): record review fixes and comment composer update * feat(notifications): surface contribution responses and catch-up alerts in header and My Engage * chore(changelog): record in-app notifications update * fix(governance): address PR #20 CodeRabbit review comments * chore(changelog): record PR #20 review fixes * docs(research): compare participatory governance patterns with Engage * docs(research): record verification and refresh changelog * fix(governance): address PR #20 review findings * chore(changelog): update snapshot after main merge * docs(research): validate governance patterns with REA runtime evidence * chore(changelog): record REA governance research"
-  },
-  {
-    "hash": "b8af56b",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record GitHub protection defaults (#19)"
-  },
-  {
-    "hash": "041c469",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "repo",
-    "summary": "Add CODEOWNERS for default review routing (#18)",
-    "details": "Every path defaults to @finneh4249 so pull requests are routed to a single accountable reviewer. Ownership is advisory only: the main ruleset keeps a one-approval requirement for all contributors."
-  },
-  {
-    "hash": "430bec4",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box destination picker"
-  },
-  {
-    "hash": "5549e0c",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Offer accessible geographic destination picker"
-  },
-  {
-    "hash": "63e0a28",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record branch identity repair"
-  },
-  {
-    "hash": "2a7452a",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Reuse existing identities and accept national concerns"
-  },
-  {
-    "hash": "123606c",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record self-service branch membership"
-  },
-  {
-    "hash": "e839386",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Let verified members manage branch membership"
-  },
-  {
-    "hash": "e22aa5e",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box availability fix"
-  },
-  {
-    "hash": "7efcbbb",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "sense-box",
-    "summary": "Accept local concerns before branch setup"
-  },
-  {
-    "hash": "f2b384d",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box release"
-  },
-  {
-    "hash": "8ec0cf1",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Collect private branch community priorities"
-  },
-  {
-    "hash": "9ef66f5",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "proposals",
-    "summary": "Capture approved desktop and mobile journeys"
-  },
-  {
-    "hash": "b5207f2",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Implement approved reading and voting journey"
-  },
-  {
-    "hash": "41b4682",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "proposals",
-    "summary": "Record approved design reset and requirements audit"
-  },
-  {
-    "hash": "99a9ea0",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Include voting status safeguard"
-  },
-  {
-    "hash": "7560540",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "voting",
-    "summary": "Refresh proposal hero after saving a vote"
-  },
-  {
-    "hash": "a17770f",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record proposal participation redesign"
-  },
-  {
-    "hash": "fc8d130",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Connect policy reading with voting and simplify discovery"
-  },
-  {
-    "hash": "dede16c",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record proposal experience changes"
-  },
-  {
-    "hash": "1c13678",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Simplify discovery and expose ballot progression"
-  },
-  {
-    "hash": "50a7710",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "agents.md",
-    "summary": "Enhance AGENTS.md with more bounded structure for Coding agents working on the repository"
-  },
-  {
-    "hash": "d619b8f",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record audited platform settings"
-  },
-  {
-    "hash": "5bb7e82",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add audited platform settings and branch hierarchy validation",
-    "details": "Replace the raw JSON platform settings form with a task-based settings workspace. Administrators can manage visibility, public features, social channels and the branch website directory, with server-side URL validation, read-only infrastructure notes and a recorded change history that supports restoring earlier values. Enforce branch parent kinds on the server so states and territories sit under National and local branches sit under a state or territory. Add coverage for the settings API, audit history, restore behaviour and branch hierarchy rules."
-  },
-  {
-    "hash": "b808f0b",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record durable migrations and branch seed"
-  },
-  {
-    "hash": "e2137a5",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add durable database migrations and standard branch seed",
-    "details": "Add Admin -> Migrations for national administrators. The page previews each additive migration, shows the last recorded run and any error, and applies Standard branches or Branch participation individually or in order. Every run is recorded in data_migrations with run count, timestamps, actor and result. Standard branches is an idempotent seed for Fusion National, VIC, NSW, QLD, WA, SA, TAS, ACT and NT with National as parent; existing branches are never renamed, re-parented or un-recognised. Branch participation remains blocked until the National branch exists. The command-line seed now uses the same service, and the participation migration remains available for deployment automation."
-  },
-  {
-    "hash": "b980369",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record branch participation and verification"
-  },
-  {
-    "hash": "a727732",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Separate branch following from verified membership",
-    "details": "Members choose the branches they follow during onboarding and in My Engage. Authorised administrators verify followers as members in a focused Branch governance workspace. Branch subscriptions are now Engage-owned preferences, while verified organisational membership stays in branch_memberships with source, verification and audit metadata. National governance is included for every verified account and never removed by branch preferences. Existing members without branch connections receive national scope silently and a one-time state branch invitation. Eligibility is decided in one service used by proposal pages, ballot submission, pending-vote promotion and digests. Followers can discover branch activity but cannot vote. Revocation requires a reason and preserves historical votes and the person's following preference. The migration backfills legacy membership metadata, adds subscriptions without duplicating them, assigns open proposals without branch context to national governance, and leaves branch-owned and archived records untouched. The Underground CRM boundary is implemented through applyExternalMembership: external membership facts can update organisational membership but never branch subscriptions, and local administrators cannot silently override CRM-sourced records. Tests cover national defaults, follow/unfollow idempotency, source integrity, permissions, migration, parent/child eligibility and new proposal defaults."
-  },
-  {
-    "hash": "ba482d0",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the member engagement admin repair"
-  },
-  {
-    "hash": "34166c8",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Repair proxy test sends and clarify admin delivery reporting",
-    "details": "Use JSON and the configured public origin to prevent the reverse proxy from rejecting admin test email before provider submission. Separate explicit provider rejection from uncertain sends, expose safe self-only receipts, and keep test bounces isolated from member preferences. Replace raw engagement reporting with responsive cards, period controls, a read-only audience preview and expandable diagnostics. Historical ballot opportunity coverage remains explicitly unavailable. Validation: 144 tests passed, 15 optional tests skipped; Astro check and build passed; mocked-provider HTTP and DOM interaction checks passed. Browser screenshots and authenticated production delivery remain blocked and are documented."
-  },
-  {
-    "hash": "69ca17a",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record passing lifecycle checks and campaign review materials"
-  },
-  {
-    "hash": "8d457fc",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "email",
-    "summary": "Keep verification notices within narrow mobile screens"
-  },
-  {
-    "hash": "300966c",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Let administrators inspect the proposed re-engagement audience"
-  },
-  {
-    "hash": "9e72e64",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "member",
-    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
-  },
-  {
-    "hash": "71a61de",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ci",
-    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
-  },
-  {
-    "hash": "cb39b60",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record lifecycle audit, consent assessment and rollout checks"
-  },
-  {
-    "hash": "52c6570",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Connect verification, participation and legacy consent journeys"
-  },
-  {
-    "hash": "ee47cdf",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record administrator test email delivery"
-  },
-  {
-    "hash": "eb5f365",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "email",
-    "summary": "Let administrators send themselves a sample digest",
-    "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
-  },
-  {
-    "hash": "cfbf459",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record notification preferences and digest rollout defaults"
-  },
-  {
-    "hash": "bc6409f",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Separate email preferences and explain rollout defaults",
-    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
-  },
-  {
-    "hash": "7a56a95",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "engagement",
-    "summary": "Add proposal rankings, ballot deadlines and member reminders",
-    "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
   }
 ]

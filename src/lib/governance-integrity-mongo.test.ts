@@ -568,7 +568,9 @@ test(
       });
       await db.collection("proposals").updateOne(
         { proposalId: opened.proposalId },
-        { $set: { ballotClosedAt: new Date(Date.now() - 1000) } },
+        // Pre-rule closure keeps this fixture about result idempotency. Quorum
+        // certification has separate coverage.
+        { $set: { ballotClosedAt: new Date("2026-11-10T00:00:00.000Z") } },
       );
       const sameDecision = {
         matterId: opened.proposalId,
@@ -701,7 +703,8 @@ test(
         .collection("proposals")
         .updateOne(
           { proposalId: opened.proposalId },
-          { $set: { ballotClosedAt: new Date() } },
+          // Pre-rule closure; this case tests the certification boundary.
+          { $set: { ballotClosedAt: new Date("2026-11-10T00:00:00.000Z") } },
         );
       const recorded = await recordFormalDecision(db, {
         matterId: opened.proposalId,

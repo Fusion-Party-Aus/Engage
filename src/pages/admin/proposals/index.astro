@@ -1074,6 +1074,29 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
       }
       tallyContainer.appendChild(basis);
 
+      if (payload.quorum) {
+        const quorumNote = document.createElement('p');
+        quorumNote.className = 'admin-inline-note';
+        const quorum = payload.quorum;
+        if (quorum.final) {
+          const tests =
+            quorum.status === 'legacy-not-applied'
+              ? 'This ballot closed before the quorum rule took effect.'
+              : `${quorum.platformQuorumMet ? 'Platform quorum met' : 'Platform quorum not met'} · ${quorum.ballotQuorumMet ? 'ballot quorum met' : 'ballot quorum not met'} (${quorum.participation ?? 0} of ${quorum.ballotQuorumRequired ?? 0}).`;
+          quorumNote.textContent = `Quorum: ${quorum.verdictLabel}. ${tests}`;
+        } else {
+          quorumNote.textContent = `Quorum so far: ${quorum.participation ?? 0} of ${quorum.ballotQuorumRequired ?? 0} needed, based on ${quorum.activeEligibleMembers ?? 0} recently active members. The binding figure is recorded when the ballot closes.`;
+        }
+        tallyContainer.appendChild(quorumNote);
+        if (quorum.final && quorum.quorumMet === false) {
+          const blockedNote = document.createElement('p');
+          blockedNote.className = 'admin-inline-note';
+          blockedNote.textContent =
+            'This ballot did not meet quorum. Only an inconclusive outcome can be recorded.';
+          tallyContainer.appendChild(blockedNote);
+        }
+      }
+
       if (['unbound', 'decryption-unavailable', 'unreadable'].includes(summary.state)) {
         const blocked = document.createElement('p');
         blocked.className = 'admin-inline-note';
@@ -1082,7 +1105,10 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         return;
       }
 
-      form.dataset.computedResult = summary.computedResult ?? '';
+      form.dataset.computedResult =
+        payload.quorum?.final && payload.quorum.quorumMet === false
+          ? 'inconclusive'
+          : (summary.computedResult ?? '');
       form.hidden = false;
       wireBallotOutcomeForm(form);
     } catch (error) {

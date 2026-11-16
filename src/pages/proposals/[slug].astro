@@ -2,6 +2,14 @@
 import { recordLifecycle } from '../../lib/member-lifecycle.ts';
 import { ballotExpired } from '../../lib/ballot-deadline.ts';
 import { proposalBallotResultFilter } from '../../lib/ballots.ts';
+import {
+  buildQuorumPreview,
+  getQuorumElectoratePreview,
+  quorumRuleLabel,
+  quorumVerdictLabel,
+  readBallotQuorumRecord,
+} from '../../lib/quorum.ts';
+import { proposalBallotId } from '../../lib/vote-storage.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ProposalBallot from '../../components/ui/ProposalBallot';
 import SecondProposalButton from '../../components/ui/SecondProposalButton';
@@ -54,6 +62,7 @@ const [
   relatedBranches,
   evidenceMap,
   targetPolicyForChange,
+  quorumRecord,
 ] = proposal
   ? await Promise.all([
       proposal.supersededByProposalId
@@ -80,8 +89,9 @@ const [
       proposal.targetPolicyId
         ? db.collection('policy_registry').findOne({ policyId: proposal.targetPolicyId })
         : Promise.resolve(null),
+      readBallotQuorumRecord(db, proposalBallotId(proposal.proposalId)),
     ])
-  : [null, [], null, null, [], [], [], null, [], new Map(), null];
+  : [null, [], null, null, [], [], [], null, [], new Map(), null, null];
 
 const supersededByProposal = supersededByDetail?.proposal ?? null;
 const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
@@ -306,6 +316,47 @@ const stages: ProposalStage[] = ['propose', 'deliberate', 'decide', 'implement']
 const currentStageIndex = proposal ? stages.indexOf(proposal.stage) : -1;
 
 const votes = proposal?.votes ?? { approve: 0, abstain: 0, reject: 0, total: 0 };
+
+const quorumPreview =
+  proposal?.stage === 'decide' && !ballotExpired(proposal) && !quorumRecord
+    ? buildQuorumPreview(await getQuorumElectoratePreview(db), votes.total)
+    : null;
+const quorumView = quorumRecord
+  ? {
+      final: true,
+      label: quorumRuleLabel(quorumRecord),
+      status: quorumRecord.status,
+      verdict: quorumRecord.verdict,
+      verdictLabel: quorumVerdictLabel(quorumRecord.verdict),
+      eligibleRegisteredMembers: quorumRecord.eligibleRegisteredMembers,
+      activeEligibleMembers: quorumRecord.activeEligibleMembers,
+      platformQuorumRequired: quorumRecord.platformQuorumRequired,
+      platformQuorumMet: quorumRecord.platformQuorumMet,
+      ballotQuorumRequired: quorumRecord.ballotQuorumRequired,
+      ballotQuorumMet: quorumRecord.ballotQuorumMet,
+      participatingMembers:
+        quorumRecord.participatingMembers ?? quorumRecord.tally?.total,
+      quorumMet: quorumRecord.quorumMet,
+      activeWindowDays: quorumRecord.activeWindowDays,
+    }
+  : quorumPreview
+    ? {
+        final: false,
+        label: quorumRuleLabel({ ruleVersion: quorumPreview.ruleVersion }),
+        status: 'current',
+        verdict: null,
+        verdictLabel: null,
+        eligibleRegisteredMembers: quorumPreview.eligibleRegisteredMembers,
+        activeEligibleMembers: quorumPreview.activeEligibleMembers,
+        platformQuorumRequired: quorumPreview.platformQuorumRequired,
+        platformQuorumMet: quorumPreview.platformQuorumMet,
+        ballotQuorumRequired: quorumPreview.ballotQuorumRequired,
+        ballotQuorumMet: quorumPreview.ballotQuorumMet,
+        participatingMembers: quorumPreview.participationCount,
+        quorumMet: quorumPreview.quorumMet,
+        activeWindowDays: quorumPreview.activeWindowDays,
+      }
+    : null;
 
 const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
 
@@ -954,6 +1005,95 @@ const initialsFor = (name: string) =>
                 <p>Wording: {ballotRevisionLabel}</p>
                 {ballotResult && <p>Returning officer result: {ballotResultLabel}</p>}
               </details>
+
+              {quorumView && (
+                <section class="grid gap-3" aria-labelledby="quorum-heading">
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <h3 id="quorum-heading" class="m-0 text-base font-semibold">How many people need to vote?</h3>
+                    <Badge
+                      variant={
+                        quorumView.status === 'unavailable'
+                          ? 'warning'
+                          : quorumView.quorumMet
+                            ? 'success'
+                            : 'muted'
+                      }
+                    >
+                      {quorumView.verdictLabel ?? (quorumView.quorumMet ? 'Quorum met' : 'Not yet met')}
+                    </Badge>
+                  </div>
+                  <p class="m-0 text-sm text-muted-foreground">
+                    Engage needs at least 30 eligible registered members before its ballots can make decisions. Each ballot also needs enough people to take part.
+                  </p>
+                  <dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt class="text-muted-foreground">Eligible registered members</dt>
+                      <dd class="m-0 font-medium tabular">
+                        {quorumView.eligibleRegisteredMembers ?? 'Not recorded'}
+                        {quorumView.platformQuorumRequired
+                          ? ` · ${quorumView.platformQuorumMet ? 'platform quorum met' : `needs ${quorumView.platformQuorumRequired}`}`
+                          : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted-foreground">Recently active members</dt>
+                      <dd class="m-0 font-medium tabular">
+                        {quorumView.activeEligibleMembers ?? 'Not recorded'}
+                        {quorumView.activeWindowDays ? ` in the last ${quorumView.activeWindowDays} days` : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted-foreground">Participants needed</dt>
+                      <dd class="m-0 font-medium tabular">
+                        {quorumView.ballotQuorumRequired
+                          ? quorumView.ballotQuorumRequired
+                          : quorumView.final
+                            ? 'Not recorded'
+                            : 'No active electorate yet'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted-foreground">{quorumView.final ? 'Members who took part' : 'Votes recorded so far'}</dt>
+                      <dd class="m-0 font-medium tabular">
+                        {quorumView.participatingMembers ?? 0}
+                        {quorumView.ballotQuorumRequired
+                          ? ` of ${quorumView.ballotQuorumRequired} needed`
+                          : ' recorded'}
+                      </dd>
+                    </div>
+                  </dl>
+                  {!quorumView.final ? (
+                    <p class="m-0 text-sm text-muted-foreground">
+                      You can vote for, vote against or abstain. All three count towards participation. The final calculation happens when voting closes, so the number needed can change as members become active or inactive.
+                    </p>
+                  ) : quorumView.status === 'legacy-not-applied' ? (
+                    <p class="m-0 text-sm text-muted-foreground">
+                      This ballot closed before the current quorum rule took effect. It is recorded under the earlier rule and quorum is not applied retrospectively.
+                    </p>
+                  ) : quorumView.status === 'unavailable' ? (
+                    <p class="m-0 text-sm text-muted-foreground">
+                      Quorum could not be calculated when this ballot closed. The recorded result stays provisional until an officer reviews the closure.
+                    </p>
+                  ) : quorumView.verdict === 'inconclusive' ? (
+                    <p class="m-0 text-sm text-muted-foreground">
+                      Too few people took part for this ballot to decide the question. It is inconclusive, not rejected, and can return for further discussion before a later ballot.
+                    </p>
+                  ) : (
+                    <p class="m-0 text-sm text-muted-foreground">
+                      This result reflects the members who took part, not Fusion’s whole membership.
+                    </p>
+                  )}
+                  {quorumView.final && quorumView.status === 'evaluated' && (
+                    <p class="m-0 text-xs text-muted-foreground">
+                      {quorumView.platformQuorumMet ? 'Platform quorum met' : 'Platform quorum not met'}
+                      {' · '}
+                      {quorumView.ballotQuorumMet ? 'ballot quorum met' : 'ballot quorum not met'}
+                      {' · '}
+                      {quorumView.label}
+                    </p>
+                  )}
+                </section>
+              )}
 
               {proposal.stage === 'decide' && !canVoteOnProposal && (
                 <div class="rail-notice">

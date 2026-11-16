@@ -184,8 +184,11 @@ test("terms describe the computed ballot outcome rule and its override", () => {
   assert.match(text, /simple-majority-d9-v1/);
   assert.match(text, /Yes greater than No approves/i);
   assert.match(text, /a tie or a ballot with no votes does not/i);
-  assert.match(text, /abstentions are recorded but do not change that comparison/i);
-  assert.match(text, /no quorum or minimum turnout/i);
+  assert.match(text, /abstentions do not change the Yes-versus-No comparison/i);
+  assert.match(text, /at least 30 eligible registered members/i);
+  assert.match(text, /active on Engage in the 90 days before closure/i);
+  assert.match(text, /fails either test is inconclusive, not rejected/i);
+  assert.match(text, /adaptation of Fusion's constitutional quorum principles/i);
   assert.match(text, /explicit override with a written reason/i);
   assert.match(text, /applies to ordinary Yes\/No ballots/i);
   assert.match(text, /Amendment endorsement ballots follow a separate procedure/i);
