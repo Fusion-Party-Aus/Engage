@@ -220,9 +220,9 @@ There is **no in-process scheduler**. `setInterval` is not used. Scheduled work 
 
 | Job | Endpoint | Secret | Gate |
 |---|---|---|---|
-| Ballot digest email | `POST /api/email/digest` | `ENGAGE_CRON_SECRET` | `ENGAGE_DIGEST_ENABLED === "true"` |
+| Ballot digest email | `POST /api/email/digest` | `ENGAGE_CRON_SECRET` | On under **Platform settings → Scheduled jobs** (returns `disabled` when off) |
 | Discord weekly digest | `POST /api/cron/discord-digest` | `ENGAGE_CRON_SECRET` | Enabled and scheduled through Admin → Platform settings → Discord |
-| CRM membership verification | `POST /api/cron/membership-verification` | `ENGAGE_CRM_VERIFICATION_CRON_SECRET` | CRM verification enabled (409 when off) |
+| CRM membership verification | `POST /api/cron/membership-verification` | `ENGAGE_CRM_VERIFICATION_CRON_SECRET` | On under **Platform settings → CRM verification** (409 when off) |
 | Health probe | `GET /api/health` | None | Always available |
 
 Two scheduled jobs are CLIs rather than endpoints: `npm run governance:scheduler -- --apply`
@@ -231,6 +231,8 @@ delivers queued governance notifications. Run the drain immediately after the
 scheduler.
 
 The documented digest cadence is every 15 minutes. Coolify production currently has **no enabled scheduled tasks**; the operator must configure them. The systemd units in `deploy/systemd/` run the LAN-only Coolify poller, not application jobs.
+
+Both job gates and the CRM tuning are administrator settings stored in MongoDB, not environment configuration. A missing setting means off, so a deployment upgrading from the former environment variables must turn the job on under **Platform settings** after deploying. See [build, deployment and operations](build-deploy-operations.md#crm-verification-and-scheduled-jobs).
 
 Consequences of missing schedulers:
 
