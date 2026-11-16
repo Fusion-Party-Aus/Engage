@@ -1,6 +1,15 @@
 [
   {
-    "hash": "48bb9a4",
+    "hash": "5e56fdd",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Close the activity window at the ballot deadline",
+    "details": "Cap every activity source at the closure timestamp and anchor the snapshot to the official deadline rather than a late scheduler run. Post-deadline browsing must not enlarge the active electorate. Refs #122"
+  },
+  {
+    "hash": "610a1bd",
     "date": "2026-11-16",
     "type": "chore",
     "category": "ops",
@@ -672,14 +681,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record administrator test email delivery"
-  },
-  {
-    "hash": "eb5f365",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "email",
-    "summary": "Let administrators send themselves a sample digest",
-    "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
   }
 ]
