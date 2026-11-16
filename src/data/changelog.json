@@ -1,5 +1,23 @@
 [
   {
+    "hash": "38f7961",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "profiles",
+    "summary": "Harden partial updates and CRM id collisions",
+    "details": "Write only the profile fields supplied by a partial update and return the persisted values, so a biography-only save cannot restore an older visibility choice. Refuse to publish a CRM person id that collides with another member id, and return 404 for an ambiguous path instead of rendering the wrong person. When profile settings fail to load, disable the form and show an error rather than defaulting visibility to public. Add coverage for partial updates and the 24-hex collision case. Refs #113"
+  },
+  {
+    "hash": "84d9c73",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record profile visibility after merging main",
+    "details": "Regenerate the snapshot on the merged branch and preserve older entries outside the generator's window. Refs #113"
+  },
+  {
     "hash": "b8320aa",
     "date": "2026-11-16",
     "type": "perf",
