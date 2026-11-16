@@ -65,6 +65,12 @@ vote status or email notification consent.
   or identifiable ballot choice.
 - An admin-only preview and explicit test send target a separate test Discord
   server; live sending is disabled by default.
+- Webhook URLs, role IDs, enablement and Melbourne posting schedule are edited in
+  **Admin → Platform settings → Discord**. They live in a separate, encrypted
+  integration settings store; webhook values never enter public site settings or
+  settings-history snapshots. The existing auth bootstrap key protects ciphertext.
+- The external cron is an hourly *trigger*; Engage decides if the configured
+  local posting day/hour is due and keeps one attempt per Melbourne week.
 - See [Discord weekly digest setup](../integrations/discord-weekly-digest.md).
 
 ### Web Push
@@ -212,7 +218,7 @@ There is **no in-process scheduler**. `setInterval` is not used. Scheduled work 
 | Job | Endpoint | Secret | Gate |
 |---|---|---|---|
 | Ballot digest email | `POST /api/email/digest` | `ENGAGE_CRON_SECRET` | `ENGAGE_DIGEST_ENABLED === "true"` |
-| Discord weekly digest | `POST /api/cron/discord-digest` | `ENGAGE_CRON_SECRET` | `ENGAGE_DISCORD_DIGEST_ENABLED === "true"` |
+| Discord weekly digest | `POST /api/cron/discord-digest` | `ENGAGE_CRON_SECRET` | Enabled and scheduled through Admin → Platform settings → Discord |
 | CRM membership verification | `POST /api/cron/membership-verification` | `ENGAGE_CRM_VERIFICATION_CRON_SECRET` | CRM verification enabled (409 when off) |
 | Health probe | `GET /api/health` | None | Always available |
 
