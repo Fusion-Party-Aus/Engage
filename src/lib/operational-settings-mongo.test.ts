@@ -3,12 +3,19 @@ import { describe, it } from "node:test";
 import { MongoClient } from "mongodb";
 import { initializeDatabase } from "./db.ts";
 import {
+  CRM_OPERATIONAL_SETTINGS_ID,
+  DEFAULT_CRM_SETTINGS,
   DEFAULT_OPERATIONAL_THRESHOLDS,
+  JOBS_OPERATIONAL_SETTINGS_ID,
   OPERATIONAL_SETTINGS_COLLECTION,
   OPERATIONAL_SETTINGS_EVENTS_COLLECTION,
   OPERATIONAL_SETTINGS_ID,
+  getCrmSettingsState,
+  getJobsSettingsState,
   getOperationalSettingsState,
   listOperationalSettingsEvents,
+  saveCrmSettings,
+  saveJobsSettings,
   saveOperationalSettings,
 } from "./operational-settings.ts";
 
@@ -118,6 +125,74 @@ describe("operational settings persistence", { skip: !uri }, () => {
       assert.equal(event.actorId, actor.memberId);
       assert.equal(event.actorName, actor.name);
       assert.ok(event.createdAt instanceof Date);
+    } finally {
+      await secondDb.dropDatabase();
+      await second.close();
+    }
+  });
+
+  it("persists CRM and job settings beside the thresholds with separate audits", async () => {
+    const name = `engage_ops_sections_${crypto.randomUUID().replaceAll("-", "")}`;
+    const first = await new MongoClient(uri!).connect();
+    const firstDb = first.db(name);
+    try {
+      await initializeDatabase(firstDb);
+      const crm = await saveCrmSettings(firstDb, actor, {
+        ...DEFAULT_CRM_SETTINGS,
+        crmVerificationEnabled: true,
+        crmBatchSize: 40,
+        crmTimeoutMs: 5_000,
+      });
+      assert.equal(crm.ok, true);
+      if (!crm.ok) return;
+      assert.deepEqual(crm.changedFields.sort(), [
+        "crmBatchSize",
+        "crmTimeoutMs",
+        "crmVerificationEnabled",
+      ]);
+
+      const jobs = await saveJobsSettings(firstDb, actor, { digestEnabled: true });
+      assert.equal(jobs.ok, true);
+    } finally {
+      await first.close();
+    }
+
+    const second = await new MongoClient(uri!).connect();
+    const secondDb = second.db(name);
+    try {
+      const crmState = await getCrmSettingsState(secondDb);
+      assert.equal(crmState.values.crmVerificationEnabled, true);
+      assert.equal(crmState.values.crmBatchSize, 40);
+      assert.equal(crmState.values.crmTimeoutMs, 5_000);
+      assert.deepEqual(crmState.invalidFields, []);
+
+      const jobsState = await getJobsSettingsState(secondDb);
+      assert.equal(jobsState.values.digestEnabled, true);
+
+      const all = await listOperationalSettingsEvents(secondDb);
+      assert.deepEqual(
+        all.map((event) => event.setting).sort(),
+        ["crm", "jobs"],
+      );
+      const crmEvent = all.find((event) => event.setting === "crm")!;
+      assert.deepEqual(crmEvent.after, {
+        crmVerificationEnabled: true,
+        crmBatchSize: 40,
+        crmTimeoutMs: 5_000,
+      });
+      assert.equal(crmEvent.actorId, actor.memberId);
+      assert.equal(crmEvent.actorName, actor.name);
+      assert.ok(crmEvent.createdAt instanceof Date);
+
+      const storedIds = await secondDb
+        .collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION)
+        .find({})
+        .project({ _id: 1 })
+        .toArray();
+      assert.deepEqual(
+        storedIds.map((row) => row._id).sort(),
+        [CRM_OPERATIONAL_SETTINGS_ID, JOBS_OPERATIONAL_SETTINGS_ID],
+      );
     } finally {
       await secondDb.dropDatabase();
       await second.close();

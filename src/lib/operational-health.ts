@@ -7,14 +7,17 @@ import {
 } from "./job-runs.ts";
 import { VERIFICATION_ATTEMPTS } from "./membership-verification.ts";
 import {
+  getCrmSettingsState,
+  getJobsSettingsState,
   getOperationalSettingsState,
   OPERATIONAL_THRESHOLD_BY_KEY,
   OPERATIONAL_THRESHOLD_FIELDS,
+  type CrmSettingsState,
+  type JobsSettingsState,
   type OperationalSettingsState,
   type OperationalThresholdKey,
 } from "./operational-settings.ts";
 import { turnstileConfiguration } from "./turnstile.ts";
-import { crmVerificationEnabled } from "./underground-crm.ts";
 import type { PlatformEnv } from "./types.ts";
 
 /**
@@ -326,18 +329,34 @@ async function ballotDeadlineCheck(
 
 async function digestCheck(
   db: Db,
-  env: PlatformEnv,
   now: Date,
   thresholds: RecencyThresholds,
+  jobsSettings: JobsSettingsState,
   invalidProblem?: string,
 ): Promise<OperationalCheck> {
-  if (env.ENGAGE_DIGEST_ENABLED !== "true") {
+  if (jobsSettings.readFailed) {
     return {
       id: "digest",
       status: "unknown",
-      summary: "Ballot digest email is disabled in this deployment.",
+      summary: "The saved scheduled job settings could not be read.",
+      nextAction: CORRECT_SETTINGS_ACTION,
+    };
+  }
+  if (jobsSettings.invalidFields.length > 0) {
+    return {
+      id: "digest",
+      status: "unknown",
+      summary: "The saved scheduled digest setting is not valid.",
+      nextAction: CORRECT_SETTINGS_ACTION,
+    };
+  }
+  if (!jobsSettings.values.digestEnabled) {
+    return {
+      id: "digest",
+      status: "unknown",
+      summary: "Ballot digest email is turned off.",
       nextAction:
-        "Set ENGAGE_DIGEST_ENABLED=true and schedule POST /api/email/digest to send ballot reminders.",
+        "Turn on scheduled digests in Platform settings, then schedule POST /api/email/digest to send ballot reminders.",
     };
   }
   const base = await jobRecencyCheck(db, now, {
@@ -370,18 +389,34 @@ async function digestCheck(
 
 async function membershipVerificationCheck(
   db: Db,
-  env: PlatformEnv,
   now: Date,
   thresholds: RecencyThresholds,
+  crmSettings: CrmSettingsState,
   invalidProblem?: string,
 ): Promise<OperationalCheck> {
-  if (!crmVerificationEnabled(env as Record<string, string | undefined>)) {
+  if (crmSettings.readFailed) {
     return {
       id: "membership-verification",
       status: "unknown",
-      summary: "Automatic membership verification is not enabled.",
+      summary: "The saved CRM verification settings could not be read.",
+      nextAction: CORRECT_SETTINGS_ACTION,
+    };
+  }
+  if (crmSettings.invalidFields.length > 0) {
+    return {
+      id: "membership-verification",
+      status: "unknown",
+      summary: "Some saved CRM verification settings are not valid.",
+      nextAction: CORRECT_SETTINGS_ACTION,
+    };
+  }
+  if (!crmSettings.values.crmVerificationEnabled) {
+    return {
+      id: "membership-verification",
+      status: "unknown",
+      summary: "Automatic membership verification is turned off.",
       nextAction:
-        "No action while the feature is off. Enable ENGAGE_CRM_VERIFICATION_ENABLED and schedule the endpoint to keep memberships current.",
+        "Turn on CRM verification in Platform settings, then schedule the endpoint to keep memberships current.",
     };
   }
   const base = await jobRecencyCheck(db, now, {
@@ -571,7 +606,11 @@ export async function evaluateOperationalHealth(input: {
 }): Promise<OperationalHealthReport> {
   const { db, env } = input;
   const now = input.now ?? new Date();
-  const settings = await getOperationalSettingsState(db);
+  const [settings, crmSettings, jobsSettings] = await Promise.all([
+    getOperationalSettingsState(db),
+    getCrmSettingsState(db),
+    getJobsSettingsState(db),
+  ]);
   const thresholds = reportThresholds(settings);
 
   const schedulerProblem = thresholdProblem(settings, [
@@ -612,24 +651,24 @@ export async function evaluateOperationalHealth(input: {
     guarded("digest", () =>
       digestCheck(
         db,
-        env,
         now,
         {
           warn: thresholds.digestWarnHours,
           fail: thresholds.digestStaleHours,
         },
+        jobsSettings,
         digestProblem,
       ),
     ),
     guarded("membership-verification", () =>
       membershipVerificationCheck(
         db,
-        env,
         now,
         {
           warn: thresholds.verificationWarnHours,
           fail: thresholds.verificationStaleHours,
         },
+        crmSettings,
         verificationProblem,
       ),
     ),

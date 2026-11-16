@@ -24,8 +24,14 @@ import {
   processDueVerificationAttempts,
   reconcileLinkedMembers,
   resolveOpenVerificationReviews,
+  runVerificationCycle,
   verifyMemberFromCrm,
 } from "./membership-verification.ts";
+import {
+  CRM_OPERATIONAL_SETTINGS_ID,
+  DEFAULT_CRM_SETTINGS,
+  OPERATIONAL_SETTINGS_COLLECTION,
+} from "./operational-settings.ts";
 
 const FUSION_MEMBERSHIP_TYPE = "7c0e1f52-8a3d-4a7d-9b5e-2f6d1c8a4e10";
 const OTHER_MEMBERSHIP_TYPE = "c3f4a2b1-6d5e-4c8a-9f7b-1e2d3c4b5a60";
@@ -60,8 +66,6 @@ function env(overrides: Record<string, string> = {}) {
         Melbourne: VIC_BRANCH,
       },
     }),
-    ENGAGE_CRM_OUTAGE_ALERT_AFTER_ATTEMPTS: "3",
-    ENGAGE_CRM_RECONCILE_INTERVAL_MINUTES: "1440",
     ...overrides,
   };
 }
@@ -873,6 +877,140 @@ describe("Verification queue", () => {
         .collection(VERIFICATION_ATTEMPTS)
         .countDocuments({ memberId: String(noMembership) }),
       1,
+    );
+  });
+});
+
+describe("CRM verification settings", () => {
+  async function seedCrmSettings(
+    db: Db,
+    overrides: Partial<typeof DEFAULT_CRM_SETTINGS> = {},
+  ): Promise<void> {
+    await db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).insertOne({
+      _id: CRM_OPERATIONAL_SETTINGS_ID,
+      ...DEFAULT_CRM_SETTINGS,
+      crmVerificationEnabled: true,
+      ...overrides,
+    });
+  }
+
+  it("processes only the saved batch size", async () => {
+    const { db, memberId } = await seededDb();
+    await seedCrmSettings(db, { crmBatchSize: 1 });
+    await enqueueVerificationAttempt(db, memberId, { now: FIXED_NOW });
+
+    const second = new ObjectId();
+    await db.collection("user").insertOne({
+      _id: second as any,
+      name: "Second Pending Member",
+      email: "second@example.org",
+      emailVerified: true,
+    });
+    await db.collection("memberships").insertOne({
+      memberId: String(second),
+      status: "pending",
+    });
+    await enqueueVerificationAttempt(db, String(second), { now: FIXED_NOW });
+
+    const report = await processDueVerificationAttempts(db, env(), {
+      fetchImpl: fakeCrm({ byEmail: [] }),
+      now: FIXED_NOW,
+      sendNotice: async () => "not-needed",
+    });
+    assert.equal(report.processed, 1);
+  });
+
+  it("uses the saved reconcile interval and request timeout", async () => {
+    const { db, memberId, memberEmail } = await seededDb();
+    await seedCrmSettings(db, {
+      crmReconcileIntervalMinutes: 60,
+      crmTimeoutMs: 2_000,
+    });
+
+    await verifyMemberFromCrm(db, env(), memberId, {
+      fetchImpl: fakeCrm({
+        byEmail: [crmPerson("crm-person-priya", memberEmail)],
+      }),
+      now: FIXED_NOW,
+      sendNotice: async () => "not-needed",
+    });
+
+    const link = await db
+      .collection(CRM_IDENTITY_LINKS)
+      .findOne({ memberId });
+    assert.ok(link?.nextCheckAt instanceof Date);
+    assert.equal(
+      new Date(link!.nextCheckAt).getTime(),
+      FIXED_NOW.getTime() + 60 * 60_000,
+    );
+    assert.equal(
+      readUndergroundCrmConfig(env(), { timeoutMs: 2_000 }).timeoutMs,
+      2_000,
+    );
+    assert.throws(
+      () => readUndergroundCrmConfig(env(), { timeoutMs: 500 }),
+      /timeout/,
+    );
+  });
+
+  it("raises the outage alert at the saved attempt threshold", async () => {
+    const { db, adminId, memberId } = await seededDb();
+    await seedCrmSettings(db, { crmOutageAlertAfterAttempts: 2 });
+    await enqueueVerificationAttempt(db, memberId, { now: FIXED_NOW });
+
+    const first = await processDueVerificationAttempts(db, env(), {
+      fetchImpl: fakeCrm({ status: 503 }),
+      now: FIXED_NOW,
+      sendNotice: async () => "not-needed",
+    });
+    assert.equal(first.retried, 1);
+    assert.equal(
+      await db
+        .collection("member_notifications")
+        .countDocuments({ memberId: adminId, title: /CRM membership checks delayed/ }),
+      0,
+    );
+
+    const second = await processDueVerificationAttempts(db, env(), {
+      fetchImpl: fakeCrm({ status: 503 }),
+      now: new Date(FIXED_NOW.getTime() + 6 * 60_000),
+      sendNotice: async () => "not-needed",
+    });
+    assert.equal(second.retried, 1);
+    assert.equal(
+      await db
+        .collection("member_notifications")
+        .countDocuments({ memberId: adminId, title: /CRM membership checks delayed/ }),
+      1,
+    );
+  });
+
+  it("fails clearly when a saved value is invalid instead of clamping it", async () => {
+    const { db } = await seededDb();
+    await seedCrmSettings(db, { crmBatchSize: 0 });
+
+    await assert.rejects(
+      () =>
+        runVerificationCycle(db, env(), {
+          fetchImpl: fakeCrm({ byEmail: [] }),
+          now: FIXED_NOW,
+          sendNotice: async () => "not-needed",
+        }),
+      /invalid/i,
+    );
+
+    await db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).updateOne(
+      { _id: CRM_OPERATIONAL_SETTINGS_ID },
+      { $set: { crmBatchSize: 10_000 } },
+    );
+    await assert.rejects(
+      () =>
+        processDueVerificationAttempts(db, env(), {
+          fetchImpl: fakeCrm({ byEmail: [] }),
+          now: FIXED_NOW,
+          sendNotice: async () => "not-needed",
+        }),
+      /invalid/i,
     );
   });
 });

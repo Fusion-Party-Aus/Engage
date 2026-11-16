@@ -235,8 +235,9 @@ export async function initializeDatabase(db: Db): Promise<void> {
     db.collection("membership_verification_reviews").createIndex({status:1,createdAt:1}),
     db.collection("membership_verification_events").createIndex({eventId:1},{unique:true}),
     db.collection("membership_verification_events").createIndex({memberId:1,createdAt:-1}),
-    // Operational thresholds are a single administrator-owned document (#128).
-    // The event index backs the "last changed" line on the settings page.
+    // Operational settings are administrator-owned documents (#128): health
+    // thresholds, CRM verification tuning and the scheduled-job gates. The
+    // event index backs the "last changed" line on the settings page.
     db.collection(OPERATIONAL_SETTINGS_EVENTS_COLLECTION).createIndex({eventId:1},{unique:true}),
     db.collection(OPERATIONAL_SETTINGS_EVENTS_COLLECTION).createIndex({createdAt:-1}),
     db.collection(OPERATIONAL_SETTINGS_COLLECTION).createIndex({updatedAt:-1}),

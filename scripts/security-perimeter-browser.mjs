@@ -79,7 +79,6 @@ const server = spawn(process.execPath, ["dist/server/entry.mjs"], {
     BETTER_AUTH_URL: origin,
     BETTER_AUTH_SECRET: "perimeter-browser-secret-not-used-in-production",
     ENGAGE_CRM_VERIFICATION_CRON_SECRET: cronSecret,
-    ENGAGE_DIGEST_ENABLED: "false",
     LEGAL_ACCEPTANCE_ENABLED: "false",
     PUBLIC_TURNSTILE_SITE_KEY: turnstileSiteKey,
     // Render the widget in the preview. No protected form is submitted, and
