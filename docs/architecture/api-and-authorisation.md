@@ -19,7 +19,7 @@ All routes are `prerender = false`. `src/middleware.ts` is a perimeter layer onl
 | Sense Box | `POST /api/sense-box` | Public concern submission |
 | Legal | `POST /api/legal/acceptance` | Record terms/privacy acceptance |
 | Public v1 | `/api/v1/policies`, `/versions`, `/branches`, `/policy-categories`, `/openapi.json` | Read-only published catalogue |
-| Member | `GET/POST /api/member/branches`, `GET/POST /api/member/profile` | Following, branch membership self-service, and the owner's public biography |
+| Member | `GET/POST /api/member/branches`, `GET/POST /api/member/profile` | Following, branch membership self-service, and the owner's public biography and visibility |
 | Notifications | `/api/notifications/inbox`, `/preferences`, `/push-subscription` | Inbox, preferences, Web Push |
 | Email | `/api/email/preferences`, `/unsubscribe`, `/webhook`, `/digest` | Email consent, unsubscribe, delivery events, digest job |
 | Cron | `POST /api/cron/membership-verification` | CRM verification cycle |
@@ -54,7 +54,7 @@ All JSON responses must go through an explicit mapper in `src/lib/api-contracts.
 
 `privateJson()` sets `cache-control: private, no-store`. `publicJson()` computes an ETag, answers `If-None-Match` with 304, and sets canonical `Link` and cache headers.
 
-Public member profiles are server-rendered at `/members/<memberId>/` and are not a JSON API. The read model in `src/lib/member-profile.ts` filters comments, proposals and amendments through `canViewProposal` and the archived-review rule, so the page can never widen access that the proposal itself refuses. The only profile write is `POST /api/member/profile`, which updates the signed-in account's own biography and is origin-checked.
+Public member profiles are server-rendered at `/members/<memberId>/` and are not a JSON API. The read model in `src/lib/member-profile.ts` filters comments, proposals and amendments through `canViewProposal` and the archived-review rule, so the page can never widen access that the proposal itself refuses. The only profile write is `POST /api/member/profile`, which updates the signed-in account's own biography and visibility and is origin-checked. A hidden profile returns 404 to others and is suppressed from author links. With `ENGAGE_PROFILE_CRM_IDENTIFIERS=on`, a member-id path 301s to an active CRM identity link's `crmPersonId`; the lookup is local and never calls the CRM.
 
 ### Pagination
 
