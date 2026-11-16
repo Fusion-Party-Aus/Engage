@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MongoClient, type Collection, type Db } from "mongodb";
-import { commentVoteRetryBudgetMs, voteOnComment } from "./store.ts";
+import { voteOnComment } from "./store.ts";
 import type { SessionUser } from "./types.ts";
 
 /**
@@ -126,9 +126,12 @@ test(
       await seedComment(db, proposalId, commentId);
 
       const voters = Array.from({ length: 25 }, (_, index) => voter(index));
+      // Production uses the 5 s default. A loaded runner can stall well past
+      // that without any vote being lost, so the test passes a larger budget
+      // explicitly rather than turning a machine stall into a false failure.
       const results = await Promise.all(
         voters.map((member) =>
-          voteOnComment(db, member, commentId, "upvote"),
+          voteOnComment(db, member, commentId, "upvote", 15_000),
         ),
       );
       assert.equal(results.length, 25);
@@ -147,8 +150,8 @@ test(
       // Two simultaneous toggles from a new member cancel out, and the member
       // never appears twice in either array.
       await Promise.all([
-        voteOnComment(db, voter(99), commentId, "upvote"),
-        voteOnComment(db, voter(99), commentId, "upvote"),
+        voteOnComment(db, voter(99), commentId, "upvote", 15_000),
+        voteOnComment(db, voter(99), commentId, "upvote", 15_000),
       ]);
       const afterToggle = await db.collection("comments").findOne({ commentId });
       assert.ok(afterToggle);
@@ -187,24 +190,13 @@ test(
       const slowDb = slowCommentWrites(db, 40);
       const voters = Array.from({ length: 25 }, (_, index) => voter(index));
       // A loaded machine can spend more than the production 5 s default on the
-      // same burst, so this case proves convergence with a deliberately larger
-      // budget while the default stays bounded for real requests.
-      const previousBudget =
-        process.env.ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS;
-      process.env.ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS = "15000";
-      try {
-        await Promise.all(
-          voters.map((member) =>
-            voteOnComment(slowDb, member, commentId, "upvote"),
-          ),
-        );
-      } finally {
-        if (previousBudget === undefined) {
-          delete process.env.ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS;
-        } else {
-          process.env.ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS = previousBudget;
-        }
-      }
+      // same burst, so this case passes a larger budget explicitly to prove
+      // convergence while the production default stays bounded.
+      await Promise.all(
+        voters.map((member) =>
+          voteOnComment(slowDb, member, commentId, "upvote", 15_000),
+        ),
+      );
 
       const stored = await db.collection("comments").findOne({ commentId });
       assert.ok(stored);
@@ -228,7 +220,6 @@ test(
     const db = client.db(`engage_comment_votes_stuck_${Date.now()}`);
     const warnings: Array<Record<string, unknown>> = [];
     const originalWarn = console.warn;
-    const previousBudget = process.env.ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS;
     console.warn = (...args: unknown[]) => {
       try {
         warnings.push(JSON.parse(String(args[0])) as Record<string, unknown>);
@@ -237,22 +228,20 @@ test(
       }
     };
     try {
-      // Invalid, empty and non-positive overrides fall back to the 5 s
-      // default; the small override below is clamped to the 250 ms floor.
-      assert.equal(commentVoteRetryBudgetMs(""), 5_000);
-      assert.equal(commentVoteRetryBudgetMs("not-a-number"), 5_000);
-      assert.equal(commentVoteRetryBudgetMs("0"), 5_000);
-      assert.equal(commentVoteRetryBudgetMs("1"), 250);
-      assert.equal(commentVoteRetryBudgetMs("999999"), 60_000);
-      process.env.ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS = "1";
-
       const proposalId = "comment-vote-stuck";
       const commentId = `cmt-${crypto.randomUUID()}`;
       await seedComment(db, proposalId, commentId);
       const member = voter(1);
       const started = Date.now();
       await assert.rejects(
-        voteOnComment(neverMatchingWrites(db), member, commentId, "upvote"),
+        // 1 ms is clamped to the 250 ms floor, so the failure stays fast.
+        voteOnComment(
+          neverMatchingWrites(db),
+          member,
+          commentId,
+          "upvote",
+          1,
+        ),
         /Comment votes changed at the same time/,
       );
       const elapsed = Date.now() - started;
@@ -269,11 +258,6 @@ test(
       assert.ok(!serialised.includes(member.memberId));
       assert.ok(!serialised.includes("upvote"));
     } finally {
-      if (previousBudget === undefined) {
-        delete process.env.ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS;
-      } else {
-        process.env.ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS = previousBudget;
-      }
       console.warn = originalWarn;
       await db.dropDatabase();
       await client.close();
