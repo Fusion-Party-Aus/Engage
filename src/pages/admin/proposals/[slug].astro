@@ -836,7 +836,11 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                     <div>
                       <dt>Ballot requirement</dt>
                       <dd class="tabular">
-                        {quorumDisplay.ballotQuorumRequired ?? 'Not recorded'}
+                        {quorumDisplay.ballotQuorumRequired
+                          ? quorumDisplay.ballotQuorumRequired
+                          : quorumDisplay.final
+                            ? 'Not recorded'
+                            : 'No active electorate yet'}
                         {quorumDisplay.participatingMembers !== undefined
                           ? ` · ${quorumDisplay.participatingMembers} participated`
                           : ''}

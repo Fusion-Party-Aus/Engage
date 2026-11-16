@@ -1044,15 +1044,21 @@ const initialsFor = (name: string) =>
                     </div>
                     <div>
                       <dt class="text-muted-foreground">Participants needed</dt>
-                      <dd class="m-0 font-medium tabular">{quorumView.ballotQuorumRequired ?? 'Not recorded'}</dd>
+                      <dd class="m-0 font-medium tabular">
+                        {quorumView.ballotQuorumRequired
+                          ? quorumView.ballotQuorumRequired
+                          : quorumView.final
+                            ? 'Not recorded'
+                            : 'No active electorate yet'}
+                      </dd>
                     </div>
                     <div>
                       <dt class="text-muted-foreground">{quorumView.final ? 'Members who took part' : 'Votes recorded so far'}</dt>
                       <dd class="m-0 font-medium tabular">
                         {quorumView.participatingMembers ?? 0}
-                        {quorumView.ballotQuorumRequired !== undefined
+                        {quorumView.ballotQuorumRequired
                           ? ` of ${quorumView.ballotQuorumRequired} needed`
-                          : ''}
+                          : ' recorded'}
                       </dd>
                     </div>
                   </dl>
