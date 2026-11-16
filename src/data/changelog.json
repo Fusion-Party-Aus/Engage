@@ -1,5 +1,32 @@
 [
   {
+    "hash": "d844be9",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "operations",
+    "summary": "Point operational thresholds at the admin setting",
+    "details": "Remove the eight threshold variables from `.env.example` and the environment table. Document the administrator setting instead: defaults, whole-hour bounds, warn-below-fail ordering, and the audited change record. Record what remains on #128: CRM batch sizing, reconcile cadence, outage attempts, request timeout, the digest/CRM enablement gates and the site setting environment fallbacks."
+  },
+  {
+    "hash": "a480e5a",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "settings",
+    "summary": "Make operational health thresholds audited admin settings",
+    "details": "Move the eight operational health thresholds from environment variables to a single validated, audited setting: - scheduler warn/fail, digest warn/fail, verification warn/fail - ballot closure grace and email delivery reporting window The setting is one document in `operational_settings` (`_id: \"thresholds\"`) with documented defaults and whole-hour bounds. Warn must stay below fail. Validation rejects partial, fractional or out-of-range input field by field, and nothing is stored until the whole set is valid. Each change appends an event to `operational_settings_events` with the actor, time and only the changed fields, before and after. There are no secrets. `ops:health` reads the saved values and names each threshold's source as `settings` or `default`. A saved value that is missing, not an integer or out of range is reported as `unknown` with a plain-language action; the affected threshold is labelled as the default it fell back to. Warn/fail ordering is checked at evaluation too. The eight environment variables and their `PlatformEnv` fields are removed. `/admin/settings/` gains an Operational thresholds form built from the admin Card, Field, Input, Button and Alert primitives, with grouped pairs, defaults, ranges, inline errors, a success confirmation and the last audited change. The new `POST /api/admin/operational-settings` requires `settings.manage`, checks same-origin writes and returns field errors without internals. Tests cover validation, defaults, merging, audit shape, permission denial, same-origin rejection, API errors, health sources, invalid stored values, read failure, environment variables having no effect, and replica-set persistence."
+  },
+  {
+    "hash": "b0e0c81",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "discussion",
+    "summary": "Bound comment vote retries by time, not attempt count (#123) (#134)",
+    "details": "* fix(discussion): bound comment vote retries by time with backoff (#123) The comment vote compare-and-swap gave up after 12 fixed attempts with a 2-8 ms jitter. On a cold replica set the first write can take hundreds of milliseconds, so 25 concurrent voters exhausted the attempts and valid votes failed with 'Comment votes changed at the same time. Try again.' Retry on a five-second time budget instead, with exponential backoff and jitter (4 ms doubling to a 250 ms cap). Legitimate contention converges even when writes are slow; a genuinely stuck writer still fails in bounded time. Exactly-once is unchanged. The write is still one version-filtered compare-and-swap of the whole vote state, so a lost race writes nothing and retries against the committed state. Voter arrays, switching between upvotes and downvotes, and the persisted shape are untouched. Expiry now logs comment_vote_retry_budget_exhausted with the comment ID, attempt count and budget only - never member IDs or vote choices - before throwing. Tests add a deterministic cold-write case (40 ms per comment write) that fails under the old attempt count and passes now, plus a stuck-writer case proving the budget is bounded and the warning is emitted without identities. * chore(changelog): record bounded comment vote retries (#123) Regenerates the public snapshot so the fix commit appears on /changelog/. The 80-commit window still drops the oldest entries, which is the pre-existing truncation tracked in #96. * fix(discussion): make the comment vote retry budget configurable (#123) The 5 s retry budget was a fixed constant. Under full-suite load the injected 40 ms cold-write test needed longer than 5 s to converge and failed, even though votes were not actually lost. Read the budget from ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS at call time. Unset, empty or invalid values use the 5000 ms default; values are clamped to 250-60000 ms so a bad setting cannot remove the bound. The expiry warning records the effective budget. The stress test now runs with a 15000 ms budget, proving convergence under injected slow writes on a loaded machine while production keeps the 5 s default. The stuck-writer test uses the 250 ms floor so it stays fast, and asserts the default, fallback and clamp rules. Exactly-once is unchanged: the write is still one version-filtered compare-and-swap of the whole vote state, and no persisted shape or privacy boundary changed. * chore(changelog): record the configurable comment vote retry budget (#123) Regenerates the public snapshot so the stabilisation commit appears on /changelog/. * refactor(discussion): inject the comment vote retry budget instead of an environment variable (#123) Configuration belongs in the administration panel; environment variables are reserved for secrets, bootstrap and deployment topology. Remove ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS from the vote path. The production budget stays a fixed 5000 ms module constant. Tests pass an explicit optional fifth argument to voteOnComment, an injection point that is validated and clamped to 250-60000 ms; production callers omit it. The expiry warning still records the effective budget. The concurrency tests pass 15000 ms so a loaded runner cannot turn a machine stall into a false failure, and the stuck-writer test passes 1 ms (clamped to the 250 ms floor) so it stays fast. Exactly-once assertions, the persisted shape and the privacy boundary are unchanged. Docs remove the environment-override wording. * chore(changelog): record the injected comment vote retry budget (#123) Regenerates the public snapshot so the refactor appears on /changelog/. * chore(changelog): record bounded comment vote retries after merging main"
+  },
+  {
     "hash": "9e56766",
     "date": "2026-11-17",
     "type": "docs",
@@ -34,60 +61,6 @@
     "scope": "platform",
     "summary": "[Consolidated] Two-tier quorum and Discord attention-debt digest (#127)",
     "details": "* feat(discord): add attention-debt ranking and safe weekly webhook delivery (#125) * chore(discord): configure safe opt-in digest settings (#125) * chore(discord): configure safe opt-in digest settings (#125) * chore(discord): configure safe opt-in digest settings (#125) * feat(discord): expose guarded weekly scheduler and admin test API (#125) * feat(discord): expose guarded weekly scheduler and admin test API (#125) * feat(discord): add digest preview and test-send to engagement admin (#125) * feat(discord): wire admin preview and safe test-send controls (#125) * fix(discord): rank inaugural proposals by attention, not legacy creation date (#125) * fix(discord): determine Melbourne digest week independent of locale formatting (#125) * test(discord): cover attention-debt fairness, launch cohort and isolated webhook delivery (#125) * fix(discord): escape titles safely and type delivery ledger (#125) * docs(discord): document launch cohort, algorithm and test-server rollout (#125) * docs(discord): register digest channel and scheduled endpoint (#125) * style(discord): format read-only message preview (#125) * fix(discord): link directly to eligible open ballots and discussions (#125) * refactor(discord): isolate safe webhook URL validation (#125) * feat(discord): persist encrypted, audited webhook and schedule settings in Engage (#125) * feat(discord): read in-app settings and enforce editable weekly schedule (#125) * fix(discord): preserve immutable settings record key during updates (#125) * feat(discord): add admin-only encrypted integration settings API (#125) * feat(discord): add in-app webhook, role and schedule configuration UI (#125) * feat(discord): integrate Discord configuration into Platform settings (#125) * fix(discord): report saved config and enforce settings authority (#125) * chore(discord): move integration configuration out of environment variables (#125) * chore(discord): move integration configuration out of environment variables (#125) * refactor(discord): centralise setup and testing in Platform settings (#125) * refactor(discord): remove superseded engagement dashboard controls (#125) * fix(discord): actually remove saved secrets from MongoDB on clear (#125) * test(discord): exercise isolated sending through stored encrypted config (#125) * test(discord): cover encrypted in-app settings, removal, isolation and schedule (#125) * docs(discord): document in-app encrypted settings and configurable schedule (#125) * docs(discord): align scheduled jobs and settings architecture (#125) * feat(ballots): add two-tier constitutional-style quorum Evaluate platform quorum (30 eligible registered members) and ballot quorum (max(ceil(sqrt(N)), min(30, ceil(N/2)))) once at closure, inside the closure transaction. Persist one immutable ballot_quorum_records snapshot with the electorate, thresholds, participation, tally and verdict. Certification refuses a missing, unreadable or mismatched snapshot and cannot override a quorum failure into approval or rejection. Ballots closed before the rule keep the approval-only basis. Record genuine signed-in use as a daily activity signal for the 90-day active electorate. Refs #122 * feat(proposals): explain quorum to members and officers Show the current eligible registered membership, active electorate, estimated requirement, participation and the closure caveat on every ballot page. After closure, show the recorded calculation and whether each test was met. Give administrators the same calculation and any closure anomaly on the proposal workspace and inline outcome control. Inconclusive ballots are presented as neither adopted nor rejected, and a quorum failure can only be recorded as inconclusive. Refs #122 * test(discord): type string-keyed MongoDB settings fixture (#125) * docs(discord): document in-app settings endpoint (#125) * fix(discord): support Node strip-only TypeScript test runtime (#125) * docs(governance): record the two-tier quorum decision and basis Record D37–D39 and the rule 36 adaptation: platform quorum, ballot formula, the 90-day active member definition, closure immutability, inconclusive failure and the no-override rule. Note that rule 30(4)(e) AGM obligations continue and that rule 98 confirmation is still needed before the first post-adoption closure is treated as binding. Update the public explanation, legal Terms wording, lifecycle, data model, capability and known-gap records, and add the quorum procedure page. Refs #122 * test(ballots): cover quorum boundaries and closure evidence Cover the published formula and its transitions, platform boundaries, approval and quorum separation, abstentions, vote changes, duplicate participation, zero active members, legacy pre-rule closures, open ballots at rollout, membership changes after closure, participation mismatch, missing snapshots and concurrent closure with a membership update. Move existing certification mechanics fixtures to pre-rule closures so they keep testing the approval rule. Refs #122 * fix(discord): use accessible confirmation for removing saved webhooks (#125) * fix(proposals): clarify zero active electorate in quorum displays Show 'No active electorate yet' rather than a zero participant target, and show recorded participation without a misleading 'of 0'. This keeps the formula exact while making the small-electorate state understandable. Refs #122 * test(discord): allow same-week catch-up when the scheduled slot was missed (#125) * docs(discord): clarify same-week scheduling catch-up behaviour (#125) * chore(changelog): record the two-tier quorum work Refs #122 * fix(ballots): close the activity window at the ballot deadline Cap every activity source at the closure timestamp and anchor the snapshot to the official deadline rather than a late scheduler run. Post-deadline browsing must not enlarge the active electorate. Refs #122 * chore(changelog): record the quorum activity-window fix Refs #122 * docs(governance): state the zero-active quorum edge case Refs #122 * chore(changelog): record the quorum edge-case note Refs #122 * test(ballots): keep projection certification case pre-quorum Refs #122 * chore(changelog): record the projection test fix Refs #122 * chore(changelog): refresh for the consolidated branch Refs #122, #125 * test(discord): assert webhook fields are absent, not substrings Resolve CodeQL's incomplete URL substring sanitization alerts in the secret-redaction test without weakening the assertion. Refs #125 * chore(changelog): record the Discord test hardening Refs #125"
-  },
-  {
-    "hash": "578d0dc",
-    "date": "2026-11-17",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the injected comment vote retry budget (#123)",
-    "details": "Regenerates the public snapshot so the refactor appears on /changelog/."
-  },
-  {
-    "hash": "a861497",
-    "date": "2026-11-17",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "discussion",
-    "summary": "Inject the comment vote retry budget instead of an environment variable (#123)",
-    "details": "Configuration belongs in the administration panel; environment variables are reserved for secrets, bootstrap and deployment topology. Remove ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS from the vote path. The production budget stays a fixed 5000 ms module constant. Tests pass an explicit optional fifth argument to voteOnComment, an injection point that is validated and clamped to 250-60000 ms; production callers omit it. The expiry warning still records the effective budget. The concurrency tests pass 15000 ms so a loaded runner cannot turn a machine stall into a false failure, and the stuck-writer test passes 1 ms (clamped to the 250 ms floor) so it stays fast. Exactly-once assertions, the persisted shape and the privacy boundary are unchanged. Docs remove the environment-override wording."
-  },
-  {
-    "hash": "dbddefa",
-    "date": "2026-11-17",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the configurable comment vote retry budget (#123)",
-    "details": "Regenerates the public snapshot so the stabilisation commit appears on /changelog/."
-  },
-  {
-    "hash": "27e8bf8",
-    "date": "2026-11-17",
-    "type": "fix",
-    "category": "fix",
-    "scope": "discussion",
-    "summary": "Make the comment vote retry budget configurable (#123)",
-    "details": "The 5 s retry budget was a fixed constant. Under full-suite load the injected 40 ms cold-write test needed longer than 5 s to converge and failed, even though votes were not actually lost. Read the budget from ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS at call time. Unset, empty or invalid values use the 5000 ms default; values are clamped to 250-60000 ms so a bad setting cannot remove the bound. The expiry warning records the effective budget. The stress test now runs with a 15000 ms budget, proving convergence under injected slow writes on a loaded machine while production keeps the 5 s default. The stuck-writer test uses the 250 ms floor so it stays fast, and asserts the default, fallback and clamp rules. Exactly-once is unchanged: the write is still one version-filtered compare-and-swap of the whole vote state, and no persisted shape or privacy boundary changed."
-  },
-  {
-    "hash": "85c55a8",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record bounded comment vote retries (#123)",
-    "details": "Regenerates the public snapshot so the fix commit appears on /changelog/. The 80-commit window still drops the oldest entries, which is the pre-existing truncation tracked in #96."
-  },
-  {
-    "hash": "8897b43",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "discussion",
-    "summary": "Bound comment vote retries by time with backoff (#123)",
-    "details": "The comment vote compare-and-swap gave up after 12 fixed attempts with a 2-8 ms jitter. On a cold replica set the first write can take hundreds of milliseconds, so 25 concurrent voters exhausted the attempts and valid votes failed with 'Comment votes changed at the same time. Try again.' Retry on a five-second time budget instead, with exponential backoff and jitter (4 ms doubling to a 250 ms cap). Legitimate contention converges even when writes are slow; a genuinely stuck writer still fails in bounded time. Exactly-once is unchanged. The write is still one version-filtered compare-and-swap of the whole vote state, so a lost race writes nothing and retries against the committed state. Voter arrays, switching between upvotes and downvotes, and the persisted shape are untouched. Expiry now logs comment_vote_retry_budget_exhausted with the comment ID, attempt count and budget only - never member IDs or vote choices - before throwing. Tests add a deterministic cold-write case (40 ms per comment write) that fails under the old attempt count and passes now, plus a stuck-writer case proving the budget is bounded and the warning is emitted without identities."
   },
   {
     "hash": "8693fbb",
@@ -684,5 +657,29 @@
     "category": "fix",
     "scope": "ci",
     "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
+  },
+  {
+    "hash": "cb39b60",
+    "date": "2026-11-09",
+    "type": "docs",
+    "category": "docs",
+    "scope": "member",
+    "summary": "Record lifecycle audit, consent assessment and rollout checks"
+  },
+  {
+    "hash": "52c6570",
+    "date": "2026-11-09",
+    "type": "feat",
+    "category": "feature",
+    "scope": "member",
+    "summary": "Connect verification, participation and legacy consent journeys"
+  },
+  {
+    "hash": "ee47cdf",
+    "date": "2026-11-09",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record administrator test email delivery"
   }
 ]

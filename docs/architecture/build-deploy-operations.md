@@ -28,7 +28,6 @@ Configuration is read through `runtimeEnv(locals)` and typed as `PlatformEnv`. `
 | Auth | `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 | Email | `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, `RESEND_WEBHOOK_SECRET` |
 | Jobs | `ENGAGE_CRON_SECRET`, `ENGAGE_EMAIL_SECRET`, `ENGAGE_DIGEST_ENABLED` |
-| Operations | `GOVERNANCE_SCHEDULER_WARN_HOURS`, `GOVERNANCE_SCHEDULER_STALE_HOURS`, `DIGEST_WARN_HOURS`, `DIGEST_STALE_HOURS`, `MEMBERSHIP_VERIFICATION_WARN_HOURS`, `MEMBERSHIP_VERIFICATION_STALE_HOURS`, `BALLOT_CLOSURE_GRACE_HOURS`, `EMAIL_DELIVERY_WINDOW_HOURS` (optional; defaults in the health section) |
 | CRM | `ENGAGE_CRM_*` (base URL, token, membership types, verification flag) |
 | Ballots | `BALLOT_ENCRYPTION_MODE`, `BALLOT_ENCRYPTION_KEYS`, active key ID, blind-index key |
 | Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
@@ -189,9 +188,9 @@ A job that has never run reports `failing`, because the absence of evidence is t
 
 | Job | Invocation | Documented cadence | Warn (default) | Fail (default) |
 |---|---|---|---|---|
-| Governance scheduler | `npm run governance:scheduler -- --apply` from cron or a Coolify job | Every 15 minutes is safe; hourly is the practical minimum for deadline accuracy | 2 hours (`GOVERNANCE_SCHEDULER_WARN_HOURS`) | 26 hours (`GOVERNANCE_SCHEDULER_STALE_HOURS`) |
-| Ballot digest | `POST /api/email/digest` with `Authorization: Bearer $ENGAGE_CRON_SECRET` | Every 15 minutes while `ENGAGE_DIGEST_ENABLED=true` | 1 hour (`DIGEST_WARN_HOURS`) | 24 hours (`DIGEST_STALE_HOURS`) |
-| Membership verification | `POST /api/cron/membership-verification` with `Authorization: Bearer $ENGAGE_CRM_VERIFICATION_CRON_SECRET` | Every 15 minutes while CRM verification is enabled | 2 hours (`MEMBERSHIP_VERIFICATION_WARN_HOURS`) | 24 hours (`MEMBERSHIP_VERIFICATION_STALE_HOURS`) |
+| Governance scheduler | `npm run governance:scheduler -- --apply` from cron or a Coolify job | Every 15 minutes is safe; hourly is the practical minimum for deadline accuracy | 2 hours | 26 hours |
+| Ballot digest | `POST /api/email/digest` with `Authorization: Bearer $ENGAGE_CRON_SECRET` | Every 15 minutes while `ENGAGE_DIGEST_ENABLED=true` | 1 hour | 24 hours |
+| Membership verification | `POST /api/cron/membership-verification` with `Authorization: Bearer $ENGAGE_CRM_VERIFICATION_CRON_SECRET` | Every 15 minutes while CRM verification is enabled | 2 hours | 24 hours |
 
 Warn is a small multiple of cadence — roughly 4–8 expected ticks, or two hourly scheduler ticks — not a single missed tick. A scheduler jitter, a slow run or one failed provider call must not page anyone: those are covered by the run's own `ok` and error evidence. An exhausted warn threshold means ticks are being missed repeatedly, which is worth knowing within an hour or two rather than a day. Fail is the wide outer bound where the job's guarantee is clearly broken and someone must act.
 
@@ -225,18 +224,24 @@ Overall state is the worst check, ordered `ok < unknown < degraded < failing`.
 | `email-delivery` | Recent `engagement_email_outbox` rows with status `failed` or `held` | `ok` or `degraded` |
 | `turnstile` | Existing Turnstile configuration helper | `ok` enforced, `ok` outside production when not enforced, `degraded` when disabled in production, `failing` when misconfigured in production |
 
-Thresholds are named in the report and in every check that applied one. Change them with environment variables; the report records each value, its variable name and whether it is the default or came from the environment. Every job check has both a warn and a fail threshold. If a configured warn value is not below the fail value, that check reports `unknown` with the conflicting values rather than quietly picking one.
+Thresholds are named in the report and in every check that applied one. Each entry records the value and whether it came from the saved setting or the documented default. Change them in Engage under **Platform settings → Operational thresholds**; a saved change takes effect on the next evaluation, with no redeploy and no environment change. Every job check has both a warn and a fail threshold. If a saved warn value is not below the fail value, or a saved value is outside its permitted range, that check reports `unknown` with the conflicting values rather than quietly picking one.
 
-| Variable | Default | Effect |
-|---|---|---|
-| `GOVERNANCE_SCHEDULER_WARN_HOURS` | 2 | Degraded when the last apply run is older |
-| `GOVERNANCE_SCHEDULER_STALE_HOURS` | 26 | Failing when the last apply run is older |
-| `DIGEST_WARN_HOURS` | 1 | Degraded when the last digest apply run is older |
-| `DIGEST_STALE_HOURS` | 24 | Failing when the last digest apply run is older |
-| `MEMBERSHIP_VERIFICATION_WARN_HOURS` | 2 | Degraded when the last verification apply run is older |
-| `MEMBERSHIP_VERIFICATION_STALE_HOURS` | 24 | Failing when the last verification apply run is older |
-| `BALLOT_CLOSURE_GRACE_HOURS` | 2 | Grace before an unclosed deadline is failing rather than degraded |
-| `EMAIL_DELIVERY_WINDOW_HOURS` | 24 | Window counted for failed or held email |
+| Setting | Default | Permitted | Effect |
+|---|---|---|---|
+| Governance scheduler warn | 2 hours | 1–168 | Degraded when the last apply run is older |
+| Governance scheduler fail | 26 hours | 2–720 | Failing when the last apply run is older |
+| Ballot digest warn | 1 hour | 1–168 | Degraded when the last digest apply run is older |
+| Ballot digest fail | 24 hours | 2–720 | Failing when the last digest apply run is older |
+| Membership verification warn | 2 hours | 1–168 | Degraded when the last verification apply run is older |
+| Membership verification fail | 24 hours | 2–720 | Failing when the last verification apply run is older |
+| Ballot closure grace | 2 hours | 0–48 | Grace before an unclosed deadline is failing rather than degraded |
+| Email delivery window | 24 hours | 1–168 | Window counted for failed or held email |
+
+Values are whole hours. A save is validated as a complete set, so a partial or out-of-range change is rejected at the field and nothing is stored. Each successful change appends an audit event to `operational_settings_events` with the administrator, the time, and only the fields that changed, with their before and after values. The settings page shows the last change. The saved values live in one document in `operational_settings` with `_id: "thresholds"`.
+
+A stored value that is missing, not a whole number or outside its range is never trusted silently: the affected check reports `unknown` with a plain-language message, the report labels that threshold as the default it fell back to, and the settings page marks the saved value as invalid. Repair it by saving valid values.
+
+These are operational reporting values only. Changing them never alters ballot eligibility, closure semantics, quorum or recorded results.
 
 ### What each state means
 
@@ -249,7 +254,7 @@ Thresholds are named in the report and in every check that applied one. Change t
 - **Membership verification failing.** Membership status stops tracking the CRM. Existing statuses are unchanged; no one is suspended by a failed run.
 - **Email delivery degraded.** Failed or held outbox rows need review in email administration. Bounced or complained addresses stay suppressed.
 - **Turnstile degraded or failing.** In production a missing key fails protected actions closed, so magic-link sign-in and public submission stop working. Set both Turnstile keys.
-- **Unknown.** The feature is not enabled in this deployment, a warn/fail threshold pair is invalid, or a check could not read its evidence. It is not proof of health.
+- **Unknown.** The feature is not enabled in this deployment, a saved threshold is missing or invalid, a warn value is not below its fail value, or a check could not read its evidence. It is not proof of health.
 
 ### Escalation
 
@@ -274,7 +279,8 @@ Thresholds are named in the report and in every check that applied one. Change t
 - **No scheduler is enabled in Coolify production.** This slice records and reports runs; it does not create them. #39 stays open until an external scheduler is configured and observed.
 - **No production verification.** Everything here was verified against a local replica set. There is no evidence of a production run.
 - **No metrics, traces or alert delivery.** The health command is the alerting input; nothing sends alerts yet.
-- **No admin page.** Health is a command and a coarse probe in this slice.
+- **No admin health page.** Health is a command and a coarse probe in this slice. The only administrator surface is the operational threshold setting under **Platform settings**, not a live health view.
+- **Operational tuning is only partly migrated.** The eight health thresholds are administrator settings ([#128](https://github.com/Fusion-Party-Aus/Engage/issues/128)). CRM batch size, reconcile cadence, outage alert attempts and request timeout still come from `ENGAGE_CRM_*` environment variables, as do the `ENGAGE_DIGEST_ENABLED` and `ENGAGE_CRM_VERIFICATION_ENABLED` enablement gates. Site settings still read environment fallbacks. Those remain on #128.
 
 
 ## Changelog

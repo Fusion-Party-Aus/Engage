@@ -6,6 +6,13 @@ import {
   type JobRunRecord,
 } from "./job-runs.ts";
 import { VERIFICATION_ATTEMPTS } from "./membership-verification.ts";
+import {
+  getOperationalSettingsState,
+  OPERATIONAL_THRESHOLD_BY_KEY,
+  OPERATIONAL_THRESHOLD_FIELDS,
+  type OperationalSettingsState,
+  type OperationalThresholdKey,
+} from "./operational-settings.ts";
 import { turnstileConfiguration } from "./turnstile.ts";
 import { crmVerificationEnabled } from "./underground-crm.ts";
 import type { PlatformEnv } from "./types.ts";
@@ -19,9 +26,11 @@ import type { PlatformEnv } from "./types.ts";
  * exposing a secret, a provider response, a member identifier or a ballot
  * choice. Every check returns a plain-language message and one next action.
  *
- * Thresholds are named in the report and configurable by environment variable,
- * so an operator can see the rule that produced a state rather than guessing.
- * A check that cannot run reports `unknown`; it is never silently `ok`.
+ * Thresholds are an administrator setting (#128). The report names each value
+ * and whether it came from the saved setting or the documented default, so an
+ * operator can see the rule that produced a state rather than guessing. A check
+ * that cannot run — including one whose saved thresholds are invalid — reports
+ * `unknown`; it is never silently `ok`.
  */
 
 export type OperationalHealthStatus = "ok" | "degraded" | "failing" | "unknown";
@@ -35,10 +44,10 @@ export type OperationalCheckId =
   | "turnstile";
 
 export interface OperationalThreshold {
-  /** Stable name; also the environment variable that can override it. */
+  /** Plain-language name shown in the report. */
   name: string;
   hours: number;
-  source: "default" | "environment";
+  source: "default" | "settings";
 }
 
 export interface OperationalCheck {
@@ -57,44 +66,16 @@ export interface OperationalHealthReport {
   generatedAt: string;
   /** Ledger retention, so an operator knows how far back evidence goes. */
   jobRunRetentionDays: number;
-  thresholds: Record<string, OperationalThreshold>;
+  thresholds: Record<OperationalThresholdKey, OperationalThreshold>;
   checks: OperationalCheck[];
 }
 
-export const GOVERNANCE_SCHEDULER_WARN_HOURS = 2;
-export const GOVERNANCE_SCHEDULER_STALE_HOURS = 26;
-export const DIGEST_WARN_HOURS = 1;
-export const DIGEST_STALE_HOURS = 24;
-export const MEMBERSHIP_VERIFICATION_WARN_HOURS = 2;
-export const MEMBERSHIP_VERIFICATION_STALE_HOURS = 24;
-export const BALLOT_CLOSURE_GRACE_HOURS = 2;
-export const EMAIL_DELIVERY_WINDOW_HOURS = 24;
-
-export const OPERATIONAL_THRESHOLD_ENV = {
-  governanceSchedulerWarnHours: "GOVERNANCE_SCHEDULER_WARN_HOURS",
-  governanceSchedulerStaleHours: "GOVERNANCE_SCHEDULER_STALE_HOURS",
-  digestWarnHours: "DIGEST_WARN_HOURS",
-  digestStaleHours: "DIGEST_STALE_HOURS",
-  membershipVerificationWarnHours: "MEMBERSHIP_VERIFICATION_WARN_HOURS",
-  membershipVerificationStaleHours: "MEMBERSHIP_VERIFICATION_STALE_HOURS",
-  ballotClosureGraceHours: "BALLOT_CLOSURE_GRACE_HOURS",
-  emailDeliveryWindowHours: "EMAIL_DELIVERY_WINDOW_HOURS",
-} as const;
-
 const HOUR_MS = 3_600_000;
 
-function threshold(
-  env: PlatformEnv,
-  name: string,
-  fallback: number,
-): OperationalThreshold {
-  const raw = String((env as Record<string, unknown>)[name] ?? "").trim();
-  const parsed = Number(raw);
-  if (raw && Number.isFinite(parsed) && parsed > 0) {
-    return { name, hours: parsed, source: "environment" };
-  }
-  return { name, hours: fallback, source: "default" };
-}
+const CORRECT_SETTINGS_ACTION =
+  "Open Platform settings and correct the operational thresholds.";
+const READ_FAILED_SUMMARY =
+  "The saved operational thresholds could not be read.";
 
 function hoursBetween(from: Date, to: Date): number {
   return Math.max(0, (to.getTime() - from.getTime()) / HOUR_MS);
@@ -156,6 +137,8 @@ interface JobRecencyOptions {
   id: OperationalCheckId;
   job: JobName;
   thresholds: RecencyThresholds;
+  /** Set when the saved thresholds cannot be trusted. */
+  invalidProblem?: string;
   missingSummary: string;
   missingAction: string;
   failedAction: string;
@@ -171,9 +154,9 @@ interface JobRecencyOptions {
  * which the job's guarantee has definitely not been met.
  *
  * States: no run → failing; older than fail → failing; last run failed →
- * failing; older than warn → degraded; otherwise ok. A warn threshold that is
- * not below the fail threshold is a configuration error, reported as unknown
- * instead of silently trusting a value that could hide an outage.
+ * failing; older than warn → degraded; otherwise ok. A saved threshold that is
+ * invalid, or a warn value that is not below the fail value, is reported as
+ * unknown instead of silently trusting a value that could hide an outage.
  */
 async function jobRecencyCheck(
   db: Db,
@@ -181,6 +164,15 @@ async function jobRecencyCheck(
   options: JobRecencyOptions,
 ): Promise<OperationalCheck> {
   const { warn, fail } = options.thresholds;
+  if (options.invalidProblem) {
+    return {
+      id: options.id,
+      status: "unknown",
+      summary: options.invalidProblem,
+      nextAction: options.invalidAction,
+      threshold: fail.name,
+    };
+  }
   if (!(warn.hours < fail.hours)) {
     return {
       id: options.id,
@@ -238,28 +230,23 @@ async function jobRecencyCheck(
   };
 }
 
-function invalidThresholdAction(warnName: string, failName: string): string {
-  return `Correct ${warnName} or ${failName} so the warn threshold is below the fail threshold.`;
-}
-
 async function governanceSchedulerCheck(
   db: Db,
   now: Date,
   thresholds: RecencyThresholds,
+  invalidProblem?: string,
 ): Promise<OperationalCheck> {
   const base = await jobRecencyCheck(db, now, {
     id: "governance-scheduler",
     job: "governance-scheduler",
     thresholds,
+    invalidProblem,
     missingSummary: "No governance scheduler run has been recorded.",
     missingAction:
       "Enable the governance scheduler in the external scheduler and run it with --apply.",
     failedAction:
       "Read the scheduler report and log, fix the cause, then run it with --apply.",
-    invalidAction: invalidThresholdAction(
-      thresholds.warn.name,
-      thresholds.fail.name,
-    ),
+    invalidAction: CORRECT_SETTINGS_ACTION,
   });
   if (base.status !== "ok") return base;
 
@@ -284,7 +271,18 @@ async function ballotDeadlineCheck(
   db: Db,
   now: Date,
   grace: OperationalThreshold,
+  invalidProblem?: string,
 ): Promise<OperationalCheck> {
+  if (invalidProblem) {
+    return {
+      id: "ballot-deadlines",
+      status: "unknown",
+      summary: invalidProblem,
+      nextAction: CORRECT_SETTINGS_ACTION,
+      threshold: grace.name,
+    };
+  }
+
   const overdue = {
     stage: "decide",
     ballotClosesAt: { $lte: now },
@@ -331,6 +329,7 @@ async function digestCheck(
   env: PlatformEnv,
   now: Date,
   thresholds: RecencyThresholds,
+  invalidProblem?: string,
 ): Promise<OperationalCheck> {
   if (env.ENGAGE_DIGEST_ENABLED !== "true") {
     return {
@@ -345,15 +344,13 @@ async function digestCheck(
     id: "digest",
     job: "ballot-digest",
     thresholds,
+    invalidProblem,
     missingSummary: "No digest run has been recorded.",
     missingAction:
       "Schedule POST /api/email/digest in the external scheduler with ENGAGE_CRON_SECRET.",
     failedAction:
       "Inspect delivery holds in email administration, then run the digest again.",
-    invalidAction: invalidThresholdAction(
-      thresholds.warn.name,
-      thresholds.fail.name,
-    ),
+    invalidAction: CORRECT_SETTINGS_ACTION,
   });
   if (base.status !== "ok") return base;
 
@@ -376,6 +373,7 @@ async function membershipVerificationCheck(
   env: PlatformEnv,
   now: Date,
   thresholds: RecencyThresholds,
+  invalidProblem?: string,
 ): Promise<OperationalCheck> {
   if (!crmVerificationEnabled(env as Record<string, string | undefined>)) {
     return {
@@ -390,15 +388,13 @@ async function membershipVerificationCheck(
     id: "membership-verification",
     job: "membership-verification",
     thresholds,
+    invalidProblem,
     missingSummary: "No membership verification run has been recorded.",
     missingAction:
       "Schedule POST /api/cron/membership-verification in the external scheduler with its cron secret.",
     failedAction:
       "Check CRM availability and configuration, then run the cycle again. Existing memberships are unchanged by a failure.",
-    invalidAction: invalidThresholdAction(
-      thresholds.warn.name,
-      thresholds.fail.name,
-    ),
+    invalidAction: CORRECT_SETTINGS_ACTION,
   });
   if (base.status !== "ok") return base;
 
@@ -431,7 +427,18 @@ async function emailDeliveryCheck(
   db: Db,
   now: Date,
   window: OperationalThreshold,
+  invalidProblem?: string,
 ): Promise<OperationalCheck> {
+  if (invalidProblem) {
+    return {
+      id: "email-delivery",
+      status: "unknown",
+      summary: invalidProblem,
+      nextAction: CORRECT_SETTINGS_ACTION,
+      threshold: window.name,
+    };
+  }
+
   const since = new Date(now.getTime() - window.hours * HOUR_MS);
   const [failed, held] = await Promise.all([
     db
@@ -519,6 +526,44 @@ async function guarded(
   }
 }
 
+function invalidStoredSummary(keys: OperationalThresholdKey[]): string {
+  const names = keys.map(
+    (key) => OPERATIONAL_THRESHOLD_BY_KEY.get(key)?.reportName ?? key,
+  );
+  return names.length === 1
+    ? `The saved ${names[0]} is not valid.`
+    : `The saved ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are not valid.`;
+}
+
+function thresholdProblem(
+  state: OperationalSettingsState,
+  keys: OperationalThresholdKey[],
+): string | undefined {
+  if (state.readFailed) return READ_FAILED_SUMMARY;
+  const invalid = keys.filter((key) => state.invalidFields.includes(key));
+  return invalid.length > 0 ? invalidStoredSummary(invalid) : undefined;
+}
+
+function reportThresholds(
+  state: OperationalSettingsState,
+): Record<OperationalThresholdKey, OperationalThreshold> {
+  return Object.fromEntries(
+    OPERATIONAL_THRESHOLD_FIELDS.map((field) => [
+      field.key,
+      {
+        name: field.reportName,
+        hours: state.values[field.key],
+        // A saved value that cannot be trusted is reported as the default it
+        // falls back to, and the check itself reports unknown. It is never
+        // presented as an applied setting.
+        source: state.invalidFields.includes(field.key)
+          ? "default"
+          : state.source,
+      } satisfies OperationalThreshold,
+    ]),
+  ) as Record<OperationalThresholdKey, OperationalThreshold>;
+}
+
 export async function evaluateOperationalHealth(input: {
   db: Db;
   env: PlatformEnv;
@@ -526,73 +571,75 @@ export async function evaluateOperationalHealth(input: {
 }): Promise<OperationalHealthReport> {
   const { db, env } = input;
   const now = input.now ?? new Date();
-  const thresholds = {
-    governanceSchedulerWarnHours: threshold(
-      env,
-      OPERATIONAL_THRESHOLD_ENV.governanceSchedulerWarnHours,
-      GOVERNANCE_SCHEDULER_WARN_HOURS,
-    ),
-    governanceSchedulerStaleHours: threshold(
-      env,
-      OPERATIONAL_THRESHOLD_ENV.governanceSchedulerStaleHours,
-      GOVERNANCE_SCHEDULER_STALE_HOURS,
-    ),
-    digestWarnHours: threshold(
-      env,
-      OPERATIONAL_THRESHOLD_ENV.digestWarnHours,
-      DIGEST_WARN_HOURS,
-    ),
-    digestStaleHours: threshold(
-      env,
-      OPERATIONAL_THRESHOLD_ENV.digestStaleHours,
-      DIGEST_STALE_HOURS,
-    ),
-    membershipVerificationWarnHours: threshold(
-      env,
-      OPERATIONAL_THRESHOLD_ENV.membershipVerificationWarnHours,
-      MEMBERSHIP_VERIFICATION_WARN_HOURS,
-    ),
-    membershipVerificationStaleHours: threshold(
-      env,
-      OPERATIONAL_THRESHOLD_ENV.membershipVerificationStaleHours,
-      MEMBERSHIP_VERIFICATION_STALE_HOURS,
-    ),
-    ballotClosureGraceHours: threshold(
-      env,
-      OPERATIONAL_THRESHOLD_ENV.ballotClosureGraceHours,
-      BALLOT_CLOSURE_GRACE_HOURS,
-    ),
-    emailDeliveryWindowHours: threshold(
-      env,
-      OPERATIONAL_THRESHOLD_ENV.emailDeliveryWindowHours,
-      EMAIL_DELIVERY_WINDOW_HOURS,
-    ),
-  };
+  const settings = await getOperationalSettingsState(db);
+  const thresholds = reportThresholds(settings);
+
+  const schedulerProblem = thresholdProblem(settings, [
+    "schedulerWarnHours",
+    "schedulerStaleHours",
+  ]);
+  const digestProblem = thresholdProblem(settings, [
+    "digestWarnHours",
+    "digestStaleHours",
+  ]);
+  const verificationProblem = thresholdProblem(settings, [
+    "verificationWarnHours",
+    "verificationStaleHours",
+  ]);
+  const ballotsProblem = thresholdProblem(settings, ["ballotClosureGraceHours"]);
+  const emailProblem = thresholdProblem(settings, ["emailDeliveryWindowHours"]);
 
   const checks = await Promise.all([
     guarded("governance-scheduler", () =>
-      governanceSchedulerCheck(db, now, {
-        warn: thresholds.governanceSchedulerWarnHours,
-        fail: thresholds.governanceSchedulerStaleHours,
-      }),
+      governanceSchedulerCheck(
+        db,
+        now,
+        {
+          warn: thresholds.schedulerWarnHours,
+          fail: thresholds.schedulerStaleHours,
+        },
+        schedulerProblem,
+      ),
     ),
     guarded("ballot-deadlines", () =>
-      ballotDeadlineCheck(db, now, thresholds.ballotClosureGraceHours),
+      ballotDeadlineCheck(
+        db,
+        now,
+        thresholds.ballotClosureGraceHours,
+        ballotsProblem,
+      ),
     ),
     guarded("digest", () =>
-      digestCheck(db, env, now, {
-        warn: thresholds.digestWarnHours,
-        fail: thresholds.digestStaleHours,
-      }),
+      digestCheck(
+        db,
+        env,
+        now,
+        {
+          warn: thresholds.digestWarnHours,
+          fail: thresholds.digestStaleHours,
+        },
+        digestProblem,
+      ),
     ),
     guarded("membership-verification", () =>
-      membershipVerificationCheck(db, env, now, {
-        warn: thresholds.membershipVerificationWarnHours,
-        fail: thresholds.membershipVerificationStaleHours,
-      }),
+      membershipVerificationCheck(
+        db,
+        env,
+        now,
+        {
+          warn: thresholds.verificationWarnHours,
+          fail: thresholds.verificationStaleHours,
+        },
+        verificationProblem,
+      ),
     ),
     guarded("email-delivery", () =>
-      emailDeliveryCheck(db, now, thresholds.emailDeliveryWindowHours),
+      emailDeliveryCheck(
+        db,
+        now,
+        thresholds.emailDeliveryWindowHours,
+        emailProblem,
+      ),
     ),
     guardTurnstile(env),
   ]);

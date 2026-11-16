@@ -4,6 +4,24 @@ import PlatformSettings from '../../../components/PlatformSettings';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { getSiteConfig, listSiteConfigEvents } from '../../../lib/site-config.ts';
+import {
+  OPERATIONAL_THRESHOLD_BY_KEY,
+  OPERATIONAL_THRESHOLD_GROUPS,
+  getOperationalSettingsState,
+  listOperationalSettingsEvents,
+} from '../../../lib/operational-settings.ts';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+import Card from '../../../components/admin/Card.astro';
+import CardContent from '../../../components/admin/CardContent.astro';
+import CardDescription from '../../../components/admin/CardDescription.astro';
+import CardFooter from '../../../components/admin/CardFooter.astro';
+import CardHeader from '../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../components/admin/CardTitle.astro';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import Field from '../../../components/admin/Field.astro';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -14,8 +32,30 @@ const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.req
 if (!user) return Astro.redirect('/member/');
 if (!user.isAdmin) return Astro.redirect('/admin/');
 
-const [config, events] = await Promise.all([getSiteConfig(db, env), listSiteConfigEvents(db)]);
+const [config, events, thresholdState, thresholdEvents] = await Promise.all([
+  getSiteConfig(db, env),
+  listSiteConfigEvents(db),
+  getOperationalSettingsState(db),
+  listOperationalSettingsEvents(db),
+]);
 const plain = (value: unknown): any => JSON.parse(JSON.stringify(value));
+
+const groups = OPERATIONAL_THRESHOLD_GROUPS.map((group) => ({
+  ...group,
+  fields: group.fields.map((key) => OPERATIONAL_THRESHOLD_BY_KEY.get(key)!),
+}));
+const lastThresholdChange = thresholdEvents[0];
+const changedOn = lastThresholdChange?.createdAt
+  ? lastThresholdChange.createdAt.toLocaleString('en-AU', {
+      timeZone: 'Australia/Melbourne',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  : '';
+const invalidCount = thresholdState.invalidFields.length;
 ---
 
 <AdminLayout
@@ -26,4 +66,200 @@ const plain = (value: unknown): any => JSON.parse(JSON.stringify(value));
   isBranchAdmin={user.isBranchAdmin}
 >
   <PlatformSettings client:load initialConfig={plain(config)} initialEvents={plain(events)} />
+
+  <section class="mt-10 border-t border-border pt-8" aria-labelledby="operational-thresholds-heading">
+    <div class="mb-4 max-w-2xl">
+      <h2 id="operational-thresholds-heading" class="m-0 text-lg font-semibold">Operational thresholds</h2>
+      <p class="mt-1 mb-0 text-sm text-muted-foreground">When scheduled work is reported as late or failing.</p>
+    </div>
+
+    {thresholdState.readFailed && (
+      <Alert variant="destructive" class="mb-4">
+        <AlertTitle>Couldn't load the saved thresholds</AlertTitle>
+        <AlertDescription>Refresh the page to try again. Health checks report unknown until the values can be read.</AlertDescription>
+      </Alert>
+    )}
+
+    {!thresholdState.readFailed && invalidCount > 0 && (
+      <Alert variant="warning" class="mb-4">
+        <AlertTitle>{invalidCount === 1 ? 'One saved threshold is invalid' : `${invalidCount} saved thresholds are invalid`}</AlertTitle>
+        <AlertDescription>Health checks report those thresholds as unknown. Enter valid values and save to repair them.</AlertDescription>
+      </Alert>
+    )}
+
+    <div class="mb-4" hidden data-operational-success>
+      <Alert variant="success" role="status" tabindex="-1">
+        <AlertTitle>Thresholds saved</AlertTitle>
+        <AlertDescription>Health checks will use the new values from their next run.</AlertDescription>
+      </Alert>
+    </div>
+
+    <div class="mb-4" hidden data-operational-error>
+      <Alert variant="destructive" tabindex="-1">
+        <AlertTitle>Couldn't save thresholds</AlertTitle>
+        <AlertDescription data-operational-error-message>Try again.</AlertDescription>
+      </Alert>
+    </div>
+
+    <Card class="gap-0">
+      <CardHeader class="border-b pb-4">
+        <CardTitle class="text-base">Scheduled work</CardTitle>
+        <CardDescription>Warn must be fewer hours than fail. All values are whole hours.</CardDescription>
+      </CardHeader>
+      <CardContent class="p-0">
+        <form id="operational-thresholds-form" action="/api/admin/operational-settings" method="post" novalidate data-operational-settings>
+          {groups.map((group) => (
+            <fieldset class="m-0 grid gap-4 border-0 border-b border-border px-5 py-5 last:border-b-0 sm:grid-cols-2">
+              <legend class="sr-only">{group.title}</legend>
+              <div class="sm:col-span-2">
+                <h3 class="m-0 text-sm font-semibold">{group.title}</h3>
+                <p class="mt-1 mb-0 text-sm text-muted-foreground">{group.description}</p>
+              </div>
+              {group.fields.map((field) => (
+                <Field
+                  label={`${field.label} (hours)`}
+                  htmlFor={field.key}
+                  hint={`Default ${field.default} hours. Enter ${field.min}–${field.max}.`}
+                  errorId={`${field.key}-error`}
+                >
+                  <Input
+                    id={field.key}
+                    name={field.key}
+                    type="number"
+                    inputMode="numeric"
+                    step={1}
+                    min={field.min}
+                    max={field.max}
+                    required
+                    autoComplete="off"
+                    defaultValue={String(thresholdState.values[field.key])}
+                    disabled={thresholdState.readFailed}
+                    aria-describedby={`${field.key}-hint ${field.key}-error`}
+                  />
+                </Field>
+              ))}
+            </fieldset>
+          ))}
+        </form>
+      </CardContent>
+      <CardFooter class="flex-wrap items-center justify-between gap-4 border-t pt-5">
+        <p class="m-0 text-sm text-muted-foreground" data-operational-last-change>
+          {lastThresholdChange
+            ? `Last changed ${changedOn} by ${lastThresholdChange.actorName || 'an administrator'}.`
+            : 'Using the default thresholds. No changes saved yet.'}
+        </p>
+        <Button type="submit" form="operational-thresholds-form" disabled={thresholdState.readFailed}>Save thresholds</Button>
+      </CardFooter>
+    </Card>
+  </section>
 </AdminLayout>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>('[data-operational-settings]');
+
+  if (form) {
+    const success = document.querySelector<HTMLElement>('[data-operational-success]');
+    const failure = document.querySelector<HTMLElement>('[data-operational-error]');
+    const failureMessage = document.querySelector<HTMLElement>('[data-operational-error-message]');
+    const lastChange = document.querySelector<HTMLElement>('[data-operational-last-change]');
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+    const hide = (element: HTMLElement | null) => {
+      element?.setAttribute('hidden', '');
+    };
+    const show = (element: HTMLElement | null) => {
+      element?.removeAttribute('hidden');
+    };
+    const focusTarget = (element: HTMLElement | null) =>
+      element?.querySelector<HTMLElement>('[data-slot="alert"]') ?? null;
+
+    const clearMessages = () => {
+      hide(success);
+      hide(failure);
+      for (const error of form.querySelectorAll<HTMLElement>('[data-slot="field-error"]')) {
+        error.textContent = '';
+        error.setAttribute('hidden', '');
+      }
+      for (const input of form.querySelectorAll<HTMLInputElement>('[aria-invalid]')) {
+        input.removeAttribute('aria-invalid');
+      }
+    };
+
+    const showFailure = (message: string) => {
+      if (failureMessage) failureMessage.textContent = message;
+      show(failure);
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearMessages();
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = 'Saving…';
+      }
+
+      try {
+        const values = Object.fromEntries(new FormData(form).entries());
+        const response = await fetch(form.action, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const fieldErrors = (data.fieldErrors ?? {}) as Record<string, string>;
+          let firstInvalid: HTMLInputElement | null = null;
+          for (const [key, message] of Object.entries(fieldErrors)) {
+            const error = form.querySelector<HTMLElement>(`[id="${key}-error"]`);
+            const input = form.querySelector<HTMLInputElement>(`[name="${key}"]`);
+            if (error) {
+              error.textContent = message;
+              error.removeAttribute('hidden');
+            }
+            if (input) {
+              input.setAttribute('aria-invalid', 'true');
+              firstInvalid ??= input;
+            }
+          }
+          showFailure(
+            typeof data.error === 'string'
+              ? data.error
+              : "Couldn't save thresholds. Try again.",
+          );
+          if (firstInvalid) firstInvalid.focus();
+          else focusTarget(failure)?.focus();
+          return;
+        }
+
+        show(success);
+        focusTarget(success)?.focus();
+        const latest = Array.isArray(data.events) ? data.events[0] : null;
+        if (lastChange) {
+          if (latest?.createdAt) {
+            const when = new Date(latest.createdAt).toLocaleString('en-AU', {
+              timeZone: 'Australia/Melbourne',
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            });
+            lastChange.textContent = `Last changed ${when} by ${latest.actorName || 'an administrator'}.`;
+          } else {
+            lastChange.textContent = 'No values changed.';
+          }
+        }
+      } catch {
+        showFailure("Couldn't reach the server. Check your connection and try again.");
+        focusTarget(failure)?.focus();
+      } finally {
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = 'Save thresholds';
+        }
+      }
+    });
+  }
+</script>

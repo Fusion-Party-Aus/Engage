@@ -217,7 +217,9 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 
 **Partially resolved (operational observability slice, #39):** authorised runs now record a durable `job_runs` ledger entry (90-day TTL) for the governance scheduler, digest and CRM verification, including failures, with no secrets or member data. `npm run ops:health` evaluates governance scheduling, ballot deadlines, digest cadence, verification backlog, recent email delivery and Turnstile, with named thresholds and exit codes `0` healthy, `2` degraded, `1` failing. `/api/health` publishes coarse `governanceScheduler` and `jobs` states and stays 200 when only a job is degraded.
 
-**Still missing:** the external scheduler itself is not configured in Coolify production, no run has been observed in production, there is no metrics/tracing backend, no alert delivery and no admin health page. `ops:health` is the input an external monitor would alert on.
+**Thresholds are now administrator settings ([#128](https://github.com/Fusion-Party-Aus/Engage/issues/128)):** the eight operational health thresholds are stored in MongoDB, validated as whole hours with bounds and warn-below-fail ordering, audited with actor and before/after values, and edited under **Platform settings → Operational thresholds**. They are no longer environment variables. CRM tuning and the digest/CRM enablement gates remain environment configuration on #128.
+
+**Still missing:** the external scheduler itself is not configured in Coolify production, no run has been observed in production, there is no metrics/tracing backend, no alert delivery and no admin health page (only the threshold settings). `ops:health` is the input an external monitor would alert on.
 
 **Direction:** Configure and monitor an external scheduler. Treat missing jobs as an operational incident.
 
