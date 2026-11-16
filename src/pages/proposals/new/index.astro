@@ -2,18 +2,25 @@
 import SiteLayout from '../../../layouts/SiteLayout.astro';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Textarea } from '../../../components/ui/textarea';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
-import { isPolicyChangeType, policyChangeLabel } from '../../../lib/policy-change.ts';
+import {
+  POLICY_CHANGE_GUIDANCE,
+  POLICY_CHANGE_TYPES,
+  defaultPolicyChangeTitle,
+  isPolicyChangeType,
+} from '../../../lib/policy-change.ts';
 import { policyCanonicalPath } from '../../../lib/policy-registry.ts';
 import ProposalScopeSelector from '../../../components/proposal/ProposalScopeSelector';
 import PolicyChangeTypeSelector from '../../../components/proposal/PolicyChangeTypeSelector';
 import { ImagePlus, Link as LinkIcon } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { canViewProposal, normalizeProposalDoc } from '../../../lib/store.ts';
 import {
   defaultProposalScopeKey,
   listProposalSubmissionScopes,
@@ -55,43 +62,117 @@ const targetPolicy = requestedTargetPolicyId
     })
   : null;
 const isPolicyChange = Boolean(targetPolicy);
-const changeTypeOptions = ['amend', 'replace', 'repeal'] as const;
+const changeTypeOptions = POLICY_CHANGE_TYPES.map((type) => ({
+  value: type,
+  label: POLICY_CHANGE_GUIDANCE[type].label,
+  description: POLICY_CHANGE_GUIDANCE[type].description,
+}));
+const guidance = POLICY_CHANGE_GUIDANCE[changeType];
 const defaultTitle = targetPolicy
-  ? `${changeType === 'repeal' ? 'Repeal' : changeType === 'replace' ? 'Replace' : 'Amend'}: ${targetPolicy.title}`
+  ? defaultPolicyChangeTitle(changeType, String(targetPolicy.title ?? ''))
   : '';
-const summaryPlaceholder = changeType === 'repeal'
-  ? 'Explain why this policy should be repealed and what should happen instead.'
-  : 'Describe what should change and why. Other members will refine the wording during deliberation.';
+const inheritedSpace = targetPolicy
+  ? String(targetPolicy.category ?? '').trim() || 'General'
+  : '';
+const targetJurisdictionBranchId = targetPolicy?.jurisdictionBranchId
+  ? String(targetPolicy.jurisdictionBranchId)
+  : '';
+const targetBranch = targetJurisdictionBranchId
+  ? branches.find(
+      (branch) => String(branch.branchId) === targetJurisdictionBranchId,
+    )
+  : null;
+const jurisdictionLabel = targetBranch?.name
+  ? String(targetBranch.name).replace(/^Fusion\s+/i, '')
+  : targetPolicy?.jurisdiction
+    ? String(targetPolicy.jurisdiction).split(',')[0]!.trim()
+    : '';
+
+// A member should see that a discussion already exists before writing a
+// duplicate. Visibility is resolved with the same rule as the proposal page.
+const openPolicyChangeProposals = targetPolicy
+  ? (
+      await db
+        .collection('proposals')
+        .find({
+          targetPolicyId: targetPolicy.policyId,
+          stage: { $in: ['propose', 'deliberate', 'decide'] },
+        })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .toArray()
+    ).filter((row) => canViewProposal(normalizeProposalDoc(row), user))
+  : [];
+
+const changeLabel = (value: unknown) =>
+  isPolicyChangeType(value) ? POLICY_CHANGE_GUIDANCE[value].label : 'Change';
+const changeStageLabel = (stage: string) =>
+  stage === 'decide'
+    ? 'Voting'
+    : stage === 'deliberate'
+      ? 'In discussion'
+      : 'Gathering support';
+
 const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
 ---
-<SiteLayout title="Suggest an idea · Engage" description="Suggest a proposal for Fusion members to consider." noIndex>
+<SiteLayout
+  title={isPolicyChange ? 'Propose a policy change · Engage' : 'Suggest an idea · Engage'}
+  description={isPolicyChange ? 'Propose a change to an existing Fusion policy.' : 'Suggest a proposal for Fusion members to consider.'}
+  noIndex
+>
   <div class="page-wrap section-space compose-page">
     <Button href="/proposals/" variant="ghost" size="sm">← Browse proposals</Button>
     <header class="compose-header">
       <div class="compose-header__top">
-        <h1>{isPolicyChange ? `${policyChangeLabel(changeType)}` : 'Suggest an idea'}</h1>
-        <Badge variant="info">New proposal</Badge>
+        <h1>{isPolicyChange ? 'Propose a change to this policy' : 'Suggest an idea'}</h1>
+        <Badge variant="info">{isPolicyChange ? 'Policy change' : 'New proposal'}</Badge>
       </div>
       <p>{isPolicyChange
-        ? 'This proposal refers to the published policy below. Submitting it leaves that policy unchanged. Adopted amendments and replacements take effect when published; a repeal takes effect at ratification.'
+        ? 'Members can propose changes to existing Fusion policies, including removing them entirely.'
         : 'Explain what you want Fusion to do and why. Another verified member must second your proposal before it moves into discussion.'}</p>
     </header>
 
     {isPolicyChange && (
-      <section class="policy-change-context" aria-label="Policy being changed">
+      <section class="policy-change-context" aria-label="Current policy">
         <div>
-          <span class="policy-change-context__eyebrow">Changing current policy</span>
+          <span class="policy-change-context__eyebrow">
+            Current policy{jurisdictionLabel ? ` · ${jurisdictionLabel}` : ''}
+          </span>
           <a class="policy-change-context__title" href={policyCanonicalPath(targetPolicy!)}>{targetPolicy!.title}</a>
           <p>{targetPolicy!.summary}</p>
         </div>
-        <Badge variant="outline">{targetPolicy!.jurisdiction ?? 'Jurisdiction not recorded'}</Badge>
       </section>
+    )}
+
+    {isPolicyChange && openPolicyChangeProposals.length > 0 && (
+      <Card className="policy-change-existing">
+        <CardHeader>
+          <CardTitle>
+            {openPolicyChangeProposals.length === 1
+              ? 'This policy already has an open proposal'
+              : 'This policy already has open proposals'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul class="policy-change-existing__list">
+            {openPolicyChangeProposals.map((proposal) => (
+              <li>
+                <a href={`/proposals/${proposal.slug}/`}>{proposal.title}</a>
+                <span>{changeLabel(proposal.changeType)} · {changeStageLabel(String(proposal.stage))}</span>
+              </li>
+            ))}
+          </ul>
+          <p>Join the discussion there, or propose a different change below.</p>
+        </CardContent>
+      </Card>
     )}
 
     {!user ? (
       <Alert className="callout">
         <AlertDescription>
-          <p>Sign in to suggest an idea. You’ll return to this form afterwards.</p>
+          <p>{isPolicyChange
+            ? 'Sign in to propose a change. You’ll return to this form afterwards.'
+            : 'Sign in to suggest an idea. You’ll return to this form afterwards.'}</p>
           <Button href={`/member/?returnTo=${encodeURIComponent(signInReturnTo)}&intent=propose`}>
             {isPolicyChange ? 'Sign in to propose a change' : 'Sign in to suggest an idea'}
           </Button>
@@ -100,72 +181,151 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     ) : !user.canParticipate ? (
       <Alert className="callout" variant="warning">
         <AlertDescription>
-          <p>This account cannot submit ideas yet. Check your membership status in My Engage.</p>
+          <p>This account cannot submit proposals yet. Check your membership status in My Engage.</p>
           <Button href="/member/" variant="outline">Check your account</Button>
         </AlertDescription>
       </Alert>
     ) : (
-      <form id="new-proposal-form" class="compose-form">
-        {isPolicyChange && (
+      <form
+        id="new-proposal-form"
+        class="compose-form"
+        data-policy-change={isPolicyChange ? 'true' : undefined}
+        data-policy-title={isPolicyChange ? String(targetPolicy!.title) : undefined}
+      >
+        {isPolicyChange ? (
           <>
             <input type="hidden" name="targetPolicyId" value={targetPolicy!.policyId} />
+            <input type="hidden" name="space" value={inheritedSpace} />
             <PolicyChangeTypeSelector
               client:load
-              options={changeTypeOptions.map((option) => ({ value: option, label: policyChangeLabel(option) }))}
+              options={changeTypeOptions}
               defaultValue={changeType}
-              hint="Submitting leaves the current policy unchanged. An adopted amendment or replacement takes effect when published; a repeal takes effect at ratification."
+              describedBy="policy-change-effect"
             />
+            <p id="policy-change-effect" class="policy-change-effect">{guidance.effect}</p>
+
+            <Field>
+              <Label htmlFor="proposal-summary" id="policy-summary-label">{guidance.summaryLabel}</Label>
+              <Textarea
+                id="proposal-summary"
+                name="summary"
+                required
+                minLength={10}
+                maxLength={2000}
+                rows={5}
+                placeholder={guidance.summaryPlaceholder}
+                aria-describedby="policy-summary-hint"
+              />
+              <p class="field-hint" id="policy-summary-hint">{guidance.summaryHint}</p>
+            </Field>
+
+            <div data-change-panel="amend" hidden={changeType !== 'amend'}>
+              <Field
+                label="Which part should change?"
+                htmlFor="proposal-target-section"
+                hint="Name a commitment or section if you can. Leave blank if the whole policy should change."
+              >
+                <Input
+                  id="proposal-target-section"
+                  name="targetSection"
+                  maxLength={300}
+                  placeholder="For example: Commitment 2, or the section on accessible stops"
+                />
+              </Field>
+            </div>
+
+            <div data-change-panel="replace" hidden={changeType !== 'replace'}>
+              <Field
+                label="Proposed wording"
+                htmlFor="proposal-proposed-wording"
+                hint="Optional. You can work on the exact wording during discussion."
+              >
+                <Textarea
+                  id="proposal-proposed-wording"
+                  name="proposedWording"
+                  rows={6}
+                  maxLength={5000}
+                  placeholder="Write the replacement policy wording, if you have it."
+                />
+              </Field>
+            </div>
+
+            <Field label="Proposal title" htmlFor="proposal-title">
+              <Input
+                id="proposal-title"
+                name="title"
+                required
+                minLength={4}
+                maxLength={200}
+                defaultValue={defaultTitle}
+              />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label="Title" htmlFor="proposal-title">
+              <Input id="proposal-title" name="title" required minLength={4} maxLength={200} defaultValue={defaultTitle} placeholder="For example: Run regional trains more often" />
+            </Field>
+
+            <div class="topic-field-block">
+              <Field label="Topic" htmlFor="proposal-topic">
+                <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="Choose a topic below or type your own (e.g. Housing, Climate)" />
+              </Field>
+              <div class="topic-chips" role="group" aria-label="Suggested topics">
+                {quickTopics.map((topic) => (
+                  <Button type="button" className="topic-chip" variant="outline" size="sm" data-topic-value={topic}>
+                    {topic}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {showScopeSelector && (
+              <ProposalScopeSelector
+                client:load
+                options={scopeOptions.map(({ key, label, kind, branchName, parentName }) => ({
+                  key,
+                  label,
+                  kind,
+                  ...(branchName && branchName !== label ? { branchName } : {}),
+                  ...(parentName ? { parentName } : {}),
+                }))}
+                defaultValue={defaultScopeKey}
+                hint="Choose National or the branch you want to consider this idea. You can submit to any recognised branch, but voting in its ballots requires membership of that branch."
+              />
+            )}
+
+            <Field label="What would change?" htmlFor="proposal-summary">
+              <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder="Describe what should change and why. Other members will refine the wording during discussion." />
+            </Field>
           </>
         )}
-        <Field label="Title" htmlFor="proposal-title">
-          <Input id="proposal-title" name="title" required minLength={4} maxLength={200} defaultValue={defaultTitle} placeholder="For example: Run regional trains more often" />
-        </Field>
-
-        <div class="topic-field-block">
-          <Field label="Topic" htmlFor="proposal-topic">
-            <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="Choose a topic below or type your own (e.g. Housing, Climate)" />
-          </Field>
-          <div class="topic-chips" role="group" aria-label="Suggested topics">
-            {quickTopics.map((topic) => (
-              <Button type="button" className="topic-chip" variant="outline" size="sm" data-topic-value={topic}>
-                {topic}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {showScopeSelector && !isPolicyChange && (
-          <ProposalScopeSelector
-            client:load
-            options={scopeOptions.map(({ key, label, kind, branchName, parentName }) => ({
-              key,
-              label,
-              kind,
-              ...(branchName && branchName !== label ? { branchName } : {}),
-              ...(parentName ? { parentName } : {}),
-            }))}
-            defaultValue={defaultScopeKey}
-            hint="Choose National or the branch you want to consider this idea. You can submit to any recognised branch, but voting in its ballots requires membership of that branch."
-          />
-        )}
-
-        <Field label="What would change?" htmlFor="proposal-summary">
-          <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder={summaryPlaceholder} />
-        </Field>
 
         <details class="optional-drawer">
           <summary>
-            <span>Add commitments, background or images</span>
+            <span>Add supporting information</span>
             <Badge variant="outline">Optional</Badge>
           </summary>
           <div class="compose-details-grid">
-            <Field label="What should this achieve? (one commitment per line)" htmlFor="proposal-outcomes">
-              <Textarea id="proposal-outcomes" name="outcomes" rows={4} placeholder="More frequent services&#10;Better connections between trains and buses" />
-            </Field>
+            {isPolicyChange ? (
+              <div data-change-outcomes hidden={changeType === 'repeal'}>
+                <Field
+                  label="What should the policy commit to? (one commitment per line)"
+                  htmlFor="proposal-outcomes"
+                  hint="Each line becomes a key commitment in the proposal."
+                >
+                  <Textarea id="proposal-outcomes" name="outcomes" rows={4} placeholder="More frequent services&#10;Better connections between trains and buses" />
+                </Field>
+              </div>
+            ) : (
+              <Field label="What should this achieve? (one commitment per line)" htmlFor="proposal-outcomes">
+                <Textarea id="proposal-outcomes" name="outcomes" rows={4} placeholder="More frequent services&#10;Better connections between trains and buses" />
+              </Field>
+            )}
 
             <div class="markdown-field-group">
               <div class="markdown-field-head">
-                <Label htmlFor="proposal-details">Why does it matter?</Label>
+                <Label htmlFor="proposal-details">Background and evidence</Label>
                 <div class="markdown-toolbar">
                   <Button type="button" className="toolbar-btn" id="insert-image-btn" variant="outline" size="sm">
                     <ImagePlus aria-hidden="true" />
@@ -189,14 +349,14 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
             </div>
 
             <div class="attachment-fields-row">
-              <Field label="Image or reference link (optional)" htmlFor="proposal-attachment-url">
+              <Field label="Image or reference link" htmlFor="proposal-attachment-url">
                 <Input
                   id="proposal-attachment-url"
                   name="attachmentUrl"
                   placeholder="https://example.com/diagram.png or /path/to/file.pdf"
                 />
               </Field>
-              <Field label="Attachment description (optional)" htmlFor="proposal-attachment-desc">
+              <Field label="Description" htmlFor="proposal-attachment-desc">
                 <Input
                   id="proposal-attachment-desc"
                   name="attachmentDescription"
@@ -216,8 +376,22 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
   </div>
 </SiteLayout>
 
+{isPolicyChange && (
+  <script type="application/json" id="policy-change-copy" set:html={JSON.stringify(POLICY_CHANGE_GUIDANCE)} />
+)}
+
 <script>
   import { trackEngage } from '../../../lib/analytics.ts';
+
+  interface PolicyChangeCopyEntry {
+    label: string;
+    description: string;
+    summaryLabel: string;
+    summaryPlaceholder: string;
+    summaryHint: string;
+    effect: string;
+  }
+
   const form = document.querySelector<HTMLFormElement>('#new-proposal-form');
   const status = document.querySelector<HTMLElement>('#submit-status');
   const button = document.querySelector<HTMLButtonElement>('#new-proposal-form button[type="submit"]');
@@ -226,6 +400,57 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
   const detailsTextarea = document.querySelector<HTMLTextAreaElement>('#proposal-details');
   const insertImageBtn = document.querySelector<HTMLButtonElement>('#insert-image-btn');
   const insertLinkBtn = document.querySelector<HTMLButtonElement>('#insert-link-btn');
+
+  const isPolicyChangeForm = form?.dataset.policyChange === 'true';
+  const changeTypeInput = form?.querySelector<HTMLInputElement>('input[name="changeType"]');
+  const summaryInput = document.querySelector<HTMLTextAreaElement>('#proposal-summary');
+  const summaryLabel = document.getElementById('policy-summary-label');
+  const summaryHint = document.getElementById('policy-summary-hint');
+  const effectNote = document.getElementById('policy-change-effect');
+  const titleInput = document.querySelector<HTMLInputElement>('#proposal-title');
+  const changePanels = document.querySelectorAll<HTMLElement>('[data-change-panel]');
+  const changeOutcomes = document.querySelector<HTMLElement>('[data-change-outcomes]');
+  const policyTitle = form?.dataset.policyTitle ?? '';
+  let titleTouched = false;
+
+  let policyCopy: Record<string, PolicyChangeCopyEntry> | null = null;
+  try {
+    const copyElement = document.getElementById('policy-change-copy');
+    policyCopy = copyElement?.textContent
+      ? JSON.parse(copyElement.textContent)
+      : null;
+  } catch {
+    policyCopy = null;
+  }
+
+  // The chosen action is the organising principle of the form. The selector is
+  // a hydrated island, so it announces the choice and this page follows it.
+  const applyChangeType = (type: string) => {
+    const copy = policyCopy?.[type];
+    if (!copy) return;
+    if (summaryLabel) summaryLabel.textContent = copy.summaryLabel;
+    if (summaryHint) summaryHint.textContent = copy.summaryHint;
+    if (effectNote) effectNote.textContent = copy.effect;
+    if (summaryInput) summaryInput.placeholder = copy.summaryPlaceholder;
+    changePanels.forEach((panel) => {
+      panel.hidden = panel.dataset.changePanel !== type;
+    });
+    if (changeOutcomes) changeOutcomes.hidden = type === 'repeal';
+    if (titleInput && !titleTouched) {
+      titleInput.value = `${copy.label}: ${policyTitle}`;
+    }
+  };
+
+  if (changeTypeInput) applyChangeType(changeTypeInput.value);
+
+  window.addEventListener('policy-change-type', (event) => {
+    const type = (event as CustomEvent<unknown>).detail;
+    if (typeof type === 'string') applyChangeType(type);
+  });
+
+  titleInput?.addEventListener('input', () => {
+    titleTouched = true;
+  });
 
   topicChips.forEach((chip) => {
     chip.addEventListener('click', () => {
@@ -271,7 +496,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     event.preventDefault();
     if (!status || !button) return;
     button.disabled = true;
-    status.textContent = 'Submitting your idea…';
+    status.textContent = isPolicyChangeForm ? 'Submitting your proposal…' : 'Submitting your idea…';
     trackEngage('contribution_attempted', { action: 'proposal' });
     const data = new FormData(form);
     const attachmentUrl = String(data.get('attachmentUrl') ?? '').trim();
@@ -279,16 +504,27 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     const scopeKey = String(data.get('scope') ?? '').trim();
     const targetPolicyId = String(data.get('targetPolicyId') ?? '').trim();
     const changeType = String(data.get('changeType') ?? '').trim();
+    const targetSection = String(data.get('targetSection') ?? '').trim();
+    const proposedWording = String(data.get('proposedWording') ?? '').trim();
+    const declaresPolicyChange = Boolean(targetPolicyId && changeType);
+    const outcomes = String(data.get('outcomes') ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
     const payload = {
       title: data.get('title'),
       space: data.get('space'),
       summary: data.get('summary'),
       details: data.get('details'),
-      ...(targetPolicyId && changeType ? { targetPolicyId, changeType } : {}),
-      outcomes: String(data.get('outcomes') ?? '')
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean),
+      ...(declaresPolicyChange
+        ? {
+            targetPolicyId,
+            changeType,
+            ...(changeType === 'amend' ? { targetSection } : {}),
+            ...(changeType === 'replace' ? { proposedWording } : {}),
+          }
+        : {}),
+      ...(changeType !== 'repeal' ? { outcomes } : {}),
       ...(attachmentUrl ? { attachmentUrl } : {}),
       ...(attachmentDescription ? { attachmentDescription } : {}),
       stage: 'propose',
@@ -301,13 +537,17 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
         body: JSON.stringify(payload),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Could not submit your idea.');
+      if (!response.ok) throw new Error(result.error || 'Could not submit your proposal.');
       trackEngage('contribution_result', { action: 'proposal', outcome: 'success' });
       location.href = `/proposals/${result.proposal.slug}/`;
     } catch (error) {
       trackEngage('contribution_result', { action: 'proposal', outcome: 'failed' });
       status.textContent =
-        error instanceof Error ? error.message : 'Could not submit your idea. Please try again.';
+        error instanceof Error
+          ? error.message
+          : isPolicyChangeForm
+            ? 'Could not submit your proposal. Please try again.'
+            : 'Could not submit your idea. Please try again.';
       button.disabled = false;
     }
   });
@@ -346,9 +586,51 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     display: grid;
     gap: 1.15rem;
     padding: clamp(1.2rem, 3vw, 2rem);
-    background: #fff;
+    background: var(--horizon-surface);
     border: 1px solid var(--horizon-line);
     border-radius: 0.8rem;
+  }
+
+  .policy-change-effect {
+    margin: -0.35rem 0 0;
+    color: var(--horizon-muted);
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .policy-change-existing {
+    margin: 0 0 1.25rem;
+  }
+
+  .policy-change-existing__list {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    list-style: none;
+  }
+
+  .policy-change-existing__list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.2rem 0.75rem;
+  }
+
+  .policy-change-existing__list a {
+    font-weight: 600;
+  }
+
+  .policy-change-existing__list span {
+    color: var(--horizon-muted);
+    font-size: 0.85rem;
+  }
+
+  .policy-change-existing p {
+    margin: 0;
+    color: var(--horizon-muted);
+    font-size: 0.9rem;
   }
 
   .topic-field-block {
@@ -365,7 +647,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
   :global(.topic-chip.is-active) {
     background: var(--horizon-purple);
     border-color: var(--horizon-purple);
-    color: #ffffff;
+    color: var(--horizon-white);
   }
 
   .optional-drawer {

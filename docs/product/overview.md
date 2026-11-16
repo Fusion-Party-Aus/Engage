@@ -1,6 +1,6 @@
 # Product overview
 
-**Status:** Current · **Verified:** 13 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 ## Definition
 
@@ -61,6 +61,8 @@ A member follows branches for updates and may join one geographic branch and one
 ### 4. Deliberate
 
 On a proposal in Propose or Deliberate, a verified member can comment with a stance (`support`, `concern`, `amendment` or `comment`), reply to another member's comment in a nested thread, upvote or downvote comments, and propose a structured wording amendment against the current revision. Replies are associated with their parent comment on the server; the top-level sort never flattens them.
+
+Author names and avatars link to a public member profile at `/members/<memberId>/`. The profile aggregates the member's visible comments, proposals and amendments, shows an optional biography and geographic affiliation, and displays a display-only comment score: the net score across visible comments. It never exposes ballot choices, account status, email addresses, CRM identifiers or other members' comment votes. The comment score has no effect on eligibility, permissions or proposal authority.
 
 ### 5. Decide
 
@@ -125,7 +127,7 @@ A member commenting "I support this" has not voted. A proposal with 90% supporti
 
 ## Current capabilities and future ambitions
 
-**Shipping today:** proposals with five lifecycle stages; deliberation with stances, threaded replies and confidence-weighted comment ranking; structured amendments with their own revisions and ballots; formal ballot binding and result recording; policy ratification, publication, withdrawal and supersession; branch following and branch membership; scoped RBAC; UndergroundCRM verification behind a feature flag; email, in-app and Web Push plumbing; PWA; public API v1; encrypted-vote support.
+**Shipping today:** proposals with five lifecycle stages; deliberation with stances, threaded replies and confidence-weighted comment ranking; public member profiles with contribution history and display-only comment score; structured amendments with their own revisions and ballots; formal ballot binding and result recording; policy ratification, publication, withdrawal and supersession; branch following and branch membership; scoped RBAC; UndergroundCRM verification behind a feature flag; email, in-app and Web Push plumbing; PWA; public API v1; encrypted-vote support.
 
 **Not shipping today:** a populated national policy baseline (the registry starts empty); automated thresholds, quorum or tally computation; scheduled ballot opening; eligibility snapshots taken at ballot open; seconding; confirmation ballots; election-officer roles; amendment/repeal initiated from a policy page; AI briefings; Signal or Horizon CMS integration; Fusion Core/Auth.
 

@@ -219,6 +219,8 @@ export function getSubstantiveChanges(
     attachmentDescription?: string;
     kind?: string;
     branch?: string;
+    targetSection?: string;
+    proposedWording?: string;
   },
 ): string[] {
   const changes: string[] = [];
@@ -272,6 +274,18 @@ export function getSubstantiveChanges(
     ) {
       changes.push("outcomes");
     }
+  }
+  if (
+    updates.targetSection !== undefined &&
+    updates.targetSection.trim() !== (existing.targetSection || "").trim()
+  ) {
+    changes.push("targetSection");
+  }
+  if (
+    updates.proposedWording !== undefined &&
+    updates.proposedWording.trim() !== (existing.proposedWording || "").trim()
+  ) {
+    changes.push("proposedWording");
   }
   return changes;
 }
@@ -362,6 +376,10 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
             ? { changeType: raw.changeType }
             : {}),
         }
+      : {}),
+    ...(raw.targetSection ? { targetSection: String(raw.targetSection) } : {}),
+    ...(raw.proposedWording
+      ? { proposedWording: String(raw.proposedWording) }
       : {}),
     authorId: raw.authorId ? String(raw.authorId) : undefined,
     authorName: raw.authorName ? String(raw.authorName) : undefined,
@@ -1080,6 +1098,14 @@ export async function saveProposal(
             ? body.attachmentDescription
             : undefined,
         kind: typeof body.kind === "string" ? body.kind : undefined,
+        targetSection:
+          typeof body.targetSection === "string"
+            ? body.targetSection
+            : undefined,
+        proposedWording:
+          typeof body.proposedWording === "string"
+            ? body.proposedWording
+            : undefined,
       });
 
       if (substantiveChanges.length > 0) {
@@ -1400,12 +1426,19 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
     throw new Error("Title must be between 4 and 200 characters.");
   }
 
+  // A change inherits the published policy's topic. The policy already carries
+  // its subject, so the member is never asked to choose it again.
+  const inheritedPolicySpace =
+    policyChange && typeof policyChange.target.category === "string"
+      ? policyChange.target.category.trim()
+      : "";
   const space =
-    typeof body.space === "string" && body.space.trim()
+    inheritedPolicySpace ||
+    (typeof body.space === "string" && body.space.trim()
       ? body.space.trim()
       : typeof body.category === "string" && body.category.trim()
         ? body.category.trim()
-        : (existing?.space ?? "General");
+        : (existing?.space ?? "General"));
   if (space.length < 2 || space.length > 100) {
     throw new Error("Space / topic must be between 2 and 100 characters.");
   }
@@ -1450,6 +1483,30 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
     typeof body.attachmentDescription === "string"
       ? body.attachmentDescription.trim()
       : (existing?.attachmentDescription ?? "");
+
+  // Action-specific content. A repeal carries a rationale, not new commitments;
+  // a replacement carries wording; an amendment may name the part it changes.
+  const effectiveChangeType = policyChange?.changeType ?? existing?.changeType;
+  const targetSection =
+    effectiveChangeType === "amend"
+      ? typeof body.targetSection === "string"
+        ? body.targetSection.trim()
+        : (existing?.targetSection ?? "")
+      : "";
+  if (targetSection.length > 300) {
+    throw new Error(
+      "The part of the policy to change must be 300 characters or fewer.",
+    );
+  }
+  const proposedWording =
+    effectiveChangeType === "replace"
+      ? typeof body.proposedWording === "string"
+        ? body.proposedWording.trim()
+        : (existing?.proposedWording ?? "")
+      : "";
+  if (proposedWording.length > 5000) {
+    throw new Error("Proposed wording must be 5,000 characters or fewer.");
+  }
 
   const kind = normalizeKind(
     body.kind ?? existing?.kind ?? "policy",
@@ -1652,6 +1709,8 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
       summary: rawSummary,
       outcomes,
       details,
+      targetSection: targetSection || undefined,
+      proposedWording: proposedWording || undefined,
       attachmentUrl: attachmentUrl || undefined,
       attachmentDescription: attachmentDescription || undefined,
       kind,
@@ -1671,6 +1730,8 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
       summary: updated.summary,
       outcomes: updated.outcomes,
       details: updated.details,
+      ...(targetSection ? { targetSection } : {}),
+      ...(proposedWording ? { proposedWording } : {}),
       attachmentUrl: updated.attachmentUrl,
       attachmentDescription: updated.attachmentDescription,
       kind: updated.kind,
@@ -1685,6 +1746,8 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
     };
     const unsetFields: Record<string, 1> = {};
     if (scopeWasSubmitted && !geographicScope) unsetFields.scope = 1;
+    if (!targetSection) unsetFields.targetSection = 1;
+    if (!proposedWording) unsetFields.proposedWording = 1;
     if (user.isStaff && body.provenance === null) {
       unsetFields.provenance = 1;
     } else if (user.isStaff && body.provenance !== undefined) {
@@ -1696,6 +1759,10 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
       summary: updated.summary,
       outcomes: updated.outcomes,
       details: updated.details,
+      ...(updated.targetSection ? { targetSection: updated.targetSection } : {}),
+      ...(updated.proposedWording
+        ? { proposedWording: updated.proposedWording }
+        : {}),
     };
     const contentHash = createHash("sha256")
       .update(JSON.stringify(snapshot))
@@ -1882,6 +1949,8 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
     summary: rawSummary,
     outcomes,
     details,
+    ...(targetSection ? { targetSection } : {}),
+    ...(proposedWording ? { proposedWording } : {}),
     ...(attachmentUrl ? { attachmentUrl } : {}),
     ...(attachmentDescription ? { attachmentDescription } : {}),
     kind: createdKind,
@@ -1917,6 +1986,10 @@ function parseBallotCloseDate(raw: unknown, existingClose?: Date, now = new Date
     summary: created.summary,
     outcomes: created.outcomes,
     details: created.details,
+    ...(created.targetSection ? { targetSection: created.targetSection } : {}),
+    ...(created.proposedWording
+      ? { proposedWording: created.proposedWording }
+      : {}),
   };
   const revision = {
     revisionId,

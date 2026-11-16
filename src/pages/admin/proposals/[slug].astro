@@ -573,10 +573,24 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
             </div>
             <p class="project-brief-copy">{proposal.summary}</p>
 
-            {(proposal.outcomes.length > 0 || proposal.details || proposal.detailHtml) && (
+            {(proposal.outcomes.length > 0 || proposal.details || proposal.detailHtml || proposal.targetSection || proposal.proposedWording) && (
               <details class="project-wording-disclosure">
-                <summary>Inspect full commitments &amp; rationale ({proposal.outcomes.length} commitments)</summary>
+                <summary>Inspect full proposal wording</summary>
                 <div class="project-wording-disclosure__body">
+                  {proposal.targetSection && (
+                    <div>
+                      <h3>Part of the policy to change</h3>
+                      <p>{proposal.targetSection}</p>
+                    </div>
+                  )}
+                  {proposal.proposedWording && (
+                    <div>
+                      <h3>Proposed wording</h3>
+                      <div class="typeset typeset-notes max-w-[65ch]">
+                        <PortableText value={proposal.proposedWording} />
+                      </div>
+                    </div>
+                  )}
                   {proposal.outcomes.length > 0 && (
                     <div>
                       <h3>Key commitments</h3>

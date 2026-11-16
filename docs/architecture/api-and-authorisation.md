@@ -1,6 +1,6 @@
 # API and authorisation
 
-**Status:** Current · **Verified:** 15 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 ## Surface map
 
@@ -19,7 +19,7 @@ All routes are `prerender = false`. `src/middleware.ts` is a perimeter layer onl
 | Sense Box | `POST /api/sense-box` | Public concern submission |
 | Legal | `POST /api/legal/acceptance` | Record terms/privacy acceptance |
 | Public v1 | `/api/v1/policies`, `/versions`, `/branches`, `/policy-categories`, `/openapi.json` | Read-only published catalogue |
-| Member | `GET/POST /api/member/branches` | Following and branch membership self-service |
+| Member | `GET/POST /api/member/branches`, `GET/POST /api/member/profile` | Following, branch membership self-service, and the owner's public biography |
 | Notifications | `/api/notifications/inbox`, `/preferences`, `/push-subscription` | Inbox, preferences, Web Push |
 | Email | `/api/email/preferences`, `/unsubscribe`, `/webhook`, `/digest` | Email consent, unsubscribe, delivery events, digest job |
 | Cron | `POST /api/cron/membership-verification` | CRM verification cycle |
@@ -54,6 +54,8 @@ All JSON responses must go through an explicit mapper in `src/lib/api-contracts.
 
 `privateJson()` sets `cache-control: private, no-store`. `publicJson()` computes an ETag, answers `If-None-Match` with 304, and sets canonical `Link` and cache headers.
 
+Public member profiles are server-rendered at `/members/<memberId>/` and are not a JSON API. The read model in `src/lib/member-profile.ts` filters comments, proposals and amendments through `canViewProposal` and the archived-review rule, so the page can never widen access that the proposal itself refuses. The only profile write is `POST /api/member/profile`, which updates the signed-in account's own biography and is origin-checked.
+
 ### Pagination
 
 `parsePagination` caps `limit` at 100 and rejects a negative offset. Use it for list endpoints; do not accept unbounded queries from the client.
@@ -74,7 +76,7 @@ Four layers exist:
 
 1. Astro `security.checkOrigin: true` for form posts. It compares the `Origin` header with the request URL origin and refuses form-like cross-site submissions. `security.allowedDomains` trusts `engage.fusionparty.org.au` over HTTPS so a TLS-terminating proxy still compares against the public origin.
 2. `src/middleware.ts` covers every state-changing method (`POST`, `PUT`, `PATCH`, `DELETE`) on every route, including JSON APIs. It refuses `Sec-Fetch-Site: cross-site`, an `Origin` that differs from the resolved public origin, and an absent `Origin` when a session or dev cookie is present. Bearer cron jobs and provider webhooks carry no cookie and are allowed. Rejections are a plain 403 with no request data logged or echoed.
-3. Explicit `Origin` equality against the resolved public origin in selected handlers (settings, roles, test email, email preferences, member branches, notifications, Sense Box). These remain as defence in depth; the middleware does not replace them.
+3. Explicit `Origin` equality against the resolved public origin in selected handlers (settings, roles, test email, email preferences, member branches, member profile, notifications, Sense Box). These remain as defence in depth; the middleware does not replace them.
 4. Better Auth `trustedOrigins` limited to `BETTER_AUTH_URL`.
 
 There are no per-request CSRF tokens; the design relies on Origin, `Sec-Fetch-Site` and `SameSite=Lax` cookies. See [security/perimeter.md](../security/perimeter.md) for the full rule, exemptions and residual risk.

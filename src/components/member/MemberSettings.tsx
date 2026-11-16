@@ -10,6 +10,7 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldSeparator, FieldTitle } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +35,8 @@ export interface MemberSettingsProps {
   role: MemberRole;
   status: MembershipStatus;
   canParticipate: boolean;
+  bio: string;
+  profileHref: string;
   branches: { id: string; name: string; status?: 'member' | 'follower' }[];
   stats: { votes: number; contributions: number; ideas: number };
 }
@@ -206,6 +209,91 @@ function ProfileSection({ name, email, onSaved }: { name: string; email: string;
           </p>
           <Button disabled={!changed || invalid || saving} size="sm" type="submit">
             {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </CardFooter>
+      </SettingsSection>
+    </form>
+  );
+}
+
+function BioSection({ bio, profileHref }: Pick<MemberSettingsProps, 'bio' | 'profileHref'>) {
+  const [draft, setDraft] = useState(bio);
+  const [savedBio, setSavedBio] = useState(bio);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
+  const trimmed = draft.trim();
+  const tooLong = trimmed.length > 500;
+  const changed = trimmed !== savedBio.trim();
+
+  async function save(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (tooLong || !changed || saving) return;
+    setSaving(true);
+    setFailed(false);
+    setMessage('Saving…');
+    try {
+      const response = await fetch('/api/member/profile', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ bio: trimmed }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setFailed(true);
+        setMessage(result?.error || 'Could not save your biography. Try again.');
+      } else {
+        setSavedBio(trimmed);
+        setMessage('Your public profile has been saved.');
+      }
+    } catch {
+      setFailed(true);
+      setMessage('Could not save your biography. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={save} noValidate>
+      <SettingsSection
+        description="Optional. Appears on your public profile above your contributions."
+        title="Public profile"
+      >
+        <CardContent className="flex-1 px-0 py-(--card-spacing)">
+          <FieldGroup className="gap-5">
+            <SettingField
+              description={`${trimmed.length}/500 characters. Plain text only.`}
+              error={tooLong ? 'Keep your biography to 500 characters or fewer.' : undefined}
+              htmlFor="member-bio"
+              label="Biography"
+            >
+              <Textarea
+                aria-invalid={tooLong}
+                id="member-bio"
+                maxLength={500}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="A short introduction for people reading your contributions."
+                rows={4}
+                value={draft}
+              />
+            </SettingField>
+          </FieldGroup>
+        </CardContent>
+        <CardFooter className="flex-wrap justify-end gap-3 border-t px-5 py-3">
+          <Button href={profileHref} size="sm" variant="outline">
+            View public profile
+          </Button>
+          <p
+            aria-live="polite"
+            className={failed ? 'mr-auto text-sm font-semibold [color:var(--horizon-danger-ink)]' : 'mr-auto text-sm text-muted-foreground'}
+            role="status"
+          >
+            {message}
+          </p>
+          <Button disabled={!changed || tooLong || saving} size="sm" type="submit">
+            {saving ? 'Saving…' : 'Save biography'}
           </Button>
         </CardFooter>
       </SettingsSection>
@@ -635,6 +723,7 @@ export default function MemberSettings(props: MemberSettingsProps) {
         <MemberPreview branches={props.branches} name={name} stats={props.stats} status={props.status} />
         <ProfileSection email={props.email} name={name} onSaved={setName} />
       </div>
+      <BioSection bio={props.bio} profileHref={props.profileHref} />
       <PasskeysSection />
       <div className="grid w-full gap-4 xl:grid-cols-2">
         <AccessSection branches={props.branches} canParticipate={props.canParticipate} role={props.role} />
