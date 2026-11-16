@@ -20,6 +20,7 @@ import { getSessionUser } from '../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../lib/db.ts';
 import { loadBallotCryptoConfig } from '../lib/ballot-crypto.ts';
 import { listOutstandingDecisions, listProposals } from '../lib/store.ts';
+import { attachPublicTallies, publicTallyLabel } from '../lib/public-proposals.ts';
 import { findMemberVotes, proposalBallotId } from '../lib/vote-storage.ts';
 import { getSiteConfig } from '../lib/site-config.ts';
 import type { ProposalStage } from '../lib/types.ts';
@@ -31,10 +32,14 @@ if (authError) return Astro.redirect(`/member/?error=${encodeURIComponent(authEr
 const env = runtimeEnv(Astro.locals);
 const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
 const siteConfig = await getSiteConfig(db, env);
-const [proposals, publishedPolicyCount] = await Promise.all([
-  listProposals(db, { includeArchived: false, user, includeDetails: false }),
+const [proposalSummaries, publishedPolicyCount] = await Promise.all([
+  listProposals(db, { includeArchived: false, user, includeDetails: false, includeVoteTallies: false }),
   db.collection('policy_registry').countDocuments({ publicationStatus: 'published' }),
 ]);
+// Vote totals come from the display-only projection or the certified result.
+// This page never scans `proposal_votes`.
+const proposals = await attachPublicTallies(db, proposalSummaries);
+const highlightProposals = proposals.filter((proposal) => proposal.tallyState !== 'pending');
 const votes = proposals.filter((p) => p.stage === 'decide' && !ballotExpired(p));
 const myVoteRows = user?.canParticipate
   ? await findMemberVotes(
@@ -165,7 +170,7 @@ const stageVariant = (s: ProposalStage) => {
         </a>
       </div>
 
-      <ProposalHighlights proposals={proposals} />
+      <ProposalHighlights proposals={highlightProposals} />
       <div class="home-workspace-grid">
         <div class="home-workspace-main">
           <!-- Open Votes Queue -->
@@ -366,7 +371,7 @@ const stageVariant = (s: ProposalStage) => {
         </section>
 
         <!-- 2-Column Live Register Preview + Public/Member Access Summary -->
-        <ProposalHighlights proposals={proposals} />
+        <ProposalHighlights proposals={highlightProposals} />
       <div class="home-workspace-grid">
           <section class="home-workspace-main" aria-labelledby="active-proposals-heading">
             <div class="home-block__head">
@@ -388,7 +393,9 @@ const stageVariant = (s: ProposalStage) => {
                       <Badge variant={stageVariant(item.stage)}>{stageLabel(item.stage)}</Badge>
                       <a class="home-topic-chip" href={`/proposals/?space=${encodeURIComponent(item.space)}`}>{item.space}</a>
                       <span class="tabular home-stat-inline">
-                        {item.commentCount} {item.commentCount === 1 ? 'discussion post' : 'discussion posts'} · {item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'}
+                        {item.commentCount} {item.commentCount === 1 ? 'discussion post' : 'discussion posts'} · {publicTallyLabel(item)
+                          ? <a href={`/proposals/${item.slug}/`}>{publicTallyLabel(item)}</a>
+                          : <>{item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'}</>}
                       </span>
                     </div>
                     <h3><a href={`/proposals/${item.slug}/`}>{item.title}</a></h3>

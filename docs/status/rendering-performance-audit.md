@@ -1,9 +1,9 @@
 # Rendering performance audit — RFC 0001 Phase 2
 
-**Status:** Current · **Measured:** 14 November 2026; register follow-up measured 15 November 2026; header follow-up measured 15 November 2026
+**Status:** Current · **Measured:** 14 November 2026; register follow-up measured 15 November 2026; header follow-up measured 15 November 2026; public-list follow-up measured 16 November 2026
 **Branch:** merged into `feat/rfc0001-sprint1-integration` (PR #51) · **Baseline commit:** `1bd4fd1` · **Measured after commit:** `b25e385`
 **Harness:** [`scripts/rendering-performance.mjs`](../../scripts/rendering-performance.mjs)
-**Data:** [`rendering-performance-baseline.json`](rendering-performance-baseline.json) · [`rendering-performance-after.json`](rendering-performance-after.json) · register follow-up: [`rendering-performance-register-before.json`](rendering-performance-register-before.json) · [`rendering-performance-register-after.json`](rendering-performance-register-after.json) · header follow-up: [`rendering-performance-header-before.json`](rendering-performance-header-before.json) · [`rendering-performance-header-after.json`](rendering-performance-header-after.json)
+**Data:** [`rendering-performance-baseline.json`](rendering-performance-baseline.json) · [`rendering-performance-after.json`](rendering-performance-after.json) · register follow-up: [`rendering-performance-register-before.json`](rendering-performance-register-before.json) · [`rendering-performance-register-after.json`](rendering-performance-register-after.json) · header follow-up: [`rendering-performance-header-before.json`](rendering-performance-header-before.json) · [`rendering-performance-header-after.json`](rendering-performance-header-after.json) · public-list follow-up: [`rendering-performance-public-before.json`](rendering-performance-public-before.json) · [`rendering-performance-public-after.json`](rendering-performance-public-after.json) · [`rendering-performance-public-before-proposals.json`](rendering-performance-public-before-proposals.json) · [`rendering-performance-public-after-proposals.json`](rendering-performance-public-after-proposals.json)
 
 This audit measures the server render cost and client experience of representative public, member and administrator pages, then removes duplicated and render-blocking work that does not affect governance authority. Local measurements are **indicative, not production SLA evidence**. See [Limitations](#limitations).
 
@@ -291,10 +291,159 @@ Reading the numbers:
   Clicking a notification now navigates to its target without a mark-read
   request; the centre reconciles unread state on the next load.
 
+## Public list pagination and the tally projection (16 November 2026)
+
+`/` and `/proposals/` still scanned every vote and decrypted every encrypted
+ballot to show approve/abstain/reject totals. `/proposals/` also loaded every
+proposal and filtered/sorted it in the page. This slice removes both costs from
+the public lists.
+
+**Method.** Same harness and synthetic data (78 proposals, 1,200 plaintext
+votes, 10 bound open ballots), five runs per page/identity. The before snapshot
+records `57402f0`; the after snapshot records `65ace21`. Snapshots:
+[home before](rendering-performance-public-before.json) ·
+[home after](rendering-performance-public-after.json) ·
+[proposals before](rendering-performance-public-before-proposals.json) ·
+[proposals after](rendering-performance-public-after-proposals.json).
+
+| Page (identity) | HTML KB | Document DB commands | Document DB time ms | getMore batches | TTFB ms | Transferred JS KB |
+|---|---|---|---|---|---|---|
+| `/` (anonymous) | 55.5 → 56.0 | 7 → **6** | 29.7 → **15.6** | 3 → **1** | 35.1 → 29.6 | 15.7 → 15.7 |
+| `/` (member) | 66.9 → 66.7 | 14 → **13** | 32.5 → **24.2** | 3 → **1** | 40.0 → 34.9 | 15.7 → 15.7 |
+| `/proposals/` (anonymous) | 94.9 → 128.7 | 7 → 7 | 18.0 → 19.2 | 3 → **1** | 34.5 → 34.3 | 15.7 → 15.7 |
+| `/proposals/` (member) | 102.7 → 136.5 | 15 → 15 | 27.3 → **21.1** | 3 → **1** | 37.5 → 32.9 | 15.7 → 15.7 |
+
+Reading these numbers honestly:
+
+- **The HTML grew on `/proposals/` because the page now renders 25 rows instead
+  of 15.** The task specified 25 per page, so this is not a like-for-like row
+  count. The added ~34 KB is ten rows at roughly 3.4 KB each; the shell, filters
+  and pagination are unchanged. On `/` (which still renders every visible
+  summary) HTML is flat.
+- **The vote cursor is gone.** `getMore` fell from three batches to one on every
+  measured page. The remaining batch is the comment count read, not votes.
+- **Document DB time is the deterministic part of the win on `/`** (−47%
+  anonymous, −26% member). On `/proposals/` the command count is unchanged
+  because the page now performs two bounded proposal reads (candidates for
+  counts and ordering, then one display page) instead of one full read plus a
+  1,200-vote scan; the saving is in the removed decryption and the bounded
+  display read, which driver command counts cannot express.
+- TTFB and LCP in this local setup move by 1–8 ms between runs on unchanged
+  pages. Treat them as noise, as everywhere else in this audit.
+
+**Profiler evidence on the same seeded database.** With MongoDB profiling on
+and the profile cleared after startup, one anonymous request per page:
+
+| Request | Collections touched | `proposal_votes` operations |
+|---|---|---|
+| `/proposals/` before (`57402f0`) | `proposals`, `comments`, `branches`, `proposal_votes` (1 find + 2 `getMore`) | **3** |
+| `/proposals/` after | `proposals` ×2, `comments` ×2, `ballot_tallies`, `ballot_results`, `branches` | **0** |
+| `/` before | `proposals` ×2, `comments` ×4, `branches`, `policy_registry`, `proposal_votes` (2 finds + 4 `getMore`) | **6** |
+| `/` after | `proposals` ×3, `comments` ×4, `branches`, `policy_registry`, `ballot_tallies` ×2, `ballot_results` ×2 | **0** |
+
+The unit suites prove the same without a database, and without trusting a
+profiler window: `public-proposals.test.ts` wraps the collection factory and
+asserts that the candidate read, the page build and the home overlay never ask
+for `proposal_votes`; `ballot-tallies-mongo.test.ts` asserts it through the real
+`listProposals` option. The display query also asks MongoDB to exclude `details`
+and `detailHtml`; search still matches rationale in the query without returning
+it.
+
+**What the public list does now**
+
+- `/proposals/` reads a bounded 25-row display page. Search, stage, branch and
+  topic filters, ordering and range are computed before the page is loaded;
+  invalid or out-of-range pages clamp; equal sort keys break by proposal id.
+- A **certified** ballot shows the tally stored on `ballot_results`. Otherwise a
+  fresh `ballot_tallies` row is shown. A missing row, or one older than ten
+  minutes, shows `Voting open — tally updating` (or `Voting closed — tally
+  pending`) linked to the matter. No number is guessed and no vote is scanned.
+- `/` overlays the same projection on the register it already reads. Matters
+  without a trustworthy aggregate are omitted from the three highlight cards
+  rather than showing a percentage from zero votes.
+- Pagination keeps `q`, `stage`, `branch`, `space`, `sort`, `focus` and `joined`
+  across pages; changing a filter submits without `page`. Each page
+  self-references its canonical address and emits `rel="prev"`/`rel="next"`.
+  The repository has no `noIndex` convention for parameterised lists, so none
+  was invented; pages stay indexable with a self-canonical.
+- The pagination controls use the existing `Button` primitive. Previous/next
+  carry an accessible name, the current page is marked `aria-current="page"`,
+  and the range is a `role="status"` live region.
+
+**What the projection is, and why it cannot change a governance outcome**
+
+`ballot_tallies` holds one document per `(ballotId, revisionId)` with `approve`,
+`abstain`, `reject`, `total` and `updatedAt`. A unique compound index enforces
+one row per ballot/revision. The row stores no member id, choice, reason,
+envelope or blind index, so it cannot be joined back to a voter.
+
+`castVote` applies the row **after** the vote transaction commits. The update is
+best-effort: a failure, a write conflict or a write slower than 500 ms is logged
+as an operational event (`ballot_tally_projection_failed`,
+`ballot_tally_projection_conflict`, `ballot_tally_projection_timeout`) and the
+vote still succeeds. The projection is not read by `recordFormalDecision`, which
+continues to recompute the outcome from the votes bound to the ballot and
+revision and refuses unbound or unreadable votes. Eligibility, ballot binding,
+deadlines, the D9 comparison and D10 abstention treatment are untouched.
+
+Writes are atomic and race-safe, because a read-then-write projection
+double-counts under concurrent votes:
+
+- **Normal votes are one upsert increment.** `approve`/`abstain`/`reject`/`total`
+  are `$inc`ed and the row is created in the same operation, so two concurrent
+  first votes cannot each create a row or lose one.
+- **Vote changes move a count**, decrementing the previous choice and
+  incrementing the new one; re-casting the same choice is a no-op.
+- **A revision move is two transactional deltas** (old row −1, new row +1), so no
+  row is ever half-moved.
+- **Recounts are last-resort and guarded.** The only recount is for an unreadable
+  prior vote and the repair CLI. It is compare-and-set on an internal `version`
+  token, bounded by a watermark recorded in `appliedThrough`, and retries on a
+  conflict. An increment for a vote the recount already counted is skipped, so
+  the recount cannot be double counted either. At the write deadline the recount
+  is abandoned rather than writing a stale absolute count, leaving the row for
+  `npm run ballots:tally-projection`.
+- **A row that is internally inconsistent** (negative, or a total that is not the
+  sum of the choices) is never displayed; it reads as tally pending until
+  repaired. This covers drift from a projection that was already missing.
+
+Rows are revision-scoped, and encrypted votes are counted by the same decryption
+path as certification. `npm run ballots:tally-projection` reports and rebuilds
+rows; it never deletes, edits or rewrites a vote and never records a result.
+
+An earlier revision of this slice used a read-then-write fallback whenever the
+projection row was missing. The full suite exposed a double count under
+concurrent votes, so that path was replaced by the atomic strategy above. The
+race cases in `ballot-tallies-mongo.test.ts` reproduce the failure mode and
+assert the row against the votes.
+
+**Deliberate limits**
+
+- The projection is eventually consistent. Within the ten-minute window it may
+  lag a vote by one write; outside it the page says so instead of showing it. A
+  stopped projection writer is therefore visible rather than silently wrong.
+- Sorting by vote totals uses the displayed aggregate (certified, fresh
+  projection, or zero while pending). A pending row can sort as zero.
+- A ballot with no tally row yet shows `Voting open — tally updating` even when
+  nobody has voted, because the page does not scan to prove a zero.
+- The projection is not backfilled at startup. Run
+  `npm run ballots:tally-projection -- --database <name> --apply` once after
+  deployment if existing ballots should show counts immediately instead of the
+  neutral state.
+- A recount records the newest vote timestamp it actually counted. If a vote's
+  transaction stamps an earlier `updatedAt` but commits after that recount, its
+  increment can be skipped and the row under-counted. The normal increment path
+  is unaffected and `npm run ballots:tally-projection` repairs the row; the
+  alternative would be writing a stale absolute count, which is worse.
+- The harness seeds votes directly and does not seed `ballot_tallies`, so its
+  measured pages show the neutral state. That is deliberate: the harness
+  measures the read path, and the browser check below seeds fresh, stale and
+  certified rows explicitly.
+
 ## Deliberately left alone
 
-- **Per-vote decryption and full vote scans in `listProposals`.** Member and public list cards still need approve/reject/abstain totals, and encrypted ballots can only be tallied after decryption. The admin register no longer does this; a tally read model for the remaining list pages is S4/I12 work.
-- **Full-collection proposal search.** `/proposals/` searches `details` client-side for consistency with the existing UX. Moving search into MongoDB with the same semantics needs its own change and index review. The admin register now searches in MongoDB because pagination requires it.
+- **Per-vote decryption on the proposal detail page.** `/proposals/[slug]/` still computes the live bound tally from the votes, because it is the surface that shows the ballot and its exact wording to a member. The public lists no longer do this; they read `ballot_tallies` and `ballot_results` instead (see the 16 November section).
+- **Full-collection search semantics elsewhere.** `/proposals/` now searches in MongoDB because pagination requires it: the query covers the identifier, title, topic space, summary and rationale, and rationale is never returned. Other pages that need full-text semantics still load and match in the page.
 - **Ballot authority, eligibility and tally.** All remain server-computed and in the initial response. The ballot island is still server-rendered; hydration timing changed only. The register shows certified tallies and the workspace keeps the live bound tally.
 - **Per-request session freshness.** No session caching across requests. No member-specific page or API caching was added.
 - **Remaining React islands.** `/member/`, `/admin/` and `/proposals/[slug]/` still use React for settings, timelines and the ballot. Their hydration timing was already tuned; replacing them is separate work.
@@ -315,21 +464,24 @@ Reading the numbers:
 - The header follow-up ran the full harness before and after on the same machine, but local load varied between the two invocations (the before run shows the higher TTFB). JavaScript bytes and script counts are deterministic; LCP and TTFB deltas are direction only. LCP moved on anonymous control pages the change does not affect.
 - The header browser comparison used a scripted Playwright run against the before (`b9286f4`) and after (`ad34a17`) builds rather than the harness byte totals. It reports decoded body size for scripts, so its absolute KB values differ slightly from the harness transfer-size figures.
 - The header panel was browser-tested with seeded notifications, intercepted empty and `500` responses, a no-JavaScript context and reduced motion. It was not exercised against a production-scale notification inbox or real push subscription state.
+- The public-list follow-up's profiler window and before/after harness run used the harness's synthetic database (78 proposals, 1,200 plaintext votes). It establishes which collections are read, not a production CPU or I/O saving; encrypted ballots were exercised in the replica-set test, not the harness, which runs with `BALLOT_ENCRYPTION_MODE=off`.
+- The public-list browser check seeded `ballot_tallies` directly rather than through votes, so it proves the display states, not the vote-to-projection write path (covered by `ballot-tallies-mongo.test.ts`).
 
 ## Top remaining opportunities, by expected value
 
-1. **Tally/read model for member list pages (S4/I12).** `/` and `/proposals/` still scan every vote and decrypt every ballot for approve/reject/abstain totals. Store aggregate counts per ballot/revision so those pages stop doing per-vote work. The admin register no longer needs it.
-2. **Pair the member lists with server-side filtering and pagination.** `/proposals/` still reads and filters the whole collection in the page. The register's projected, paginated read is a working pattern to reuse, including search semantics.
-3. **Defer more `/member/` secondary data.** Notification inbox, passkey count, push subscriptions and branch profile can move behind small endpoints or server islands so the member's next action and outstanding ballots render without waiting for preference data.
-4. **Command layer and central route policy (S1).** A single request context would make session resolution, authorisation and query batching uniform rather than page-by-page.
+1. **Defer more `/member/` secondary data.** Notification inbox, passkey count, push subscriptions and branch profile can move behind small endpoints or server islands so the member's next action and outstanding ballots render without waiting for preference data.
+2. **Command layer and central route policy (S1).** A single request context would make session resolution, authorisation and query batching uniform rather than page-by-page.
+3. **Live tally on the proposal detail page.** The detail page still decrypts the bound votes on every read. It is one ballot, so the cost is bounded, but it is the last public per-vote decryption path.
 
 ## Verification
 
-- `npm run check` — 0 errors, 0 warnings (22 pre-existing hints at the time of the first pass; the header follow-up leaves 20 hints, none in the changed files).
-- `npm test` with `VOTING_TEST_MONGODB_URI` — 306 tests passed for the first pass; the register follow-up runs the full suite at 532 tests, and the header follow-up runs it at 600 tests, 0 fail. That includes `site-header-notifications.test.ts` (no React import or island, native disclosure, no-JavaScript link, lazy `no-store` fetch, Escape focus restoration) and `proposal-register.test.ts` (pagination boundaries, filters, empty and out-of-range pages, stable ordering, no `proposal_votes` access, projection shape, certified and open ballot display, editing from a later page).
+- `npm run check` — 0 errors, 0 warnings (22 pre-existing hints at the time of the first pass; the public-list follow-up leaves 20 hints, none in the changed files).
+- `npm test` with `VOTING_TEST_MONGODB_URI` — 306 tests passed for the first pass; the register follow-up runs the full suite at 532 tests, the header follow-up at 600 tests, and the public-list follow-up at 683 tests, 0 fail, run twice on the replica set (both runs 683/683). That includes `site-header-notifications.test.ts`, `proposal-register.test.ts`, `public-proposals.test.ts` (25-row pages, boundaries, invalid and out-of-range pages, filter preservation and reset, stable ordering, canonical and rel-link helpers, no `proposal_votes` access, fresh/stale/missing/inconsistent projection states, certified results from `ballot_results`, visibility narrowing, privacy) and `ballot-tallies.test.ts` / `ballot-tallies-mongo.test.ts` (delta arithmetic, same-choice re-cast, changed vote, many concurrent first votes, concurrent vote changes, concurrent revision moves, ten rebuild-versus-increment races, revision scoping, encrypted mode, a deadline that abandons a rebuild without writing, a corrupted projection not affecting certification, a failed projection write leaving the vote successful and logging, and the repair plan).
+- Projection concurrency suite alone: `src/lib/ballot-tallies-mongo.test.ts` run 10 times, 11/11 tests passed each time.
 - `npm run build` — production build succeeds.
-- Harness run against the committed code, three runs per page/identity; before/after JSON committed under `docs/status/`. The register follow-up ran `--filter admin-proposals --runs 3` against `78c07c0` (before) and `c1f72c0` (after). The header follow-up ran the full harness against `b9286f4` (before) and `ad34a17` (after).
-- Register follow-up browser verification at 1440×1000 and 390×844: 65 checks passed, including 25-row pages, range text, filter preservation, keyboard focus on the pagination links with a visible ring, empty and out-of-range states, edit/revise/new resolving off-page proposals, no horizontal overflow, and no console, page or request errors.
+- Harness run against the committed code; before/after JSON committed under `docs/status/`. The register follow-up ran `--filter admin-proposals --runs 3` against `78c07c0` (before) and `c1f72c0` (after). The header follow-up ran the full harness against `b9286f4` (before) and `ad34a17` (after). The public-list follow-up ran `--filter home` and `--filter "proposals /proposals/"` with five runs against `57402f0` (before) and `65ace21` (after), and ran the MongoDB profiler over one anonymous request per page on the same seeded database.
+- Public-list follow-up browser verification at 1440×1000 and 390×844: 60 checks passed. Covered 25 rendered rows, the range status, self-referencing canonical with `rel="prev"`/`rel="next"` moving between pages, the active stage tab, filter preservation and reset to page 1, keyboard-only focus on the Next control with a visible ring, the fresh projection count, the stale `Voting open — tally updating` state linked to the matter, the certified tally from `ballot_results`, empty and out-of-range states, no horizontal overflow, and no console, page or 5xx errors. Run against a seeded database with one fresh, one stale and one certified tally; the remaining open ballots exercised the missing-row state.
+- `npm run ballots:tally-projection` on a scratch database: dry run reported 7 scanned votes, 3 groups, 1 missing, 1 mismatch and 1 orphan row and exited 2; `--apply` wrote 2 rows and zeroed 1 orphan; `--verify` then exited 0 with `needsRepair=false`. A production apply without `--allow-production`/`--confirm-production engage_production` is refused before connecting.
 - Header follow-up browser verification at 1440×1000 and 390×844: 42 checks passed. Covered seeded notifications (three items, two unread) rendering title and relative time, unread accessible name and badge, panel open/close, Escape restoring summary focus, outside-click close, keyboard-only reaching the summary with a visible 3 px focus ring and Enter opening the panel, intercepted empty and `500` states with a working retry, the panel fitting a 390 px viewport without horizontal overflow, no console/page errors or failed first-party requests, a JavaScript-disabled context where the bell navigates to the notification centre, and reduced-motion rendering.
 - Header follow-up script comparison against both builds: `/`, `/proposals/` and `/policies/` served the `NotificationBell` island with 20 script requests before and no island with 4 script requests after; `/admin/proposals/` served no island after.
 - Browser verification: `/admin/` server island replaces its fallback and its nested activity timeline hydrates on scroll with no console errors; the proposal ballot hydrates and responds to a click on desktop (member click-to-next-paint proxy 97 ms in the measured run).
