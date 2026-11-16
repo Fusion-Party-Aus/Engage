@@ -1,5 +1,23 @@
 [
   {
+    "hash": "255ab3c",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "governance",
+    "summary": "State the zero-active quorum edge case",
+    "details": "Refs #122"
+  },
+  {
+    "hash": "7d90e0d",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the quorum activity-window fix",
+    "details": "Refs #122"
+  },
+  {
     "hash": "5e56fdd",
     "date": "2026-11-16",
     "type": "fix",
@@ -665,21 +683,5 @@
     "category": "docs",
     "scope": "member",
     "summary": "Record lifecycle audit, consent assessment and rollout checks"
-  },
-  {
-    "hash": "52c6570",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Connect verification, participation and legacy consent journeys"
-  },
-  {
-    "hash": "ee47cdf",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record administrator test email delivery"
   }
 ]
