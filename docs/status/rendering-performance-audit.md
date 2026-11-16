@@ -435,10 +435,11 @@ against the votes every round.
   `npm run ballots:tally-projection -- --database <name> --apply` once after
   deployment if existing ballots should show counts immediately instead of the
   neutral state.
-- The projection write deadline defaults to 500 ms and can be raised with
-  `ENGAGE_BALLOT_TALLY_DEADLINE_MS`. The race tests raise it because they run
-  against a slow, shared replica set; an expired deadline writes nothing either
-  way.
+- The projection write deadline is a fixed 500 ms. An expired deadline writes
+  nothing either way; a row abandoned by a slow write is left for
+  `npm run ballots:tally-projection`. The tests wait for the projection to
+  converge and repair it the documented way rather than raising the deadline
+  through the deployment environment.
 - A recount reads the votes and then writes absolute counts under a version
   token. A vote whose projection increment is delayed until after that write,
   but whose vote was already visible to the recount, can be counted twice. The
