@@ -208,6 +208,7 @@ produces a notification.
 | `/api/email/unsubscribe` | GET, POST | HMAC token | One-click unsubscribe |
 | `/api/email/webhook` | POST | Svix signature | Delivery/bounce/complaint events |
 | `/api/email/digest` | POST | Bearer `ENGAGE_CRON_SECRET` | Send due digest batches |
+| `/api/admin/discord-settings` | GET / PATCH | `settings.manage`; Origin required on PATCH | Configure Discord channels, role mentions, enabled state and weekly schedule |
 | `/api/admin/discord-digest` | GET / POST | Admin session; Origin required on POST | Preview and explicitly test-send to separate Discord server |
 | `/api/cron/discord-digest` | POST | Bearer `ENGAGE_CRON_SECRET` | Run one public Discord digest per Melbourne week |
 
