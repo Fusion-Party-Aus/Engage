@@ -9,6 +9,13 @@ import {
 import { emailOrigin } from "./engagement-email.ts";
 import { canViewProposal, listProposals } from "./store.ts";
 import { proposalBallotId } from "./vote-storage.ts";
+import { validateDiscordWebhook } from "./discord-webhook.ts";
+import {
+  discordWeeklyDigestDue,
+  getDiscordSettingsSummary,
+  loadDiscordSettings,
+} from "./discord-settings.ts";
+export { validateDiscordWebhook } from "./discord-webhook.ts";
 
 const DAY = 86_400_000;
 const MAX_ITEMS = 5;
@@ -53,7 +60,7 @@ export interface DiscordDigestPreview {
 }
 
 export interface DiscordDigestResult {
-  status: "disabled" | "already-attempted" | "empty" | "sent" | "held";
+  status: "disabled" | "not-due" | "already-attempted" | "empty" | "sent" | "held";
   featured: number;
 }
 
@@ -186,20 +193,6 @@ function safeTitle(value: string): string {
     .slice(0, 115)
     .replace(/@/g, "@\u200b")
     .replace(/[\\*_`~|>\[\]()]/g, "\\$&");
-}
-
-export function validateDiscordWebhook(value: string): URL {
-  const url = new URL(value);
-  if (
-    url.protocol !== "https:" ||
-    !["discord.com", "discordapp.com"].includes(url.hostname) ||
-    url.port || url.username || url.password || url.search || url.hash ||
-    !/^\/api\/webhooks\/\d{15,25}\/[A-Za-z0-9._-]+$/.test(url.pathname)
-  ) {
-    throw new Error("Discord webhook configuration is invalid.");
-  }
-  url.searchParams.set("wait", "true");
-  return url;
 }
 
 function roleMention(roleId: string | undefined): string {
@@ -336,9 +329,10 @@ export async function previewWeeklyDiscordDigest(
   });
   const weekKey = melbourneWeekKey(now);
   const selected = selectDiscordDigest(candidates, now, weekKey);
+  const settings = await getDiscordSettingsSummary(db);
   const role = test
-    ? assertRole(env.ENGAGE_DISCORD_TEST_ROLE_ID, true)
-    : assertRole(env.ENGAGE_DISCORD_ROLE_ID);
+    ? assertRole(settings.testRoleId, true)
+    : assertRole(settings.liveRoleId, true);
   return {
     weekKey,
     candidates: selected,
@@ -356,6 +350,7 @@ async function sendWebhook(
   const roles = roleId ? [assertRole(roleId)!] : [];
   const response = await send(webhook.toString(), {
     method: "POST",
+    redirect: "error",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       content,
@@ -380,15 +375,17 @@ export async function runWeeklyDiscordDigest(
   send: typeof fetch = fetch,
   now: Date = new Date(),
 ): Promise<DiscordDigestResult> {
-  if (env.ENGAGE_DISCORD_DIGEST_ENABLED !== "true") {
-    return { status: "disabled", featured: 0 };
+  const config = await loadDiscordSettings(db, env);
+  if (!config.enabled) return { status: "disabled", featured: 0 };
+  if (!config.liveWebhookUrl || !config.liveRoleId) {
+    throw new Error("Complete the Discord settings before enabling live posting.");
   }
-  if (!env.ENGAGE_DISCORD_WEBHOOK_URL) {
-    throw new Error("Discord weekly digest is enabled but not configured.");
+  if (!discordWeeklyDigestDue(config, now)) {
+    return { status: "not-due", featured: 0 };
   }
-  validateDiscordWebhook(env.ENGAGE_DISCORD_WEBHOOK_URL);
-  assertRole(env.ENGAGE_DISCORD_ROLE_ID);
-  if (env.ENGAGE_DISCORD_WEBHOOK_URL === env.ENGAGE_DISCORD_TEST_WEBHOOK_URL) {
+  validateDiscordWebhook(config.liveWebhookUrl);
+  assertRole(config.liveRoleId);
+  if (config.liveWebhookUrl === config.testWebhookUrl) {
     throw new Error("Test and live Discord webhooks must differ.");
   }
   const preview = await previewWeeklyDiscordDigest(db, env, now);
@@ -413,9 +410,9 @@ export async function runWeeklyDiscordDigest(
   }
   try {
     const messageId = await sendWebhook(
-      env.ENGAGE_DISCORD_WEBHOOK_URL,
+      config.liveWebhookUrl,
       preview.content,
-      env.ENGAGE_DISCORD_ROLE_ID,
+      config.liveRoleId,
       send,
     );
     await outbox.updateOne({ _id: id }, {
@@ -438,11 +435,12 @@ export async function sendTestDiscordDigest(
   send: typeof fetch = fetch,
   now: Date = new Date(),
 ): Promise<DiscordDigestResult> {
-  if (!env.ENGAGE_DISCORD_TEST_WEBHOOK_URL) {
-    throw new Error("Configure a separate test Discord webhook first.");
+  const config = await loadDiscordSettings(db, env);
+  if (!config.testWebhookUrl) {
+    throw new Error("Configure a separate test Discord webhook in Platform settings.");
   }
-  validateDiscordWebhook(env.ENGAGE_DISCORD_TEST_WEBHOOK_URL);
-  if (env.ENGAGE_DISCORD_TEST_WEBHOOK_URL === env.ENGAGE_DISCORD_WEBHOOK_URL) {
+  validateDiscordWebhook(config.testWebhookUrl);
+  if (config.testWebhookUrl === config.liveWebhookUrl) {
     throw new Error("The test webhook must differ from the live webhook.");
   }
   const preview = await previewWeeklyDiscordDigest(db, env, now, true);
@@ -465,9 +463,9 @@ export async function sendTestDiscordDigest(
   }
   try {
     const messageId = await sendWebhook(
-      env.ENGAGE_DISCORD_TEST_WEBHOOK_URL,
+      config.testWebhookUrl,
       preview.content,
-      env.ENGAGE_DISCORD_TEST_ROLE_ID,
+      config.testRoleId || undefined,
       send,
     );
     await outbox.updateOne({ _id: id }, {
