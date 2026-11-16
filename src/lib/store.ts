@@ -2370,10 +2370,32 @@ export type CommentVoteAction = (typeof COMMENT_VOTE_ACTIONS)[number];
  * How long a vote may keep retrying after losing a compare-and-swap race.
  * A cold replica set can take hundreds of milliseconds per write, so the
  * retry loop is bounded by time rather than a fixed attempt count.
+ *
+ * `ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS` overrides the 5 s default for
+ * deployments with unusually slow writes. Values are clamped to 250 ms–60 s;
+ * unset, empty or invalid values keep the safe default so a bad setting can
+ * never remove the bound.
  */
 const COMMENT_VOTE_RETRY_BUDGET_MS = 5_000;
+const COMMENT_VOTE_RETRY_BUDGET_MIN_MS = 250;
+const COMMENT_VOTE_RETRY_BUDGET_MAX_MS = 60_000;
 const COMMENT_VOTE_RETRY_INITIAL_DELAY_MS = 4;
 const COMMENT_VOTE_RETRY_MAX_DELAY_MS = 250;
+
+export function commentVoteRetryBudgetMs(
+  raw: string | undefined = process.env.ENGAGE_COMMENT_VOTE_RETRY_BUDGET_MS,
+): number {
+  const value = raw?.trim();
+  if (!value) return COMMENT_VOTE_RETRY_BUDGET_MS;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return COMMENT_VOTE_RETRY_BUDGET_MS;
+  }
+  return Math.min(
+    Math.max(Math.round(parsed), COMMENT_VOTE_RETRY_BUDGET_MIN_MS),
+    COMMENT_VOTE_RETRY_BUDGET_MAX_MS,
+  );
+}
 
 /**
  * Apply one member's upvote or downvote to a comment.
@@ -2416,7 +2438,8 @@ export async function voteOnComment(
   // `voteVersion`, so this write misses and retries against the new state
   // instead of overwriting another member's vote. Retries stop when the time
   // budget expires, so contention converges without a stuck writer hanging.
-  const deadline = Date.now() + COMMENT_VOTE_RETRY_BUDGET_MS;
+  const budgetMs = commentVoteRetryBudgetMs();
+  const deadline = Date.now() + budgetMs;
   let attempt = 0;
   for (;;) {
     const existing = await col.findOne({ commentId: id });
@@ -2526,7 +2549,7 @@ export async function voteOnComment(
   logOperationalEvent("warn", "comment_vote_retry_budget_exhausted", {
     commentId: id,
     attempts: attempt,
-    budgetMs: COMMENT_VOTE_RETRY_BUDGET_MS,
+    budgetMs,
   });
   throw new Error("Comment votes changed at the same time. Try again.");
 }
