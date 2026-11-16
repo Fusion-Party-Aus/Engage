@@ -61,7 +61,7 @@ POST /api/cron/discord-digest
 Authorization: Bearer <ENGAGE_CRON_SECRET>
 ```
 
-The cron job is only a trigger. The application decides whether the selected Melbourne weekday/hour has arrived, and the database enforces one posting attempt per Melbourne calendar week. You can change the weekly posting time without editing the external scheduler. The existing `ENGAGE_CRON_SECRET` remains an infrastructure secret; it is not a Discord integration setting.
+The cron job is only a trigger. The application decides whether the selected Melbourne weekday/hour has arrived, and the database enforces one posting attempt per Melbourne calendar week. If that slot was missed, the next hourly trigger later in the same Melbourne week may catch up; it does not post early. You can change the weekly posting time without editing the external scheduler. The existing `ENGAGE_CRON_SECRET` remains an infrastructure secret; it is not a Discord integration setting.
 
 Do not call the endpoint with a browser GET. Do not place the bearer secret in Git, documentation, screenshots or Discord.
 
