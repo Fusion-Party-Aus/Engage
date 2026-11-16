@@ -113,20 +113,6 @@ export interface PlatformEnv {
    * member-id profile paths then redirect with 301. Off by default.
    */
   ENGAGE_PROFILE_CRM_IDENTIFIERS?: string;
-  /**
-   * Operational health thresholds (#39). Each scheduled job has a warn and a
-   * fail threshold; warn must be below fail or the check reports unknown. Empty
-   * or invalid values use the documented default, and the health report names
-   * the value and its source.
-   */
-  GOVERNANCE_SCHEDULER_WARN_HOURS?: string;
-  GOVERNANCE_SCHEDULER_STALE_HOURS?: string;
-  DIGEST_WARN_HOURS?: string;
-  DIGEST_STALE_HOURS?: string;
-  MEMBERSHIP_VERIFICATION_WARN_HOURS?: string;
-  MEMBERSHIP_VERIFICATION_STALE_HOURS?: string;
-  BALLOT_CLOSURE_GRACE_HOURS?: string;
-  EMAIL_DELIVERY_WINDOW_HOURS?: string;
   ENGAGE_ALLOW_INDEXING?: string;
   ENGAGE_DEFAULT_OG_IMAGE?: string;
   ENGAGE_PUBLIC_PULSE_POLL?: string;
