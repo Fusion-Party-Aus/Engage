@@ -96,6 +96,18 @@ const date=(v:any)=>v ? new Date(v).toLocaleString('en-AU',{timeZone:'Australia/
     <p class="engagement-caption">Read-only preview. This action never sends messages or changes member preferences.</p>
    </section>
   </div>
+  <section class="engagement-card" aria-labelledby="discord-digest-heading">
+    <header><h2 id="discord-digest-heading">Discord weekly digest</h2><p>Spotlight proposals that have had less attention.</p></header>
+    <p class="engagement-caption">The preview uses current public proposals and rotates those featured in previous weeks. Tests only post to the separate Discord test webhook; they cannot post to the live server.</p>
+    <p class="engagement-recipient"><span>Test server</span><strong>{env.ENGAGE_DISCORD_TEST_WEBHOOK_URL ? 'Webhook configured' : 'Webhook not configured'}</strong></p>
+    <div class="engagement-controls">
+      <Button type="button" id="discord-preview-button" variant="outline">Preview next digest</Button>
+      <form id="discord-test-form"><Button type="submit" id="discord-test-button" disabled={!env.ENGAGE_DISCORD_TEST_WEBHOOK_URL}>Send to test Discord</Button></form>
+    </div>
+    <p id="discord-digest-status" class="engagement-feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+    <pre id="discord-digest-preview" class="engagement-discord-preview" aria-label="Discord message preview"></pre>
+    <p class="engagement-caption">Weekly live posting is {env.ENGAGE_DISCORD_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}. The live role mention and webhook are configured separately. A test message is labelled TEST.</p>
+  </section>
   <details class="engagement-card engagement-diagnostics"><summary>Delivery diagnostics</summary><div>
    <dl class="engagement-metrics"><div><dt>Email provider configuration</dt><dd>{env.RESEND_API_KEY && env.AUTH_EMAIL_FROM && env.ENGAGE_EMAIL_SECRET ? 'Present · acceptance still needs a test' : 'Incomplete'}</dd></div><div><dt>Signed delivery webhook</dt><dd>{env.RESEND_WEBHOOK_SECRET ? 'Secret present · receipt not yet verified' : 'Not configured'}</dd></div><div><dt>Suppressed accounts</dt><dd>{report?.suppressed ?? 'Unavailable'}</dd></div></dl>
    <p>Verify the sender address and its domain in Resend. Configuration being present does not prove the credentials or domain are valid.</p><p>Delivery receipts require the signed provider webhook. Without a receipt, accepted messages remain pending. The latest five tests for your account are shown above; message IDs can be inspected in Resend.</p><p>Timeouts and uncertain outcomes are held for inspection and are not retried automatically. Explicit provider rejection is recorded as failed. Check the provider before retrying a held message.</p><p>Bounces and spam complaints suppress further reminders. Unsubscribing affects Engage digests only. Tests do not add subscribers or enable scheduled delivery.</p>
