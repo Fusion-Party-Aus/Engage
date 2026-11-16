@@ -1,5 +1,6 @@
 import { recordLifecycle, recordParticipation, notePriorParticipation } from "./member-lifecycle.ts";
 import { loadBallotCryptoConfig, loadBallotCryptoConfigForRead } from "./ballot-crypto.ts";
+import { logOperationalEvent } from "./resilience.ts";
 import { BALLOTS_COLLECTION, FORMAL_DECISIONS_COLLECTION } from "./ballots.ts";
 import { projectCommittedVoteTally } from "./ballot-tallies.ts";
 import { runInTransaction } from "./db.ts";
@@ -2366,18 +2367,49 @@ const COMMENT_VOTE_ACTIONS = ["upvote", "downvote"] as const;
 export type CommentVoteAction = (typeof COMMENT_VOTE_ACTIONS)[number];
 
 /**
+ * How long a vote may keep retrying after losing a compare-and-swap race.
+ * A cold replica set can take hundreds of milliseconds per write, so the
+ * retry loop is bounded by time rather than a fixed attempt count.
+ */
+const COMMENT_VOTE_RETRY_BUDGET_MS = 5_000;
+const COMMENT_VOTE_RETRY_BUDGET_MIN_MS = 250;
+const COMMENT_VOTE_RETRY_BUDGET_MAX_MS = 60_000;
+const COMMENT_VOTE_RETRY_INITIAL_DELAY_MS = 4;
+const COMMENT_VOTE_RETRY_MAX_DELAY_MS = 250;
+
+/**
+ * Normalise the optional test injection point. Production callers use the
+ * module default; invalid values fall back to it and explicit values are
+ * clamped so the retry loop always stays bounded.
+ */
+function commentVoteRetryBudgetMs(override?: number): number {
+  if (override === undefined) return COMMENT_VOTE_RETRY_BUDGET_MS;
+  if (!Number.isFinite(override) || override <= 0) {
+    return COMMENT_VOTE_RETRY_BUDGET_MS;
+  }
+  return Math.min(
+    Math.max(Math.round(override), COMMENT_VOTE_RETRY_BUDGET_MIN_MS),
+    COMMENT_VOTE_RETRY_BUDGET_MAX_MS,
+  );
+}
+
+/**
  * Apply one member's upvote or downvote to a comment.
  *
  * A member can have at most one active vote per comment: the opposite vote is
  * removed when they switch, and a second click on the same vote clears it.
  * Only aggregate counts and the caller's own choice are ever returned. Voter
  * identities stay in the record and are never serialised to a client.
+ *
+ * `retryBudgetMs` is an explicit test injection point for exercising the
+ * bounded retry loop; production callers omit it and use the 5 s default.
  */
 export async function voteOnComment(
   db: Db,
   user: SessionUser,
   commentId: string,
   action: CommentVoteAction,
+  retryBudgetMs?: number,
 ): Promise<CommentVoteResult> {
   if (!user.canParticipate) {
     throw new Error(
@@ -2404,8 +2436,12 @@ export async function voteOnComment(
 
   // The vote is a single-document compare-and-swap. A concurrent vote bumps
   // `voteVersion`, so this write misses and retries against the new state
-  // instead of overwriting another member's vote.
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  // instead of overwriting another member's vote. Retries stop when the time
+  // budget expires, so contention converges without a stuck writer hanging.
+  const budgetMs = commentVoteRetryBudgetMs(retryBudgetMs);
+  const deadline = Date.now() + budgetMs;
+  let attempt = 0;
+  for (;;) {
     const existing = await col.findOne({ commentId: id });
     if (!existing) throw new Error("Comment not found.");
     if (existing.deletedAt) {
@@ -2490,12 +2526,31 @@ export async function voteOnComment(
         hasDownvoted: downvoted,
       };
     }
-    // Small jitter avoids two writers retrying in lockstep.
+    // Exponential backoff with jitter: heavy contention spreads out instead
+    // of every writer retrying in lockstep, and a slow first write gets time
+    // to settle before the next compare-and-swap.
+    attempt += 1;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    const backoff = Math.min(
+      COMMENT_VOTE_RETRY_INITIAL_DELAY_MS * 2 ** Math.min(attempt - 1, 6),
+      COMMENT_VOTE_RETRY_MAX_DELAY_MS,
+    );
+    const jittered = Math.max(
+      1,
+      Math.round(backoff * (0.5 + Math.random() * 0.5)),
+    );
     await new Promise((resolve) =>
-      setTimeout(resolve, 2 + Math.floor(Math.random() * 6)),
+      setTimeout(resolve, Math.min(jittered, remaining)),
     );
   }
 
+  // Comment ID only: voter identities and choices never reach operational logs.
+  logOperationalEvent("warn", "comment_vote_retry_budget_exhausted", {
+    commentId: id,
+    attempts: attempt,
+    budgetMs,
+  });
   throw new Error("Comment votes changed at the same time. Try again.");
 }
 
