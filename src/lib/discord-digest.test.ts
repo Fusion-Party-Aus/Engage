@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryDb } from "./db.ts";
+import { updateDiscordSettings } from "./discord-settings.ts";
 import {
   attentionScore,
   melbourneWeekKey,
@@ -14,6 +15,7 @@ import {
 
 const NOW = new Date("2026-11-16T09:00:00.000Z");
 const ORIGIN = "https://engage.fusionparty.org.au";
+const SECRET = "test-development-secret-key-at-least-32-bytes";
 const FAKE_WEBHOOK = "https://discord.com/api/webhooks/123456789012345678/testSecretToken";
 const FAKE_TEST_WEBHOOK = "https://discord.com/api/webhooks/234567890123456789/testServerToken";
 
@@ -133,9 +135,12 @@ describe("Discord webhook delivery safety", () => {
     };
     const env = {
       PUBLIC_ORIGIN: ORIGIN,
-      ENGAGE_DISCORD_TEST_WEBHOOK_URL: FAKE_TEST_WEBHOOK,
-      ENGAGE_DISCORD_TEST_ROLE_ID: "456789012345678901",
+      BETTER_AUTH_SECRET: SECRET,
     };
+    await updateDiscordSettings(db, env, { memberId: "admin", name: "Admin" }, {
+      testWebhookUrl: FAKE_TEST_WEBHOOK,
+      testRoleId: "456789012345678901",
+    });
     assert.deepEqual(
       await runWeeklyDiscordDigest(db, env, send as typeof fetch, NOW),
       { status: "disabled", featured: 0 },
@@ -160,8 +165,11 @@ describe("Discord webhook delivery safety", () => {
     const db = createMemoryDb();
     const env = {
       PUBLIC_ORIGIN: ORIGIN,
-      ENGAGE_DISCORD_TEST_WEBHOOK_URL: FAKE_TEST_WEBHOOK,
+      BETTER_AUTH_SECRET: SECRET,
     };
+    await updateDiscordSettings(db, env, { memberId: "admin", name: "Admin" }, {
+      testWebhookUrl: FAKE_TEST_WEBHOOK,
+    });
     const failure = async () => { throw new Error("network lost"); };
     const result = await sendTestDiscordDigest(db, env, "admin", failure as typeof fetch, NOW);
     assert.equal(result.status, "held");
