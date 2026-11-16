@@ -53,10 +53,32 @@ export interface RankedCandidate extends DigestCandidate {
   attentionScore: number;
 }
 
+export interface DiscordEmbedField {
+  name: string;
+  value: string;
+  inline?: boolean;
+}
+
+export interface DiscordEmbed {
+  title: string;
+  description?: string;
+  url?: string;
+  color?: number;
+  fields?: DiscordEmbedField[];
+  footer?: { text: string };
+}
+
+export interface DiscordDigestMessage {
+  content: string;
+  embeds: DiscordEmbed[];
+}
+
 export interface DiscordDigestPreview {
   weekKey: string;
   candidates: RankedCandidate[];
-  content: string;
+  message: DiscordDigestMessage;
+  /** Readable rendering of the same message for the admin preview. */
+  text: string;
 }
 
 export interface DiscordDigestResult {
@@ -201,39 +223,84 @@ function roleMention(roleId: string | undefined): string {
     : "";
 }
 
+/** Horizon accent. Discord renders the embed's left rule in this colour. */
+const EMBED_COLOUR = 0x00c9d2;
+
+function proposalLink(item: RankedCandidate, origin: string): string {
+  const link = new URL(
+    `/proposals/${encodeURIComponent(item.slug)}/`,
+    origin,
+  );
+  link.searchParams.set("source", "discord-weekly");
+  link.hash = item.stage === "decide" ? "proposal-vote" : "deliberation";
+  // Parentheses would end a Discord masked link early.
+  return link.toString().replace(/\(/g, "%28").replace(/\)/g, "%29");
+}
+
+function participationDetail(item: RankedCandidate): string {
+  if (item.stage !== "decide") {
+    return `${item.commentCount} ${item.commentCount === 1 ? "contribution" : "contributions"} so far`;
+  }
+  return item.participation === null
+    ? "Participation figures are updating"
+    : `${item.participation} ${item.participation === 1 ? "participant" : "participants"} so far`;
+}
+
+/**
+ * One embed keeps the weekly post a single scannable card: the proposal title
+ * is the field name, and the field value carries the activity figure plus a
+ * direct Engage link. Discord resolves mentions and masked links in field
+ * values, so only the server-built link is ever emitted there.
+ */
 export function renderDiscordDigest(
   items: RankedCandidate[],
   origin: string,
   roleId?: string,
   test = false,
-): string {
-  const lines = [
-    test ? "**TEST — Engage weekly digest (test server)**" : "**Engage this week**",
-    roleMention(roleId),
-    "",
-    "A few proposals could use more voices. Take a look, share your thoughts or cast your vote.",
-  ].filter(Boolean);
-  if (!items.length) {
-    lines.push("", "Nothing currently needs a spotlight. Check Engage for the latest updates.");
-  } else {
-    for (const item of items) {
-      const label = item.stage === "decide" ? "Open vote" : "Discussion";
-      const description = item.stage === "decide"
-        ? item.participation === null
-          ? "Participation figures updating"
-          : `${item.participation} ${item.participation === 1 ? "participant" : "participants"} so far`
-        : `${item.commentCount} ${item.commentCount === 1 ? "contribution" : "contributions"} so far`;
-      const link = new URL(
-        `/proposals/${encodeURIComponent(item.slug)}/`,
-        origin,
-      );
-      link.searchParams.set("source", "discord-weekly");
-      link.hash = item.stage === "decide" ? "proposal-vote" : "deliberation";
-      lines.push("", `**${safeTitle(item.title)}** · ${label}`, description, link.toString());
+): DiscordDigestMessage {
+  const fields: DiscordEmbedField[] = items.map((item) => {
+    const label = item.stage === "decide" ? "Open vote" : "Discussion";
+    const action = item.stage === "decide"
+      ? "Cast your vote"
+      : "Join the discussion";
+    return {
+      name: `${label} · ${safeTitle(item.title)}`,
+      value: `${participationDetail(item)}\n[${action}](${proposalLink(item, origin)})`,
+    };
+  });
+  return {
+    content: roleMention(roleId),
+    embeds: [{
+      title: test ? "TEST — Engage this week" : "Engage this week",
+      url: origin,
+      color: EMBED_COLOUR,
+      description: items.length
+        ? "A few proposals could use more voices. Take a look, share your thoughts or cast your vote."
+        : "Nothing currently needs a spotlight. Check Engage for the latest updates.",
+      ...(fields.length ? { fields } : {}),
+      footer: {
+        text: test
+          ? "Test post to the test server. All views are welcome; read each proposal before taking part."
+          : "All views are welcome. Read each proposal before taking part.",
+      },
+    }],
+  };
+}
+
+/** Readable preview of the same message, without exposing payload internals. */
+export function renderDiscordDigestText(message: DiscordDigestMessage): string {
+  const blocks: string[] = [];
+  const mention = message.content.replace(/<@&\d+>/g, "@Tuned");
+  if (mention) blocks.push(mention);
+  for (const embed of message.embeds) {
+    blocks.push(embed.title);
+    if (embed.description) blocks.push(embed.description);
+    for (const field of embed.fields ?? []) {
+      blocks.push(`${field.name}\n${field.value}`);
     }
+    if (embed.footer) blocks.push(embed.footer.text);
   }
-  lines.push("", "All views are welcome. Please read the proposal before taking part.");
-  return lines.join("\n").slice(0, 2000);
+  return blocks.join("\n\n");
 }
 
 function assertRole(value: string | undefined, optional = false): string | undefined {
@@ -333,16 +400,18 @@ export async function previewWeeklyDiscordDigest(
   const role = test
     ? assertRole(settings.testRoleId, true)
     : assertRole(settings.liveRoleId, true);
+  const message = renderDiscordDigest(selected, origin, role, test);
   return {
     weekKey,
     candidates: selected,
-    content: renderDiscordDigest(selected, origin, role, test),
+    message,
+    text: renderDiscordDigestText(message),
   };
 }
 
 async function sendWebhook(
   url: string,
-  content: string,
+  message: DiscordDigestMessage,
   roleId: string | undefined,
   send: typeof fetch,
 ): Promise<string> {
@@ -353,7 +422,8 @@ async function sendWebhook(
     redirect: "error",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      content,
+      ...(message.content ? { content: message.content } : {}),
+      embeds: message.embeds,
       allowed_mentions: { parse: [], roles },
     }),
     signal: AbortSignal.timeout(10_000),
@@ -411,7 +481,7 @@ export async function runWeeklyDiscordDigest(
   try {
     const messageId = await sendWebhook(
       config.liveWebhookUrl,
-      preview.content,
+      preview.message,
       config.liveRoleId,
       send,
     );
@@ -464,7 +534,7 @@ export async function sendTestDiscordDigest(
   try {
     const messageId = await sendWebhook(
       config.testWebhookUrl,
-      preview.content,
+      preview.message,
       config.testRoleId || undefined,
       send,
     );

@@ -24,7 +24,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
     ]);
     return Response.json({
       weekKey: preview.weekKey,
-      content: preview.content,
+      text: preview.text,
       featured: preview.candidates.length,
       testConfigured: settings.testWebhookConfigured,
       liveEnabled: settings.enabled,

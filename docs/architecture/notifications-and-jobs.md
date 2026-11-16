@@ -63,6 +63,8 @@ vote status or email notification consent.
   exposure through a seeded weighted lottery with repeat cooldown.
 - Only credible fresh public aggregate turnout is shown; never a private vote
   or identifiable ballot choice.
+- Each post is a single embed with one linked field per featured proposal; the
+  test post is clearly labelled and proposal titles cannot inject mentions.
 - An admin-only preview and explicit test send target a separate test Discord
   server; live sending is disabled by default.
 - Webhook URLs, role IDs, enablement and Melbourne posting schedule are edited in

@@ -24,6 +24,12 @@ The score never uses proposal subject, political position, author, votes for/aga
 
 Preview and live selection for the same Melbourne calendar week use the same lottery seed. Featured IDs persist in `discord_digest_runs` to support rotation and ensure attempted posts do not get repeated.
 
+## Message format
+
+Each weekly post is one Discord embed: a Horizon accent rule, an intro line, one field per featured proposal (stage, activity figure and a direct Engage link) and a short footer inviting participation. The embed title links to Engage. The test post is titled `TEST — Engage this week` and its footer states that it went to the test server.
+
+Only the configured `@Tuned` role is mentioned, in the message content above the embed. Proposal titles are escaped and mention-neutralised before they enter the embed, and `allowed_mentions` stays restricted to the configured role, so a title cannot ping anyone or inject link formatting.
+
 ## Configuration in Engage
 
 Open **Admin → Platform settings → Discord**. The integration is disabled by default.
