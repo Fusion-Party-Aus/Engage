@@ -44,5 +44,7 @@
 .engagement-dashboard .engagement-empty{padding:1rem;background:var(--horizon-lavender-soft);border-radius:.5rem;font-size:.85rem}
 .engagement-diagnostics>div{margin-top:1rem;max-width:55rem}
 .engagement-dashboard :is(button,input,select,summary):focus-visible{outline:3px solid var(--horizon-focus);outline-offset:3px}
+.engagement-discord-preview{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;max-height:26rem;overflow:auto;margin:.8rem 0 0;padding:.85rem;border:1px solid var(--horizon-line);border-radius:.5rem;background:var(--horizon-lavender-soft);color:var(--horizon-purple-deep);font:400 .85rem/1.55 var(--font-outfit),sans-serif}
+.engagement-discord-preview:empty{display:none}
 @media(max-width:1100px){.engagement-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.engagement-columns{grid-template-columns:minmax(0,1fr)}.engagement-card{padding:1rem}.engagement-kpis{gap:.65rem}.engagement-kpi .engagement-value{font-size:1.5rem}.engagement-controls{width:100%}.engagement-controls label{width:100%}.engagement-metrics>div{grid-template-columns:minmax(0,1fr)}.engagement-metrics dd{text-align:left}.engagement-controls select{flex:1}}
