@@ -1,5 +1,5 @@
 import type { Db } from "mongodb";
-import { BALLOTS_COLLECTION } from "./ballots.ts";
+import { BALLOTS_COLLECTION, recordBallotQuorumAtClosure } from "./ballots.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEventOnce } from "./governance-relationships.ts";
 import { jobErrorMessage, withJobRun } from "./job-runs.ts";
@@ -509,6 +509,20 @@ export async function closeDueBallots(
           },
           session,
         );
+        // The binding quorum snapshot is written in the same transaction as the
+        // closure. Membership and vote reads therefore share one snapshot, and a
+        // crash cannot leave a closed ballot without its closure evidence.
+        await recordBallotQuorumAtClosure(db, {
+          ballotId,
+          matterId: proposalId,
+          revisionId: stringField(raw.ballotRevisionId) || "",
+          // The activity window is anchored to the official deadline, not to
+          // how late the scheduler ran. Post-deadline browsing must not enlarge
+          // the active electorate.
+          closedAt: ballotClosesAt,
+          now,
+          session,
+        });
         return true;
       });
 

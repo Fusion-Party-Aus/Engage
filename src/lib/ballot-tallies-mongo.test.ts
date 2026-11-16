@@ -238,7 +238,9 @@ async function insertVote(
 }
 
 async function closeBallot(db: Db, proposalId: string): Promise<void> {
-  const now = new Date();
+  // This fixture covers projection and certification mechanics before the
+  // two-tier quorum rule took effect. Quorum closure has separate coverage.
+  const now = new Date("2026-11-10T00:00:00.000Z");
   await db
     .collection("proposals")
     .updateOne({ proposalId }, { $set: { ballotClosedAt: now } });

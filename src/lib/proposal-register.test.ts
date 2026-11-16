@@ -466,6 +466,10 @@ describe("admin proposal register ballot display", () => {
       registerRuleBasisLabel("simple-majority-d9-v1"),
       "Simple majority (D9)",
     );
+    assert.equal(
+      registerRuleBasisLabel("two-tier-quorum-simple-majority-v1"),
+      "Two-tier quorum and simple majority",
+    );
     assert.equal(registerRuleBasisLabel(undefined), undefined);
   });
 

@@ -65,3 +65,4 @@ preview?.addEventListener('submit',async(event)=>{
  } catch(error) {results.replaceChildren();feedback(previewStatus,error instanceof Error ? error.message : 'Preview unavailable. Try again shortly.','error');}
  finally {if(submit) submit.disabled=false;preview.removeAttribute('aria-busy');}
 });
+

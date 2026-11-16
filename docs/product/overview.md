@@ -97,7 +97,7 @@ Engage is not a forum with a poll attached. The differences are structural:
 - **Votes bind to wording.** Changing the text invalidates the basis of existing votes; the system locks substantive edits once a ballot opens or a vote exists.
 - **Eligibility is scoped, not global.** National ballots are open to verified members. Branch ballots require membership of that branch. Administration never creates voting rights.
 - **Authority is explicit.** The body with governance authority and the jurisdiction of the decision are recorded fields, not inferences from who is editing.
-- **Outcomes are recorded, not computed.** An officer must cite a decision event. Engage deliberately does not invent thresholds or certify a result from a tally it does not have rules for.
+- **Outcomes follow published rules.** An officer cites a decision event. Since 16 November 2026, ordinary policy ballots must pass the two-tier quorum and the D9 approval test before a successful result can be certified. The rules and their constitutional basis are explicit; Engage does not invent other thresholds.
 - **Publication is a separate registry act.** Ratification and publication each produce durable events. The public API serves only published revisions.
 - **History is append-only where it matters.** Revisions, results, publication events, branch membership events and RBAC changes are audit records.
 
@@ -121,7 +121,7 @@ A member commenting "I support this" has not voted. A proposal with 90% supporti
 - **Be a general-purpose forum, social network or messaging product.** Deliberation exists to improve governance matters.
 - **Be a survey or sentiment tool.** The Sense Box collects public concerns, but it is not a ballot and creates no decision.
 - **Replace Signal, Horizon CMS or public websites.** Engage may eventually supply published policy to them; it does not publish campaigns or manage web content.
-- **Implement parliamentary procedure it has not been given.** Thresholds, quorums, notice periods, seconding, tie-breaking and ratifying authority by jurisdiction are not invented in code.
+- **Implement parliamentary procedure it has not been given.** The two-tier quorum is an explicitly recorded adaptation of Fusion's constitutional principles (D37–D39). Notice periods, tie-breaking beyond D9, the abstention denominator and ratifying authority by jurisdiction are not invented in code.
 - **Guarantee ballot secrecy against a determined administrator in every configuration.** Encryption is available and must be configured; the default deployment stores votes in plaintext. The threat model is documented in [security-audit-and-ballot-encryption.md](../security-audit-and-ballot-encryption.md).
 - **Provide electoral or legal advice.** Published policy is a party record, not a statement of law.
 
@@ -129,7 +129,7 @@ A member commenting "I support this" has not voted. A proposal with 90% supporti
 
 **Shipping today:** proposals with five lifecycle stages; deliberation with stances, threaded replies and confidence-weighted comment ranking; public member profiles with contribution history and display-only comment score; structured amendments with their own revisions and ballots; formal ballot binding and result recording; policy ratification, publication, withdrawal and supersession; branch following and branch membership; scoped RBAC; UndergroundCRM verification behind a feature flag; email, in-app and Web Push plumbing; PWA; public API v1; encrypted-vote support.
 
-**Not shipping today:** a populated national policy baseline (the registry starts empty); automated thresholds, quorum or tally computation; scheduled ballot opening; eligibility snapshots taken at ballot open; seconding; confirmation ballots; election-officer roles; amendment/repeal initiated from a policy page; AI briefings; Signal or Horizon CMS integration; Fusion Core/Auth.
+**Not shipping today:** a populated national policy baseline (the registry starts empty); notice periods or scheduled ballot opening; eligibility snapshots taken at ballot open; tie-breaking beyond D9; the abstention denominator; confirmation ballots; election-officer roles; amendment/repeal initiated from a policy page; AI briefings; Signal or Horizon CMS integration; Fusion Core/Auth.
 
 The authoritative list, with evidence, is [status/capability-matrix.md](../status/capability-matrix.md). Known defects are in [status/known-gaps.md](../status/known-gaps.md).
 

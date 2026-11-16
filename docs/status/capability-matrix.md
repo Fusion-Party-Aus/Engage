@@ -119,7 +119,12 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Scheduled ballot opening | Not implemented | No scheduler or `opensAt` |
 | Explicit proposal-ballot close | Not implemented | Deadline is the only close |
 | Record a formal result | Implemented | Officer supplies result + decision event |
-| Compute result from tally | **Not implemented, by design** | No thresholds, quorum or ties |
+| Compute approval from tally | Implemented | D9 simple majority; tie and zero votes do not approve |
+| Platform quorum (30 eligible registered members) | Implemented for ballots closing on or after 16 November 2026 | `quorum.ts`; D37 |
+| Ballot quorum (`max(ceil(sqrt(N)), min(30, ceil(N/2)))`) | Implemented for ballots closing on or after 16 November 2026 | `quorum.ts`; D37 |
+| Immutable quorum closure record | Implemented | `ballot_quorum_records` |
+| Inconclusive outcome on quorum failure | Implemented | Cannot be overridden into approval |
+| Audited correction of a defective quorum record | Not implemented | Requires a reviewed data change plus governance event |
 | Multiple ballot instances per matter | Not implemented | One current ballot per proposal |
 | Confirmation ballot | Not implemented | — |
 | Seconding | Not implemented | — |
@@ -207,7 +212,7 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 
 These are not oversights in the matrix; they are open product decisions:
 
-- thresholds, quorum, turnout, tie-breaking, abstention and non-voter treatment;
+- tie-breaking beyond D9, the abstention denominator for approval, and non-voter treatment (quorum and turnout are defined for ballots closing on or after 16 November 2026 by D37–D39);
 - notice periods, campaign windows and scheduled opening;
 - qualifying membership rules for each class of ballot;
 - ratifying authority by jurisdiction;
