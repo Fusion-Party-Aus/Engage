@@ -278,7 +278,8 @@ export async function updateDiscordSettings(
   next.updatedBy = actor.memberId;
   next.updatedByName = actor.name;
   const col = db.collection<StoredDiscordSettings>(SETTINGS_COLLECTION);
-  await col.updateOne({ _id: SETTINGS_ID }, { $set: next }, { upsert: true });
+  const { _id: _key, ...fields } = next;
+  await col.updateOne({ _id: SETTINGS_ID }, { $set: fields }, { upsert: true });
   await db.collection(EVENTS_COLLECTION).insertOne({
     eventId: randomUUID(),
     actorId: actor.memberId,
