@@ -17,6 +17,7 @@ const actor = { memberId: "admin", name: "Administrator" };
 const liveUrl = "https://discord.com/api/webhooks/123456789012345678/liveTestCredential";
 const testUrl = "https://discord.com/api/webhooks/234567890123456789/testCredential";
 const role = "123456789012345678";
+type StoredRow = { _id: string; liveWebhook?: unknown; testWebhook?: unknown };
 
 describe("in-app Discord integration configuration", () => {
   it("starts disabled with editable Melbourne schedule and no secrets", async () => {
@@ -47,7 +48,7 @@ describe("in-app Discord integration configuration", () => {
     assert.equal(result.liveWebhookConfigured, true);
     assert.equal(result.enabled, false);
     assert.equal(result.dayOfWeek, 2);
-    const stored = await db.collection("discord_settings").findOne({ _id: "global" });
+    const stored = await db.collection<StoredRow>("discord_settings").findOne({ _id: "global" });
     assert.ok(stored);
     assert.equal(JSON.stringify(stored).includes(liveUrl), false);
     assert.equal(JSON.stringify(stored).includes(testUrl), false);
@@ -96,13 +97,13 @@ describe("in-app Discord integration configuration", () => {
     const removed = await updateDiscordSettings(db, env, actor, { clearLiveWebhook: true });
     assert.equal(removed.enabled, false);
     assert.equal(removed.liveWebhookConfigured, false);
-    const stored = await db.collection("discord_settings").findOne({ _id: "global" });
+    const stored = await db.collection<StoredRow>("discord_settings").findOne({ _id: "global" });
     assert.equal(stored?.liveWebhook, undefined);
     assert.ok(stored?.testWebhook);
     const testRemoved = await updateDiscordSettings(db, env, actor, { clearTestWebhook: true });
     assert.equal(testRemoved.testWebhookConfigured, false);
     assert.equal(
-      (await db.collection("discord_settings").findOne({ _id: "global" }))?.testWebhook,
+      (await db.collection<StoredRow>("discord_settings").findOne({ _id: "global" }))?.testWebhook,
       undefined,
     );
   });
