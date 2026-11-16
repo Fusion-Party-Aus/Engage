@@ -108,7 +108,9 @@ Two amendments can edit the same field and both be `ready`. Conflict detection c
 
 **Display tallies are a projection, not a result.** Public lists now read `ballot_tallies`, one aggregate row per `(ballotId, revisionId)` written after a committed vote, and show `Voting open — tally updating` when the row is missing or older than ten minutes. The projection stores no voter reference and is never read by certification, which still recomputes from the bound votes. Normal writes are single atomic increments and a revision move is transactional; the only recount path is absolute and compare-and-set on a row version, retrying if the row changed and abandoned at its deadline, so an increment is never skipped. A row that is internally inconsistent is displayed as tally pending, never as a number. Existing ballots are not backfilled at startup, so deployments must run `npm run ballots:tally-projection` once if they want immediate counts; the same tool reports and repairs any row a failed or abandoned write left behind.
 
-**Still open:** the abstention denominator (decision register O1), quorum and turnout (none are authorised, D8), ranked choice (O2), confirmation ballots (O3) and election rules. Simple majority (D9) is the only rule encoded; a tie and zero votes are not successful. **Amendment endorsement ballots** (`src/pages/api/admin/amendments/close-ballot.ts`) remain officer-supplied and are not covered by this check, because the amendment-resolution method is undecided (O2/D18). Do not implement validation for them without that decision. Do not treat the computed check as a complete rule engine.
+**Quorum added 16 November 2026 (#122):** ballots closing on or after that date also pass the two-tier quorum in [../governance/ballot-quorum.md](../governance/ballot-quorum.md). The scheduler writes one immutable `ballot_quorum_records` snapshot in the closure transaction; certification refuses a missing snapshot (`BALLOT_QUORUM_SNAPSHOT_MISSING`), an unreadable closure tally (`BALLOT_QUORUM_UNAVAILABLE`), a participation mismatch (`BALLOT_QUORUM_PARTICIPATION_MISMATCH`) and any attempt to override a quorum failure into approval or rejection (`BALLOT_QUORUM_NOT_MET`). Earlier closures are `legacy-not-applied` and keep the approval-only rule.
+
+**Still open:** the abstention denominator for approval (decision register O1), ranked choice (O2), confirmation ballots (O3), election rules, Committee/Operations Manual confirmation of the quorum adaptation (O11), and an in-product audited correction path for a defective closure record. A correction currently needs a reviewed code-level or database change plus a governance event; do not edit `ballot_quorum_records` directly. **Amendment endorsement ballots** (`src/pages/api/admin/amendments/close-ballot.ts`) remain officer-supplied and are not covered by this check, because the amendment-resolution method is undecided (O2/D18). Do not implement validation for them without that decision. Do not treat the computed check as a complete rule engine.
 
 ### 11. National membership row can conflict with CRM assignment
 
@@ -287,7 +289,7 @@ list below is retained only to show which questions are settled and which remain
 | **G6** Whether seconding is required | **Answered:** required before Deliberate (D3). Mechanism not yet implemented. |
 | **G7** Deliberation and ballot periods | **Answered:** 30 days deliberation, 30 days ballot, 60-day ceiling (D4–D7). |
 | **G8** Qualifying membership for each ballot class | **Answered in principle:** eligibility at vote time; one geographic and one constituent branch; National for all (D2, D21). |
-| **G9** Thresholds, quorum, ties, abstentions | **Partly answered:** simple majority, tie fails, no quorum (D8, D9). Abstention denominator remains open (D10, O1). |
+| **G9** Thresholds, quorum, ties, abstentions | **Mostly answered:** simple majority, tie fails (D9); two-tier quorum for ballots closing on or after 16 November 2026 (D37–D39); abstention denominator remains open (D10, O1), though abstentions now count towards quorum. |
 | **G10** Early closure | **Deferred:** no irreversible-outcome early closure until a correct model exists (D12). |
 | **G11** Preferential amendment method | **Direction only:** direct choice for two, ranked choice for three or more; method and tie handling unspecified (D18). |
 | **G12** Delegated or automatic ratification | **Answered in principle:** automatic for zero or one amendment; collision review for two or more (D14–D20). |
@@ -296,7 +298,7 @@ list below is retained only to show which questions are settled and which remain
 | **G18–G21** Status and adoption of Reclaim/national records | Out of scope while the import is deferred. |
 
 The full historical register is in `docs/engage-product-direction-governance-audit-2026-11-07.md`.
-New open decisions are tracked as O1–O8 in the decision register.
+New open decisions are tracked as O1–O11 in the decision register.
 
 ## Verification limitations
 
@@ -341,4 +343,4 @@ The actionable gaps were opened as GitHub issues on 13 November 2026. This page 
 | Public member profiles and contribution history | #113 |
 | Ballot-results index migration safety — resolved 15 November 2026 | #55 |
 
-Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain partly blocked on unresolved governance or legal decisions; implement only the parts the decision register settles. #28's Yes-versus-No computed check is implemented against D8/D9, while the abstention denominator (O1, D10) remains undecided.
+Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain partly blocked on unresolved governance or legal decisions; implement only the parts the decision register settles. #28's Yes-versus-No computed check is implemented against D9; the two-tier quorum is implemented against D37–D39, while the abstention denominator (O1, D10) remains undecided.
