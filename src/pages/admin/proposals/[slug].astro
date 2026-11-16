@@ -31,6 +31,14 @@ import {
   resolveBallotClosure,
 } from '../../../lib/ballots.ts';
 import { proposalBallotId } from '../../../lib/vote-storage.ts';
+import {
+  QUORUM_RULE_EFFECTIVE_AT,
+  buildQuorumPreview,
+  getQuorumElectoratePreview,
+  quorumRuleLabel,
+  quorumVerdictLabel,
+  readBallotQuorumRecord,
+} from '../../../lib/quorum.ts';
 
 import { ballotDeadlineLabel } from '../../../lib/ballot-deadline.ts';
 import { revisionDisplayLabel } from '../../../lib/revision-label.ts';
@@ -98,7 +106,7 @@ for (const amendment of amendmentRows) {
   const current = amendment.revisionHistory.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
 }
-const [ballotResult, ballotRow, rawPolicy, relatedProposals, branches, visibleOtherProposals] = proposal
+const [ballotResult, ballotRow, rawPolicy, relatedProposals, branches, visibleOtherProposals, quorumRecord] = proposal
   ? await Promise.all([
       db.collection('ballot_results').findOne(proposalBallotResultFilter(proposal.proposalId)),
       db.collection('ballots').findOne(
@@ -109,8 +117,9 @@ const [ballotResult, ballotRow, rawPolicy, relatedProposals, branches, visibleOt
       db.collection('proposals').find({ space: proposal.space, proposalId: { $ne: proposal.proposalId } }).limit(4).toArray(),
       db.collection('branches').find({}).sort({ name: 1 }).toArray(),
       listProposals(db, { includeArchived: true, user, tolerateUnreadableVotes: true }),
+      readBallotQuorumRecord(db, proposalBallotId(proposal.proposalId)),
     ])
-  : [null, null, null, [], [], []];
+  : [null, null, null, [], [], [], null];
 const allOtherProposals = proposal
   ? visibleOtherProposals.filter(
       (other) =>
@@ -165,17 +174,20 @@ const ballotState = proposal?.stage === 'decide'
     ? 'Voting closed'
     : 'Not yet open';
 
-// D9: approve greater than reject approves; a tie does not. D8 adds no quorum or
-// turnout threshold, and D10/O1 leaves the abstention denominator undefined, so
-// abstentions are shown but never change this comparison. The tally is read from
-// the same bound set that certification enforces.
+// D9: approve greater than reject approves; a tie does not. D10/O1 leaves the
+// abstention denominator undefined, so abstentions are shown but never change
+// this comparison. D37/D38 add the separate two-tier quorum gate. The tally is
+// read from the same bound set that certification enforces.
 const boundTally = canManageBallot && proposal?.ballotRevisionId
   ? (await readBoundBallotTallies(db, {
       ballots: [{ matterId: proposal.proposalId, revisionId: proposal.ballotRevisionId }],
       cryptoConfig: loadBallotTallyCryptoConfig(env),
     })).get(proposal.proposalId) ?? null
   : null;
-const computedOutcome = boundTally?.computedResult ?? null;
+const computedOutcome =
+  quorumRecord?.status === 'evaluated' && quorumRecord.quorumMet === false
+    ? 'inconclusive'
+    : (boundTally?.computedResult ?? null);
 const tallyBlocked = Boolean(
   boundTally && ['unbound', 'decryption-unavailable', 'unreadable'].includes(boundTally.state),
 );
@@ -200,6 +212,70 @@ const recordedOutcome = ballotResult
       decisionEventId: ballotResult.decisionEventId ? String(ballotResult.decisionEventId) : null,
     }
   : null;
+
+const quorumPreview =
+  proposal && proposal.stage === 'decide' && !ballotIsClosed && !quorumRecord
+    ? buildQuorumPreview(await getQuorumElectoratePreview(db), proposal.votes.total)
+    : null;
+const quorumDisplay = quorumRecord
+  ? {
+      final: true,
+      label: quorumRuleLabel(quorumRecord),
+      verdict: quorumVerdictLabel(quorumRecord.verdict),
+      eligibleRegisteredMembers: quorumRecord.eligibleRegisteredMembers,
+      activeEligibleMembers: quorumRecord.activeEligibleMembers,
+      platformQuorumRequired: quorumRecord.platformQuorumRequired,
+      platformQuorumMet: quorumRecord.platformQuorumMet,
+      ballotQuorumRequired: quorumRecord.ballotQuorumRequired,
+      ballotQuorumMet: quorumRecord.ballotQuorumMet,
+      participatingMembers:
+        quorumRecord.participatingMembers ?? quorumRecord.tally?.total,
+      quorumMet: quorumRecord.quorumMet,
+      anomalies: quorumRecord.anomalies ?? [],
+      status: quorumRecord.status,
+      activeWindowDays: quorumRecord.activeWindowDays,
+    }
+  : proposal &&
+      ballotIsClosed &&
+      (ballotClosure.closesAt ?? proposal.ballotClosedAt) &&
+      new Date(ballotClosure.closesAt ?? proposal.ballotClosedAt!).getTime() >=
+        QUORUM_RULE_EFFECTIVE_AT.getTime()
+    ? {
+        final: true,
+        label: 'Two-tier quorum, version 1',
+        verdict: 'Inconclusive',
+        eligibleRegisteredMembers: undefined,
+        activeEligibleMembers: undefined,
+        platformQuorumRequired: 30,
+        platformQuorumMet: undefined,
+        ballotQuorumRequired: undefined,
+        ballotQuorumMet: undefined,
+        participatingMembers: undefined,
+        quorumMet: false,
+        anomalies: [
+          'No quorum closure record exists for a ballot that closed after the rule took effect. Do not certify a result until the closure is reviewed.',
+        ],
+        status: 'unavailable',
+        activeWindowDays: 90,
+      }
+  : quorumPreview
+    ? {
+        final: false,
+        label: quorumRuleLabel({ ruleVersion: quorumPreview.ruleVersion }),
+        verdict: null,
+        eligibleRegisteredMembers: quorumPreview.eligibleRegisteredMembers,
+        activeEligibleMembers: quorumPreview.activeEligibleMembers,
+        platformQuorumRequired: quorumPreview.platformQuorumRequired,
+        platformQuorumMet: quorumPreview.platformQuorumMet,
+        ballotQuorumRequired: quorumPreview.ballotQuorumRequired,
+        ballotQuorumMet: quorumPreview.ballotQuorumMet,
+        participatingMembers: quorumPreview.participationCount,
+        quorumMet: quorumPreview.quorumMet,
+        anomalies: [],
+        status: 'current',
+        activeWindowDays: quorumPreview.activeWindowDays,
+      }
+    : null;
 
 const policyState = policy
   ? `${String(policy.status ?? 'adopted')} · ${String(policy.publicationStatus ?? 'unpublished')}`
@@ -720,6 +796,95 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                 <p class="admin-inline-note">No member votes have been recorded for this ballot yet.</p>
               )}
 
+              {quorumDisplay && (
+                <div id="ballot-quorum" class="admin-action-box">
+                  <div class="admin-action-box__head">
+                    <ShieldCheck className="size-4" aria-hidden="true" />
+                    <strong>{quorumDisplay.final ? 'Quorum at closure' : 'Quorum so far'}</strong>
+                    <Badge
+                      variant={
+                        quorumDisplay.status === 'unavailable'
+                          ? 'warning'
+                          : quorumDisplay.quorumMet
+                            ? 'success'
+                            : 'muted'
+                      }
+                    >
+                      {quorumDisplay.status === 'unavailable'
+                        ? 'Not calculated'
+                        : quorumDisplay.verdict ??
+                          (quorumDisplay.quorumMet ? 'Quorum met' : 'Not yet met')}
+                    </Badge>
+                  </div>
+                  <dl class="admin-property-grid">
+                    <div>
+                      <dt>Eligible registered members</dt>
+                      <dd class="tabular">
+                        {quorumDisplay.eligibleRegisteredMembers ?? 'Not recorded'}
+                        {quorumDisplay.platformQuorumRequired
+                          ? ` · ${quorumDisplay.platformQuorumMet ? 'meets' : 'below'} the ${quorumDisplay.platformQuorumRequired} platform requirement`
+                          : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Recently active members</dt>
+                      <dd class="tabular">
+                        {quorumDisplay.activeEligibleMembers ?? 'Not recorded'}
+                        {quorumDisplay.activeWindowDays ? ` · last ${quorumDisplay.activeWindowDays} days` : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Ballot requirement</dt>
+                      <dd class="tabular">
+                        {quorumDisplay.ballotQuorumRequired ?? 'Not recorded'}
+                        {quorumDisplay.participatingMembers !== undefined
+                          ? ` · ${quorumDisplay.participatingMembers} participated`
+                          : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Rule</dt>
+                      <dd>{quorumDisplay.label}</dd>
+                    </div>
+                  </dl>
+                  {!quorumDisplay.final && (
+                    <p class="admin-inline-note">
+                      This is the position now. The binding calculation is recorded when the ballot closes, and the number needed can move as members become active or inactive.
+                    </p>
+                  )}
+                  {quorumDisplay.final && quorumDisplay.status === 'evaluated' && (
+                    <p class="admin-inline-note">
+                      {quorumDisplay.platformQuorumMet
+                        ? `Platform quorum met with ${quorumDisplay.eligibleRegisteredMembers} eligible registered members.`
+                        : `Platform quorum not met: ${quorumDisplay.eligibleRegisteredMembers ?? 0} of ${quorumDisplay.platformQuorumRequired ?? 30} needed.`}{' '}
+                      {quorumDisplay.ballotQuorumMet
+                        ? `Ballot quorum met with ${quorumDisplay.participatingMembers ?? 0} of ${quorumDisplay.ballotQuorumRequired ?? 0}.`
+                        : `Ballot quorum not met: ${quorumDisplay.participatingMembers ?? 0} of ${quorumDisplay.ballotQuorumRequired ?? 0} needed.`}
+                    </p>
+                  )}
+                  {quorumDisplay.final && quorumDisplay.status !== 'evaluated' && (
+                    <p class="admin-inline-note">
+                      {quorumDisplay.status === 'legacy-not-applied'
+                        ? 'This ballot closed before the quorum rule took effect. Quorum is not applied retrospectively.'
+                        : 'Participation could not be read when this ballot closed. The result cannot be certified until the closure is reviewed.'}
+                    </p>
+                  )}
+                  {quorumDisplay.anomalies.length > 0 && quorumDisplay.status !== 'legacy-not-applied' && (
+                    <Alert variant="warning">
+                      <AlertTitle>Review this closure</AlertTitle>
+                      <AlertDescription>
+                        {quorumDisplay.anomalies.join(' ')}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {quorumDisplay.final && (
+                    <p class="admin-inline-note">
+                      The rule is fixed for this ballot. Thresholds cannot be changed per ballot; a correction to a recorded closure needs a reviewed, audited change.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <dl class="admin-property-grid">
                 <div><dt>Bound ballot wording</dt><dd>{proposal.ballotRevisionId ? ballotRevisionLabel : 'Needs binding before outcome'}</dd></div>
                 <div><dt>Recorded outcome</dt><dd>{ballotResult ? `${ballotOutcomeLabel(String(ballotResult.result))} · ${formatDate(ballotResult.recordedAt)}` : 'Not recorded'}</dd></div>
@@ -824,6 +989,11 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                       Record the outcome of the votes on frozen revision <code>{String(proposal.ballotRevisionId).slice(0, 12)}</code>.
                     </p>
                     <BallotOutcomeBasis summary={boundTally} />
+                    {quorumRecord?.status === 'evaluated' && quorumRecord.quorumMet === false && (
+                      <p class="admin-inline-note">
+                        This ballot did not meet quorum. Choose Inconclusive; an approved or rejected result is refused.
+                      </p>
+                    )}
                     <form
                       class="ballot-result-form grid gap-3"
                       data-proposal-id={proposal.proposalId}
