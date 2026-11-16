@@ -104,6 +104,12 @@ export interface PlatformEnv {
   ENGAGE_CRON_SECRET?: string;
   ENGAGE_EMAIL_SECRET?: string;
   ENGAGE_DIGEST_ENABLED?: string;
+  /** Weekly public Discord participation digest. Disabled unless explicitly enabled. */
+  ENGAGE_DISCORD_DIGEST_ENABLED?: string;
+  ENGAGE_DISCORD_WEBHOOK_URL?: string;
+  ENGAGE_DISCORD_ROLE_ID?: string;
+  ENGAGE_DISCORD_TEST_WEBHOOK_URL?: string;
+  ENGAGE_DISCORD_TEST_ROLE_ID?: string;
   /** Gate and bearer secret for automatic CRM membership verification. */
   ENGAGE_CRM_VERIFICATION_ENABLED?: string;
   ENGAGE_CRM_VERIFICATION_CRON_SECRET?: string;
