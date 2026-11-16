@@ -259,7 +259,7 @@ export async function readQuorumElectorate(
           {
             memberId: { $in: eligibleMemberIds },
             event: { $in: ACTIVITY_EVENT_TYPES },
-            at: { $gte: since },
+            at: { $gte: since, $lte: now },
           },
           { projection: { memberId: 1 }, ...(sessionOpts ?? {}) },
         )
@@ -267,28 +267,40 @@ export async function readQuorumElectorate(
       db
         .collection("proposal_votes")
         .find(
-          { memberId: { $in: eligibleMemberIds }, updatedAt: { $gte: since } },
+          {
+            memberId: { $in: eligibleMemberIds },
+            updatedAt: { $gte: since, $lte: now },
+          },
           { projection: { memberId: 1 }, ...(sessionOpts ?? {}) },
         )
         .toArray(),
       db
         .collection("comments")
         .find(
-          { memberId: { $in: eligibleMemberIds }, createdAt: { $gte: since } },
+          {
+            memberId: { $in: eligibleMemberIds },
+            createdAt: { $gte: since, $lte: now },
+          },
           { projection: { memberId: 1 }, ...(sessionOpts ?? {}) },
         )
         .toArray(),
       db
         .collection("proposals")
         .find(
-          { authorId: { $in: eligibleMemberIds }, createdAt: { $gte: since } },
+          {
+            authorId: { $in: eligibleMemberIds },
+            createdAt: { $gte: since, $lte: now },
+          },
           { projection: { authorId: 1 }, ...(sessionOpts ?? {}) },
         )
         .toArray(),
       db
         .collection("amendments")
         .find(
-          { authorId: { $in: eligibleMemberIds }, createdAt: { $gte: since } },
+          {
+            authorId: { $in: eligibleMemberIds },
+            createdAt: { $gte: since, $lte: now },
+          },
           { projection: { authorId: 1 }, ...(sessionOpts ?? {}) },
         )
         .toArray(),

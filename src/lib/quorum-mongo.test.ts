@@ -630,6 +630,37 @@ describe(
       assert.equal(recorded.quorum?.participatingMembers, 15);
     });
 
+    it("anchors the activity window to the deadline, not a late scheduler run", async () => {
+      await fresh();
+      await seedElectorate(db, 29, { prefix: "before", active: 29 });
+      await insertMember(db, "after-deadline", { activeDaysAgo: 1 });
+      const { ballotId, revisionId } = await seedBallot(db, {
+        matterId: "PROP-LATE",
+        status: "open",
+      });
+      await seedVotes(
+        db,
+        ballotId,
+        "PROP-LATE",
+        revisionId,
+        Array.from({ length: 15 }, () => "approve" as const),
+        Array.from({ length: 15 }, (_, index) => `before-${index}`),
+      );
+      await db.collection("proposals").updateOne(
+        { proposalId: "PROP-LATE" },
+        { $set: { ballotClosesAt: dayOffset(2) } },
+      );
+      const report = await closeDueBallots(db, { now: NOW });
+      assert.equal(report.errors.length, 0);
+      const snapshot = await db
+        .collection(BALLOT_QUORUM_COLLECTION)
+        .findOne({ ballotId });
+      // The voter who was active only after the deadline is not counted, even
+      // though the scheduler ran two days later.
+      assert.equal(snapshot?.activeEligibleMembers, 29);
+      assert.equal(snapshot?.eligibleRegisteredMembers, 30);
+    });
+
     it("records one snapshot under concurrent closure and membership change", async () => {
       await fresh();
       await seedElectorate(db, 30, { prefix: "race", active: 30 });

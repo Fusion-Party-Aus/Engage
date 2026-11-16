@@ -516,7 +516,10 @@ export async function closeDueBallots(
           ballotId,
           matterId: proposalId,
           revisionId: stringField(raw.ballotRevisionId) || "",
-          closedAt: now,
+          // The activity window is anchored to the official deadline, not to
+          // how late the scheduler ran. Post-deadline browsing must not enlarge
+          // the active electorate.
+          closedAt: ballotClosesAt,
           now,
           session,
         });
