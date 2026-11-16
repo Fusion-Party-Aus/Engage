@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MongoClient } from "mongodb";
+import { MongoClient, type Collection, type Db } from "mongodb";
 import { voteOnComment } from "./store.ts";
 import type { SessionUser } from "./types.ts";
 
@@ -8,7 +8,7 @@ import type { SessionUser } from "./types.ts";
  * Proves the comment-vote compare-and-swap on a real MongoDB server.
  *
  * The in-memory database serialises updates in one process; it cannot show
- * that concurrent writers do not overwrite each other. This case runs only
+ * that concurrent writers do not overwrite each other. These cases run only
  * when VOTING_TEST_MONGODB_URI is available (CI starts a replica set).
  */
 const uri = process.env.VOTING_TEST_MONGODB_URI;
@@ -31,6 +31,88 @@ function voter(index: number): SessionUser {
   };
 }
 
+async function seedComment(
+  db: Db,
+  proposalId: string,
+  commentId: string,
+): Promise<void> {
+  await db.collection("proposals").insertOne({
+    proposalId,
+    slug: proposalId,
+    title: "Comment vote concurrency",
+    space: "Governance",
+    summary: "Concurrency test.",
+    stage: "deliberate",
+    authorId: "author-1",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  // Deliberately omit voteVersion: legacy rows must take the first CAS.
+  await db.collection("comments").insertOne({
+    commentId,
+    proposalId,
+    memberId: "author-1",
+    authorName: "Author",
+    stance: "comment",
+    body: "Concurrent voting fixture.",
+    upvotes: [],
+    downvotes: [],
+    createdAt: new Date(),
+  });
+}
+
+/**
+ * Models a cold replica set: every comment write pays extra latency, so a
+ * fixed attempt count would be exhausted while the write is still settling.
+ * Only `collection` is needed by the vote path, so a small facade keeps the
+ * injection readable.
+ */
+function slowCommentWrites(db: Db, delayMs: number): Db {
+  return {
+    collection(name: string) {
+      const collection = db.collection(name);
+      if (name !== "comments") return collection;
+      return new Proxy(collection, {
+        get(target: Collection, property, receiver) {
+          const value = Reflect.get(target, property, receiver);
+          if (property !== "updateOne" || typeof value !== "function") {
+            return typeof value === "function" ? value.bind(target) : value;
+          }
+          return async (...args: unknown[]) => {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            return value.apply(target, args);
+          };
+        },
+      });
+    },
+  } as unknown as Db;
+}
+
+/** Fails every compare-and-swap so the retry budget can be observed. */
+function neverMatchingWrites(db: Db): Db {
+  return {
+    collection(name: string) {
+      const collection = db.collection(name);
+      if (name !== "comments") return collection;
+      return new Proxy(collection, {
+        get(target: Collection, property, receiver) {
+          const value = Reflect.get(target, property, receiver);
+          if (property === "updateOne") {
+            return async () => ({
+              acknowledged: true,
+              matchedCount: 0,
+              modifiedCount: 0,
+              upsertedCount: 0,
+              upsertedId: null,
+            });
+          }
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    },
+  } as unknown as Db;
+}
+
 test(
   "concurrent comment votes are not lost on MongoDB",
   { skip: !uri },
@@ -41,29 +123,7 @@ test(
     try {
       const proposalId = "comment-vote-concurrency";
       const commentId = `cmt-${crypto.randomUUID()}`;
-      await db.collection("proposals").insertOne({
-        proposalId,
-        slug: proposalId,
-        title: "Comment vote concurrency",
-        space: "Governance",
-        summary: "Concurrency test.",
-        stage: "deliberate",
-        authorId: "author-1",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      // Deliberately omit voteVersion: legacy rows must take the first CAS.
-      await db.collection("comments").insertOne({
-        commentId,
-        proposalId,
-        memberId: "author-1",
-        authorName: "Author",
-        stance: "comment",
-        body: "Concurrent voting fixture.",
-        upvotes: [],
-        downvotes: [],
-        createdAt: new Date(),
-      });
+      await seedComment(db, proposalId, commentId);
 
       const voters = Array.from({ length: 25 }, (_, index) => voter(index));
       const results = await Promise.all(
@@ -106,6 +166,85 @@ test(
       );
       assert.equal(afterToggle.voteVersion, 27);
     } finally {
+      await db.dropDatabase();
+      await client.close();
+    }
+  },
+);
+
+test(
+  "concurrent comment votes converge when the first writes are slow",
+  { skip: !uri },
+  async () => {
+    const client = new MongoClient(uri!);
+    await client.connect();
+    const db = client.db(`engage_comment_votes_cold_${Date.now()}`);
+    try {
+      const proposalId = "comment-vote-cold-start";
+      const commentId = `cmt-${crypto.randomUUID()}`;
+      await seedComment(db, proposalId, commentId);
+
+      const slowDb = slowCommentWrites(db, 40);
+      const voters = Array.from({ length: 25 }, (_, index) => voter(index));
+      await Promise.all(
+        voters.map((member) =>
+          voteOnComment(slowDb, member, commentId, "upvote"),
+        ),
+      );
+
+      const stored = await db.collection("comments").findOne({ commentId });
+      assert.ok(stored);
+      assert.equal(stored.upvotes.length, 25);
+      assert.equal(new Set(stored.upvotes).size, 25);
+      assert.equal(stored.downvotes.length, 0);
+      assert.equal(stored.voteVersion, 25);
+    } finally {
+      await db.dropDatabase();
+      await client.close();
+    }
+  },
+);
+
+test(
+  "a stuck comment vote fails within its retry budget and logs the comment",
+  { skip: !uri },
+  async () => {
+    const client = new MongoClient(uri!);
+    await client.connect();
+    const db = client.db(`engage_comment_votes_stuck_${Date.now()}`);
+    const warnings: Array<Record<string, unknown>> = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      try {
+        warnings.push(JSON.parse(String(args[0])) as Record<string, unknown>);
+      } catch {
+        // Ignore unrelated warnings.
+      }
+    };
+    try {
+      const proposalId = "comment-vote-stuck";
+      const commentId = `cmt-${crypto.randomUUID()}`;
+      await seedComment(db, proposalId, commentId);
+      const member = voter(1);
+      const started = Date.now();
+      await assert.rejects(
+        voteOnComment(neverMatchingWrites(db), member, commentId, "upvote"),
+        /Comment votes changed at the same time/,
+      );
+      const elapsed = Date.now() - started;
+      assert.ok(elapsed >= 4_000, `budget expired after ${elapsed}ms`);
+      assert.ok(elapsed < 10_000, `budget was bounded (${elapsed}ms)`);
+
+      const warning = warnings.find(
+        (entry) => entry.event === "comment_vote_retry_budget_exhausted",
+      );
+      assert.ok(warning, "budget expiry is logged");
+      assert.equal(warning.commentId, commentId);
+      const serialised = JSON.stringify(warning);
+      assert.ok(!serialised.includes(member.memberId));
+      assert.ok(!serialised.includes("upvote"));
+    } finally {
+      console.warn = originalWarn;
       await db.dropDatabase();
       await client.close();
     }
