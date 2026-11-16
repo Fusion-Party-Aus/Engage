@@ -279,7 +279,17 @@ export async function updateDiscordSettings(
   next.updatedByName = actor.name;
   const col = db.collection<StoredDiscordSettings>(SETTINGS_COLLECTION);
   const { _id: _key, ...fields } = next;
-  await col.updateOne({ _id: SETTINGS_ID }, { $set: fields }, { upsert: true });
+  const unset: Record<string, ""> = {};
+  if (patch.clearLiveWebhook === true) unset.liveWebhook = "";
+  if (patch.clearTestWebhook === true) unset.testWebhook = "";
+  await col.updateOne(
+    { _id: SETTINGS_ID },
+    {
+      $set: fields,
+      ...(Object.keys(unset).length ? { $unset: unset } : {}),
+    },
+    { upsert: true },
+  );
   await db.collection(EVENTS_COLLECTION).insertOne({
     eventId: randomUUID(),
     actorId: actor.memberId,
