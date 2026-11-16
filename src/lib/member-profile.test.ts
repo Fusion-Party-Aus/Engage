@@ -5,13 +5,15 @@ import { createMemoryDb } from "./db.ts";
 import {
   amendmentDeepLink,
   commentDeepLink,
-  getMemberBioSettings,
   getMemberProfilePage,
+  getMemberProfileSettings,
   memberInitials,
   memberProfileHref,
   normalizeMemberBio,
+  profileCrmIdentifiersEnabled,
+  resolveMemberProfileRoute,
   resolveMemberProfileLinks,
-  saveMemberBio,
+  saveMemberProfile,
   validateMemberBioInput,
   MEMBER_BIO_MAX_LENGTH,
   MEMBER_PROFILE_PAGE_SIZE,
@@ -375,6 +377,7 @@ describe("public profile header", () => {
     assert.ok(page);
     assert.equal(page.profile.name, "Ada Lovelace");
     assert.equal(page.profile.initials, "AL");
+    assert.equal(page.profile.visible, true);
     assert.equal(page.profile.bio, "Interested in transparent governance.");
     assert.deepEqual(page.profile.affiliations, ["National member", "Victoria"]);
     assert.equal(page.profile.href, memberProfileHref(seeded.ada.toHexString()));
@@ -683,20 +686,87 @@ describe("profile links", () => {
   });
 });
 
-describe("biography settings", () => {
+describe("public profile settings", () => {
   it("lets the account owner save and read a biography", async () => {
     const seeded = await seed();
     const owner = session(seeded.ada.toHexString());
-    const saved = await saveMemberBio(
-      db,
-      owner,
-      "  I care about\r\nclear process.  ",
+    const saved = await saveMemberProfile(db, owner, {
+      bio: "  I care about\r\nclear process.  ",
+    });
+    assert.deepEqual(saved, {
+      bio: "I care about\nclear process.",
+      profileVisible: true,
+    });
+    assert.deepEqual(
+      await getMemberProfileSettings(db, seeded.ada.toHexString()),
+      {
+        bio: "I care about\nclear process.",
+        profileVisible: true,
+      },
     );
-    assert.equal(saved, "I care about\nclear process.");
+  });
+
+  it("lets the owner hide the profile and its author links", async () => {
+    const seeded = await seed();
+    const owner = session(seeded.ada.toHexString());
+    const saved = await saveMemberProfile(db, owner, {
+      profileVisible: false,
+    });
+    assert.equal(saved.profileVisible, false);
+
     assert.equal(
-      await getMemberBioSettings(db, seeded.ada.toHexString()),
-      "I care about\nclear process.",
+      await getMemberProfilePage(db, seeded.ada.toHexString()),
+      null,
     );
+    const preview = await getMemberProfilePage(
+      db,
+      seeded.ada.toHexString(),
+      { viewer: owner },
+    );
+    assert.ok(preview);
+    assert.equal(preview.profile.visible, false);
+    assert.equal(
+      (
+        await resolveMemberProfileLinks(db, [seeded.ada.toHexString()])
+      ).has(seeded.ada.toHexString()),
+      false,
+    );
+
+    const visibleAgain = await saveMemberProfile(db, owner, {
+      profileVisible: true,
+    });
+    assert.equal(visibleAgain.profileVisible, true);
+    assert.ok(
+      await getMemberProfilePage(db, seeded.ada.toHexString()),
+    );
+  });
+
+  it("rejects an invalid visibility value", async () => {
+    const seeded = await seed();
+    await assert.rejects(
+      saveMemberProfile(db, session(seeded.ada.toHexString()), {
+        profileVisible: "yes",
+      }),
+      /Profile visibility must be on or off/,
+    );
+  });
+
+  it("preserves settings omitted from a partial update", async () => {
+    const seeded = await seed();
+    const owner = session(seeded.ada.toHexString());
+
+    await saveMemberProfile(db, owner, { profileVisible: false });
+    const bioOnly = await saveMemberProfile(db, owner, {
+      bio: "Biography only.",
+    });
+    assert.equal(bioOnly.profileVisible, false);
+    assert.equal(bioOnly.bio, "Biography only.");
+
+    const visibilityOnly = await saveMemberProfile(db, owner, {
+      profileVisible: true,
+    });
+    assert.equal(visibilityOnly.bio, "Biography only.");
+    assert.equal(visibilityOnly.profileVisible, true);
   });
 
   it("rejects overlong or control-character biographies without changing storage", async () => {
@@ -708,18 +778,20 @@ describe("biography settings", () => {
     );
     assert.throws(() => validateMemberBioInput("bad\u0000text"), /unsupported/);
     await assert.rejects(
-      saveMemberBio(db, owner, "x".repeat(MEMBER_BIO_MAX_LENGTH + 1)),
+      saveMemberProfile(db, owner, {
+        bio: "x".repeat(MEMBER_BIO_MAX_LENGTH + 1),
+      }),
       /500 characters or fewer/,
     );
     assert.equal(
-      await getMemberBioSettings(db, seeded.ada.toHexString()),
+      (await getMemberProfileSettings(db, seeded.ada.toHexString())).bio,
       "Interested in transparent governance.",
     );
   });
 
-  it("does not save a biography for a missing account", async () => {
+  it("does not save a profile for a missing account", async () => {
     await assert.rejects(
-      saveMemberBio(db, session("no-account"), "Hello"),
+      saveMemberProfile(db, session("no-account"), { bio: "Hello" }),
       /Account record not found/,
     );
   });
@@ -730,5 +802,100 @@ describe("biography settings", () => {
       "x".repeat(MEMBER_BIO_MAX_LENGTH),
     );
     assert.equal(normalizeMemberBio(undefined), "");
+  });
+});
+
+describe("CRM profile identifier seam", () => {
+  it("is off by default and keeps the member id canonical", async () => {
+    const seeded = await seed();
+    const memberId = seeded.ada.toHexString();
+    const route = await resolveMemberProfileRoute(db, memberId, {});
+    assert.ok(route);
+    assert.equal(route.canonicalIdentifier, memberId);
+    assert.equal(route.redirect, null);
+    assert.equal(profileCrmIdentifiersEnabled({}), false);
+
+    const page = await getMemberProfilePage(db, memberId, {
+      profileIdentifier: route.canonicalIdentifier,
+    });
+    assert.ok(page);
+    assert.equal(page.profile.href, memberProfileHref(memberId));
+  });
+
+  it("redirects a member-id path to an active CRM identifier when enabled", async () => {
+    const seeded = await seed();
+    const memberId = seeded.ada.toHexString();
+    const crmPersonId = "crm-person-ada";
+    await db.collection("crm_identity_links").insertOne({
+      linkId: "link-ada",
+      memberId,
+      crmPersonId,
+      application: "underground-crm",
+      status: "active",
+      linkedAt: new Date(),
+    });
+
+    const env = { ENGAGE_PROFILE_CRM_IDENTIFIERS: "on" };
+    assert.equal(profileCrmIdentifiersEnabled(env), true);
+
+    const memberPath = await resolveMemberProfileRoute(db, memberId, env);
+    assert.ok(memberPath);
+    assert.equal(memberPath.memberId, memberId);
+    assert.equal(memberPath.canonicalIdentifier, crmPersonId);
+    assert.equal(memberPath.redirect, memberProfileHref(crmPersonId));
+
+    const crmPath = await resolveMemberProfileRoute(db, crmPersonId, env);
+    assert.ok(crmPath);
+    assert.equal(crmPath.memberId, memberId);
+    assert.equal(crmPath.canonicalIdentifier, crmPersonId);
+    assert.equal(crmPath.redirect, null);
+
+    const page = await getMemberProfilePage(db, memberId, {
+      profileIdentifier: crmPath.canonicalIdentifier,
+    });
+    assert.ok(page);
+    assert.equal(page.profile.href, memberProfileHref(crmPersonId));
+  });
+
+  it("ignores retired CRM links", async () => {
+    const seeded = await seed();
+    const memberId = seeded.ada.toHexString();
+    await db.collection("crm_identity_links").insertOne({
+      linkId: "link-retired",
+      memberId,
+      crmPersonId: "crm-person-retired",
+      application: "underground-crm",
+      status: "retired",
+      linkedAt: new Date(),
+    });
+    const env = { ENGAGE_PROFILE_CRM_IDENTIFIERS: "on" };
+    const route = await resolveMemberProfileRoute(db, memberId, env);
+    assert.ok(route);
+    assert.equal(route.canonicalIdentifier, memberId);
+    assert.equal(route.redirect, null);
+  });
+
+  it("does not misroute a CRM id that collides with another member id", async () => {
+    const seeded = await seed();
+    const adaId = seeded.ada.toHexString();
+    const bobId = seeded.bob.toHexString();
+    await db.collection("crm_identity_links").insertOne({
+      linkId: "link-collision",
+      memberId: adaId,
+      crmPersonId: bobId,
+      application: "underground-crm",
+      status: "active",
+      linkedAt: new Date(),
+    });
+
+    const env = { ENGAGE_PROFILE_CRM_IDENTIFIERS: "on" };
+    const adaRoute = await resolveMemberProfileRoute(db, adaId, env);
+    assert.ok(adaRoute);
+    // Ada keeps her member id as canonical rather than publishing Bob's id.
+    assert.equal(adaRoute.canonicalIdentifier, adaId);
+    assert.equal(adaRoute.redirect, null);
+
+    // The colliding path is ambiguous, so it does not render either person.
+    assert.equal(await resolveMemberProfileRoute(db, bobId, env), null);
   });
 });

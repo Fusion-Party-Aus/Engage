@@ -1,4 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
+import { CRM_APPLICATION, CRM_IDENTITY_LINKS } from "./underground-crm.ts";
 import {
   canReviewArchivedProposal,
   canViewProposal,
@@ -7,6 +8,7 @@ import {
 import type {
   CommentRecord,
   CommentStance,
+  PlatformEnv,
   ProposalRecord,
   ProposalStage,
   SessionUser,
@@ -56,6 +58,7 @@ export interface MemberProfileView {
   bio: string;
   joinedAt: Date | null;
   affiliations: string[];
+  visible: boolean;
   stats: MemberProfileStats;
 }
 
@@ -125,6 +128,22 @@ export interface GetMemberProfileOptions {
   page?: number | null;
   viewer?: SessionUser | null;
   pageSize?: number;
+  /** Canonical public identifier, used for profile links and tabs. */
+  profileIdentifier?: string | null;
+}
+
+export interface MemberProfileSettings {
+  bio: string;
+  profileVisible: boolean;
+}
+
+export interface MemberProfileRoute {
+  memberId: string;
+  canonicalIdentifier: string;
+  canonicalHref: string;
+  profileVisible: boolean;
+  /** Set when the requested identifier is not canonical. */
+  redirect: string | null;
 }
 
 function asText(value: unknown, fallback = ""): string {
@@ -186,6 +205,130 @@ function memberIdFilter(memberId: string): Record<string, unknown> {
     return { _id: new ObjectId(value) };
   }
   return { _id: value };
+}
+
+/** Whether linked CRM person ids are the canonical public profile path. */
+export function profileCrmIdentifiersEnabled(
+  env: Pick<PlatformEnv, "ENGAGE_PROFILE_CRM_IDENTIFIERS">,
+): boolean {
+  return (
+    String(env.ENGAGE_PROFILE_CRM_IDENTIFIERS ?? "")
+      .trim()
+      .toLowerCase() === "on"
+  );
+}
+
+/**
+ * Resolve the canonical public identifier for a member.
+ *
+ * Until upstream CRM support is enabled this is the opaque member id. When the
+ * flag is on, an active CRM identity link supplies the CRM person id; the
+ * legacy member-id path then redirects with 301. The link is read-only and the
+ * CRM is never called from a profile request.
+ */
+export async function resolveMemberProfileIdentifier(
+  db: Db,
+  memberId: string,
+  env: Pick<PlatformEnv, "ENGAGE_PROFILE_CRM_IDENTIFIERS">,
+): Promise<string> {
+  const canonical = canonicalMemberId(memberId);
+  if (!profileCrmIdentifiersEnabled(env)) return canonical;
+  const link = await db.collection(CRM_IDENTITY_LINKS).findOne({
+    memberId: canonical,
+    application: CRM_APPLICATION,
+    status: "active",
+  });
+  const crmId = asText(link?.crmPersonId);
+  if (!crmId || crmId === canonical) return canonical;
+
+  // A CRM person id may look exactly like another member's ObjectId. Never
+  // publish a canonical path that would resolve to a different account first.
+  const collision = await db
+    .collection("user")
+    .findOne(memberIdFilter(crmId), { projection: { _id: 1 } });
+  if (
+    collision &&
+    canonicalMemberId(String(collision._id)) !== canonical
+  ) {
+    return canonical;
+  }
+  return crmId;
+}
+
+/**
+ * Resolve either a member-id or a CRM-id profile path to one member and its
+ * canonical path. The caller checks visibility before issuing the redirect so a
+ * hidden profile never reveals its CRM identifier.
+ */
+export async function resolveMemberProfileRoute(
+  db: Db,
+  rawIdentifier: string,
+  env: Pick<PlatformEnv, "ENGAGE_PROFILE_CRM_IDENTIFIERS">,
+): Promise<MemberProfileRoute | null> {
+  const identifier = String(rawIdentifier ?? "").trim();
+  if (!identifier) return null;
+
+  let account = await db
+    .collection("user")
+    .findOne(memberIdFilter(identifier));
+  if (!account && profileCrmIdentifiersEnabled(env)) {
+    const link = await db.collection(CRM_IDENTITY_LINKS).findOne({
+      crmPersonId: identifier,
+      application: CRM_APPLICATION,
+      status: "active",
+    });
+    if (link?.memberId) {
+      account = await db
+        .collection("user")
+        .findOne(memberIdFilter(String(link.memberId)));
+    }
+  }
+
+  if (!account) {
+    const memberId = canonicalMemberId(identifier);
+    return {
+      memberId,
+      canonicalIdentifier: memberId,
+      canonicalHref: memberProfileHref(memberId),
+      profileVisible: true,
+      redirect: null,
+    };
+  }
+
+  const accountId = canonicalMemberId(String(account._id));
+  if (profileCrmIdentifiersEnabled(env)) {
+    // If this path is both a member id and a different member's active CRM id,
+    // the intended profile is ambiguous. Return 404 instead of guessing.
+    const competing = await db.collection(CRM_IDENTITY_LINKS).findOne({
+      crmPersonId: identifier,
+      application: CRM_APPLICATION,
+      status: "active",
+    });
+    if (
+      competing?.memberId &&
+      canonicalMemberId(String(competing.memberId)) !== accountId
+    ) {
+      return null;
+    }
+  }
+
+  const memberId = accountId;
+  const canonicalIdentifier = await resolveMemberProfileIdentifier(
+    db,
+    memberId,
+    env,
+  );
+  return {
+    memberId,
+    canonicalIdentifier,
+    canonicalHref: memberProfileHref(canonicalIdentifier),
+    profileVisible:
+      account.disabled !== true && account.profileVisible !== false,
+    redirect:
+      canonicalIdentifier === identifier
+        ? null
+        : memberProfileHref(canonicalIdentifier),
+  };
 }
 
 /**
@@ -257,6 +400,7 @@ interface ProfileIdentity {
   bio: string;
   joinedAt: Date | null;
   affiliations: string[];
+  visible: boolean;
 }
 
 async function loadAffiliations(db: Db, memberId: string): Promise<string[]> {
@@ -303,11 +447,14 @@ async function loadProfileIdentity(
     .findOne(memberIdFilter(memberId));
   if (account) {
     if (account.disabled === true) return null;
+    const visible = account.profileVisible !== false;
+    if (!visible && viewer?.memberId !== memberId) return null;
     return {
       name: asText(account.name) || "Member",
       bio: normalizeMemberBio(account.bio),
       joinedAt: asDate(account.createdAt),
       affiliations: await loadAffiliations(db, memberId),
+      visible,
     };
   }
 
@@ -373,7 +520,13 @@ async function loadProfileIdentity(
   const name =
     storedCommentName || storedProposalName || (amendmentVisible ? "Member" : "");
   if (!name) return null;
-  return { name, bio: "", joinedAt: null, affiliations: [] };
+  return {
+    name,
+    bio: "",
+    joinedAt: null,
+    affiliations: [],
+    visible: true,
+  };
 }
 
 async function commentScoreTotal(
@@ -417,30 +570,67 @@ async function commentScoreTotal(
   );
 }
 
-export async function getMemberBioSettings(
+export async function getMemberProfileSettings(
   db: Db,
   memberId: string,
-): Promise<string> {
+): Promise<MemberProfileSettings> {
   const account = await db
     .collection("user")
-    .findOne(memberIdFilter(memberId), { projection: { bio: 1 } });
-  return normalizeMemberBio(account?.bio);
+    .findOne(memberIdFilter(memberId), {
+      projection: { bio: 1, profileVisible: 1 },
+    });
+  return {
+    bio: normalizeMemberBio(account?.bio),
+    profileVisible: account?.profileVisible !== false,
+  };
 }
 
-export async function saveMemberBio(
+export async function saveMemberProfile(
   db: Db,
   user: SessionUser,
-  rawBio: unknown,
-): Promise<string> {
-  const bio = validateMemberBioInput(rawBio);
+  input: { bio?: unknown; profileVisible?: unknown },
+): Promise<MemberProfileSettings> {
+  const hasBio = Object.prototype.hasOwnProperty.call(input, "bio");
+  const hasVisibility = Object.prototype.hasOwnProperty.call(
+    input,
+    "profileVisible",
+  );
+  if (!hasBio && !hasVisibility) {
+    throw new Error("No profile changes provided.");
+  }
+
+  // Validate first, then write only the fields the caller supplied. Reading the
+  // old document and writing both fields would let a partial update clobber a
+  // concurrent change to the field it did not supply.
+  const update: Record<string, unknown> = {
+    profileUpdatedAt: new Date(),
+  };
+  if (hasBio) update.bio = validateMemberBioInput(input.bio);
+  if (hasVisibility) {
+    if (typeof input.profileVisible !== "boolean") {
+      throw new Error("Profile visibility must be on or off.");
+    }
+    update.profileVisible = input.profileVisible;
+  }
+
   const result = await db.collection("user").updateOne(
     memberIdFilter(user.memberId),
-    { $set: { bio, bioUpdatedAt: new Date() } },
+    { $set: update },
   );
   if (!result.matchedCount) {
     throw new Error("Account record not found.");
   }
-  return bio;
+
+  const updated = await db
+    .collection("user")
+    .findOne(memberIdFilter(user.memberId), {
+      projection: { bio: 1, profileVisible: 1 },
+    });
+  if (!updated) throw new Error("Account record not found.");
+  return {
+    bio: normalizeMemberBio(updated.bio),
+    profileVisible: updated.profileVisible !== false,
+  };
 }
 
 /**
@@ -477,13 +667,13 @@ export async function resolveMemberProfileLinks(
   const users = await db
     .collection("user")
     .find({ _id: { $in: candidates } })
-    .project({ _id: 1, name: 1, disabled: 1 })
+    .project({ _id: 1, name: 1, disabled: 1, profileVisible: 1 })
     .toArray();
   const names = new Map<string, string>();
   const suppressed = new Set<string>();
   for (const account of users) {
     const id = canonicalMemberId(String(account._id));
-    if (account.disabled === true) {
+    if (account.disabled === true || account.profileVisible === false) {
       suppressed.add(id);
       continue;
     }
@@ -598,6 +788,7 @@ export async function getMemberProfilePage(
 
   const viewer = options.viewer ?? null;
   const tab = resolveTab(options.tab);
+  const publicIdentifier = asText(options.profileIdentifier) || memberId;
   const pageSize =
     Number.isFinite(options.pageSize) && Number(options.pageSize) > 0
       ? Math.min(50, Math.max(1, Math.trunc(Number(options.pageSize))))
@@ -754,12 +945,13 @@ export async function getMemberProfilePage(
   return {
     profile: {
       memberId,
-      href: memberProfileHref(memberId),
+      href: memberProfileHref(publicIdentifier),
       name: identity.name,
       initials: memberInitials(identity.name),
       bio: identity.bio,
       joinedAt: identity.joinedAt,
       affiliations: identity.affiliations,
+      visible: identity.visible,
       stats,
     },
     tab,

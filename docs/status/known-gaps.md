@@ -142,11 +142,12 @@ Comments can be deleted by staff, but there is no moderation state, reason or au
 
 **Limits today:**
 
-- There is no profile visibility opt-out or self-service account deletion. Disabling an account returns 404 for its profile and suppresses author links, but historic comments on visible proposals remain part of the discussion.
-- Avatars are initials only. There is no image upload, storage or external image fetch.
-- The profile URL contains the opaque Better Auth `memberId`. It is not an email address or CRM identifier, but it is stable and therefore linkable.
+- Self-service account deletion is not implemented. Hiding a profile or disabling an account returns 404 for the profile and suppresses author links, but historic comments on visible proposals remain part of the discussion.
+- Initials-only avatars are the current product decision. There is no image upload, storage or external image fetch.
+- The default profile URL contains the opaque Better Auth `memberId`. It is not an email address. A CRM-identifier seam is implemented but off by default: `ENGAGE_PROFILE_CRM_IDENTIFIERS=on` makes an active CRM identity link canonical and 301s member-id paths. Leave it off until upstream CRM support is confirmed.
+- Biography has no revision history. This is not required today.
 - When the account document is gone but a visible contribution remains, the profile uses the author name stored on that contribution. A name that exists only on a private proposal does not create a profile.
-- The comment score has no leaderboard, tier or permission effect by design.
+- The comment score is display-only by design. It has no leaderboard, tier or permission effect.
 
 ### 15. Perimeter security is incomplete
 

@@ -245,6 +245,9 @@ try {
   const bioInput = memberPage.locator('#member-bio');
   await bioInput.waitFor();
   assert.equal(await bioInput.count(), 1, 'owner sees the biography field');
+  const visibleSwitch = memberPage.locator('#member-profile-visible');
+  assert.equal(await visibleSwitch.count(), 1, 'owner sees the profile visibility control');
+  assert.equal(await visibleSwitch.getAttribute('data-state'), 'checked');
   const profileLink = memberPage.getByRole('link', {
     name: 'View public profile',
   });

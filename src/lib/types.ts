@@ -108,6 +108,12 @@ export interface PlatformEnv {
   ENGAGE_CRM_VERIFICATION_ENABLED?: string;
   ENGAGE_CRM_VERIFICATION_CRON_SECRET?: string;
   /**
+   * Opt-in future link: when "on", a member with an active CRM identity link
+   * gets the CRM person id as the canonical public profile path. Legacy
+   * member-id profile paths then redirect with 301. Off by default.
+   */
+  ENGAGE_PROFILE_CRM_IDENTIFIERS?: string;
+  /**
    * Operational health thresholds (#39). Each scheduled job has a warn and a
    * fail threshold; warn must be below fail or the check reports unknown. Empty
    * or invalid values use the documented default, and the health report names

@@ -41,12 +41,15 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | CRM write-back or webhook | Not implemented | Scheduled/queued pull only |
 | Shared Fusion identity / SSO / Fusion Auth | Planned | No code or dependency |
 | Legal acceptance gate | Implemented but inactive | Requires flag and published documents |
-| Self-service email change or account deletion | Not implemented | Not in scope today |
+| Self-service email change | Not implemented | Not in scope today |
+| Self-service account deletion | Not implemented | Needs a separate retention and audit decision |
 | Public member profile | Implemented | `/members/[memberId]/`; viewer-relative history and statistics, no separate profile store ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)) |
-| Editable public biography | Implemented | Owner-only `POST /api/member/profile`; plain text ≤500 characters |
+| Editable public profile | Implemented | Owner-only `POST /api/member/profile`; plain text biography ≤500 characters and a visibility switch |
+| Public-profile opt-out | Implemented | A hidden profile returns 404 to others and author links are suppressed; the owner can preview it |
+| CRM profile identifier redirect | Implemented, off by default | `ENGAGE_PROFILE_CRM_IDENTIFIERS=on` uses an active CRM identity link as the canonical path and 301s member-id paths; no CRM call on a profile request |
 | Comment score | Implemented, display only | Sum of net scores on visible, non-deleted comments; no eligibility, permission or ballot effect |
 | Public leaderboards or score-weighted privileges | Not implemented, by design | Comment score never ranks members or grants authority |
-| Custom avatar upload | Not implemented | Initials from the display name; no image upload or storage |
+| Initials-only avatars | Implemented | Product decision for now; no image upload or storage |
 
 ## Branches
 
