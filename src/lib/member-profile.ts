@@ -238,7 +238,21 @@ export async function resolveMemberProfileIdentifier(
     application: CRM_APPLICATION,
     status: "active",
   });
-  return asText(link?.crmPersonId) || canonical;
+  const crmId = asText(link?.crmPersonId);
+  if (!crmId || crmId === canonical) return canonical;
+
+  // A CRM person id may look exactly like another member's ObjectId. Never
+  // publish a canonical path that would resolve to a different account first.
+  const collision = await db
+    .collection("user")
+    .findOne(memberIdFilter(crmId), { projection: { _id: 1 } });
+  if (
+    collision &&
+    canonicalMemberId(String(collision._id)) !== canonical
+  ) {
+    return canonical;
+  }
+  return crmId;
 }
 
 /**
@@ -281,7 +295,24 @@ export async function resolveMemberProfileRoute(
     };
   }
 
-  const memberId = canonicalMemberId(String(account._id));
+  const accountId = canonicalMemberId(String(account._id));
+  if (profileCrmIdentifiersEnabled(env)) {
+    // If this path is both a member id and a different member's active CRM id,
+    // the intended profile is ambiguous. Return 404 instead of guessing.
+    const competing = await db.collection(CRM_IDENTITY_LINKS).findOne({
+      crmPersonId: identifier,
+      application: CRM_APPLICATION,
+      status: "active",
+    });
+    if (
+      competing?.memberId &&
+      canonicalMemberId(String(competing.memberId)) !== accountId
+    ) {
+      return null;
+    }
+  }
+
+  const memberId = accountId;
   const canonicalIdentifier = await resolveMemberProfileIdentifier(
     db,
     memberId,
@@ -568,38 +599,38 @@ export async function saveMemberProfile(
     throw new Error("No profile changes provided.");
   }
 
-  const account = await db
-    .collection("user")
-    .findOne(memberIdFilter(user.memberId), {
-      projection: { bio: 1, profileVisible: 1 },
-    });
-  if (!account) throw new Error("Account record not found.");
-
-  const bio = hasBio
-    ? validateMemberBioInput(input.bio)
-    : normalizeMemberBio(account.bio);
-  let profileVisible = account.profileVisible !== false;
+  // Validate first, then write only the fields the caller supplied. Reading the
+  // old document and writing both fields would let a partial update clobber a
+  // concurrent change to the field it did not supply.
+  const update: Record<string, unknown> = {
+    profileUpdatedAt: new Date(),
+  };
+  if (hasBio) update.bio = validateMemberBioInput(input.bio);
   if (hasVisibility) {
     if (typeof input.profileVisible !== "boolean") {
       throw new Error("Profile visibility must be on or off.");
     }
-    profileVisible = input.profileVisible;
+    update.profileVisible = input.profileVisible;
   }
 
   const result = await db.collection("user").updateOne(
     memberIdFilter(user.memberId),
-    {
-      $set: {
-        bio,
-        profileVisible,
-        profileUpdatedAt: new Date(),
-      },
-    },
+    { $set: update },
   );
   if (!result.matchedCount) {
     throw new Error("Account record not found.");
   }
-  return { bio, profileVisible };
+
+  const updated = await db
+    .collection("user")
+    .findOne(memberIdFilter(user.memberId), {
+      projection: { bio: 1, profileVisible: 1 },
+    });
+  if (!updated) throw new Error("Account record not found.");
+  return {
+    bio: normalizeMemberBio(updated.bio),
+    profileVisible: updated.profileVisible !== false,
+  };
 }
 
 /**

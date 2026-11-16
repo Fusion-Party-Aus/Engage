@@ -751,6 +751,24 @@ describe("public profile settings", () => {
     );
   });
 
+  it("preserves settings omitted from a partial update", async () => {
+    const seeded = await seed();
+    const owner = session(seeded.ada.toHexString());
+
+    await saveMemberProfile(db, owner, { profileVisible: false });
+    const bioOnly = await saveMemberProfile(db, owner, {
+      bio: "Biography only.",
+    });
+    assert.equal(bioOnly.profileVisible, false);
+    assert.equal(bioOnly.bio, "Biography only.");
+
+    const visibilityOnly = await saveMemberProfile(db, owner, {
+      profileVisible: true,
+    });
+    assert.equal(visibilityOnly.bio, "Biography only.");
+    assert.equal(visibilityOnly.profileVisible, true);
+  });
+
   it("rejects overlong or control-character biographies without changing storage", async () => {
     const seeded = await seed();
     const owner = session(seeded.ada.toHexString());
@@ -855,5 +873,29 @@ describe("CRM profile identifier seam", () => {
     assert.ok(route);
     assert.equal(route.canonicalIdentifier, memberId);
     assert.equal(route.redirect, null);
+  });
+
+  it("does not misroute a CRM id that collides with another member id", async () => {
+    const seeded = await seed();
+    const adaId = seeded.ada.toHexString();
+    const bobId = seeded.bob.toHexString();
+    await db.collection("crm_identity_links").insertOne({
+      linkId: "link-collision",
+      memberId: adaId,
+      crmPersonId: bobId,
+      application: "underground-crm",
+      status: "active",
+      linkedAt: new Date(),
+    });
+
+    const env = { ENGAGE_PROFILE_CRM_IDENTIFIERS: "on" };
+    const adaRoute = await resolveMemberProfileRoute(db, adaId, env);
+    assert.ok(adaRoute);
+    // Ada keeps her member id as canonical rather than publishing Bob's id.
+    assert.equal(adaRoute.canonicalIdentifier, adaId);
+    assert.equal(adaRoute.redirect, null);
+
+    // The colliding path is ambiguous, so it does not render either person.
+    assert.equal(await resolveMemberProfileRoute(db, bobId, env), null);
   });
 });

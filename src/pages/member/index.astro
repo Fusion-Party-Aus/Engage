@@ -229,8 +229,8 @@ const memberView =
     : 'overview';
 const memberProfileSettings =
   user && memberView === 'account'
-    ? await getMemberProfileSettings(db, user.memberId).catch(() => ({ bio: '', profileVisible: true }))
-    : { bio: '', profileVisible: true };
+    ? await getMemberProfileSettings(db, user.memberId).catch(() => null)
+    : null;
 
 // Contextual Intent Preservation (Message Match & Safe Same-Origin Redirect)
 const rawReturnTo = Astro.url.searchParams.get('returnTo')?.trim() ?? '';
@@ -962,8 +962,9 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               role={user.role}
               status={user.status}
               canParticipate={user.canParticipate}
-              bio={memberProfileSettings.bio}
-              profileVisible={memberProfileSettings.profileVisible}
+              bio={memberProfileSettings?.bio ?? ''}
+              profileVisible={memberProfileSettings?.profileVisible ?? true}
+              profileSettingsAvailable={Boolean(memberProfileSettings)}
               profileHref={memberProfileHref(user.memberId)}
               branches={memberBranches.map((branch) => ({
                 id: branch.branchId,
