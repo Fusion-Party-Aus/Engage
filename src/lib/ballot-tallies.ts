@@ -690,18 +690,11 @@ export async function projectCommittedVoteTally(
     deadlineMs?: number;
   },
 ): Promise<void> {
-  // The default 500 ms keeps the vote response responsive. A test harness or a
-  // deliberately slow deployment can raise it; an expired deadline still writes
-  // nothing and leaves the row for the repair CLI.
-  const configuredDeadline = Number.parseInt(
-    process.env.ENGAGE_BALLOT_TALLY_DEADLINE_MS ?? "",
-    10,
-  );
-  const deadlineMs =
-    input.deadlineMs ??
-    (Number.isFinite(configuredDeadline) && configuredDeadline > 0
-      ? configuredDeadline
-      : BALLOT_TALLY_WRITE_DEADLINE_MS);
+  // The 500 ms production deadline keeps the vote response responsive. An
+  // expired deadline writes nothing and leaves the row for the repair CLI.
+  // Callers that need longer (a backfill, a test) pass `deadlineMs`
+  // explicitly; the deployment environment never tunes behaviour.
+  const deadlineMs = input.deadlineMs ?? BALLOT_TALLY_WRITE_DEADLINE_MS;
   const deadlineAt = Date.now() + deadlineMs;
   let timedOut = false;
   const work = updateBallotTallyProjection(db, { ...input, deadlineAt }).catch(

@@ -419,3 +419,15 @@ Before declaring work complete, answer:
 - Are verification, commits, and changelog complete?
 
 **If the interface looks like something built for a developer to debug rather than a member or administrator to use, redesign it before calling the work finished.**
+
+## 11. Configuration
+
+The product owns configuration, not the deployment.
+
+- Most, and ideally all, configuration is an administrator setting: stored in MongoDB, validated, audited, and defaulted to a sensible value.
+- Environment variables are reserved for values that cannot live in the database or must exist before it: the database connection, encryption and signing secrets and keys, provider credentials, the public origin, and deployment topology.
+- Every environment variable is a cost. It must be provisioned in every environment, documented in `.env.example`, rotated, and cannot be changed without a redeploy. A new one must be justified explicitly in the change and in `.env.example`.
+- Do not add an environment variable for an operational threshold, retry limit, cadence, feature toggle, display limit or policy timing. Those are administrator settings.
+- Administrator-facing configuration uses plain language, a validated range and an obvious default, and never exposes a raw key or internal name.
+- Tests must not tune behaviour through the deployment environment. Inject the value through the function or the setting under test.
+- When touching an area that already has an environment knob, migrate it to the admin setting rather than adding another.

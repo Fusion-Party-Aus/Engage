@@ -45,6 +45,7 @@ Then open the files you intend to change. Do not plan from documentation alone.
 | "Fix a stale page" | Find the service that owns the data; do not patch around it in the template. |
 | "Add a notification" | Topic + channel consent + dedupe + template + preference UI + test. |
 | "Add an integration" | Adapter in `src/lib/integrations.ts`, explicit env, failure behaviour, docs, feature flag. |
+| "Add a configuration option" | Admin setting in MongoDB with validation, audit and default; not a new environment variable. See `AGENTS.md` section 11. |
 | "Improve a screen" | Follow `AGENTS.md`; use primitives; verify at 390 px and desktop. |
 | "Fix a security bug" | Reproduce in a test first; enforce in the service, not only the route. |
 
