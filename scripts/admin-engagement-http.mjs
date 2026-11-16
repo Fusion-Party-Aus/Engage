@@ -1,7 +1,7 @@
 // Synthetic preview only. All provider handoffs are mocked; no production email is sent.
 import {dev} from 'astro';
 import assert from 'node:assert/strict';
-process.env.APP_MODE='preview';process.env.MONGODB_URI='';process.env.PUBLIC_ORIGIN='https://public.example.test';process.env.RESEND_API_KEY='mock-key';process.env.AUTH_EMAIL_FROM='Engage <admin@example.test>';process.env.ENGAGE_EMAIL_SECRET='mock-signing-secret';process.env.ENGAGE_DIGEST_ENABLED='false';
+process.env.APP_MODE='preview';process.env.MONGODB_URI='';process.env.PUBLIC_ORIGIN='https://public.example.test';process.env.RESEND_API_KEY='mock-key';process.env.AUTH_EMAIL_FROM='Engage <admin@example.test>';process.env.ENGAGE_EMAIL_SECRET='mock-signing-secret';
 const original=globalThis.fetch;let providerCalls=0;
 globalThis.fetch=async(url,init)=>String(url)==='https://api.resend.com/emails' ? (providerCalls++,Response.json({id:'mock-http-receipt'})) : original(url,init);
 const server=await dev({root:process.cwd(),server:{host:'127.0.0.1',port:4349}});

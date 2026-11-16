@@ -11,7 +11,7 @@ const {chromium}=await import(pathToFileURL(modulePath).href);
 const output=path.resolve('docs/screenshots/member-lifecycle');
 await mkdir(output,{recursive:true});
 const origin='http://127.0.0.1:4397';
-const server=spawn(process.execPath,['dist/server/entry.mjs'],{stdio:'inherit',env:{...process.env,APP_MODE:'preview',MONGODB_URI:'',HOST:'127.0.0.1',PORT:'4397',ASTRO_NODE_LOGGING:'disabled',PUBLIC_ORIGIN:origin,BETTER_AUTH_URL:origin,RESEND_API_KEY:'',AUTH_EMAIL_FROM:'',ENGAGE_DIGEST_ENABLED:'false'}});
+const server=spawn(process.execPath,['dist/server/entry.mjs'],{stdio:'inherit',env:{...process.env,APP_MODE:'preview',MONGODB_URI:'',HOST:'127.0.0.1',PORT:'4397',ASTRO_NODE_LOGGING:'disabled',PUBLIC_ORIGIN:origin,BETTER_AUTH_URL:origin,RESEND_API_KEY:'',AUTH_EMAIL_FROM:''}});
 let browser;
 try {
  let ready=false;

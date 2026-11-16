@@ -103,9 +103,7 @@ export interface PlatformEnv {
   RESEND_WEBHOOK_SECRET?: string;
   ENGAGE_CRON_SECRET?: string;
   ENGAGE_EMAIL_SECRET?: string;
-  ENGAGE_DIGEST_ENABLED?: string;
-  /** Gate and bearer secret for automatic CRM membership verification. */
-  ENGAGE_CRM_VERIFICATION_ENABLED?: string;
+  /** Bearer secret for automatic CRM membership verification. */
   ENGAGE_CRM_VERIFICATION_CRON_SECRET?: string;
   /**
    * Opt-in future link: when "on", a member with an active CRM identity link

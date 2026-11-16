@@ -27,8 +27,8 @@ Configuration is read through `runtimeEnv(locals)` and typed as `PlatformEnv`. `
 | Database | `MONGODB_URI`, `MONGODB_DB_NAME`, initial Mongo credentials for Compose |
 | Auth | `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 | Email | `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, `RESEND_WEBHOOK_SECRET` |
-| Jobs | `ENGAGE_CRON_SECRET`, `ENGAGE_EMAIL_SECRET`, `ENGAGE_DIGEST_ENABLED` |
-| CRM | `ENGAGE_CRM_*` (base URL, token, membership types, verification flag) |
+| Jobs | `ENGAGE_CRON_SECRET`, `ENGAGE_EMAIL_SECRET` |
+| CRM | `ENGAGE_CRM_*` base URL, token, membership type IDs and electorate map. Enablement and tuning are administrative settings. |
 | Ballots | `BALLOT_ENCRYPTION_MODE`, `BALLOT_ENCRYPTION_KEYS`, active key ID, blind-index key |
 | Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
 | Site | `ENGAGE_ALLOW_INDEXING`, CTA, social/state-site JSON, repo URL, OG image |
@@ -189,8 +189,8 @@ A job that has never run reports `failing`, because the absence of evidence is t
 | Job | Invocation | Documented cadence | Warn (default) | Fail (default) |
 |---|---|---|---|---|
 | Governance scheduler | `npm run governance:scheduler -- --apply` from cron or a Coolify job | Every 15 minutes is safe; hourly is the practical minimum for deadline accuracy | 2 hours | 26 hours |
-| Ballot digest | `POST /api/email/digest` with `Authorization: Bearer $ENGAGE_CRON_SECRET` | Every 15 minutes while `ENGAGE_DIGEST_ENABLED=true` | 1 hour | 24 hours |
-| Membership verification | `POST /api/cron/membership-verification` with `Authorization: Bearer $ENGAGE_CRM_VERIFICATION_CRON_SECRET` | Every 15 minutes while CRM verification is enabled | 2 hours | 24 hours |
+| Ballot digest | `POST /api/email/digest` with `Authorization: Bearer $ENGAGE_CRON_SECRET` | Every 15 minutes while scheduled digests are on under **Platform settings → Scheduled jobs** | 1 hour | 24 hours |
+| Membership verification | `POST /api/cron/membership-verification` with `Authorization: Bearer $ENGAGE_CRM_VERIFICATION_CRON_SECRET` | Every 15 minutes while CRM verification is on under **Platform settings → CRM verification** | 2 hours | 24 hours |
 
 Warn is a small multiple of cadence — roughly 4–8 expected ticks, or two hourly scheduler ticks — not a single missed tick. A scheduler jitter, a slow run or one failed provider call must not page anyone: those are covered by the run's own `ok` and error evidence. An exhausted warn threshold means ticks are being missed repeatedly, which is worth knowing within an hour or two rather than a day. Fail is the wide outer bound where the job's guarantee is clearly broken and someone must act.
 
@@ -243,18 +243,33 @@ A stored value that is missing, not a whole number or outside its range is never
 
 These are operational reporting values only. Changing them never alters ballot eligibility, closure semantics, quorum or recorded results.
 
+### CRM verification and scheduled jobs
+
+CRM verification and the scheduled digest are off until an administrator turns them on. A missing setting means off, matching the safe default when the former environment variables were unset. The enablement gate is the only way to turn a job on; the external scheduler still has to call the endpoint.
+
+| Setting | Default | Permitted | Effect |
+|---|---|---|---|
+| Automatic CRM verification | Off | On or off | Permits the scheduled verification cycle to run |
+| Members per cycle | 25 | 1–100 | Members processed by one scheduled cycle |
+| Recheck linked members every | 1,440 minutes | 15–43,200 | How often an already verified member is checked again |
+| Alert after failed attempts | 3 | 1–20 | Consecutive CRM failures before administrators are notified |
+| CRM request timeout | 10,000 ms | 1,000–60,000 | How long a CRM response is awaited |
+| Scheduled ballot digests | Off | On or off | Permits the scheduled digest endpoint to send reminders |
+
+The CRM settings live in one document in `operational_settings` with `_id: "crm"`; the digest gate lives in `_id: "jobs"`. Each save is validated as a complete set, takes effect on the next run, and appends an event to `operational_settings_events` with the admin, time and only the changed fields. A stored value that is missing or outside its range is never clamped: the settings page marks it invalid and the scheduled cycle fails with a plain-language message until it is corrected.
+
 ### What each state means
 
 - **Governance scheduler degraded.** Runs are being missed past the warn threshold, or the last run left blockers or errors. Nothing advances or closes until a run succeeds.
 - **Governance scheduler failing.** Nothing advances at the deliberation deadline or records ballot closure. Voting still refuses an expired ballot at vote time, and officers can still act manually. Run the scheduler with `--apply` and read its report.
 - **Ballot deadlines failing.** The scheduler ran (or did not) and a ballot stayed open past its deadline with no closure record. This is evidence about closure, not about a result: no result is recorded by closure.
 - **Digest degraded.** The digest is late past its warn threshold, or the last run held messages. Members may not receive ballot reminders.
-- **Digest failing.** Members receive no ballot reminders. Check the endpoint's bearer secret, `ENGAGE_DIGEST_ENABLED`, and delivery holds.
+- **Digest failing.** Members receive no ballot reminders. Check the endpoint's bearer secret, whether scheduled digests are on under **Platform settings**, and delivery holds.
 - **Membership verification degraded.** The cycle is late past its warn threshold, or attempts are queued. The next successful cycle clears the backlog.
 - **Membership verification failing.** Membership status stops tracking the CRM. Existing statuses are unchanged; no one is suspended by a failed run.
 - **Email delivery degraded.** Failed or held outbox rows need review in email administration. Bounced or complained addresses stay suppressed.
 - **Turnstile degraded or failing.** In production a missing key fails protected actions closed, so magic-link sign-in and public submission stop working. Set both Turnstile keys.
-- **Unknown.** The feature is not enabled in this deployment, a saved threshold is missing or invalid, a warn value is not below its fail value, or a check could not read its evidence. It is not proof of health.
+- **Unknown.** The feature is turned off in Platform settings, a saved threshold or CRM setting is missing or invalid, a warn value is not below its fail value, or a check could not read its evidence. It is not proof of health.
 
 ### Escalation
 
@@ -279,8 +294,10 @@ These are operational reporting values only. Changing them never alters ballot e
 - **No scheduler is enabled in Coolify production.** This slice records and reports runs; it does not create them. #39 stays open until an external scheduler is configured and observed.
 - **No production verification.** Everything here was verified against a local replica set. There is no evidence of a production run.
 - **No metrics, traces or alert delivery.** The health command is the alerting input; nothing sends alerts yet.
-- **No admin health page.** Health is a command and a coarse probe in this slice. The only administrator surface is the operational threshold setting under **Platform settings**, not a live health view.
-- **Operational tuning is only partly migrated.** The eight health thresholds are administrator settings ([#128](https://github.com/Fusion-Party-Aus/Engage/issues/128)). CRM batch size, reconcile cadence, outage alert attempts and request timeout still come from `ENGAGE_CRM_*` environment variables, as do the `ENGAGE_DIGEST_ENABLED` and `ENGAGE_CRM_VERIFICATION_ENABLED` enablement gates. Site settings still read environment fallbacks. Those remain on #128.
+- **No admin health page.** Health is a command and a coarse probe in this slice. The only administrator surface is the operational settings under **Platform settings**, not a live health view.
+- **Operational tuning has moved to administrator settings.** The eight health thresholds, the CRM batch size, reconcile cadence, outage alert attempts, request timeout, and the digest and CRM enablement gates are all stored, validated and audited in Engage ([#128](https://github.com/Fusion-Party-Aus/Engage/issues/128)). Site settings still read environment fallbacks; production verification of the settings migrations remains outstanding.
+
+**Deployment migration.** A deployment that previously used the former digest or CRM verification environment variables must, after upgrading, turn the job on under **Platform settings → Scheduled jobs** or **Platform settings → CRM verification**. Those variables are ignored, and the safe default when a setting is missing is off. CRM tuning values that were previously set in the environment also need to be entered once in **Platform settings → CRM verification**; the documented defaults apply until then.
 
 
 ## Changelog

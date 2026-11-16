@@ -17,7 +17,10 @@ import {
   type OperationalHealthReport,
 } from "./operational-health.ts";
 import {
+  CRM_OPERATIONAL_SETTINGS_ID,
+  DEFAULT_CRM_SETTINGS,
   DEFAULT_OPERATIONAL_THRESHOLDS,
+  JOBS_OPERATIONAL_SETTINGS_ID,
   OPERATIONAL_SETTINGS_COLLECTION,
   OPERATIONAL_SETTINGS_ID,
   type OperationalThresholdValues,
@@ -30,8 +33,6 @@ const HOUR = 3_600_000;
 
 const baseEnv: PlatformEnv = {
   APP_MODE: "test",
-  ENGAGE_DIGEST_ENABLED: "true",
-  ENGAGE_CRM_VERIFICATION_ENABLED: "true",
 };
 
 const defaults = DEFAULT_OPERATIONAL_THRESHOLDS;
@@ -78,6 +79,7 @@ async function seedSettings(
 
 async function healthyDatabase(): Promise<Db> {
   const db = createMemoryDb();
+  await enableScheduledJobs(db);
   await seedRun(db, "governance-scheduler", {
     hoursAgo: 1,
     summary: { advanced: 0, closed: 0, skipped: 0, blockers: 0, errors: 0 },
@@ -97,7 +99,35 @@ async function evaluate(
   db: Db,
   env: PlatformEnv = baseEnv,
 ): Promise<OperationalHealthReport> {
+  await enableScheduledJobs(db);
   return evaluateOperationalHealth({ db, env, now: NOW });
+}
+
+/**
+ * Tests that are not about the enablement gate run with both jobs on, seeded
+ * the way the admin form saves them. A test that needs a gate off seeds its own
+ * document with `$setOnInsert` semantics below.
+ */
+async function enableScheduledJobs(db: Db): Promise<void> {
+  try {
+    await db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).updateOne(
+      { _id: JOBS_OPERATIONAL_SETTINGS_ID },
+      { $setOnInsert: { digestEnabled: true } },
+      { upsert: true },
+    );
+    await db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).updateOne(
+      { _id: CRM_OPERATIONAL_SETTINGS_ID },
+      {
+        $setOnInsert: {
+          ...DEFAULT_CRM_SETTINGS,
+          crmVerificationEnabled: true,
+        },
+      },
+      { upsert: true },
+    );
+  } catch {
+    // A broken proxy is a deliberate read-failure case; let evaluation report it.
+  }
 }
 
 function check(report: OperationalHealthReport, id: string): OperationalCheck {
@@ -312,6 +342,8 @@ describe("operational health evaluation", () => {
 
   it("ignores the removed threshold environment variables", async () => {
     const db = await healthyDatabase();
+    const removedDigestGate = ["ENGAGE", "DIGEST", "ENABLED"].join("_");
+    const removedCrmGate = ["ENGAGE", "CRM", "VERIFICATION", "ENABLED"].join("_");
     const env = {
       ...baseEnv,
       GOVERNANCE_SCHEDULER_WARN_HOURS: "1",
@@ -322,6 +354,8 @@ describe("operational health evaluation", () => {
       MEMBERSHIP_VERIFICATION_STALE_HOURS: "2",
       BALLOT_CLOSURE_GRACE_HOURS: "0",
       EMAIL_DELIVERY_WINDOW_HOURS: "1",
+      [removedDigestGate]: "false",
+      [removedCrmGate]: "false",
     } as unknown as PlatformEnv;
 
     const report = await evaluate(db, env);
@@ -424,11 +458,19 @@ describe("operational health evaluation", () => {
     assert.equal(warnedCheck.status, "degraded");
     assert.match(warnedCheck.summary, /warn threshold is 1 hour/);
 
-    const disabled = await evaluate(await healthyDatabase(), {
-      ...baseEnv,
-      ENGAGE_DIGEST_ENABLED: "false",
+    const disabledDb = await healthyDatabase();
+    await disabledDb
+      .collection<Record<string, unknown> & { _id: string }>(
+        OPERATIONAL_SETTINGS_COLLECTION,
+      )
+      .deleteMany({});
+    const disabled = await evaluateOperationalHealth({
+      db: disabledDb,
+      env: baseEnv,
+      now: NOW,
     });
     assert.equal(check(disabled, "digest").status, "unknown");
+    assert.match(check(disabled, "digest").summary, /turned off/);
     assert.equal(disabled.status, "unknown");
     assert.equal(operationalHealthExitCode(disabled), 2);
 
@@ -445,9 +487,10 @@ describe("operational health evaluation", () => {
   });
 
   it("reports verification disabled, backlog and cadence", async () => {
-    const disabled = await evaluate(createMemoryDb(), {
-      ...baseEnv,
-      ENGAGE_CRM_VERIFICATION_ENABLED: "false",
+    const disabled = await evaluateOperationalHealth({
+      db: createMemoryDb(),
+      env: baseEnv,
+      now: NOW,
     });
     assert.equal(
       check(disabled, "membership-verification").status,
@@ -455,7 +498,7 @@ describe("operational health evaluation", () => {
     );
     assert.match(
       check(disabled, "membership-verification").summary,
-      /not enabled/,
+      /turned off/,
     );
 
     const backlog = await healthyDatabase();
@@ -496,6 +539,28 @@ describe("operational health evaluation", () => {
       check(await evaluate(stale), "membership-verification").status,
       "failing",
     );
+  });
+
+  it("reports unknown for invalid saved CRM and job settings", async () => {
+    const db = await healthyDatabase();
+    await db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).updateOne(
+      { _id: CRM_OPERATIONAL_SETTINGS_ID },
+      { $set: { crmBatchSize: 0 } },
+    );
+    const crmReport = await evaluate(db);
+    const crmCheck = check(crmReport, "membership-verification");
+    assert.equal(crmCheck.status, "unknown");
+    assert.match(crmCheck.summary, /not valid/);
+    assert.match(crmCheck.nextAction, /Platform settings/);
+
+    await db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).updateOne(
+      { _id: JOBS_OPERATIONAL_SETTINGS_ID },
+      { $set: { digestEnabled: "true" } },
+    );
+    const jobsReport = await evaluate(db);
+    const digestCheck = check(jobsReport, "digest");
+    assert.equal(digestCheck.status, "unknown");
+    assert.match(digestCheck.summary, /not valid/);
   });
 
   it("applies two-tier recency to every scheduled job", async () => {

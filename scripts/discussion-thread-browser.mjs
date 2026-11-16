@@ -33,7 +33,6 @@ const server = spawn(process.execPath, ['dist/server/entry.mjs'], {
     BETTER_AUTH_URL: origin,
     RESEND_API_KEY: '',
     AUTH_EMAIL_FROM: '',
-    ENGAGE_DIGEST_ENABLED: 'false',
   },
 });
 

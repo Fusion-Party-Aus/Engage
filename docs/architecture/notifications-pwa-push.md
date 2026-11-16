@@ -31,7 +31,7 @@ Engage delivers member notifications across three coordinated channels without d
 Set the following environment variables in production before enabling live email or push delivery:
 
 - `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, `RESEND_WEBHOOK_SECRET`, `ENGAGE_EMAIL_SECRET`, `PUBLIC_ORIGIN`
-- `ENGAGE_DIGEST_ENABLED=true` (and authenticated cron calls to `/api/email/digest`)
+- Scheduled digests turned on under **Platform settings → Scheduled jobs** (and authenticated cron calls to `/api/email/digest`)
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (e.g. `mailto:notifications@fusionparty.org.au`)
 
 ## Verification Status

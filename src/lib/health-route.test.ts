@@ -3,6 +3,12 @@ import { describe, it } from "node:test";
 import type { Db } from "mongodb";
 import { getDatabase } from "./db.ts";
 import { JOB_RUNS_COLLECTION, type JobName } from "./job-runs.ts";
+import {
+  CRM_OPERATIONAL_SETTINGS_ID,
+  DEFAULT_CRM_SETTINGS,
+  JOBS_OPERATIONAL_SETTINGS_ID,
+  OPERATIONAL_SETTINGS_COLLECTION,
+} from "./operational-settings.ts";
 import { GET as getHealth } from "../pages/api/health.ts";
 import type { PlatformEnv } from "./types.ts";
 
@@ -15,9 +21,27 @@ import type { PlatformEnv } from "./types.ts";
 const env: PlatformEnv = {
   APP_MODE: "test",
   MONGODB_URI: "",
-  ENGAGE_DIGEST_ENABLED: "true",
-  ENGAGE_CRM_VERIFICATION_ENABLED: "true",
 };
+
+async function enableScheduledJobs(db: Db): Promise<void> {
+  await Promise.all([
+    db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).updateOne(
+      { _id: JOBS_OPERATIONAL_SETTINGS_ID },
+      { $set: { digestEnabled: true } },
+      { upsert: true },
+    ),
+    db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).updateOne(
+      { _id: CRM_OPERATIONAL_SETTINGS_ID },
+      {
+        $set: {
+          ...DEFAULT_CRM_SETTINGS,
+          crmVerificationEnabled: true,
+        },
+      },
+      { upsert: true },
+    ),
+  ]);
+}
 
 async function health(
   overrides: PlatformEnv = env,
@@ -30,6 +54,7 @@ async function health(
 
 async function seedHealthyRuns(db: Db): Promise<void> {
   await db.collection(JOB_RUNS_COLLECTION).deleteMany({});
+  await enableScheduledJobs(db);
   const now = new Date();
   const jobs: JobName[] = [
     "governance-scheduler",
@@ -72,6 +97,7 @@ describe("/api/health", () => {
   it("returns 200 and degraded when a job needs attention", async () => {
     const db = await getDatabase(env);
     await db.collection(JOB_RUNS_COLLECTION).deleteMany({});
+    await enableScheduledJobs(db);
 
     const { response, body } = await health();
     assert.equal(response.status, 200);

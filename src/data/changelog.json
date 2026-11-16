@@ -1,21 +1,30 @@
 [
   {
-    "hash": "d844be9",
+    "hash": "46a703a",
     "date": "2026-11-17",
     "type": "docs",
     "category": "docs",
-    "scope": "operations",
-    "summary": "Point operational thresholds at the admin setting",
-    "details": "Remove the eight threshold variables from `.env.example` and the environment table. Document the administrator setting instead: defaults, whole-hour bounds, warn-below-fail ordering, and the audited change record. Record what remains on #128: CRM batch sizing, reconcile cadence, outage attempts, request timeout, the digest/CRM enablement gates and the site setting environment fallbacks."
+    "scope": "config",
+    "summary": "Document CRM and job settings as administrator configuration (#128)",
+    "details": "Remove the migrated variables from .env.example, the environment table and the CRM and email guides. Document defaults, bounds, the admin locations and the deployment step required when upgrading from the environment gates."
   },
   {
-    "hash": "a480e5a",
+    "hash": "cc4c9ca",
     "date": "2026-11-17",
     "type": "feat",
     "category": "feature",
     "scope": "settings",
-    "summary": "Make operational health thresholds audited admin settings",
-    "details": "Move the eight operational health thresholds from environment variables to a single validated, audited setting: - scheduler warn/fail, digest warn/fail, verification warn/fail - ballot closure grace and email delivery reporting window The setting is one document in `operational_settings` (`_id: \"thresholds\"`) with documented defaults and whole-hour bounds. Warn must stay below fail. Validation rejects partial, fractional or out-of-range input field by field, and nothing is stored until the whole set is valid. Each change appends an event to `operational_settings_events` with the actor, time and only the changed fields, before and after. There are no secrets. `ops:health` reads the saved values and names each threshold's source as `settings` or `default`. A saved value that is missing, not an integer or out of range is reported as `unknown` with a plain-language action; the affected threshold is labelled as the default it fell back to. Warn/fail ordering is checked at evaluation too. The eight environment variables and their `PlatformEnv` fields are removed. `/admin/settings/` gains an Operational thresholds form built from the admin Card, Field, Input, Button and Alert primitives, with grouped pairs, defaults, ranges, inline errors, a success confirmation and the last audited change. The new `POST /api/admin/operational-settings` requires `settings.manage`, checks same-origin writes and returns field errors without internals. Tests cover validation, defaults, merging, audit shape, permission denial, same-origin rejection, API errors, health sources, invalid stored values, read failure, environment variables having no effect, and replica-set persistence."
+    "summary": "Move CRM tuning and job gates into audited admin settings (#128)",
+    "details": "Store CRM verification enablement, batch size, reconcile interval, outage alert threshold and request timeout, plus the scheduled digest gate, in the operational_settings collection. Each document is validated, defaulted and audited, and the admin settings page gains CRM verification and Scheduled jobs sections. The cron route, digest sender, verification cycle and health report now read enablement and tuning from the database. Missing settings mean off, matching the former unset-variable default. Invalid stored values fail clearly and are never clamped. The six environment variables and their PlatformEnv fields are removed."
+  },
+  {
+    "hash": "1ebab4e",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "settings",
+    "summary": "Operational health thresholds as audited admin settings (#128) (#141)",
+    "details": "* feat(settings): make operational health thresholds audited admin settings Move the eight operational health thresholds from environment variables to a single validated, audited setting: - scheduler warn/fail, digest warn/fail, verification warn/fail - ballot closure grace and email delivery reporting window The setting is one document in `operational_settings` (`_id: \"thresholds\"`) with documented defaults and whole-hour bounds. Warn must stay below fail. Validation rejects partial, fractional or out-of-range input field by field, and nothing is stored until the whole set is valid. Each change appends an event to `operational_settings_events` with the actor, time and only the changed fields, before and after. There are no secrets. `ops:health` reads the saved values and names each threshold's source as `settings` or `default`. A saved value that is missing, not an integer or out of range is reported as `unknown` with a plain-language action; the affected threshold is labelled as the default it fell back to. Warn/fail ordering is checked at evaluation too. The eight environment variables and their `PlatformEnv` fields are removed. `/admin/settings/` gains an Operational thresholds form built from the admin Card, Field, Input, Button and Alert primitives, with grouped pairs, defaults, ranges, inline errors, a success confirmation and the last audited change. The new `POST /api/admin/operational-settings` requires `settings.manage`, checks same-origin writes and returns field errors without internals. Tests cover validation, defaults, merging, audit shape, permission denial, same-origin rejection, API errors, health sources, invalid stored values, read failure, environment variables having no effect, and replica-set persistence. * docs(operations): point operational thresholds at the admin setting Remove the eight threshold variables from `.env.example` and the environment table. Document the administrator setting instead: defaults, whole-hour bounds, warn-below-fail ordering, and the audited change record. Record what remains on #128: CRM batch sizing, reconcile cadence, outage attempts, request timeout, the digest/CRM enablement gates and the site setting environment fallbacks. * chore(changelog): record operational threshold settings"
   },
   {
     "hash": "b0e0c81",
@@ -673,13 +682,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Connect verification, participation and legacy consent journeys"
-  },
-  {
-    "hash": "ee47cdf",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record administrator test email delivery"
   }
 ]

@@ -6,8 +6,9 @@
 >
 > - Plausible analytics is implemented and enabled only on the production host
 >   (`src/lib/analytics.ts`, `src/layouts/SiteLayout.astro`).
-> - Underground CRM membership verification is implemented, gated by
->   `ENGAGE_CRM_VERIFICATION_ENABLED` and disabled by default.
+> - Underground CRM membership verification is implemented, gated by an
+>   administrator setting under **Platform settings → CRM verification**, and
+>   disabled by default.
 > - Seconding, scheduled advancement and automatic ballot closure are
 >   implemented.
 > - The participation-API legal-acceptance enforcement and ballot privacy notice
