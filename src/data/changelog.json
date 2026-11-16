@@ -1,5 +1,23 @@
 [
   {
+    "hash": "608e07c",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "ballots",
+    "summary": "Keep projection certification case pre-quorum",
+    "details": "Refs #122"
+  },
+  {
+    "hash": "c9d4e0a",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the quorum edge-case note",
+    "details": "Refs #122"
+  },
+  {
     "hash": "255ab3c",
     "date": "2026-11-16",
     "type": "docs",
@@ -667,21 +685,5 @@
     "category": "ops",
     "scope": "member",
     "summary": "Capture desktop and mobile lifecycle states in isolated CI"
-  },
-  {
-    "hash": "71a61de",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ci",
-    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
-  },
-  {
-    "hash": "cb39b60",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record lifecycle audit, consent assessment and rollout checks"
   }
 ]
