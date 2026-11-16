@@ -235,6 +235,7 @@ export function renderDiscordDigest(
         origin,
       );
       link.searchParams.set("source", "discord-weekly");
+      link.hash = item.stage === "decide" ? "proposal-vote" : "deliberation";
       lines.push("", `**${safeTitle(item.title)}** · ${label}`, description, link.toString());
     }
   }
@@ -297,7 +298,8 @@ export async function previewWeeklyDiscordDigest(
   })).filter((p) =>
     canViewProposal(p, null) &&
     (p.publicationScope === "national" || !p.publicationScope) &&
-    (p.stage === "deliberate" || (p.stage === "decide" && !ballotExpired(p, now))),
+    (p.stage === "deliberate" ||
+      (p.stage === "decide" && p.ballotRevisionId && !ballotExpired(p, now))),
   );
   const [exposures, tallies] = await Promise.all([
     historicalExposures(db, now),
