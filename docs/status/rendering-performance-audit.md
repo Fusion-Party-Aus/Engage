@@ -378,19 +378,44 @@ one row per ballot/revision. The row stores no member id, choice, reason,
 envelope or blind index, so it cannot be joined back to a voter.
 
 `castVote` applies the row **after** the vote transaction commits. The update is
-best-effort: a failure or a write slower than 500 ms is logged as an operational
-event (`ballot_tally_projection_failed` / `ballot_tally_projection_timeout`) and
-the vote still succeeds. The projection is not read by `recordFormalDecision`,
-which continues to recompute the outcome from the votes bound to the ballot and
+best-effort: a failure, a write conflict or a write slower than 500 ms is logged
+as an operational event (`ballot_tally_projection_failed`,
+`ballot_tally_projection_conflict`, `ballot_tally_projection_timeout`) and the
+vote still succeeds. The projection is not read by `recordFormalDecision`, which
+continues to recompute the outcome from the votes bound to the ballot and
 revision and refuses unbound or unreadable votes. Eligibility, ballot binding,
 deadlines, the D9 comparison and D10 abstention treatment are untouched.
 
-Vote changes move a count from the previous choice to the new one; re-casting
-the same choice is a no-op; a row that cannot be updated from a known delta is
-rebuilt from that ballot/revision's votes. Rows are revision-scoped, and
-encrypted votes are counted by the same decryption path as certification.
-`npm run ballots:tally-projection` reports and rebuilds rows; it never deletes,
-edits or rewrites a vote and never records a result.
+Writes are atomic and race-safe, because a read-then-write projection
+double-counts under concurrent votes:
+
+- **Normal votes are one upsert increment.** `approve`/`abstain`/`reject`/`total`
+  are `$inc`ed and the row is created in the same operation, so two concurrent
+  first votes cannot each create a row or lose one.
+- **Vote changes move a count**, decrementing the previous choice and
+  incrementing the new one; re-casting the same choice is a no-op.
+- **A revision move is two transactional deltas** (old row −1, new row +1), so no
+  row is ever half-moved.
+- **Recounts are last-resort and guarded.** The only recount is for an unreadable
+  prior vote and the repair CLI. It is compare-and-set on an internal `version`
+  token, bounded by a watermark recorded in `appliedThrough`, and retries on a
+  conflict. An increment for a vote the recount already counted is skipped, so
+  the recount cannot be double counted either. At the write deadline the recount
+  is abandoned rather than writing a stale absolute count, leaving the row for
+  `npm run ballots:tally-projection`.
+- **A row that is internally inconsistent** (negative, or a total that is not the
+  sum of the choices) is never displayed; it reads as tally pending until
+  repaired. This covers drift from a projection that was already missing.
+
+Rows are revision-scoped, and encrypted votes are counted by the same decryption
+path as certification. `npm run ballots:tally-projection` reports and rebuilds
+rows; it never deletes, edits or rewrites a vote and never records a result.
+
+An earlier revision of this slice used a read-then-write fallback whenever the
+projection row was missing. The full suite exposed a double count under
+concurrent votes, so that path was replaced by the atomic strategy above. The
+race cases in `ballot-tallies-mongo.test.ts` reproduce the failure mode and
+assert the row against the votes.
 
 **Deliberate limits**
 
@@ -405,6 +430,11 @@ edits or rewrites a vote and never records a result.
   `npm run ballots:tally-projection -- --database <name> --apply` once after
   deployment if existing ballots should show counts immediately instead of the
   neutral state.
+- A recount records the newest vote timestamp it actually counted. If a vote's
+  transaction stamps an earlier `updatedAt` but commits after that recount, its
+  increment can be skipped and the row under-counted. The normal increment path
+  is unaffected and `npm run ballots:tally-projection` repairs the row; the
+  alternative would be writing a stale absolute count, which is worse.
 - The harness seeds votes directly and does not seed `ballot_tallies`, so its
   measured pages show the neutral state. That is deliberate: the harness
   measures the read path, and the browser check below seeds fresh, stale and
@@ -446,7 +476,8 @@ edits or rewrites a vote and never records a result.
 ## Verification
 
 - `npm run check` — 0 errors, 0 warnings (22 pre-existing hints at the time of the first pass; the public-list follow-up leaves 20 hints, none in the changed files).
-- `npm test` with `VOTING_TEST_MONGODB_URI` — 306 tests passed for the first pass; the register follow-up runs the full suite at 532 tests, the header follow-up at 600 tests, and the public-list follow-up at 655 tests, 0 fail. That includes `site-header-notifications.test.ts`, `proposal-register.test.ts`, `public-proposals.test.ts` (25-row pages, boundaries, invalid and out-of-range pages, filter preservation and reset, stable ordering, canonical and rel-link helpers, no `proposal_votes` access, fresh/stale/missing projection states, certified results from `ballot_results`, visibility narrowing, privacy) and `ballot-tallies.test.ts` / `ballot-tallies-mongo.test.ts` (delta arithmetic, same-choice re-cast, changed vote, concurrent votes, revision scoping, encrypted mode, a corrupted projection not affecting certification, a failed projection write leaving the vote successful and logging, and the repair plan).
+- `npm test` with `VOTING_TEST_MONGODB_URI` — 306 tests passed for the first pass; the register follow-up runs the full suite at 532 tests, the header follow-up at 600 tests, and the public-list follow-up at 683 tests, 0 fail, run twice on the replica set (both runs 683/683). That includes `site-header-notifications.test.ts`, `proposal-register.test.ts`, `public-proposals.test.ts` (25-row pages, boundaries, invalid and out-of-range pages, filter preservation and reset, stable ordering, canonical and rel-link helpers, no `proposal_votes` access, fresh/stale/missing/inconsistent projection states, certified results from `ballot_results`, visibility narrowing, privacy) and `ballot-tallies.test.ts` / `ballot-tallies-mongo.test.ts` (delta arithmetic, same-choice re-cast, changed vote, many concurrent first votes, concurrent vote changes, concurrent revision moves, ten rebuild-versus-increment races, revision scoping, encrypted mode, a deadline that abandons a rebuild without writing, a corrupted projection not affecting certification, a failed projection write leaving the vote successful and logging, and the repair plan).
+- Projection concurrency suite alone: `src/lib/ballot-tallies-mongo.test.ts` run 10 times, 11/11 tests passed each time.
 - `npm run build` — production build succeeds.
 - Harness run against the committed code; before/after JSON committed under `docs/status/`. The register follow-up ran `--filter admin-proposals --runs 3` against `78c07c0` (before) and `c1f72c0` (after). The header follow-up ran the full harness against `b9286f4` (before) and `ad34a17` (after). The public-list follow-up ran `--filter home` and `--filter "proposals /proposals/"` with five runs against `57402f0` (before) and `65ace21` (after), and ran the MongoDB profiler over one anonymous request per page on the same seeded database.
 - Public-list follow-up browser verification at 1440×1000 and 390×844: 60 checks passed. Covered 25 rendered rows, the range status, self-referencing canonical with `rel="prev"`/`rel="next"` moving between pages, the active stage tab, filter preservation and reset to page 1, keyboard-only focus on the Next control with a visible ring, the fresh projection count, the stale `Voting open — tally updating` state linked to the matter, the certified tally from `ballot_results`, empty and out-of-range states, no horizontal overflow, and no console, page or 5xx errors. Run against a seeded database with one fresh, one stale and one certified tally; the remaining open ballots exercised the missing-row state.
