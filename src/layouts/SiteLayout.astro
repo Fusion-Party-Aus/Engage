@@ -23,6 +23,10 @@ interface Props {
   ogType?: 'website' | 'article';
   noIndex?: boolean;
   workspace?: boolean;
+  /** Previous page in a paginated public list; emits rel="prev". */
+  prevHref?: string;
+  /** Next page in a paginated public list; emits rel="next". */
+  nextHref?: string;
 }
 
 const env = runtimeEnv(Astro.locals);
@@ -41,6 +45,8 @@ const {
   ogType = 'website',
   noIndex = false,
   workspace = false,
+  prevHref,
+  nextHref,
 } = Astro.props;
 
 const privateHost =
@@ -83,6 +89,8 @@ const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organ
     <meta name="description" content={description} />
     {preventIndexing && <meta name="robots" content="noindex, nofollow" />}
     {canonicalHref && <link rel="canonical" href={canonicalHref} />}
+    {prevHref && <link rel="prev" href={trustedCanonical(prevHref, originInput)} />}
+    {nextHref && <link rel="next" href={trustedCanonical(nextHref, originInput)} />}
 
     <!-- OpenGraph / Facebook / Discord Link Unfurling -->
     <meta property="og:site_name" content={`${siteConfig.siteName} · ${siteConfig.organizationName}`} />

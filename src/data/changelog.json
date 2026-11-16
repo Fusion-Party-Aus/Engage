@@ -1,21 +1,30 @@
 [
   {
-    "hash": "b5cf2ca",
+    "hash": "fcd2e5b",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the race-safe tally projection writes",
+    "details": "Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52"
+  },
+  {
+    "hash": "636adee",
     "date": "2026-11-16",
     "type": "docs",
     "category": "docs",
-    "scope": "profiles",
-    "summary": "Document profile visibility and CRM redirect",
-    "details": "Record the owner visibility switch, hidden-profile 404 and link suppression, the opt-in CRM identifier seam and its 301 behaviour, initials-only avatars, the absent self-service account deletion, and the display-only comment score. Refs #113"
+    "scope": "status",
+    "summary": "Record the race-safe projection write strategy",
+    "details": "Replaces the read-then-write description with the atomic strategy: an upsert increment for normal votes, transactional deltas for a revision move, and a compare-and-set recount bounded by a watermark and deadline for the last-resort path. Records that an internally inconsistent row is displayed as pending, the residual out-of-order watermark caveat, the concurrency tests and both full suite results. Refs #52"
   },
   {
-    "hash": "d593a12",
+    "hash": "62a467f",
     "date": "2026-11-16",
-    "type": "feat",
-    "category": "feature",
-    "scope": "profiles",
-    "summary": "Add profile visibility and CRM identifier seam",
-    "details": "Let owners hide their public profile; other viewers and visitors receive 404 and author links are suppressed, while the owner keeps a preview. Extend the profile settings route to update biography and visibility together. Add an opt-in CRM identifier seam: with ENGAGE_PROFILE_CRM_IDENTIFIERS=on, an active CRM identity link becomes the canonical profile path and legacy member-id paths redirect with 301; the lookup is local and off by default. Add coverage for both behaviours and verify the visibility control in the browser harness. Refs #113"
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Make tally projection writes atomic under concurrency",
+    "details": "The projection's first-vote path read the votes and wrote absolute counts when no row existed. A concurrent increment could land between that read and write, or after it, double counting; the full suite exposed it as an extra abstain. The normal path is now one atomic upsert increment, so a first vote creates the row and counts it in a single operation. Two concurrent first votes can no longer each create a row or lose one. A write conflict from a transactional revision move retries inside the deadline. The only remaining recount is for an unreadable prior vote and the repair CLI. It is compare-and-set guarded on an internal version token and bounded by a watermark recorded in appliedThrough, so an increment for a vote the recount already included is skipped, and an increment that landed first forces a fresh recount. The deadline is enforced before each write (and with maxTimeMS on the recount), so a timed-out rebuild leaves the row for the repair CLI instead of writing a stale absolute count. A revision move is two transactional deltas on the old and new rows, not a recount. A row whose counts are negative or do not sum to its total is never displayed; it reads as tally pending until repaired. Tests: many concurrent first votes, concurrent vote changes and a concurrent revision move each equal the authoritative tally; ten rebuild-versus-increment races; a recorder that a timed-out rebuild writes nothing; and the public list treating an inconsistent row as pending. Refs #52"
   },
   {
     "hash": "72c1cd4",
@@ -25,6 +34,78 @@
     "scope": "profiles,proposals",
     "summary": "Public member profiles and action-led policy changes (#117)",
     "details": "* feat(profiles): add public member profiles and editable biography Build a viewer-relative profile read model over existing accounts, comments, proposals, amendments and branch memberships. Profile pages show an initials avatar, optional biography, geographic affiliation, contribution statistics and display-only comment karma, with paginated Comments, Proposals and Amendments tabs and deep links to the exact discussion anchor. Deleted comments, withdrawn amendments and proposals the viewer cannot open are excluded from history, counts and karma. Owners edit a plain-text biography through an origin-checked member route; no separate profile or contribution collection is introduced. Adds profile lookup indexes for comments and amendments. Refs #113 * feat(discussion): link authors to public member profiles Comment names and avatars, the proposal author and amendment authors now link to the public profile when a member id establishes authorship. Disabled accounts render as plain text and truncated historic records without a displayable name are not linked, so the interface never invents an author or offers a dead profile link. Top support and concern takeaways use the same link, and the proposal activity timeline targets the exact amendment anchor. Refs #113 * test(profiles): cover visibility, privacy, pagination and deep links Add in-memory read-model tests for private, branch and archived visibility, deleted comments, withdrawn amendments, legacy policyId comments, karma, deterministic pagination, disabled accounts, historic authors and owner-only biography writes. Add route checks for session and origin enforcement. Add a Chromium harness that follows an author link from a discussion, checks profile tabs and statistics, follows a comment deep link, verifies empty tabs and the 404 page on desktop and mobile, and wire it into CI after the production build. Refs #113 * docs(profiles): document public profiles, visibility and display-only karma Record the profile read model, owner biography field, viewer-relative filtering, profile indexes, biography route, browser harness, capability rows and the remaining privacy limits. Explicitly state that karma never affects eligibility, permissions or proposal authority. Refs #113 * test(profiles): cover the MongoDB karma aggregation Exercise the profile read model against MongoDB so the database-side karma sum is verified, not only the in-memory fallback. The suite skips when VOTING_TEST_MONGODB_URI is not configured and uses a unique database name. Refs #113 * refactor(profiles): rename comment karma to comment score Use the accurate product term for the sum of net scores on visible comments, and remove the always-visible explanatory note. Rename the internal field and function so the old term cannot return through future UI work. Refs #113 * feat(proposals): make policy changes follow the chosen action The policy-change form now treats amend, replace and repeal as distinct member tasks. The selected action drives the page heading, default title, primary question, effect timing and visible fields. Repeal asks for a rationale and hides commitments; an amendment can name the part to change; a replacement can carry proposed wording. Policy changes inherit the published policy's topic and governance context, so members no longer re-enter a topic or scope. Open change proposals for the same policy are shown before the form so members can join the discussion. The action-specific fields are stored with the proposal, included in the revision snapshot and locked once voting begins. Fixes the stale Amend title when Repeal is selected. Refs #114, #97 * test(proposals): guard action-led policy change form wiring Assert that the action selector announces the choice, the page updates the title and question from the chosen action, repeal hides commitments, and the form inherits the policy topic while showing existing change proposals. Refs #114 * chore(changelog): record public profiles and policy change UX Refresh the public snapshot for public member profiles and the action-led policy-change form. Preserve entries outside the generator's 80-commit window so the public history is not shortened. Refs #113, #114"
+  },
+  {
+    "hash": "974e68d",
+    "date": "2026-11-16",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record public list pagination and the tally projection",
+    "details": "Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52"
+  },
+  {
+    "hash": "fba31bc",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "status",
+    "summary": "Correct the public-list suite count",
+    "details": "The final run includes the revision-move projection test: 655 tests, 0 fail. Refs #52"
+  },
+  {
+    "hash": "8b15d5a",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Move a re-bound amendment tally to the right revision row",
+    "details": "An amendment ballot can be re-bound to a newer wording revision. A member who had already voted on the previous revision casts again on the new one, so the previous count belongs to the old row, not the new row. The projection now learns the revision the previous vote was bound to and recounts both rows from their votes instead of applying a delta to the wrong row. Main matter ballots cannot reach this path: castVote refuses a ballot whose existing votes are not all bound to its current revision. Adds a projection test for the move. Refs #52"
+  },
+  {
+    "hash": "e66a1c4",
+    "date": "2026-11-16",
+    "type": "docs",
+    "category": "docs",
+    "scope": "status",
+    "summary": "Record public list pagination and the tally projection",
+    "details": "Adds the before/after harness snapshots for / and /proposals/ (before 57402f0, after 65ace21) and records what changed: 25-row server pagination with filter preservation and canonical/rel links, a display-only ballot_tallies projection, certified tallies from ballot_results, and a neutral tally-updating state for missing or stale rows. The profiler window records 3 -> 0 proposal_votes operations on /proposals/ and 6 -> 0 on /, with getMore batches falling from three to one on every measured public page. Reports the /proposals/ HTML increase honestly: it renders 25 rows instead of 15 at the specified page size, not extra markup per row. Updates I12 and S4, notes the detail page's remaining live tally and the deployment step to backfill the projection, and adds the new collection and CLI to the architecture docs. Refs #52"
+  },
+  {
+    "hash": "e7bfa48",
+    "date": "2026-11-16",
+    "type": "fix",
+    "category": "fix",
+    "scope": "proposals",
+    "summary": "Keep the active stage tab and certified tallies correct",
+    "details": "The parsed stage is now '' rather than 'all' for an unfiltered list, so the All tab has to compare against '' to stay marked current. A certified result is authoritative even when the matter no longer carries a ballotRevisionId (for example after a zero-vote unbind). Resolve certified results by every visible matter's ballot, not only those with a current binding, so the row shows the recorded tally instead of falling back to no tally. Refs #52"
+  },
+  {
+    "hash": "65ace21",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "scripts",
+    "summary": "Rebuild the ballot tally projection from votes",
+    "details": "Add npm run ballots:tally-projection. It reports missing, mismatched and orphan projection rows against the votes they should represent, and with --apply rebuilds them. It never deletes, edits or rewrites a vote and never certifies a result. Dry run is the default; --verify exits non-zero when rows need repair; an explicit --database is required; production writes additionally require --allow-production and --confirm-production engage_production. Encrypted votes need the ballot keys and the tool refuses to write a partial tally without them. Refs #52"
+  },
+  {
+    "hash": "d186ce7",
+    "date": "2026-11-16",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "proposals",
+    "summary": "Paginate the public list and stop scanning ballots",
+    "details": "/proposals/ loaded every proposal, applied search, stage, branch and sort in the page, and decrypted every vote for the row totals. It now reads a bounded display page of 25 rows from MongoDB with server-side pagination. - Page, total, page count and range are computed from the filtered set; invalid or out-of-range pages clamp; ties order deterministically by proposal id. - Links keep q, stage, branch, space, sort, focus and joined; changing a filter starts at page 1. Pagination uses the Button primitive with previous/next and a live range status. - Each page self-references its canonical address and emits rel=prev/rel=next. The repository has no noIndex convention for parameterised lists, so pages stay indexable with a self-canonical rather than inventing one. - Rows no longer read proposal_votes. A certified ballot shows the tally stored on ballot_results; otherwise a fresh ballot_tallies row is used; a missing or stale row shows \"Voting open — tally updating\" with a link to the matter. - / overlays the same projection on the register it already reads, so home no longer decrypts votes either. Matters without a trustworthy aggregate are left out of the highlights rather than showing a wrong percentage. Visibility is still decided by canViewProposal and re-checked after the coarse MongoDB pre-filter; eligibility, ballot binding and deadlines are untouched. Refs #52"
+  },
+  {
+    "hash": "d471f6e",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballots",
+    "summary": "Project display-only tallies after a committed vote",
+    "details": "Public list pages (/ and /proposals/) tallied every vote and decrypted every encrypted ballot just to show a count. Add a display-only ballot_tallies row per (ballotId, revisionId), written best-effort after the vote transaction commits. The projection is never authoritative: recordFormalDecision keeps recomputing the outcome from the bound votes and does not read it. A failed or slow projection write is logged as an operational event and cannot fail, delay or alter the vote. Vote changes decrement the previous choice and increment the new one, a re-cast of the same choice is a no-op, and rows are revision-scoped. The row stores counts and a timestamp only: no member id, choice, reason or envelope. listProposals can now omit vote tallies so public reads never touch proposal_votes; the web pages overlay certified results and the projection in the next commit. Adds the unique compound index to initializeDatabase and a rebuild/repair path for the CLI. Refs #52"
   },
   {
     "hash": "9235057",
@@ -601,241 +682,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Connect verification, participation and legacy consent journeys"
-  },
-  {
-    "hash": "ee47cdf",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record administrator test email delivery"
-  },
-  {
-    "hash": "eb5f365",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "email",
-    "summary": "Let administrators send themselves a sample digest",
-    "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
-  },
-  {
-    "hash": "cfbf459",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record notification preferences and digest rollout defaults"
-  },
-  {
-    "hash": "bc6409f",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Separate email preferences and explain rollout defaults",
-    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
-  },
-  {
-    "hash": "7a56a95",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "engagement",
-    "summary": "Add proposal rankings, ballot deadlines and member reminders",
-    "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
-  },
-  {
-    "hash": "0b8b375",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "settings",
-    "summary": "Save the configured source repository URL"
-  },
-  {
-    "hash": "6fad513",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record granular analytics improvements"
-  },
-  {
-    "hash": "2167573",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "analytics",
-    "summary": "Measure Engage navigation and participation outcomes"
-  },
-  {
-    "hash": "8a36c4a",
-    "date": "2026-11-16",
-    "type": "test",
-    "category": "ops",
-    "scope": "proposals",
-    "summary": "Guard action-led policy change form wiring",
-    "details": "Assert that the action selector announces the choice, the page updates the title and question from the chosen action, repeal hides commitments, and the form inherits the policy topic while showing existing change proposals. Refs #114"
-  },
-  {
-    "hash": "3358ff3",
-    "date": "2026-11-16",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Make policy changes follow the chosen action",
-    "details": "The policy-change form now treats amend, replace and repeal as distinct member tasks. The selected action drives the page heading, default title, primary question, effect timing and visible fields. Repeal asks for a rationale and hides commitments; an amendment can name the part to change; a replacement can carry proposed wording. Policy changes inherit the published policy's topic and governance context, so members no longer re-enter a topic or scope. Open change proposals for the same policy are shown before the form so members can join the discussion. The action-specific fields are stored with the proposal, included in the revision snapshot and locked once voting begins. Fixes the stale Amend title when Repeal is selected. Refs #114, #97"
-  },
-  {
-    "hash": "34ec685",
-    "date": "2026-11-16",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "profiles",
-    "summary": "Rename comment karma to comment score",
-    "details": "Use the accurate product term for the sum of net scores on visible comments, and remove the always-visible explanatory note. Rename the internal field and function so the old term cannot return through future UI work. Refs #113"
-  },
-  {
-    "hash": "29f328e",
-    "date": "2026-11-16",
-    "type": "test",
-    "category": "ops",
-    "scope": "profiles",
-    "summary": "Cover the MongoDB karma aggregation",
-    "details": "Exercise the profile read model against MongoDB so the database-side karma sum is verified, not only the in-memory fallback. The suite skips when VOTING_TEST_MONGODB_URI is not configured and uses a unique database name. Refs #113"
-  },
-  {
-    "hash": "1135e41",
-    "date": "2026-11-16",
-    "type": "docs",
-    "category": "docs",
-    "scope": "profiles",
-    "summary": "Document public profiles, visibility and display-only karma",
-    "details": "Record the profile read model, owner biography field, viewer-relative filtering, profile indexes, biography route, browser harness, capability rows and the remaining privacy limits. Explicitly state that karma never affects eligibility, permissions or proposal authority. Refs #113"
-  },
-  {
-    "hash": "3e367bd",
-    "date": "2026-11-16",
-    "type": "test",
-    "category": "ops",
-    "scope": "profiles",
-    "summary": "Cover visibility, privacy, pagination and deep links",
-    "details": "Add in-memory read-model tests for private, branch and archived visibility, deleted comments, withdrawn amendments, legacy policyId comments, karma, deterministic pagination, disabled accounts, historic authors and owner-only biography writes. Add route checks for session and origin enforcement. Add a Chromium harness that follows an author link from a discussion, checks profile tabs and statistics, follows a comment deep link, verifies empty tabs and the 404 page on desktop and mobile, and wire it into CI after the production build. Refs #113"
-  },
-  {
-    "hash": "d9dcb26",
-    "date": "2026-11-16",
-    "type": "feat",
-    "category": "feature",
-    "scope": "discussion",
-    "summary": "Link authors to public member profiles",
-    "details": "Comment names and avatars, the proposal author and amendment authors now link to the public profile when a member id establishes authorship. Disabled accounts render as plain text and truncated historic records without a displayable name are not linked, so the interface never invents an author or offers a dead profile link. Top support and concern takeaways use the same link, and the proposal activity timeline targets the exact amendment anchor. Refs #113"
-  },
-  {
-    "hash": "934b666",
-    "date": "2026-11-16",
-    "type": "feat",
-    "category": "feature",
-    "scope": "profiles",
-    "summary": "Add public member profiles and editable biography",
-    "details": "Build a viewer-relative profile read model over existing accounts, comments, proposals, amendments and branch memberships. Profile pages show an initials avatar, optional biography, geographic affiliation, contribution statistics and display-only comment karma, with paginated Comments, Proposals and Amendments tabs and deep links to the exact discussion anchor. Deleted comments, withdrawn amendments and proposals the viewer cannot open are excluded from history, counts and karma. Owners edit a plain-text biography through an origin-checked member route; no separate profile or contribution collection is introduced. Adds profile lookup indexes for comments and amendments. Refs #113"
-  },
-  {
-    "hash": "ca28f84",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "discussion",
-    "summary": "Guard tombstoned comments, empty menus, and vote actions"
-  },
-  {
-    "hash": "b9c3c7e",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Regenerate after merging main"
-  },
-  {
-    "hash": "6d93797",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the activity score fix",
-    "details": "Refs #57."
-  },
-  {
-    "hash": "f4d94d0",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "activity",
-    "summary": "Show the comment's net score, not upvotes alone",
-    "details": "Member activity previously labelled a contribution with its upvote count, which is misleading now that comments can be downvoted. Show the net score as points, consistent with the discussion thread, and keep vote identities out of the feed. Refs #57."
-  },
-  {
-    "hash": "6602f6e",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record atomic comment vote updates",
-    "details": "Refs #57."
-  },
-  {
-    "hash": "49a4562",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "discussion",
-    "summary": "Make comment vote writes atomic under concurrency",
-    "details": "Adds a voteVersion compare-and-swap to comment vote updates. A concurrent vote bumps the version, so a stale write is retried against the latest state rather than overwriting it. Covers 25 simultaneous voters and same-member double clicks against both the in-memory database and a real MongoDB replica set. Refs #57."
-  },
-  {
-    "hash": "9fa8fb0",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record threaded discussion and comment voting",
-    "details": "Refreshes the public snapshot after the discussion feature, CI verification and documentation commits. The generator's existing 80-commit window still drops older entries (#96); no history was edited by hand. Refs #57."
-  },
-  {
-    "hash": "be9e23c",
-    "date": "2026-11-16",
-    "type": "docs",
-    "category": "docs",
-    "scope": "discussion",
-    "summary": "Document threading, comment votes and Best ranking",
-    "details": "Updates the canonical model, API contract, capability matrix and known gaps. Records that comment votes are display ranking only, that voter identities are never returned, and the residual risks around rate limiting, audit and exact aggregate downvote counts. Refs #57."
-  },
-  {
-    "hash": "0ba7114",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "ci",
-    "summary": "Verify threaded discussion in a real browser",
-    "details": "Runs the isolated Playwright harness after the perimeter check. It proves parent-first nesting, sibling sorting, deep mobile layout, reply/delete interactions and that the comment API returns aggregate signal only. Refs #57."
-  },
-  {
-    "hash": "29f04b3",
-    "date": "2026-11-16",
-    "type": "feat",
-    "category": "feature",
-    "scope": "discussion",
-    "summary": "Render threaded replies with confidence-weighted voting",
-    "details": "Proposal discussion now stores parentCommentId and depth, renders one recursive comment component instead of a flat list, and keeps replies inside their parent's subtree when sorting. Deleting a comment that still has replies clears the body and keeps a placeholder so the thread does not lose context. Comments take upvotes and downvotes with one active vote per member. Responses return aggregate score, counts and percentage plus the caller's own choice; voter identities are never serialised. The default Best sort applies a Wilson score lower bound to every sibling group, with Top score, Newest and Oldest as alternatives and deterministic tie-breaking. Refs #57."
   }
 ]

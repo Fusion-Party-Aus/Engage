@@ -27,6 +27,7 @@
 | `amendments` | Amendment records and their lifecycle state |
 | `amendment_revisions` | Immutable amendment wording snapshots |
 | `proposal_votes` | Current vote per member per ballot, plaintext or encrypted |
+| `ballot_tallies` | Display-only aggregate per `(ballotId, revisionId)`: approve/abstain/reject/total and `updatedAt`. Never authoritative and never contains a voter reference; see [read models](../architecture/extensibility-and-hardening.md#5-integration-read-models--operational-resilience) |
 | `ballots` | Ballot projection: purpose, electorate, revision, status, close time |
 | `ballot_results` | Immutable formal decision records |
 | `ballot_binding_events` | Audit of ballot-to-revision binding |

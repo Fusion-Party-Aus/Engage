@@ -18,10 +18,17 @@ import {
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { loadBallotCryptoConfig } from '../../lib/ballot-crypto.ts';
-import { listOutstandingDecisions, listProposals, normalizeStage } from '../../lib/store.ts';
+import { listOutstandingDecisions } from '../../lib/store.ts';
+import {
+  PUBLIC_PROPOSAL_PAGE_SIZE,
+  buildPublicProposalPage,
+  listPublicProposalCandidates,
+  parsePublicProposalStage,
+  proposalListHref,
+  publicTallyLabel,
+} from '../../lib/public-proposals.ts';
 import { findMemberVotes, proposalBallotId } from '../../lib/vote-storage.ts';
 import { getSiteConfig } from '../../lib/site-config.ts';
-import { rankProposals } from '../../lib/proposal-metrics.ts';
 import type { ProposalStage } from '../../lib/types.ts';
 
 export const prerender = false;
@@ -41,100 +48,60 @@ const initialFocus = discoveryFocus(Astro.url.searchParams, Boolean(user?.canPar
 const initialSort = (Astro.url.searchParams.get('sort') ?? 'priority').trim();
 const branches = (await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()).map(({ branchId, name }) => ({ branchId, name }));
 const rawStage = (Astro.url.searchParams.get('stage') ?? Astro.url.searchParams.get('status') ?? 'all').trim();
-const initialStage = rawStage === 'all' ? 'all' : normalizeStage(rawStage);
+const initialStage = parsePublicProposalStage(rawStage);
 if (initialStage === 'decide' && (Astro.url.searchParams.has('focus') || Astro.url.searchParams.has('needsVote'))) {
   Astro.cookies.set('engage_voting_focus', initialFocus, { path: '/proposals/', sameSite: 'lax', httpOnly: true, maxAge: 60 * 60 * 24 * 90 });
 }
 const joinedOnly = Astro.url.searchParams.get('joined') === '1' || initialFocus === 'discussion';
 
-const [allAvailableProposals, joinedComments] = await Promise.all([
-  listProposals(db, {
-    includeArchived: Boolean(user?.isStaff),
-    user,
-  }),
-  user ? db.collection('comments').find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray() : Promise.resolve([]),
-]);
+const candidates = await listPublicProposalCandidates(db, { user, search: initialQuery });
+const candidateSummaries = candidates.map((proposal) => ({
+  ...proposal,
+  commentCount: 0,
+  votes: { approve: 0, abstain: 0, reject: 0, total: 0 },
+}));
 
+// The member's own votes and outstanding ballots are bounded to their own
+// records; the aggregate tally on the page never scans ballot storage.
 const memberVotesPromise = user
   ? findMemberVotes(
       db,
       user.memberId,
-      allAvailableProposals.map((p) => proposalBallotId(p.proposalId)),
+      candidates.map((p) => proposalBallotId(p.proposalId)),
       loadBallotCryptoConfig(env),
     )
   : Promise.resolve([]);
 
-const [myVotesRaw, myOutstandingVotes] = await Promise.all([
+const [myVotesRaw, myOutstandingVotes, joinedComments] = await Promise.all([
   memberVotesPromise,
   user?.canParticipate
-    ? listOutstandingDecisions(db, user.memberId, user, allAvailableProposals, memberVotesPromise)
+    ? listOutstandingDecisions(db, user.memberId, user, candidateSummaries, memberVotesPromise)
+    : Promise.resolve([]),
+  user
+    ? db.collection('comments').find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray()
     : Promise.resolve([]),
 ]);
 
-const baseProposals = allAvailableProposals.filter((p) => p.stage !== 'archived');
-
-const joinedIds = new Set(joinedComments.map((comment) => String(comment.proposalId)));
-
-const queryLower = initialQuery.toLowerCase();
-const rawProposals = allAvailableProposals.filter((p) => {
-  if (initialSpace && initialSpace !== 'all' && p.space !== initialSpace) return false;
-  if (
-    initialBranch &&
-    initialBranch !== 'all' &&
-    ![p.originatingBranchId, p.governanceAuthorityBranchId, p.jurisdictionBranchId].includes(initialBranch)
-  ) {
-    return false;
-  }
-  if (queryLower) {
-    const haystack = `${p.proposalId} ${p.title} ${p.space} ${p.summary} ${p.details}`.toLowerCase();
-    if (!haystack.includes(queryLower)) return false;
-  }
-  return true;
+const page = await buildPublicProposalPage(db, candidates, {
+  page: Astro.url.searchParams.get('page') ?? '1',
+  pageSize: PUBLIC_PROPOSAL_PAGE_SIZE,
+  stage: initialStage,
+  branch: initialBranch,
+  space: initialSpace,
+  sort: initialSort,
+  focus: initialFocus,
+  joinedOnly,
+  joinedProposalIds: joinedComments.map((comment) => String(comment.proposalId)),
+  outstandingProposalIds: myOutstandingVotes.map((item) => item.proposalId),
+  memberVotes: myVotesRaw,
 });
 
+const pageRows = page.rows;
 const outstandingIds = new Set(myOutstandingVotes.map((item) => item.proposalId));
-const votedProposalIds = new Set(
-  myVotesRaw
-    .filter((v: any) => v.proposalId && v.ballotId === proposalBallotId(String(v.proposalId)) && allAvailableProposals.some((proposal) => proposal.proposalId === String(v.proposalId) && proposal.ballotRevisionId === v.revisionId))
-    .map((v: any) => String(v.proposalId)),
-);
-
-const countDataset = rawProposals.filter((proposal) => {
-  if (joinedOnly && !joinedIds.has(proposal.proposalId)) return false;
-  if (initialFocus === 'needs-vote') return outstandingIds.has(proposal.proposalId);
-  return true;
-});
-
-const focusFiltered = countDataset.filter((proposal) =>
-  initialStage === 'all' || (proposal.stage === initialStage && (initialStage !== 'decide' || Boolean(proposal.ballotRevisionId) && !ballotExpired(proposal))),
-);
-
-const effectiveSort = initialFocus === 'recent' && initialSort === 'priority' ? 'recent' : initialSort;
-
-const visibleProposals = ["divisive", "approved", "active"].includes(effectiveSort)
- ? rankProposals(focusFiltered, effectiveSort as "divisive" | "approved" | "active")
- : [...focusFiltered].sort((a, b) => {
-  if (effectiveSort === 'recent') {
-    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-  }
-  if (effectiveSort === 'ballots') {
-    return b.votes.total - a.votes.total || b.commentCount - a.commentCount;
-  }
-  if (effectiveSort === 'contributions') {
-    return b.commentCount - a.commentCount || b.votes.total - a.votes.total;
-  }
-  const priority = { decide: 0, deliberate: 1, propose: 2, implement: 3, archived: 4 };
-  return (
-    priority[a.stage] - priority[b.stage] ||
-    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
-});
-
-const pageSize = 15;
-const requestedPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
-const pageCount = Math.max(1, Math.ceil(visibleProposals.length / pageSize));
-const currentPage = Number.isFinite(requestedPage) ? Math.min(Math.max(requestedPage, 1), pageCount) : 1;
-const pageProposals = visibleProposals.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+const visibleCount = page.total;
+const baseProposalCount = page.availableCount;
+const pageCount = page.pageCount;
+const currentPage = page.page;
 
 const buildFilterUrl = (overrides: Record<string, string | null>) => {
   const params = new URLSearchParams(Astro.url.searchParams);
@@ -154,18 +121,30 @@ const buildFilterUrl = (overrides: Record<string, string | null>) => {
   return `/proposals/${qs ? `?${qs}` : ''}`;
 };
 
-const pageUrl = (page: number) => buildFilterUrl({ page: String(page) });
+const pageUrl = (pageNumber: number) => buildFilterUrl({ page: String(pageNumber) });
 
-const spaces = [...new Set(baseProposals.map((p) => p.space))].sort();
-
-
-const stageCounts = {
-  all: rawProposals.length,
-  propose: rawProposals.filter((p) => p.stage === 'propose').length,
-  deliberate: rawProposals.filter((p) => p.stage === 'deliberate').length,
-  decide: rawProposals.filter((p) => p.stage === 'decide' && p.ballotRevisionId && !ballotExpired(p)).length,
-  implement: rawProposals.filter((p) => p.stage === 'implement').length,
+const listQuery = {
+  q: initialQuery,
+  stage: initialStage,
+  branch: initialBranch,
+  space: initialSpace,
+  sort: initialSort,
+  focus: initialFocus,
+  joined: joinedOnly,
 };
+const canonicalHref = proposalListHref(listQuery, currentPage);
+const prevHref = currentPage > 1 ? proposalListHref(listQuery, currentPage - 1) : undefined;
+const nextHref = currentPage < pageCount ? proposalListHref(listQuery, currentPage + 1) : undefined;
+const rangeSummary =
+  visibleCount === 0
+    ? 'No proposals match these filters.'
+    : `Showing ${page.startIndex}–${page.endIndex} of ${visibleCount} proposal${visibleCount === 1 ? '' : 's'}. Page ${currentPage} of ${pageCount}.`;
+
+const effectiveSort = initialFocus === 'recent' && initialSort === 'priority' ? 'recent' : initialSort;
+
+const spaces = page.spaces;
+
+const stageCounts = page.stageCounts;
 
 const stageTabs: Array<{
   id: 'all' | ProposalStage;
@@ -219,14 +198,17 @@ const hasActiveFilters =
   Boolean(initialQuery) ||
   initialSpace !== 'all' ||
   initialBranch !== 'all' ||
-  initialStage !== 'all' ||
+  initialStage !== '' ||
   initialFocus !== 'all' ||
   initialSort !== 'priority';
+
 ---
 <SiteLayout
   title="Browse proposals · Engage"
   description="Browse proposals across all stages: explore ideas, join discussions, see open votes, and follow decisions after the vote."
-  canonical="/proposals/"
+  canonical={canonicalHref}
+  prevHref={prevHref}
+  nextHref={nextHref}
 >
   <div class="page-wrap section-space proposals-page">
     <div class="proposals-surface">
@@ -234,7 +216,7 @@ const hasActiveFilters =
       <header class="proposals-top">
         <div class="proposals-top__heading">
           <h1>Browse proposals</h1>
-          <span class="proposals-total tabular">{baseProposals.length} proposals</span>
+          <span class="proposals-total tabular">{baseProposalCount} proposals</span>
         </div>
         <div class="proposals-top__actions">
           <Button href={siteConfig.primaryCtaHref || '/proposals/new/'} size="sm">
@@ -250,7 +232,7 @@ const hasActiveFilters =
         <div class="workflow-tabs-row">
           <nav class="workflow-tabs" aria-label="Filter proposals by stage">
             {stageTabs.map((tab) => {
-              const isCurrent = initialStage === tab.id;
+              const isCurrent = tab.id === 'all' ? initialStage === '' : initialStage === tab.id;
               return (
                 <a
                   href={buildFilterUrl({ stage: tab.id, focus: null, needsVote: null, page: '1' })}
@@ -269,8 +251,8 @@ const hasActiveFilters =
       </div>
 
       <!-- Search & Quiet Secondary Filters -->
-      <form data-analytics-collection="proposals" data-analytics-results={visibleProposals.length} id="proposals-filter-form" class="search-controls" role="search" method="get" action="/proposals/">
-        {initialStage !== 'all' && <input type="hidden" name="stage" value={initialStage} />}
+      <form data-analytics-collection="proposals" data-analytics-results={visibleCount} id="proposals-filter-form" class="search-controls" role="search" method="get" action="/proposals/">
+        {initialStage !== '' && <input type="hidden" name="stage" value={initialStage} />}
 
         <fieldset class="participation-filters">
           <legend>For me</legend>
@@ -341,7 +323,7 @@ const hasActiveFilters =
 
           <div class="results-and-sort">
             <span class="results-count tabular" id="live-results-count">
-              Showing {pageProposals.length} of {visibleProposals.length} proposal{visibleProposals.length === 1 ? '' : 's'}
+              <span id="live-results-range">{rangeSummary}</span>
             </span>
 
             <div class="quiet-select-wrap">
@@ -378,7 +360,7 @@ const hasActiveFilters =
         </div>
       </details>
       <!-- Spacious Proposal List -->
-      {visibleProposals.length === 0 ? (
+      {visibleCount === 0 ? (
         <div class="empty-register">
           <h2>{initialFocus === 'needs-vote' && myOutstandingVotes.length === 0 ? "You're up to date" : 'No matching proposals'}</h2>
           {initialFocus === 'needs-vote' && myOutstandingVotes.length === 0 ? (
@@ -387,11 +369,11 @@ const hasActiveFilters =
         </div>
       ) : (
         <div class="proposal-list" role="list" id="proposal-list">
-          {pageProposals.map((item) => {
+          {pageRows.map((item) => {
             const branchName = item.jurisdictionBranchId
               ? branches.find((branch) => branch.branchId === item.jurisdictionBranchId)?.name ?? null
               : null;
-            const hasVoted = votedProposalIds.has(item.proposalId);
+            const hasVoted = Boolean(item.hasVoted);
             const needsVote = outstandingIds.has(item.proposalId);
 
             const actionLabel =
@@ -451,12 +433,14 @@ const hasActiveFilters =
                       {item.commentCount} {item.commentCount === 1 ? 'contribution' : 'contributions'}
                     </span>
 
-                    {(item.stage === 'decide' || item.votes.total > 0) && (
+                    {(item.stage === 'decide' || item.votes.total > 0 || item.tallyState === 'pending') && (
                       <>
                         <span class="participation-dot" aria-hidden="true">·</span>
                         <span class="participation-stat is-ballot">
                           <Vote className="size-3.5" aria-hidden="true" />
-                          {item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'}
+                          {publicTallyLabel(item)
+                            ? <a class="participation-tally-link" href={`/proposals/${item.slug}/`}>{publicTallyLabel(item)}</a>
+                            : <>{item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'}</>}
                         </span>
                       </>
                     )}
@@ -493,9 +477,7 @@ const hasActiveFilters =
 
       <!-- Bottom Pagination Bar -->
       <footer class="proposals-bottom">
-        <span class="results-count tabular">
-          Showing {pageProposals.length} of {visibleProposals.length} proposal{visibleProposals.length === 1 ? '' : 's'}
-        </span>
+        <p class="results-count tabular" role="status" aria-live="polite">{rangeSummary}</p>
 
         {pageCount > 1 && (
           <nav class="pagination" aria-label="Proposal pages">
@@ -503,16 +485,18 @@ const hasActiveFilters =
               href={pageUrl(currentPage - 1)}
               variant="outline"
               size="sm"
+              aria-label="Previous page"
               aria-disabled={currentPage === 1}
               tabIndex={currentPage === 1 ? -1 : undefined}
             >
               ← Previous
             </Button>
-            <span class="tabular">Page {currentPage} of {pageCount}</span>
+            <span class="tabular" aria-current="page">Page {currentPage} of {pageCount}</span>
             <Button
               href={pageUrl(currentPage + 1)}
               variant="outline"
               size="sm"
+              aria-label="Next page"
               aria-disabled={currentPage === pageCount}
               tabIndex={currentPage === pageCount ? -1 : undefined}
             >
@@ -529,7 +513,7 @@ const hasActiveFilters =
   const form = document.querySelector<HTMLFormElement>('#proposals-filter-form');
   const searchInput = document.querySelector<HTMLInputElement>('#proposal-search');
   const items = Array.from(document.querySelectorAll<HTMLElement>('.proposal-item'));
-  const liveCount = document.querySelector<HTMLElement>('#live-results-count');
+  const liveCount = document.querySelector<HTMLElement>('#live-results-range');
 
   // Auto-submit quiet dropdown filters on change
   document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-auto-submit]').forEach((select) => {
@@ -888,6 +872,16 @@ const hasActiveFilters =
   .participation-stat.is-ballot {
     color: var(--horizon-ink);
     font-weight: 500;
+  }
+
+  .participation-tally-link {
+    color: var(--horizon-purple-deep);
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  .participation-tally-link:hover {
+    color: var(--horizon-purple);
   }
 
   .participation-dot {
