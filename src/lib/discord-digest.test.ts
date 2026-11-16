@@ -6,6 +6,7 @@ import {
   attentionScore,
   melbourneWeekKey,
   renderDiscordDigest,
+  renderDiscordDigestText,
   runWeeklyDiscordDigest,
   selectDiscordDigest,
   sendTestDiscordDigest,
@@ -98,16 +99,51 @@ describe("Discord webhook delivery safety", () => {
     ]) assert.throws(() => validateDiscordWebhook(bad));
   });
 
-  it("escapes untrusted proposal titles and uses role mention only for configured IDs", () => {
+  it("escapes untrusted proposal titles and mentions only the configured role", () => {
     const ranked = selectDiscordDigest([
       candidate(1, { title: "@everyone **Now** <@&555555555555555555>" }),
     ], NOW);
-    const content = renderDiscordDigest(ranked, ORIGIN, "123456789012345678", true);
-    assert.match(content, /^\*\*TEST/);
-    assert.match(content, /<@&123456789012345678>/);
-    assert.doesNotMatch(content, /@everyone/);
-    assert.doesNotMatch(content, /\*\*Now\*\*/);
-    assert.match(content, /source=discord-weekly/);
+    const message = renderDiscordDigest(ranked, ORIGIN, "123456789012345678", true);
+    const embed = message.embeds[0]!;
+    assert.match(embed.title, /^TEST — Engage this week$/);
+    assert.equal(embed.color, 0x00c9d2);
+    assert.equal(message.content, "<@&123456789012345678>");
+    assert.equal(embed.fields?.length, 1);
+    assert.match(embed.fields![0]!.name, /^Discussion · /);
+    assert.match(embed.fields![0]!.value, /source=discord-weekly/);
+    const serialised = JSON.stringify(message.embeds);
+    assert.doesNotMatch(serialised, /@everyone/);
+    assert.doesNotMatch(serialised, /\*\*Now\*\*/);
+    assert.doesNotMatch(serialised, /<@&555555555555555555>/);
+  });
+
+  it("posts a single embed with a linked field for every featured proposal", () => {
+    const ranked = selectDiscordDigest([
+      candidate(1, { title: "A discussion", commentCount: 2 }),
+      candidate(2, { title: "A ballot", participation: 7 }),
+    ], NOW);
+    const message = renderDiscordDigest(ranked, ORIGIN);
+    const embed = message.embeds[0]!;
+    assert.equal(message.embeds.length, 1);
+    assert.equal(message.content, "");
+    assert.equal(embed.url, ORIGIN);
+    assert.equal(embed.fields?.length, 2);
+    const discussion = embed.fields!.find((f) => f.name.startsWith("Discussion ·"))!;
+    const ballot = embed.fields!.find((f) => f.name.startsWith("Open vote ·"))!;
+    assert.match(discussion.value, /2 contributions so far/);
+    assert.match(discussion.value, /#deliberation/);
+    assert.match(ballot.value, /7 participants so far/);
+    assert.match(ballot.value, /#proposal-vote/);
+    assert.match(embed.footer!.text, /read each proposal/i);
+  });
+
+  it("renders an empty state and an explicit test label without fields", () => {
+    const message = renderDiscordDigest([], ORIGIN, undefined, true);
+    assert.match(message.embeds[0]!.title, /^TEST/);
+    assert.equal(message.embeds[0]!.fields, undefined);
+    assert.match(message.embeds[0]!.description!, /Nothing currently needs a spotlight/);
+    assert.match(message.embeds[0]!.footer!.text, /Test post/);
+    assert.match(renderDiscordDigestText(message), /TEST — Engage this week/);
   });
 
   it("uses the isolated test webhook and records a one-minute dedupe; live remains disabled", async () => {
@@ -151,7 +187,8 @@ describe("Discord webhook delivery safety", () => {
     assert.deepEqual(again, { status: "already-attempted", featured: 0 });
     assert.equal(calls.length, 1);
     assert.ok(calls[0]!.url.startsWith(FAKE_TEST_WEBHOOK));
-    assert.match(calls[0]!.payload.content, /^\*\*TEST/);
+    assert.match(calls[0]!.payload.embeds[0].title, /^TEST/);
+    assert.equal(calls[0]!.payload.content, "<@&456789012345678901>");
     assert.deepEqual(calls[0]!.payload.allowed_mentions, {
       parse: [],
       roles: ["456789012345678901"],

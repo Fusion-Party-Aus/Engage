@@ -160,7 +160,7 @@ export default function DiscordIntegrationSettings() {
     setBusy("preview");
     try {
       const data = await requestJson("/api/admin/discord-digest");
-      setPreview(String(data.content ?? ""));
+      setPreview(String(data.text ?? ""));
       setNotice({ text: `Preview ready · ${Number(data.featured) || 0} proposals. Nothing sent.` });
     } catch (error) {
       showError(error);
