@@ -192,6 +192,10 @@ export AUTH_TEST_MONGODB_URI=...
 pnpm test
 ```
 
+Every test database must be dropped in `after`/`afterEach`, including when a case creates a fresh database for isolation. Leaked databases accumulate indexes and collections, and a few hundred of them make the whole suite an order of magnitude slower and can exhaust a small local replica set. A full run should leave the database count unchanged.
+
+Run the suite with `--test-concurrency=1` on a single-node local replica set. Higher concurrency contends on the one primary and is measurably slower (122 s versus 77 s on the reference machine), so parallelism is not a speed-up here.
+
 ## Final report format
 
 Report:

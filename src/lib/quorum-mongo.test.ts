@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import { after, afterEach, before, describe, it } from "node:test";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import {
   BALLOT_QUORUM_COLLECTION,
@@ -171,6 +171,12 @@ describe(
     after(async () => {
       await db?.dropDatabase();
       await client?.close();
+    });
+
+    // Each case gets a fresh database; drop it afterwards so a full run cannot
+    // leave hundreds of databases and indexes behind on the test replica set.
+    afterEach(async () => {
+      await db?.dropDatabase();
     });
 
     // A fresh database per case keeps one test's electorate out of another.
