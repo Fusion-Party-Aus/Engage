@@ -18,7 +18,7 @@ Do not change a decision by editing code. Record the new maintainer decision her
 | D5 | A **ballot officer, or a holder of the explicitly authorised permission**, may advance a proposal to Decide before the deliberation deadline. Ordinary moderators do not acquire this authority by being moderators. | Approved | RFC G6, I4; #27, #31 |
 | D6 | The ordinary ballot period is **30 days**. Ballots close automatically at their deadline. | Approved — implemented | RFC I2, S3; #26 |
 | D7 | The maximum scheduled time from seconding to ballot closure is therefore **60 days**. This is a ceiling on the scheduled process, not a guarantee that every downstream administrative act finishes within it. | Approved — implemented (late runs refused and reported) | #26, #30 |
-| D8 | No additional quorum, minimum turnout or participation threshold is authorised. Decisions are made by the eligible members who participate. | Approved | RFC L1, #28 |
+| D8 | No additional quorum, minimum turnout or participation threshold is authorised. Decisions are made by the eligible members who participate. | Superseded for ballots closing on or after 16 November 2026 by D37–D39; remains the rule for earlier closures | RFC L1, #28 |
 | D9 | Ordinary Yes/No proposals use **simple majority**: Yes greater than No means approval; a tie does **not** approve. | Approved | RFC L1, #28 |
 | D10 | Abstentions may be recorded, but their effect on the denominator is **not defined**. No binding calculation may depend on an abstention rule until the maintainer supplies one. A simple Yes-versus-No comparison satisfies D9 without deciding D10. | Direction agreed — specification required | #28 |
 | D11 | Eligible members may **change their vote** while the ballot is open. | Approved (already supported) | RFC G12; #26 |
@@ -47,6 +47,9 @@ Do not change a decision by editing code. Record the new maintainer decision her
 | D34 | Victoria's live branch policies, as published at `https://vic.fusionparty.org.au/api/policies.json`, are **ratified and adopted by the Victorian branch executive**. They may be imported as adopted, published policy under Victorian branch authority without an Engage ballot. The import must record the authority basis, preserve the exact source document as an immutable revision, and never overwrite adopted wording because a source feed changed. A changed source requires a new change proposal. | Approved — implemented | #89; #37 |
 | D35 | A ratified policy may be **amended, replaced or repealed** by a new proposal that declares `targetPolicyId` and a change type. The predecessor remains the published policy until the successor is ratified **and** published; a repeal takes effect when it is ratified, with the deciding proposal recorded as lineage. A change proposal is created against the exact published revision it names and fails rather than retargeting if that wording changes. | Approved — implemented | #37 |
 | D36 | Participation records, including proposal discussions and Sense Box contributions, are intended to be publicly readable. Contribution and voting permissions are separate from readership. Individual identifiable ballot choices and private account/security records remain restricted. Sense Box contributions must be reviewed before becoming public; submitting alone must not publish them. Existing entries were collected under a private-review promise and must not be silently published retrospectively. | Approved direction — access implementation pending | Maintainer clarification, 15 November 2026; #97, #101 |
+| D37 | Engage adopts a **two-tier quorum** for policy ballots as an adaptation of Constitution rules 30(4)(e), 36(2) and 98, not as a direct application of rule 36. **Platform quorum:** at least 30 eligible registered Engage members at closure. **Ballot quorum:** Q = max(ceil(√N), min(30, ceil(N/2))), where N is the eligible active electorate at closure. Both must be satisfied. The rule is versioned `two-tier-quorum-v1` and applies to ballots that close on or after **16 November 2026**. Ballots closed earlier keep their recorded result and are not reassessed. | Approved — implemented; Committee or Operations Manual confirmation required before the first post-adoption ballot closes | #122; Constitution rule 98 |
+| D38 | For ballot quorum, an eligible member is **active** if they made genuine authenticated use of Engage in the rolling **90 days** before closure, or cast a vote, commented, proposed, amended, viewed My Engage, or viewed an eligible ballot in that window. Activity is independent of participation in the ballot being evaluated. Suspended, disabled, pending and duplicate CRM-linked accounts are excluded from the electorate. Abstentions count towards participation, but the Yes-versus-No approval test remains D9 and abstentions still have no denominator effect (D10/O1). | Approved — implemented | #122; D2, D9, D10 |
+| D39 | Both quorum tests are evaluated once, at closure, and persisted in an immutable `ballot_quorum_records` entry with the rule version, electorate counts, thresholds, unique participation, tally and verdict. A ballot failing either test is **inconclusive**, never rejected. Officers cannot set a per-ballot threshold. A correction to a recorded closure requires a separate reviewed, audited process; this register does not authorise editing the stored record. | Approved — implemented | #122 |
 
 ## Consequences for implementation
 
@@ -87,6 +90,35 @@ D13–D20 separate four things that the current system conflates:
 
 Certification may block on procedural defects. It must not be used to reject a valid member decision on policy grounds. Until automatic ratification is implemented, the manual `policies.ratify` path must not be described as discretionary approval.
 
+### Quorum is an adaptation, not rule 36 itself
+
+Rule 36 governs quorums at general meetings: the greater of 30 members or the
+square root of active membership identified at the last formal AEC audit, with a
+reduced quorum when an adjourned meeting still lacks one. Engage ballots are not
+general meetings. D37 therefore adapts the **principles** of rule 36 — a fixed
+floor and a square-root scaling term — and adds a proportional safeguard for a
+small online electorate.
+
+The following parts of rule 36 are deliberately **not** carried over:
+
+- the AEC-audit timing, because Engage uses the live eligible electorate at
+  ballot closure;
+- proxies and physical presence, because Engage records authenticated votes;
+- rule 36(4)'s reduced quorum for adjourned meetings, because there is no
+  adjournment in an online ballot.
+
+Rule 30(4)(e) continues to require AGM endorsement or rejection of policy
+implementations. A successful Engage ballot does not remove that obligation.
+Engage's quorum makes an online ballot internally valid; it does not amend the
+Constitution or discharge an AGM duty.
+
+Rule 98 allows the Committee to create binding policies and procedures that
+limit (but not expand) discretions in the Rules. D37–D39 should therefore be
+recorded in the Operations Manual, or confirmed by a Committee resolution, before
+the first ballot closing under the rule is treated as binding. Until that
+confirmation is recorded, the implementation is the platform's published
+procedure but its constitutional effect remains subject to that approval.
+
 ### National Neon import is deferred
 
 No code, migration, seed or documentation may claim that legacy Neon policies were adopted through Engage. The policy registry must remain able to support a future import, but no reconciliation work starts under this programme. Issue #36 is deferred.
@@ -109,3 +141,4 @@ D34 is a branch-specific provenance decision. It does not authorise importing an
 | O8 | Steward role model and who may be designated | D25 |
 | O9 | Whether staff may create a matter directly in Deliberate or Decide without a seconder. The current system allows this administrative path; it bypasses D3 and should be decided explicitly. | #30 |
 | O10 | Whether materially rewritten wording requires a renewed seconder and a fresh 30-day clock. The current system keeps the original seconding. | #30 |
+| O11 | Committee resolution or Operations Manual entry confirming the D37–D39 quorum adaptation as a binding procedure under Constitution rule 98. | Treating the first post-16 November 2026 ballot closure as binding; #122 |

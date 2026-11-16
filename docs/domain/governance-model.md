@@ -106,9 +106,13 @@ National participation is intentionally broad: any verified member may create pr
 | Follower: not eligible. | Explicit branch status message |
 | Unverified member: may save a preference, not a vote. | `savePendingVotePreference` |
 | Suspended member: may not vote or save a preference. | `castVote` / preference checks |
-| Eligibility is checked at vote time, not snapshotted at ballot open. | Current limitation |
+| Eligibility is checked at vote time, not snapshotted at ballot open. | Current rule (D2) |
 | A ballot must not be expired. | `ballotExpired` |
 | An amendment ballot additionally requires the parent ballot to be open and the amendment revision to match. | `castVote` |
+| Platform quorum: at least 30 eligible registered members at closure. | `readQuorumElectorate`, `recordBallotQuorumAtClosure` |
+| Ballot quorum: `max(ceil(sqrt(N)), min(30, ceil(N/2)))` active eligible participants at closure. | `calculateBallotQuorum`, `recordFormalDecision` |
+| Both quorum tests use one closure snapshot; later membership changes do not alter the result. | `ballot_quorum_records` |
+| A ballot failing either quorum test is inconclusive and can only be recorded as such. | `recordFormalDecision` |
 
 ### Administrative scope
 
@@ -149,7 +153,9 @@ Engage encodes **operational interpretations**. It is not the constitution.
 | One geographic and one constituent membership | `chooseBranchMembership` | Product decision |
 | A 2027-01-14 deadline for migrated open ballots | `ballot-expiry-migration.ts` | One-off operational decision, not a general notice period |
 | Result vocabulary `successful` / `unsuccessful` / `inconclusive` | `ballots.ts` | Implementation vocabulary |
-| No thresholds, quorum, turnout, tie or abstention rules | Absent | **Deliberate gap**; Fusion has not supplied them |
+| Two-tier quorum `two-tier-quorum-v1` | `quorum.ts` | Maintainer decision D37–D39, adapted from Constitution rule 36; Committee or Operations Manual confirmation still required |
+| 90-day active member window based on authenticated use | `quorum.ts`, `member-presence.ts` | Maintainer decision D38; historical activity before activity-day tracking is reconstructed from retained participation records |
+| Tie and abstention rules | D9, D10/O1 | D9: a tie does not approve. D10/O1: abstention denominator still undefined; abstentions count only towards quorum participation |
 | Ratification restricted to national administrators | `policies.ratify` | Conservative interim rule; branch ratification is not modelled |
 | No seconding, notice period or scheduled opening | Absent | **Deliberate gap** |
 | No eligibility snapshot | `getProposalEligibility` at vote time | Current implementation; may not satisfy a future rule |
@@ -157,7 +163,7 @@ Engage encodes **operational interpretations**. It is not the constitution.
 
 The following are **not** established by authoritative documents in this repository:
 
-- voting thresholds or quorum;
+- constitutional authority for an online quorum (D37 is an adaptation and still needs rule 98 confirmation);
 - who may ratify branch policy;
 - qualifying membership for each class of ballot;
 - notice periods, campaign windows or effective-date rules;
@@ -188,5 +194,7 @@ Before changing a rule, answer:
 - Do not let a resolution enter the Policy Registry.
 - Do not reinterpret votes after wording changes.
 - Do not compute an outcome without an approved rule set.
+- Do not recalculate quorum from live membership after closure; use the recorded snapshot.
+- Do not let an officer override a quorum failure into approval or rejection.
 - Do not expose identifiable ballots outside the authorised boundary.
 - Do not invent constitutional rules to make an interface feel complete.

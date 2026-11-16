@@ -299,7 +299,7 @@ The `ballots` collection is partly a projection. Records may be synthesised for 
 
 A vote is one member's current choice on one ballot: `approve`, `abstain` or `reject`, with an optional reason and timestamp. A member may change their vote while the ballot is open. Legacy `do-not-approve` is read as `reject`.
 
-Votes are stored in `proposal_votes`. Depending on configuration they are plaintext or AES-256-GCM encrypted with a blind index. Abstain is recorded and displayed; it has no computed effect because no threshold model exists.
+Votes are stored in `proposal_votes`. Depending on configuration they are plaintext or AES-256-GCM encrypted with a blind index. Abstain is recorded and displayed. It counts towards quorum participation but has no effect on the Yes-versus-No approval comparison, because no abstention denominator has been decided (D10/O1).
 
 An unverified member may save a **pending vote preference**, promoted after verification only if the bound revision still matches.
 
@@ -307,9 +307,9 @@ An unverified member may save a **pending vote preference**, promoted after veri
 
 A ballot result is an immutable record that a named officer recorded an outcome for a specific ballot revision, citing an external `decisionEventId`. The result vocabulary is `successful`, `unsuccessful` or `inconclusive`.
 
-The result is **not derived from the tally**. Thresholds, quorum, turnout, tie-breaking and non-voter treatment are not implemented because Fusion has not supplied them.
+For ballots closing on or after 16 November 2026, the result is tested against the tally and the two-tier quorum. The computed result is `successful` when quorum is met and Yes is greater than No, `unsuccessful` when quorum is met and Yes does not exceed No, and `inconclusive` when either quorum test fails. An officer may override the approval comparison with a written reason, but cannot override a quorum failure into approval or rejection. Ballots closed earlier keep the approval-only rule. The full calculation is in [../governance/ballot-quorum.md](../governance/ballot-quorum.md).
 
-Recording a result certifies the ballot. It does not publish policy and does not move the matter by itself.
+Recording a result certifies the ballot. It does not publish policy and does not move the matter by itself. An inconclusive result leaves the matter open to an explicit return to Deliberate; it does not automatically retry.
 
 ### Policy registry record
 
@@ -349,7 +349,8 @@ Channel consent is independent: push defaults off and is never inferred from ema
 | Comment / stance | `comments`, `CommentRecord` | Not a vote |
 | Comment vote | `upvotes`, `downvotes`, `upvoteEvents` | Display-only; aggregate score and percentage only |
 | Wording change | Amendment, `amendments` | A first-class record with its own ballot |
-| Ballot outcome | `ballot_results`, `result` | Officer-recorded, not computed |
+| Ballot outcome | `ballot_results`, `result` | Recorded against a computed approval and quorum check |
+| Quorum at closure | `ballot_quorum_records` | Immutable closure snapshot; rule version `two-tier-quorum-v1` |
 | Official policy | `policy_registry` with `publicationStatus: "published"` | Not a proposal, not a ballot result |
 | Withdrawn / replaced | `withdrawn`, `superseded` | History is retained |
 | Verify a member | `memberships.status = "verified"` | Not the same as a role |

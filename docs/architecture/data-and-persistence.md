@@ -30,6 +30,7 @@
 | `ballot_tallies` | Display-only aggregate per `(ballotId, revisionId)`: approve/abstain/reject/total and `updatedAt`. Never authoritative and never contains a voter reference; see [read models](../architecture/extensibility-and-hardening.md#5-integration-read-models--operational-resilience) |
 | `ballots` | Ballot projection: purpose, electorate, revision, status, close time |
 | `ballot_results` | Immutable formal decision records |
+| `ballot_quorum_records` | One immutable quorum closure snapshot per ballot, keyed by `ballotId` |
 | `ballot_binding_events` | Audit of ballot-to-revision binding |
 | `ballot_schedule_events` | Audit of deadline/scheduling changes |
 | `governance_events` | Append-only governance audit events |
@@ -226,6 +227,8 @@ Public profile reads are supported by `comments { memberId: 1, deletedAt: 1, cre
 
 A known gap: there is no unique `(branchId, memberId)` index on `branch_memberships`; correctness relies on application upserts.
 
+`ballot_quorum_records` has a unique `ballotId` index and a non-unique `matterId, closedAt` index. The unique index makes the closure snapshot insert-once even under a replayed scheduler run.
+
 Index creation is idempotent but is not a migration system. Changing an index requires an explicit migration or a startup upgrade path, as `ensureProposalVoteIndex` does for the legacy vote index. The `ballot_results` index change is an explicit, preflighted migration: startup reports a legacy collection and never reshapes it. See [Ballot-results index migration](../ballot-results-index-migration.md).
 
 ## Transactions
@@ -243,7 +246,7 @@ The lifecycle scheduler (`src/lib/governance-scheduler.ts`) writes each schedule
 | Operation | Reads | Writes |
 |---|---|---|
 | Advance due deliberation | `proposals` (`stage: deliberate`, `deliberationEndsAt <= now`), `amendments`, `proposal_revisions`, `proposal_votes` | `proposals` (`stage`, `ballotRevisionId`, `ballotRevisionBoundAt/By`, `ballotClosesAt`, `updatedAt`), one `proposal.stage_transition` event |
-| Close due ballot | `proposals` (`stage: decide`, `ballotClosesAt <= now`, no `ballotClosedAt`) | `proposals.ballotClosedAt`, `ballots.status` when a projection row exists, one `ballot.closed` event |
+| Close due ballot | `proposals` (`stage: decide`, `ballotClosesAt <= now`, no `ballotClosedAt`), memberships, `user`, CRM links, activity records, votes | `proposals.ballotClosedAt`, `ballots.status` when a projection row exists, one `ballot.closed` event, one `ballot_quorum_records` snapshot |
 
 Both operations report rather than guess when a record cannot be scheduled safely: unresolved amendments, votes bound to a different wording revision, a missing seconding anchor, or a 60-day ceiling already in the past. The JSON report has `advanced`, `skipped`, `closed`, `blockers` and `errors` arrays and exits non-zero on errors. The scheduler is idempotent: a missed run is caught up by the next one because deadlines are absolute, and a repeated run does nothing.
 

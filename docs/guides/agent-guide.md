@@ -84,7 +84,7 @@ Proposal ballots close by deadline, not by an officer action. No API sets `ballo
 
 ### Result is computed and checked
 
-The officer supplies `successful`, `unsuccessful` or `inconclusive`, and the result must match the outcome computed from the votes bound to the ballot and revision. The only encoded rule is D9: approve greater than reject approves, a tie and zero votes do not, and abstentions never change the comparison because no abstention denominator is defined (D10/O1). No quorum or turnout applies (D8). The basis is versioned as `simple-majority-d9-v1`.
+The officer supplies `successful`, `unsuccessful` or `inconclusive`, and the result must match the outcome computed from the votes bound to the ballot and revision. The approval rule is D9: approve greater than reject approves, a tie and zero votes do not, and abstentions never change the comparison because no abstention denominator is defined (D10/O1). For ballots closing on or after 16 November 2026, D37–D39 add a two-tier quorum: 30 eligible registered members platform-wide, and `max(ceil(sqrt(N)), min(30, ceil(N/2)))` participants from N active eligible members. Failure is `inconclusive`, never `unsuccessful`, and cannot be overridden into approval. The basis is versioned as `two-tier-quorum-simple-majority-v1`; earlier results keep `simple-majority-d9-v1`.
 
 Certification requires a closed ballot (`ballotClosedAt`, a close time that has passed, or a ballot row the system closed); a live ballot is refused with `BALLOT_NOT_CLOSED`. The tally is the whole ballot's truth: unbound or mismatched-revision votes refuse with `BALLOT_TALLY_UNBOUND_VOTES`, unreadable encrypted votes with `BALLOT_TALLY_UNREADABLE`, and missing keys with `BALLOT_DECRYPTION_UNAVAILABLE`. Admin pages derive their displayed tally from the same bound set, so never add a page-level tally that counts by `ballotId` alone. Display reads tolerate a broken key ring and show an explicit "decryption unavailable" state with unreadable votes counted; certification stays strict and refuses.
 
@@ -167,7 +167,7 @@ Stop and ask a human if:
 - a migration would rewrite governance history;
 - you need a new external service or credential;
 - the only way to make the UI work is to expose raw technical data;
-- tests require a decision about thresholds, quorum, notice or eligibility that is not written down.
+- tests require a decision about notice, abstention effects, ranked choice or eligibility that is not written down. Quorum is recorded in D37–D39; do not substitute a different threshold.
 
 A documented gap is a valid outcome. A guessed rule is not.
 
