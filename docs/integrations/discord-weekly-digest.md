@@ -1,6 +1,6 @@
 # Discord weekly digest — Attention Debt
 
-**Status:** implemented behind an off-by-default feature flag; requires manual configuration and a weekly external scheduler. Issue [#125](https://github.com/Fusion-Party-Aus/Engage/issues/125).
+**Status:** implemented behind an off-by-default feature flag; requires in-app setup and an hourly external trigger. Issue [#125](https://github.com/Fusion-Party-Aus/Engage/issues/125).
 
 ## Purpose
 
@@ -24,19 +24,18 @@ The score never uses proposal subject, political position, author, votes for/aga
 
 Preview and live selection for the same Melbourne calendar week use the same lottery seed. Featured IDs persist in `discord_digest_runs` to support rotation and ensure attempted posts do not get repeated.
 
-## Configuration
+## Configuration in Engage
 
-Create a Discord text channel and webhook in a **separate test server** first. The webhook URL is a secret and must be set in Coolify/environment settings, not Git.
+Open **Admin → Platform settings → Discord**. The integration is disabled by default.
 
-| Variable | Description |
-|---|---|
-| `ENGAGE_DISCORD_TEST_WEBHOOK_URL` | **Separate test server** Discord webhook |
-| `ENGAGE_DISCORD_TEST_ROLE_ID` | Optional test server role to mention |
-| `ENGAGE_DISCORD_WEBHOOK_URL` | Production Discord channel webhook |
-| `ENGAGE_DISCORD_ROLE_ID` | Production `@Tuned` Discord role ID |
-| `ENGAGE_DISCORD_DIGEST_ENABLED` | `false` by default. Must be exactly `true` for live sends |
-| `ENGAGE_CRON_SECRET` | Existing bearer secret for authorised scheduled jobs |
-| `PUBLIC_ORIGIN` | Trusted Engage website origin for proposal links |
+1. Create a Discord webhook in a separate test server, paste it into **Test webhook URL**, optionally enter the test role ID and save.
+2. Use **Preview digest** and **Send to test Discord**. The test message is clearly labelled, limited to one attempt per administrator per minute, and cannot use the live webhook.
+3. Once approved, enter the production channel webhook and the numeric `@Tuned` role ID. Set the desired weekday and hour (Melbourne time) in Engage.
+4. Enable **Post weekly digests** and save. This does not itself create the external scheduler.
+
+Webhooks are stored **encrypted at rest** in `discord_settings` (AES-256-GCM with a key derived from Engage's existing `BETTER_AUTH_SECRET`). Settings GET responses and admin pages return only configured/not-configured flags, never webhook values. Change history logs the actor and changed *field names*, not secrets. To rotate a webhook, paste the new one; to revoke it, use **Remove webhook**. Removing the live webhook also disables live sending.
+
+The existing bootstrap secret must be backed up. If it changes, encrypted webhooks need to be re-entered. No additional Discord-specific environment variables are required.
 
 Discord webhooks use the canonical `https://discord.com/api/webhooks/<id>/<token>` URL. The server validates the host and path; no arbitrary HTTP destinations or URL query strings are accepted. The test and production URLs must be different. The webhook URL is never returned by the admin API.
 
@@ -44,32 +43,35 @@ Discord webhooks use the canonical `https://discord.com/api/webhooks/<id>/<token
 
 ## Test in isolation
 
-1. Configure only `ENGAGE_DISCORD_TEST_WEBHOOK_URL` (and optionally `ENGAGE_DISCORD_TEST_ROLE_ID`) on the Engage environment. Leave live sending disabled.
-2. Open **Admin → Member engagement → Discord weekly digest**.
-3. Select **Preview next digest**. This loads a current read-only preview without posting anything.
-4. Select **Send to test Discord**. A clearly labelled **TEST** digest is posted to the test server only.
-5. Inspect the test message, links, wording, mentions and line breaks. Tests are limited to one attempt per administrator per minute.
+1. In **Admin → Platform settings → Discord**, save the webhook for a separate test server. Leave live posting disabled.
+2. Select **Preview digest**. This loads a read-only preview without posting.
+3. Select **Send to test Discord**. A clearly labelled **TEST** digest goes to the test server only.
+4. Inspect the test message, links, wording, mentions and line breaks. Tests are limited to one attempt per administrator per minute.
 
 A network timeout means delivery may have happened. The send record is held and not automatically retried, so inspect the Discord channel first.
 
 ## Weekly scheduling
 
-After approving the test, set the **production** webhook and role ID and change `ENGAGE_DISCORD_DIGEST_ENABLED=true`. Configure a weekly external job (suggested: Monday evening, Australia/Melbourne) to call:
+After approving the test, configure the production webhook, role, weekday and hour **in Engage**. Enable weekly posts there.
+
+Configure an **hourly** external job (for example via Coolify) to call:
 
 ```http
 POST /api/cron/discord-digest
 Authorization: Bearer <ENGAGE_CRON_SECRET>
 ```
 
+The cron job is only a trigger. The application decides whether the selected Melbourne weekday/hour has arrived, and the database enforces one posting attempt per Melbourne calendar week. You can change the weekly posting time without editing the external scheduler. The existing `ENGAGE_CRON_SECRET` remains an infrastructure secret; it is not a Discord integration setting.
+
 Do not call the endpoint with a browser GET. Do not place the bearer secret in Git, documentation, screenshots or Discord.
 
-No job is automatically installed by merging this PR: deployment and scheduler configuration are operator steps. The cron handler uses the existing `withJobRun` ledger. `discord_digest_runs` has an immutable per-week idempotency key (the Monday date in Melbourne time); a second run in the same week does not repost. Uncertain sends become `held` and require manual investigation.
+No job is automatically installed by merging this PR: the external hourly trigger is an operator setup step; destinations and schedule are configured in Engage. The cron handler uses the existing `withJobRun` ledger. `discord_digest_runs` has an immutable per-week idempotency key (the Monday date in Melbourne time); a second run in the same week does not repost. Uncertain sends become `held` and require manual investigation.
 
 The message is not personalised and does not claim that anyone has or has not voted. A proposal ballot's aggregate participation count appears only when the public tally projection is credible and fresh; otherwise the message says participation figures are updating. Quorum progress must not be claimed until the separate quorum work is authorised and implemented.
 
 ## Troubleshooting
 
-- **No message:** Confirm the webhook is configured and that the weekly cron job exists, or explicitly use admin test-send for the separate server.
+- **No message:** Confirm the webhook is saved in Platform settings and that the hourly cron trigger exists, or explicitly use admin test-send for the separate server.
 - **No role ping:** Check that the role ID belongs to the target Discord server and can be mentioned; role names alone do not work.
 - **Already attempted:** The weekly key or per-minute test key already exists. Inspect Discord and the `discord_digest_runs` status before assuming nothing was sent.
 - **Held:** Delivery confirmation was not received. Check the channel before considering a manual resending strategy.
