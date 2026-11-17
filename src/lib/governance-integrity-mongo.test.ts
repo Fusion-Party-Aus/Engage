@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MongoClient, type Db } from "mongodb";
-import { initializeDatabase } from "./db.ts";
+import { ensureDatabaseIndexes } from "./db-indexes.ts";
 import {
   BallotDomainError,
   recordFormalDecision,
@@ -81,7 +81,7 @@ async function withDatabase(run: (db: Db) => Promise<void>): Promise<void> {
     `engage_gov_mongo_test_${crypto.randomUUID().replaceAll("-", "")}`,
   );
   try {
-    await initializeDatabase(db);
+    await ensureDatabaseIndexes(db);
     await run(db);
   } finally {
     try {

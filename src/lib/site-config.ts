@@ -518,7 +518,9 @@ export async function listSiteConfigEvents(
     const rows = await db
       .collection<SiteConfigEvent>("site_settings_events")
       .find({})
-      .sort({ createdAt: -1 })
+      // Two events can share a millisecond; tie-break on the insertion id so
+      // the newest change is deterministic in the UI and in tests.
+      .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
       .toArray();
     return rows.map(({ _id, ...rest }: any) => ({

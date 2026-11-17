@@ -1,16 +1,9 @@
 import { ensureDigestCohort } from "./digest-preferences.ts";
-import { ensureBallotTallyIndexes } from "./ballot-tallies.ts";
-import { ensureVoteStorage, PROPOSAL_VOTES } from "./vote-storage.ts";
+import { ensureDatabaseIndexes } from "./db-indexes.ts";
 import { MongoClient, ObjectId, type ClientSession, type Db } from "mongodb";
 import { createHash } from "node:crypto";
 import baselineItems from "../data/policies.json" with { type: "json" };
 import { ensureLegacyProposalRevision } from "./proposal-revision.ts";
-import { ensureBallotResultsIndexes } from "./ballot-results-index-migration.ts";
-import { ensureJobRunIndexes } from "./job-runs.ts";
-import {
-  OPERATIONAL_SETTINGS_COLLECTION,
-  OPERATIONAL_SETTINGS_EVENTS_COLLECTION,
-} from "./operational-settings.ts";
 import type { PlatformEnv, ProposalRecord, ProposalStage } from "./types.ts";
 
 let clientPromise: Promise<MongoClient> | undefined;
@@ -124,13 +117,10 @@ export async function getDatabase(
       clientUri = uri;
       dbInstanceCache.clear();
       const monitorCommands = dbCommandMonitoringEnabled(env);
-      // One bounded selection timeout. The previous 400 ms development value
-      // silently fell back to the in-memory preview whenever a local Docker
-      // MongoDB was slow to answer its first selection.
       const client = new MongoClient(uri, {
         maxPoolSize: 10,
-        serverSelectionTimeoutMS: 3_000,
-        connectTimeoutMS: 3_000,
+        serverSelectionTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
+        connectTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
         monitorCommands,
       });
       if (monitorCommands) {
@@ -202,402 +192,131 @@ async function ensureSeeded(db: Db): Promise<void> {
   await pending;
 }
 
-export async function initializeDatabase(db: Db): Promise<void> {
+/**
+ * Content half of initialisation: the reminder cohort, legacy revision
+ * backfills and the baseline policy register. Insert-only, so a restart never
+ * rewrites existing content.
+ */
+export async function seedBaselineContent(db: Db): Promise<void> {
   await ensureDigestCohort(db);
-  await ensureJobRunIndexes(db);
-  await Promise.all([
-    db.collection("sense_submissions").createIndex({branchId:1,createdAt:-1}),
-    db.collection("rate_limits").createIndex({expiresAt:1},{expireAfterSeconds:0,name:"rate_limit_expiry"}),
-  ]);
-  await Promise.all([
-    db.collection("engagement_lifecycle_events").createIndex({memberId:1,event:1,at:1}),
-    db.collection("engagement_email_preferences").createIndex({memberId:1}, {unique:true}),
-    db.collection("engagement_email_outbox").createIndex({providerId:1}),
-    db.collection("engagement_email_outbox").createIndex({memberId:1,createdAt:-1}),
-    db.collection("engagement_email_events").createIndex({providerId:1}),
-    db.collection("engagement_reengagement_campaigns").createIndex({campaignId:1},{unique:true}),
-    db.collection("push_subscriptions").createIndex({memberId:1,endpoint:1},{unique:true}),
-    db.collection("push_subscriptions").createIndex({subscriptionId:1},{unique:true}),
-    db.collection("member_notifications").createIndex({memberId:1,createdAt:-1}),
-    db.collection("member_notifications").createIndex({notificationId:1},{unique:true}),
-    db.collection("notification_deliveries").createIndex({dedupeKey:1},{unique:true}),
-    // Durable notification outbox (#33). `retainUntil` is a TTL that only
-    // terminal rows carry, so unresolved work is never swept away.
-    db.collection("notification_outbox").createIndex({dedupeKey:1},{unique:true,name:"outbox_dedupe_unique"}),
-    db.collection("notification_outbox").createIndex({status:1,nextAttemptAt:1},{name:"outbox_due"}),
-    db.collection("notification_outbox").createIndex({matterId:1,event:1},{name:"outbox_matter_event"}),
-    db.collection("notification_outbox").createIndex({memberId:1,createdAt:-1},{name:"outbox_member_created"}),
-    db.collection("notification_outbox").createIndex({retainUntil:1},{expireAfterSeconds:0,name:"outbox_retention"}),
-    db.collection("crm_identity_links").createIndex({memberId:1,application:1},{unique:true}),
-    db.collection("crm_identity_links").createIndex({crmPersonId:1}),
-    db.collection("crm_identity_links").createIndex({application:1,status:1,nextCheckAt:1}),
-    db.collection("membership_verification_attempts").createIndex({status:1,nextAttemptAt:1}),
-    db.collection("membership_verification_attempts").createIndex({status:1,lockedAt:1}),
-    db.collection("membership_verification_reviews").createIndex({reviewId:1},{unique:true}),
-    db.collection("membership_verification_reviews").createIndex({memberId:1,status:1}),
-    db.collection("membership_verification_reviews").createIndex({status:1,createdAt:1}),
-    db.collection("membership_verification_events").createIndex({eventId:1},{unique:true}),
-    db.collection("membership_verification_events").createIndex({memberId:1,createdAt:-1}),
-    // Operational settings are administrator-owned documents (#128): health
-    // thresholds, CRM verification tuning and the scheduled-job gates. The
-    // event index backs the "last changed" line on the settings page.
-    db.collection(OPERATIONAL_SETTINGS_EVENTS_COLLECTION).createIndex({eventId:1},{unique:true}),
-    db.collection(OPERATIONAL_SETTINGS_EVENTS_COLLECTION).createIndex({createdAt:-1}),
-    db.collection(OPERATIONAL_SETTINGS_COLLECTION).createIndex({updatedAt:-1}),
-    // Public collaboration matters (#143). Contributions are private until an
-    // explicit approval; media bytes live in their own collection so a list read
-    // can never select them by accident.
-    db.collection("collaboration_initiatives").createIndex({slug:1},{unique:true,name:"collaboration_slug_unique"}),
-    db.collection("collaboration_contributions").createIndex({contributionId:1},{unique:true,name:"collaboration_contribution_unique"}),
-    db.collection("collaboration_contributions").createIndex({status:1,createdAt:-1},{name:"collaboration_status"}),
-    db.collection("collaboration_media").createIndex({mediaId:1},{unique:true,name:"collaboration_media_unique"}),
-    db.collection("collaboration_media").createIndex({contributionId:1},{name:"collaboration_media_contribution"}),
-    db.collection("collaboration_events").createIndex({eventId:1},{unique:true,name:"collaboration_event_unique"}),
-    db.collection("collaboration_events").createIndex({contributionId:1,at:-1},{name:"collaboration_event_contribution"}),
-  ]);
-  try {
-    await ensureVoteStorage(db);
-    await ensureBallotTallyIndexes(db);
-    await Promise.all([
-      db
-        .collection("proposals")
-        .createIndex({ proposalId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("proposals")
-        .createIndex({ slug: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("proposals")
-        .createIndex({ stage: 1, space: 1 })
-        .catch(() => {}),
-      db
-        .collection("comments")
-        .createIndex({ commentId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("comments")
-        .createIndex({ proposalId: 1, createdAt: 1 })
-        .catch(() => {}),
-      db
-        .collection("comments")
-        .createIndex({ proposalId: 1, parentCommentId: 1, createdAt: 1 })
-        .catch(() => {}),
-      db
-        .collection("comments")
-        .createIndex({ memberId: 1, createdAt: 1 })
-        .catch(() => {}),
-      // Public profile history (#113): visible, non-deleted comments per member.
-      db
-        .collection("comments")
-        .createIndex({ memberId: 1, deletedAt: 1, createdAt: -1 })
-        .catch(() => {}),
-      db
-        .collection(PROPOSAL_VOTES)
-        .createIndex({ proposalId: 1, updatedAt: -1 })
-        .catch(() => {}),
-      db
-        .collection(PROPOSAL_VOTES)
-        .createIndex({ memberId: 1, updatedAt: 1 })
-        .catch(() => {}),
-      db
-        .collection("proposals")
-        .createIndex({ authorId: 1, createdAt: 1 })
-        .catch(() => {}),
-      db
-        .collection("ballots")
-        .createIndex({ ballotId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("ballots")
-        .createIndex({ matterId: 1, status: 1 })
-        .catch(() => {}),
-      // One immutable quorum closure record per ballot.
-      db
-        .collection("ballot_quorum_records")
-        .createIndex(
-          { ballotId: 1 },
-          { unique: true, name: "ballot_quorum_ballot_unique" },
-        )
-        .catch(() => {}),
-      db
-        .collection("ballot_quorum_records")
-        .createIndex({ matterId: 1, closedAt: -1 })
-        .catch(() => {}),
-      db
-        .collection("governance_events")
-        .createIndex({ eventId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("governance_events")
-        .createIndex({ matterId: 1, createdAt: -1 })
-        .catch(() => {}),
-      db
-        .collection("governance_relationships")
-        .createIndex({ sourceMatterId: 1, relationshipType: 1 })
-        .catch(() => {}),
-      db
-        .collection("governance_relationships")
-        .createIndex({ targetMatterId: 1, relationshipType: 1 })
-        .catch(() => {}),
-      db
-        .collection("memberships")
-        .createIndex(
-          { memberId: 1 },
-          { unique: true, name: "membership_member_unique" },
-        )
-        .catch(() => {}),
-      db.collection("memberships").createIndex({ status: 1 }).catch(() => {}),
-      db
-        .collection("application_roles")
-        .createIndex(
-          { memberId: 1, role: 1 },
-          { unique: true, name: "member_role_unique" },
-        )
-        .catch(() => {}),
-      db
-        .collection("branches")
-        .createIndex({ branchId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("proposal_revisions")
-        .createIndex({ revisionId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("proposal_revisions")
-        .createIndex({ proposalId: 1, createdAt: 1 })
-        .catch(() => {}),
-      db
-        .collection("policy_registry")
-        .createIndex({ policyId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("policy_revisions")
-        .createIndex({ revisionId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("policy_revisions")
-        .createIndex({ policyId: 1, createdAt: 1 })
-        .catch(() => {}),
-      db
-        .collection("policy_import_runs")
-        .createIndex({ runId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("publication_events")
-        .createIndex({ eventId: 1 }, { unique: true })
-        .catch(() => {}),
-      // The ballot_results index shape is migrated explicitly, never as a
-      // silent startup side effect (#55). See ballot-results-index-migration.ts.
-      ensureBallotResultsIndexes(db),
-      db
-        .collection("ballot_binding_events")
-        .createIndex({ eventId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("amendments")
-        .createIndex({ amendmentId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("amendments")
-        .createIndex({ proposalId: 1, status: 1, createdAt: 1 })
-        .catch(() => {}),
-      // Public profile history (#113): amendments authored by one member.
-      db
-        .collection("amendments")
-        .createIndex({ authorId: 1, createdAt: -1 })
-        .catch(() => {}),
-      db
-        .collection("amendment_revisions")
-        .createIndex({ revisionId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("amendment_revisions")
-        .createIndex({ amendmentId: 1, createdAt: 1 })
-        .catch(() => {}),
-      db
-        .collection("branch_memberships")
-        .createIndex({ branchId: 1, memberId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("branch_memberships")
-        .createIndex({ memberId: 1, status: 1, branchRole: 1, branchId: 1 })
-        .catch(() => {}),
-      db
-        .collection("branch_memberships")
-        .createIndex({ branchId: 1, status: 1 })
-        .catch(() => {}),
-      db
-        .collection("branch_memberships")
-        .createIndex({ source: 1, branchId: 1 })
-        .catch(() => {}),
-      db
-        .collection("branch_subscriptions")
-        .createIndex(
-          { memberId: 1, branchId: 1 },
-          { unique: true, name: "branch_subscription_member_unique" },
-        )
-        .catch(() => {}),
-      db
-        .collection("branch_subscriptions")
-        .createIndex({ branchId: 1, status: 1 })
-        .catch(() => {}),
-      db
-        .collection("branch_subscriptions")
-        .createIndex({ memberId: 1, status: 1 })
-        .catch(() => {}),
-      db
-        .collection("branch_subscription_events")
-        .createIndex({ eventId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("branch_subscription_events")
-        .createIndex({ memberId: 1, createdAt: -1 })
-        .catch(() => {}),
-      db
-        .collection("branch_membership_events")
-        .createIndex({ eventId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("branch_membership_events")
-        .createIndex({ branchId: 1, memberId: 1, createdAt: 1 })
-        .catch(() => {}),
-      db
-        .collection("branch_events")
-        .createIndex({ eventId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("branch_events")
-        .createIndex({ branchId: 1, createdAt: 1 })
-        .catch(() => {}),
-      db
-        .collection("branch_referrals")
-        .createIndex({ proposalId: 1, targetBranchId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("branch_referrals")
-        .createIndex({ referralId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("site_settings_events")
-        .createIndex({ eventId: 1 }, { unique: true })
-        .catch(() => {}),
-      db
-        .collection("site_settings_events")
-        .createIndex({ createdAt: -1 })
-        .catch(() => {}),
-      db
-        .collection("data_migrations")
-        .createIndex(
-          { migrationId: 1 },
-          { unique: true, name: "data_migration_unique" },
-        )
-        .catch(() => {}),
-    ]);
-
-    const now = new Date();
-    // Preserve existing amendment records while assigning a first immutable wording revision.
-    const amendments = await db.collection("amendments").find({}).toArray();
-    for (const amendment of amendments) {
-      if (amendment.currentRevisionId) continue;
-      const snapshot =
-        amendment.changes && typeof amendment.changes === "object"
-          ? amendment.changes
-          : {};
-      const existingRevision = await db
-        .collection("amendment_revisions")
-        .findOne({ amendmentId: amendment.amendmentId });
-      const revisionId =
-        existingRevision?.revisionId ??
-        `legacy-${createHash("sha256").update(String(amendment.amendmentId)).digest("hex")}`;
+  const now = new Date();
+  // Preserve existing amendment records while assigning a first immutable wording revision.
+  const amendments = await db.collection("amendments").find({}).toArray();
+  for (const amendment of amendments) {
+    if (amendment.currentRevisionId) continue;
+    const snapshot =
+      amendment.changes && typeof amendment.changes === "object"
+        ? amendment.changes
+        : {};
+    const existingRevision = await db
+      .collection("amendment_revisions")
+      .findOne({ amendmentId: amendment.amendmentId });
+    const revisionId =
+      existingRevision?.revisionId ??
+      `legacy-${createHash("sha256").update(String(amendment.amendmentId)).digest("hex")}`;
+    await db
+      .collection("amendment_revisions")
+      .updateOne(
+        { revisionId },
+        {
+          $setOnInsert: {
+            revisionId,
+            amendmentId: amendment.amendmentId,
+            parentRevisionId: null,
+            authorId: amendment.authorId ?? "system:migration",
+            createdAt: amendment.createdAt ?? now,
+            snapshot,
+            contentHash: createHash("sha256")
+              .update(JSON.stringify(snapshot))
+              .digest("hex"),
+            provenance: "legacy-backfill",
+          },
+        },
+        { upsert: true },
+      );
+    const revision =
+      existingRevision ??
+      (await db.collection("amendment_revisions").findOne({ revisionId }));
+    if (revision)
       await db
-        .collection("amendment_revisions")
+        .collection("amendments")
         .updateOne(
-          { revisionId },
           {
-            $setOnInsert: {
-              revisionId,
-              amendmentId: amendment.amendmentId,
-              parentRevisionId: null,
-              authorId: amendment.authorId ?? "system:migration",
-              createdAt: amendment.createdAt ?? now,
-              snapshot,
-              contentHash: createHash("sha256")
-                .update(JSON.stringify(snapshot))
-                .digest("hex"),
-              provenance: "legacy-backfill",
-            },
+            amendmentId: amendment.amendmentId,
+            currentRevisionId: { $exists: false },
           },
-          { upsert: true },
+          { $set: { currentRevisionId: revision.revisionId } },
         );
-      const revision =
-        existingRevision ??
-        (await db.collection("amendment_revisions").findOne({ revisionId }));
-      if (revision)
-        await db
-          .collection("amendments")
-          .updateOne(
-            {
-              amendmentId: amendment.amendmentId,
-              currentRevisionId: { $exists: false },
-            },
-            { $set: { currentRevisionId: revision.revisionId } },
-          );
-    }
-    const proposalsCol = db.collection<ProposalRecord>("proposals");
-    await Promise.all(
-      baselineItems.map((item) => {
-        const raw = item as Record<string, any>;
-        const proposalId = String(raw.proposalId || raw.policyId);
-        const stage = mapBaselineStage(raw.stage || raw.defaultStatus);
-        const kind =
-          raw.kind || (proposalId.startsWith("GOV-") ? "resolution" : "policy");
+  }
+  const proposalsCol = db.collection<ProposalRecord>("proposals");
+  // One bulk write instead of one round trip per baseline item.
+  const operations = baselineItems.map((item) => {
+    const raw = item as Record<string, any>;
+    const proposalId = String(raw.proposalId || raw.policyId);
+    const stage = mapBaselineStage(raw.stage || raw.defaultStatus);
+    const kind =
+      raw.kind || (proposalId.startsWith("GOV-") ? "resolution" : "policy");
 
-        // Seeding is insert-only. A restart must not rewrite an existing proposal,
-        // including its updatedAt timestamp, because that would make routine
-        // initialisation look like a substantive content change.
-        return proposalsCol.updateOne(
-          { proposalId },
-          {
-            $setOnInsert: {
-              proposalId,
-              slug: String(raw.slug),
-              title: String(raw.title),
-              space: String(raw.space || raw.category || "General"),
-              spaceSummary: String(raw.spaceSummary || raw.categorySummary || ""),
-              summary: String(raw.summary || raw.statement || ""),
-              outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
-              details: String(raw.details || ""),
-              ...(raw.provenance ? { provenance: raw.provenance } : {}),
-              ...(raw.detailHtml ? { detailHtml: raw.detailHtml } : {}),
-              ...(raw.attachmentUrl
-                ? { attachmentUrl: String(raw.attachmentUrl) }
-                : {}),
-              ...(raw.attachmentDescription
-                ? { attachmentDescription: String(raw.attachmentDescription) }
-                : {}),
-              stage,
-              kind,
-              authorName: "Fusion Working Group",
-              createdAt: now,
-              updatedAt: now,
-            },
+    // Seeding is insert-only. A restart must not rewrite an existing proposal,
+    // including its updatedAt timestamp, because that would make routine
+    // initialisation look like a substantive content change.
+    return {
+      updateOne: {
+        filter: { proposalId },
+        update: {
+          $setOnInsert: {
+            proposalId,
+            slug: String(raw.slug),
+            title: String(raw.title),
+            space: String(raw.space || raw.category || "General"),
+            spaceSummary: String(raw.spaceSummary || raw.categorySummary || ""),
+            summary: String(raw.summary || raw.statement || ""),
+            outcomes: Array.isArray(raw.outcomes) ? raw.outcomes : [],
+            details: String(raw.details || ""),
+            ...(raw.provenance ? { provenance: raw.provenance } : {}),
+            ...(raw.detailHtml ? { detailHtml: raw.detailHtml } : {}),
+            ...(raw.attachmentUrl
+              ? { attachmentUrl: String(raw.attachmentUrl) }
+              : {}),
+            ...(raw.attachmentDescription
+              ? { attachmentDescription: String(raw.attachmentDescription) }
+              : {}),
+            stage,
+            kind,
+            authorName: "Fusion Working Group",
+            createdAt: now,
+            updatedAt: now,
           },
-          { upsert: true },
-        );
-      }),
-    );
+        },
+        upsert: true,
+      },
+    };
+  });
+  if (operations.length > 0) {
+    await proposalsCol.bulkWrite(operations);
+  }
 
-    // Backfill one immutable starting revision for legacy records. Existing
-    // proposal and vote documents are untouched; the hash makes this restartable.
-    // Ballots are never bound here: a ballot whose votes are not already bound to
-    // one immutable revision requires an explicit, reviewed migration decision.
-    const existingProposals = await proposalsCol.find({}).toArray();
-    await Promise.all(
-      existingProposals.map((proposal) =>
-        ensureLegacyProposalRevision(db, proposal),
-      ),
-    );
+  // Backfill one immutable starting revision for legacy records. Existing
+  // proposal and vote documents are untouched; the hash makes this restartable.
+  // Ballots are never bound here: a ballot whose votes are not already bound to
+  // one immutable revision requires an explicit, reviewed migration decision.
+  const existingProposals = await proposalsCol.find({}).toArray();
+  await Promise.all(
+    existingProposals.map((proposal) =>
+      ensureLegacyProposalRevision(db, proposal),
+    ),
+  );
+}
+
+/**
+ * Full production initialisation: schema, then baseline content. Callers that
+ * initialise a database themselves should use this unless they are certain the
+ * case does not depend on the seeded policy register.
+ */
+export async function initializeDatabase(db: Db): Promise<void> {
+  try {
+    await ensureDatabaseIndexes(db);
+    await seedBaselineContent(db);
   } catch (error) {
     seededDbs.delete(db);
     throw error;
@@ -713,8 +432,9 @@ export function createMemoryDb(): Db {
     command: async () => ({ ok: 1 }),
     collection(name: string) {
       const store = getStore(name);
-      return {
+      const collection: Record<string, any> = {
         createIndex: async () => "ok",
+        createIndexes: async () => "ok",
         countDocuments: async (filter: Record<string, any> = {}) =>
           store.filter((doc) => matchesFilter(doc, filter)).length,
         find(filter: Record<string, any> = {}) {
@@ -917,6 +637,28 @@ export function createMemoryDb(): Db {
           },
         }),
       };
+      // The preview applies bulk operations in order; the seeding path uses it
+      // to keep one round trip in Mongo instead of one write per record.
+      collection.bulkWrite = async (
+        operations: Array<Record<string, any>>,
+      ) => {
+        let upsertedCount = 0;
+        let matchedCount = 0;
+        for (const operation of operations) {
+          if (operation.insertOne) {
+            await collection.insertOne(operation.insertOne.document);
+          } else if (operation.updateOne) {
+            const { filter, update, upsert } = operation.updateOne;
+            const result = await collection.updateOne(filter, update, {
+              upsert,
+            });
+            matchedCount += result.matchedCount ?? 0;
+            if (result.upsertedId) upsertedCount += 1;
+          }
+        }
+        return { acknowledged: true, matchedCount, upsertedCount };
+      };
+      return collection;
     },
   } as unknown as Db;
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MongoClient, type Db } from "mongodb";
-import { initializeDatabase } from "./db.ts";
+import { ensureDatabaseIndexes } from "./db-indexes.ts";
 import {
   BALLOT_RESULTS_BALLOT_INDEX,
   BALLOT_RESULTS_COLLECTION,
@@ -52,7 +52,7 @@ test(
   { skip: !uri },
   async () => {
     await withDatabase(async (db) => {
-      await initializeDatabase(db);
+      await ensureDatabaseIndexes(db);
 
       const report = await inspectBallotResultsIndexes(db);
       assert.equal(report.migrated, true);
@@ -87,7 +87,7 @@ test(
         messages.push(parts.map(String).join(" "));
       };
       try {
-        await initializeDatabase(db);
+        await ensureDatabaseIndexes(db);
       } finally {
         console.error = original;
       }
