@@ -13,7 +13,7 @@ import {
   canReviewArchivedProposal,
   canViewProposal,
   normalizeProposalDoc,
-} from "../../lib/store.ts";
+} from "../../lib/proposal-helpers.ts";
 export const prerender = false;
 export const GET: APIRoute = async ({ url, locals, request }) => {
   const env = runtimeEnv(locals);

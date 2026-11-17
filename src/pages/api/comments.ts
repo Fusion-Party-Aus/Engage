@@ -6,10 +6,10 @@ import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import {
   addComment,
   deleteComment,
-  setCommentFeedback,
   voteOnComment,
   type CommentVoteAction,
-} from "../../lib/store.ts";
+} from "../../lib/comments-store.ts";
+import { setCommentFeedback } from "../../lib/contribution-feedback.ts";
 
 export const prerender = false;
 

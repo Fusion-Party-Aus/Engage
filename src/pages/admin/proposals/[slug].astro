@@ -22,7 +22,8 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
+import { getProposalDetail, listProposals } from '../../../lib/proposals-store.ts';
+import { isGovernanceResolution } from '../../../lib/proposal-helpers.ts';
 import {
   ballotOutcomeLabel,
   loadBallotTallyCryptoConfig,

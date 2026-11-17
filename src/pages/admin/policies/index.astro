@@ -18,7 +18,11 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { isGovernanceResolution, isPolicyRegistryRecordForResolution, listProposals } from '../../../lib/store.ts';
+import {
+  isGovernanceResolution,
+  isPolicyRegistryRecordForResolution,
+} from '../../../lib/proposal-helpers.ts';
+import { listProposals } from '../../../lib/proposals-store.ts';
 import { policyCanonicalPath } from '../../../lib/policy-registry.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';

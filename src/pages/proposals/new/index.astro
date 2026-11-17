@@ -20,7 +20,7 @@ import PolicyChangeTypeSelector from '../../../components/proposal/PolicyChangeT
 import { ImagePlus, Link as LinkIcon } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { canViewProposal, normalizeProposalDoc } from '../../../lib/store.ts';
+import { canViewProposal, normalizeProposalDoc } from '../../../lib/proposal-helpers.ts';
 import {
   defaultProposalScopeKey,
   listProposalSubmissionScopes,

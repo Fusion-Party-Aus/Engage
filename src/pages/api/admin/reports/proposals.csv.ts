@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { branchesWithPermission } from "../../../../lib/rbac.ts";
-import { listProposals } from "../../../../lib/store.ts";
+import { listProposals } from "../../../../lib/proposals-store.ts";
 import {
   canIncludeProposalInAdminReport,
   proposalsSummaryToCsv,

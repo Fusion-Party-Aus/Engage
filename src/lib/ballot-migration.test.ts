@@ -10,7 +10,7 @@ import {
 } from "./ballot-migration.ts";
 import { legacyRevisionId } from "./proposal-revision.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
-import { castVote } from "./store.ts";
+import { castVote } from "./voting-store.ts";
 import type { SessionUser } from "./types.ts";
 
 const uri = process.env.VOTING_TEST_MONGODB_URI;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MongoClient, type Collection, type Db } from "mongodb";
-import { voteOnComment } from "./store.ts";
+import { voteOnComment } from "./comments-store.ts";
 import type { SessionUser } from "./types.ts";
 
 /**

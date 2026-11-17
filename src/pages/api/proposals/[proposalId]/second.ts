@@ -3,10 +3,7 @@ import { getSessionUser } from "../../../../lib/auth.ts";
 import { privateJson, toProposalDetailDto } from "../../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { requireLegalAcceptance } from "../../../../lib/legal-acceptance.ts";
-import {
-  ProposalSecondingError,
-  secondProposal,
-} from "../../../../lib/store.ts";
+import { ProposalSecondingError, secondProposal } from "../../../../lib/proposals-store.ts";
 
 export const prerender = false;
 

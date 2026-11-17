@@ -17,7 +17,8 @@ import {
   setBranchFollowing,
   verifyBranchMember,
 } from "./branch-participation.ts";
-import { castVote, listOutstandingDecisions, listProposals, saveProposal } from "./store.ts";
+import { castVote, listOutstandingDecisions } from "./voting-store.ts";
+import { listProposals, saveProposal } from "./proposals-store.ts";
 import { PROPOSAL_VOTES, findMemberVotes, proposalBallotId } from "./vote-storage.ts";
 import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
 import type { SessionUser } from "./types.ts";

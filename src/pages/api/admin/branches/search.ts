@@ -2,7 +2,8 @@ import type { APIRoute } from "astro";
 import { getSessionUser, canAdministerBranch } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { branchesWithPermission, hasPermission } from "../../../../lib/rbac.ts";
-import { listMembers, listProposals } from "../../../../lib/store.ts";
+import { listMembers } from "../../../../lib/members-store.ts";
+import { listProposals } from "../../../../lib/proposals-store.ts";
 import { BRANCH_MEMBERSHIPS, BRANCH_SUBSCRIPTIONS } from "../../../../lib/branch-participation.ts";
 
 export const prerender = false;

@@ -3,7 +3,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { ShieldAlert } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { listMembers } from '../../../lib/store.ts';
+import { listMembers } from '../../../lib/members-store.ts';
 import { PERMISSION_CATALOGUE, hasPermission } from '../../../lib/rbac.ts';
 import { listRolesAndAssignments } from '../../../lib/roles-store.ts';
 import RolesManager from '../../../components/admin/RolesManager';

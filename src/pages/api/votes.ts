@@ -3,7 +3,7 @@ import { getSessionUser } from "../../lib/auth.ts";
 import { privateJson } from "../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../lib/db.ts";
 import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
-import { castVote, savePendingVotePreference } from "../../lib/store.ts";
+import { castVote, savePendingVotePreference } from "../../lib/voting-store.ts";
 
 export const prerender = false;
 
