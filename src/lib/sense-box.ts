@@ -26,7 +26,7 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{1
 const SUBMISSION_PROJECTION = {
   _id: 0, submissionId: 1, branchId: 1, title: 1, detail: 1, locality: 1,
   topic: 1, status: 1, createdAt: 1, version: 1, visibility: 1,
-  publishedAt: 1, linkedProposalId: 1, publicationConsent: 1,
+  publishedAt: 1, linkedProposalId: 1, linkedProposalIds: 1, publicationConsent: 1,
 } as const;
 
 function text(value: unknown, label: string, min: number, max: number): string {
@@ -114,6 +114,16 @@ function publicVisibility(row: Record<string, any>) {
   return row.visibility === 'published' && row.publishedAt ? 'published' : 'private';
 }
 
+/** Read the one-to-many links while retaining legacy single-link records. */
+function linkedProposalIds(row: Record<string, any>): string[] {
+  const ids = Array.isArray(row.linkedProposalIds)
+    ? row.linkedProposalIds.map(String)
+    : [];
+  if (row.linkedProposalId && !ids.includes(String(row.linkedProposalId)))
+    ids.push(String(row.linkedProposalId));
+  return Array.from(new Set(ids.filter(Boolean)));
+}
+
 async function commentCounts(db: Db, submissionIds: string[]) {
   if (!submissionIds.length) return new Map<string, number>();
   const rows = await db.collection('sense_comments')
@@ -158,7 +168,7 @@ function toSenseItem(row: Record<string, any>, commentCount = 0): SenseItem {
     version: Number(row.version),
     visibility: publicVisibility(row),
     ...(row.publishedAt ? { publishedAt: new Date(row.publishedAt).toISOString() } : {}),
-    ...(row.linkedProposalId ? { linkedProposalId: String(row.linkedProposalId) } : {}),
+    linkedProposalIds: linkedProposalIds(row),
     commentCount,
     publicationConsent: row.publicationConsent === true,
   };
@@ -213,10 +223,12 @@ export async function listPublicSense(
   ]);
   const [counts, links] = await Promise.all([
     commentCounts(db, rows.map((row) => String(row.submissionId))),
-    publicProposalLinks(db, rows.map((row) => String(row.linkedProposalId ?? ''))),
+    publicProposalLinks(db, rows.flatMap((row) => linkedProposalIds(row))),
   ]);
   const items: SensePublicItem[] = rows.map((row) => {
-    const link = row.linkedProposalId ? links.get(String(row.linkedProposalId)) : undefined;
+    const linked = linkedProposalIds(row)
+      .map((id) => links.get(id))
+      .filter((link): link is { slug: string; title: string; stage: string } => Boolean(link));
     return {
       submissionId: String(row.submissionId),
       branchId: String(row.branchId),
@@ -226,7 +238,7 @@ export async function listPublicSense(
       topic: row.topic,
       publishedAt: new Date(row.publishedAt).toISOString(),
       commentCount: counts.get(String(row.submissionId)) ?? 0,
-      ...(link ? { linkedProposal: link } : {}),
+      ...(linked.length ? { linkedProposals: linked } : {}),
     };
   });
   return { items, total, page, topics: Object.fromEntries(topicCounts) };
@@ -271,14 +283,16 @@ export async function getPublicSense(db: Db, submissionId: string, viewer?: Sess
   const row = await db.collection('sense_submissions').findOne({ submissionId, visibility: 'published', publishedAt: { $exists: true } });
   if (!row) return null;
   const [links, comments] = await Promise.all([
-    publicProposalLinks(db, [String(row.linkedProposalId ?? '')]),
+    publicProposalLinks(db, linkedProposalIds(row)),
     listSenseComments(db, submissionId, 'public', viewer),
   ]);
-  const link = row.linkedProposalId ? links.get(String(row.linkedProposalId)) : undefined;
+  const linked = linkedProposalIds(row)
+    .map((id) => links.get(id))
+    .filter((link): link is { slug: string; title: string; stage: string } => Boolean(link));
   return {
     ...toSenseItem(row, comments.filter((comment) => !comment.deleted).length),
     publishedAt: new Date(row.publishedAt).toISOString(),
-    ...(link ? { linkedProposal: link } : {}),
+    ...(linked.length ? { linkedProposals: linked } : {}),
     comments,
   };
 }
@@ -314,28 +328,31 @@ export async function getSenseReceipt(db: Db, submissionId: string): Promise<Sen
   };
 }
 
-export async function getSenseSubmission(db: Db, user: SessionUser, submissionId: string): Promise<SenseSubmissionDetail | null> {  const row = await db.collection('sense_submissions').findOne({ submissionId });
+export async function getSenseSubmission(db: Db, user: SessionUser, submissionId: string): Promise<SenseSubmissionDetail | null> {
+  const row = await db.collection('sense_submissions').findOne({ submissionId });
   if (!row) return null;
   requireBranch(user, String(row.branchId));
   const comments = await listSenseComments(db, submissionId, 'all', user);
-  let linkedProposal: { proposalId: string; slug: string; title: string; stage: string } | undefined;
-  if (row.linkedProposalId) {
-    const proposal = await db.collection('proposals').findOne(
-      { proposalId: String(row.linkedProposalId) },
-      { projection: { _id: 0, proposalId: 1, slug: 1, title: 1, stage: 1 } },
-    );
-    if (proposal) linkedProposal = {
+  const ids = linkedProposalIds(row);
+  const proposals = ids.length
+    ? await db.collection('proposals')
+        .find({ proposalId: { $in: ids } })
+        .project({ _id: 0, proposalId: 1, slug: 1, title: 1, stage: 1, publicationScope: 1, originatingBranchId: 1, jurisdictionBranchId: 1, authorId: 1 })
+        .toArray()
+    : [];
+  const linkedProposals = proposals
+    .filter((proposal) => canViewProposal(normalizeProposalDoc(proposal), user))
+    .map((proposal) => ({
       proposalId: String(proposal.proposalId),
       slug: String(proposal.slug),
       title: String(proposal.title),
       stage: String(proposal.stage),
-    };
-  }
+    }))
+    .sort((left, right) => left.title.localeCompare(right.title));
   return {
     ...toSenseItem(row, comments.filter((comment) => comment.visibility === 'public' && !comment.deleted).length),
     ...(row.publishedAt ? { publishedAt: new Date(row.publishedAt).toISOString() } : {}),
-    ...(row.linkedProposalId ? { linkedProposalId: String(row.linkedProposalId) } : {}),
-    ...(linkedProposal ? { linkedProposal } : {}),
+    ...(linkedProposals.length ? { linkedProposals } : {}),
     comments,
   };
 }
@@ -388,14 +405,28 @@ export async function reviewSense(db: Db, user: SessionUser, body: Record<string
     };
   } else if (action === 'link') {
     const proposalId = typeof body.proposalId === 'string' ? body.proposalId.trim() : '';
-    if (proposalId) {
-      const proposal = await db.collection('proposals').findOne({ proposalId });
-      if (!proposal) throw new SenseError('That proposal was not found.', 404);
-      if (!canViewProposal(normalizeProposalDoc(proposal), user)) throw new SenseError('That proposal was not found.', 404);
-    }
-    update = proposalId
-      ? { $set: { linkedProposalId: proposalId, version: version + 1, reviewedBy: user.memberId, reviewedAt: new Date() } }
-      : { $set: { version: version + 1, reviewedBy: user.memberId, reviewedAt: new Date() }, $unset: { linkedProposalId: '' } };
+    if (!proposalId) throw new SenseError('Choose a proposal to link.', 400);
+    const proposal = await db.collection('proposals').findOne({ proposalId });
+    if (!proposal) throw new SenseError('That proposal was not found.', 404);
+    if (!canViewProposal(normalizeProposalDoc(proposal), user)) throw new SenseError('That proposal was not found.', 404);
+    const legacyId = String(raw.linkedProposalId ?? '');
+    update = {
+      $addToSet: {
+        linkedProposalIds: {
+          $each: [legacyId, proposalId].filter(Boolean),
+        },
+      },
+      $set: { version: version + 1, reviewedBy: user.memberId, reviewedAt: new Date() },
+      $unset: { linkedProposalId: '' },
+    };
+  } else if (action === 'unlink') {
+    const proposalId = typeof body.proposalId === 'string' ? body.proposalId.trim() : '';
+    if (!proposalId) throw new SenseError('Choose a proposal to unlink.', 400);
+    update = {
+      $pull: { linkedProposalIds: proposalId },
+      $set: { version: version + 1, reviewedBy: user.memberId, reviewedAt: new Date() },
+      ...(String(raw.linkedProposalId ?? '') === proposalId ? { $unset: { linkedProposalId: '' } } : {}),
+    };
   } else if (action === 'status') {
     const status = choice(body.status,SENSE_STATUSES,'status');
     update = { $set: { status, version: version + 1, reviewedBy: user.memberId, reviewedAt: new Date() } };

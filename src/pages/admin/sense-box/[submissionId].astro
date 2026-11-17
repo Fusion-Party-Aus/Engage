@@ -43,12 +43,14 @@ const linkedProposals = (
 )
   .filter((proposal) => canViewProposal(normalizeProposalDoc(proposal), user))
   .map((proposal) => ({ proposalId: String(proposal.proposalId), title: String(proposal.title), stage: String(proposal.stage) }));
-if (submission.linkedProposal?.proposalId && !linkedProposals.some((proposal) => proposal.proposalId === submission.linkedProposal?.proposalId)) {
-  linkedProposals.unshift({
-    proposalId: submission.linkedProposal.proposalId,
-    title: submission.linkedProposal.title,
-    stage: submission.linkedProposal.stage,
-  });
+for (const linked of submission.linkedProposals ?? []) {
+  if (linked.proposalId && !linkedProposals.some((proposal) => proposal.proposalId === linked.proposalId)) {
+    linkedProposals.unshift({
+      proposalId: linked.proposalId,
+      title: linked.title,
+      stage: linked.stage,
+    });
+  }
 }
 const internalComments = submission.comments.filter((comment) => comment.visibility === 'internal');
 const publicComments = submission.comments.filter((comment) => comment.visibility === 'public');
@@ -84,15 +86,9 @@ const stageLabel = (stage: string) => stage === 'decide' ? 'Voting' : stage === 
         <CardDescription class="whitespace-pre-wrap">{submission.detail}</CardDescription>
       </CardHeader>
       <CardContent class="flex flex-wrap gap-3 border-t pt-4">
-        {submission.linkedProposal ? (
-          <Button href={`/proposals/${submission.linkedProposal.slug}/`} size="sm">
-            <FileText aria-hidden="true" /> Open linked proposal
-          </Button>
-        ) : (
-          <Button href={`/proposals/new/?sense=${submission.submissionId}`} size="sm">
-            <FileText aria-hidden="true" /> {published ? 'Develop a proposal' : 'Develop an independent proposal'}
-          </Button>
-        )}
+        <Button href={`/proposals/new/?sense=${submission.submissionId}`} size="sm">
+          <FileText aria-hidden="true" /> {published ? 'Develop a proposal' : 'Develop an independent proposal'}
+        </Button>
         {published && (
           <Button href={`/sense-box/${submission.submissionId}/`} variant="outline" size="sm">
             <ArrowUpRight aria-hidden="true" /> View public page
@@ -172,26 +168,37 @@ const stageLabel = (stage: string) => stage === 'decide' ? 'Voting' : stage === 
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {submission.linkedProposal ? (
-          <p class="mt-0">
-            <a href={`/proposals/${submission.linkedProposal.slug}/`}>{submission.linkedProposal.title}</a>
-            <span class="text-sm text-muted-foreground"> · {stageLabel(submission.linkedProposal.stage)}</span>
-          </p>
+        {submission.linkedProposals?.length ? (
+          <ul class="m-0 grid list-none gap-2 p-0">
+            {submission.linkedProposals.map((proposal) => (
+              <li class="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <a href={`/proposals/${proposal.slug}/`}>{proposal.title}</a>
+                  <span class="text-sm text-muted-foreground"> · {stageLabel(proposal.stage)}</span>
+                </span>
+                <form data-sense-action="unlink" data-version={submission.version}>
+                  <input type="hidden" name="proposalId" value={proposal.proposalId} />
+                  <Button type="submit" size="sm" variant="ghost">Remove link</Button>
+                  <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
+                </form>
+              </li>
+            ))}
+          </ul>
         ) : (
           <p class="mt-0 text-sm text-muted-foreground">Not linked to a proposal.</p>
         )}
-        <form data-sense-action="link" data-version={submission.version} class="flex flex-wrap items-end gap-3">
-          <Field label="Proposal" htmlFor="sense-linked-proposal" class="min-w-64">
-            <NativeSelect id="sense-linked-proposal" name="proposalId" defaultValue={submission.linkedProposal?.proposalId ?? ''}>
-              <option value="">Not linked</option>
+        <form data-sense-action="link" data-version={submission.version} class="mt-4 flex flex-wrap items-end gap-3">
+          <Field label="Add a proposal" htmlFor="sense-linked-proposal" class="min-w-64">
+            <NativeSelect id="sense-linked-proposal" name="proposalId" defaultValue="">
+              <option value="">Choose a proposal</option>
               {linkedProposals.map((proposal) => (
-                <option value={proposal.proposalId} selected={submission.linkedProposal?.proposalId === proposal.proposalId}>
+                <option value={proposal.proposalId}>
                   {proposal.title} · {stageLabel(proposal.stage)}
                 </option>
               ))}
             </NativeSelect>
           </Field>
-          <Button type="submit" size="sm" variant="outline">Save link</Button>
+          <Button type="submit" size="sm" variant="outline">Add link</Button>
           <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
         </form>
       </CardContent>
@@ -256,7 +263,7 @@ const stageLabel = (stage: string) => stage === 'decide' ? 'Voting' : stage === 
             version: Number(form.dataset.version),
             action,
             ...(action === 'status' ? { status: data.get('status') } : {}),
-            ...(action === 'link' ? { proposalId: data.get('proposalId') } : {}),
+            ...(action === 'link' || action === 'unlink' ? { proposalId: data.get('proposalId') } : {}),
           }),
         });
         const result = await response.json().catch(() => ({}));

@@ -1230,7 +1230,7 @@ export async function saveProposal(
   db: Db,
   user: SessionUser,
   body: Record<string, unknown>,
-  options: { allowAmendmentApply?: boolean } = {},
+  options: { allowAmendmentApply?: boolean; expectedRevisionId?: string } = {},
 ): Promise<ProposalRecord> {
   const col = db.collection<ProposalRecord>("proposals");
   const existingId =
@@ -1242,6 +1242,18 @@ export async function saveProposal(
   const existing = existingId
     ? await col.findOne({ proposalId: existingId })
     : null;
+  if (existing && options.expectedRevisionId) {
+    const latest = await db
+      .collection("proposal_revisions")
+      .find({ proposalId: existing.proposalId })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(1)
+      .toArray();
+    if (latest[0]?.revisionId !== options.expectedRevisionId)
+      throw new Error(
+        "The proposal wording changed while the amendment was being applied. Reload the proposal and review its current revision.",
+      );
+  }
   // A declared policy change is fixed at creation. Rewriting what a live
   // proposal targets would let a draft claim authority over different policy.
   const declaresChange =
@@ -1515,7 +1527,7 @@ export async function saveProposal(
     const latestRevisions = await db
       .collection("proposal_revisions")
       .find({ proposalId: existing.proposalId })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(1)
       .toArray();
     const previousRevision = latestRevisions[0];
@@ -1696,8 +1708,6 @@ export async function saveProposal(
     if (!senseSource) throw new Error("That Sense Box priority was not found.");
     if (!canReviewSense(user, String(senseSource.branchId)))
       throw new Error("You are not authorised to develop that Sense Box priority.");
-    if (senseSource.linkedProposalId)
-      throw new Error("That Sense Box priority is already linked to a proposal.");
     const sourceIsPublished = senseSource.visibility === "published" && Boolean(senseSource.publishedAt);
     if (!sourceIsPublished) {
       if (body.privateSourceAcknowledgement !== true)
@@ -1803,28 +1813,35 @@ export async function saveProposal(
   };
   await runInTransaction(db, async (session) => {
     const sessionOpts = session ? { session } : undefined;
-    if (senseSource) {
-      // Claim the source before creating anything. A concurrent request that
-      // already claimed it must not produce a second proposal.
-      const claim = await db.collection("sense_submissions").updateOne(
-        { submissionId: requestedSenseSource, linkedProposalId: { $exists: false } },
-        {
-          $set: {
-            linkedProposalId: proposalId,
-            linkedProposalAt: now,
-            linkedProposalBy: user.memberId,
-            ...(senseSource.status !== "archived" ? { status: "developing" } : {}),
-          },
-        },
-        sessionOpts,
-      );
-      if (claim.modifiedCount !== 1)
-        throw new Error("That Sense Box priority is already linked to a proposal.");
-    }
     await col.insertOne(created, sessionOpts);
     await db
       .collection("proposal_revisions")
       .insertOne(revision, sessionOpts);
+    if (senseSource) {
+      // One priority may inform several proposals. Adding the link is
+      // idempotent and does not claim an exclusive source. A legacy single
+      // link is folded into the array before it is removed.
+      const legacyLink = senseSource.linkedProposalId
+        ? [String(senseSource.linkedProposalId)]
+        : [];
+      await db.collection("sense_submissions").updateOne(
+        { submissionId: requestedSenseSource },
+        {
+          $addToSet: {
+            linkedProposalIds: {
+              $each: [...legacyLink, proposalId],
+            },
+          },
+          $set: {
+            linkedProposalAt: now,
+            linkedProposalBy: user.memberId,
+            ...(senseSource.status !== "archived" ? { status: "developing" } : {}),
+          },
+          $unset: { linkedProposalId: "" },
+        },
+        sessionOpts,
+      );
+    }
     if (stage === "decide") {
       await recordGovernanceEvent(
         db,

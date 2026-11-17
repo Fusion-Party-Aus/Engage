@@ -110,9 +110,17 @@ const pageHref = (page: number) => {
               <p>{item.detail.length > 280 ? `${item.detail.slice(0, 277).trimEnd()}…` : item.detail}</p>
               <div class="sense-priority__foot">
                 <span>{`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}</span>
-                {item.linkedProposal && (
-                  <a href={`/proposals/${item.linkedProposal.slug}/`}>Linked proposal: {item.linkedProposal.title}</a>
-                )}
+                {item.linkedProposals?.length ? (
+                  <span>
+                    Linked proposals:{' '}
+                    {item.linkedProposals.map((proposal, index) => (
+                      <span>
+                        {index > 0 ? ', ' : ''}
+                        <a href={`/proposals/${proposal.slug}/`}>{proposal.title}</a>
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
                 <a href={`/sense-box/${item.submissionId}/`}>Read and discuss →</a>
               </div>
             </li>

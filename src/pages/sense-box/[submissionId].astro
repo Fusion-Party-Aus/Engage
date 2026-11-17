@@ -46,13 +46,17 @@ const commentLabel = user && !user.canParticipate ? 'Verify your membership to c
       <article class="sense-detail__body">
         <p class="whitespace-pre-wrap">{priority.detail}</p>
 
-        {priority.linkedProposal && (
-          <aside class="sense-linked" aria-label="Related proposal">
-            <span class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Linked proposal</span>
-            <a href={`/proposals/${priority.linkedProposal.slug}/`}>{priority.linkedProposal.title}</a>
-            <p>Organisers are developing this priority through the formal proposal process. The proposal is separate from this discussion.</p>
+        {priority.linkedProposals?.length ? (
+          <aside class="sense-linked" aria-label="Related proposals">
+            <span class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Linked proposals</span>
+            <ul class="sense-linked__list">
+              {priority.linkedProposals.map((proposal) => (
+                <li><a href={`/proposals/${proposal.slug}/`}>{proposal.title}</a></li>
+              ))}
+            </ul>
+            <p>Organisers are developing this priority through the formal proposal process. These proposals are separate from this discussion.</p>
           </aside>
-        )}
+        ) : null}
       </article>
 
       <aside class="sense-detail__rail">
@@ -83,7 +87,9 @@ const commentLabel = user && !user.canParticipate ? 'Verify your membership to c
   .sense-detail__body p{font-size:1.05rem;line-height:1.75}
   .sense-detail__rail h2{margin-top:0;font-size:1.6rem}
   .sense-linked{display:grid;gap:.35rem;margin-top:2rem;border:1px solid var(--horizon-line);border-radius:1rem;padding:1.25rem;background:var(--horizon-lavender-soft)}
-  .sense-linked a{font-size:1.1rem;font-weight:600}
+  .sense-linked a{font-size:1.05rem;font-weight:600}
+  .sense-linked__list{display:grid;gap:.35rem;margin:0;padding-left:1.1rem}
+  .sense-linked__list a{font-size:1rem}
   .sense-linked p{margin:.25rem 0 0;font-size:.9rem;color:var(--horizon-muted)}
   @media(max-width:900px){.sense-detail__layout{grid-template-columns:1fr;gap:2.5rem}}
 </style>

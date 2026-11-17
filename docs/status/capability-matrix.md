@@ -23,7 +23,7 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Review-then-publish Sense Box priorities | Implemented | Explicit publication action; legacy rows stay private |
 | Public Sense Box discussion | Implemented | `/sense-box/[submissionId]/`; signed-in members comment, anyone reads |
 | Sense Box contributor receipt | Implemented | `/sense-box/status/[submissionId]/`; minimal status, capability link |
-| Link or develop a proposal from Sense Box | Implemented | Admin workspace; composer prefill records the source |
+| Link or develop a proposal from Sense Box | Implemented | One priority can inform multiple proposals; admin workspace and composer prefill record the source |
 | Block-anchored amendments | Implemented | Title, summary, commitments and rationale with inline diffs |
 | How-it-works and changelog | Implemented | `/how-it-works/`, `/changelog/` |
 | Terms and privacy pages | Implemented but inactive as a gate | Documents are owner-authorised; acceptance gate off |

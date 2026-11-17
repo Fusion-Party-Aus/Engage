@@ -194,15 +194,22 @@ test('a submission receipt is minimal, capability-based and tracks publication',
   assert.equal(await getSenseReceipt(db, '../../etc/passwd'), null);
 });
 
-test('a review can link a published priority to an existing proposal without changing the proposal', async () => {
+test('a review can link a priority to several proposals and unlink them independently', async () => {
   const db = await setup();
   const submissionId = await published(db);
-  const proposal = await saveProposal(db, admin, {
+  const first = await saveProposal(db, admin, {
     title: 'Fund more regional services',
     space: 'Transport',
     summary: 'A public proposal that addresses the priority.',
     outcomes: ['More services'],
     details: 'Proposal detail.',
+  });
+  const second = await saveProposal(db, admin, {
+    title: 'Improve regional connections',
+    space: 'Transport',
+    summary: 'A second public proposal that addresses the same priority.',
+    outcomes: ['Better connections'],
+    details: 'Second proposal detail.',
   });
 
   await reviewSense(db, organiser, {
@@ -210,16 +217,78 @@ test('a review can link a published priority to an existing proposal without cha
     branchId: 'branch-vic',
     version: 1,
     action: 'link',
-    proposalId: proposal.proposalId,
+    proposalId: first.proposalId,
+  });
+  await reviewSense(db, organiser, {
+    submissionId,
+    branchId: 'branch-vic',
+    version: 2,
+    action: 'link',
+    proposalId: second.proposalId,
   });
 
   const detail = await getSenseSubmission(db, organiser, submissionId);
-  assert.equal(detail?.linkedProposal?.proposalId, proposal.proposalId);
+  assert.deepEqual(
+    detail?.linkedProposals?.map((proposal) => proposal.proposalId).sort(),
+    [first.proposalId, second.proposalId].sort(),
+  );
   const publicView = await getPublicSense(db, submissionId);
-  assert.equal(publicView?.linkedProposal?.slug, proposal.slug);
+  assert.equal(publicView?.linkedProposals?.length, 2);
 
-  await reviewSense(db, organiser, { submissionId, branchId: 'branch-vic', version: 2, action: 'link' });
-  assert.equal((await getSenseSubmission(db, organiser, submissionId))?.linkedProposal, undefined);
+  await reviewSense(db, organiser, {
+    submissionId,
+    branchId: 'branch-vic',
+    version: 3,
+    action: 'unlink',
+    proposalId: first.proposalId,
+  });
+  assert.deepEqual(
+    (await getSenseSubmission(db, organiser, submissionId))?.linkedProposals?.map((proposal) => proposal.proposalId),
+    [second.proposalId],
+  );
+  await reviewSense(db, organiser, {
+    submissionId,
+    branchId: 'branch-vic',
+    version: 4,
+    action: 'unlink',
+    proposalId: second.proposalId,
+  });
+  assert.equal((await getSenseSubmission(db, organiser, submissionId))?.linkedProposals, undefined);
+});
+
+test('legacy single links are read and folded into the array on the next change', async () => {
+  const db = await setup();
+  const submissionId = await published(db);
+  const first = await saveProposal(db, admin, {
+    title: 'Legacy first proposal',
+    space: 'Transport',
+    summary: 'A proposal used to test a legacy Sense Box link.',
+    outcomes: ['First'],
+    details: 'First detail.',
+  });
+  const second = await saveProposal(db, admin, {
+    title: 'Legacy second proposal',
+    space: 'Transport',
+    summary: 'A second proposal used to test a legacy Sense Box link.',
+    outcomes: ['Second'],
+    details: 'Second detail.',
+  });
+  await db.collection('sense_submissions').updateOne(
+    { submissionId },
+    { $set: { linkedProposalId: first.proposalId } },
+  );
+  assert.equal((await getPublicSense(db, submissionId))?.linkedProposals?.length, 1);
+
+  await reviewSense(db, organiser, {
+    submissionId,
+    branchId: 'branch-vic',
+    version: 1,
+    action: 'link',
+    proposalId: second.proposalId,
+  });
+  const row = await db.collection('sense_submissions').findOne({ submissionId });
+  assert.deepEqual([...(row?.linkedProposalIds ?? [])].sort(), [first.proposalId, second.proposalId].sort());
+  assert.equal(row?.linkedProposalId, undefined);
 });
 
 test('developing a proposal records the source and links the priority atomically', async () => {
@@ -236,7 +305,7 @@ test('developing a proposal records the source and links the priority atomically
   assert.equal(proposal.sourceSenseSubmissionId, submissionId);
   assert.equal(proposal.sourceSensePrivacyBasis, 'published-source');
   const row = await db.collection('sense_submissions').findOne({ submissionId });
-  assert.equal(row?.linkedProposalId, proposal.proposalId);
+  assert.deepEqual(row?.linkedProposalIds, [proposal.proposalId]);
   assert.equal(row?.status, 'developing');
 
   const another = await submitSense(db, { ...input, requestId: '32345678-1234-4234-8234-123456789abc' });
@@ -309,7 +378,7 @@ test('a private priority cannot be copied into a public proposal without an inde
   assert.equal(independent.sourceSensePrivacyReviewedBy, organiser.memberId);
 });
 
-test('concurrent proposal creation cannot both claim one priority', async () => {
+test('one priority can inform multiple proposals', async () => {
   const db = await setup();
   const submissionId = await published(db);
   const payload = {
@@ -320,11 +389,15 @@ test('concurrent proposal creation cannot both claim one priority', async () => 
     sourceSenseSubmissionId: submissionId,
   };
   const results = await Promise.allSettled([
-    saveProposal(db, organiser, { ...payload, title: 'First concurrent proposal' }),
-    saveProposal(db, organiser, { ...payload, title: 'Second concurrent proposal' }),
+    saveProposal(db, organiser, { ...payload, title: 'First proposal from the priority' }),
+    saveProposal(db, organiser, { ...payload, title: 'Second proposal from the priority' }),
   ]);
-  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
-  const rejected = results.find((result) => result.status === 'rejected');
-  assert.match(String(rejected?.status === 'rejected' ? rejected.reason : ''), /already linked/);
-  assert.equal(await db.collection('proposals').countDocuments({ sourceSenseSubmissionId: submissionId }), 1);
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 2);
+  const proposals = await db.collection('proposals').find({ sourceSenseSubmissionId: submissionId }).toArray();
+  assert.equal(proposals.length, 2);
+  const row = await db.collection('sense_submissions').findOne({ submissionId });
+  assert.deepEqual(
+    [...(row?.linkedProposalIds ?? [])].sort(),
+    proposals.map((proposal) => proposal.proposalId).sort(),
+  );
 });

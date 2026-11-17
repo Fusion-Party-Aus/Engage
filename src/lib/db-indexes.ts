@@ -43,6 +43,7 @@ const CORE_INDEXES: IndexDefinition[] = [
   ["sense_submissions", { branchId: 1, createdAt: -1 }],
   ["sense_submissions", { submissionId: 1 }, { unique: true }],
   ["sense_submissions", { visibility: 1, publishedAt: -1 }],
+  ["sense_submissions", { linkedProposalIds: 1 }],
   ["sense_submissions", { linkedProposalId: 1 }],
   ["sense_comments", { submissionId: 1, visibility: 1, createdAt: 1 }],
   ["sense_comments", { commentId: 1 }, { unique: true }],
