@@ -2,7 +2,8 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { createAmendmentRevision } from "../../../../lib/amendments.ts";
-import { hasPermission, hasPermissionAnywhere } from "../../../../lib/rbac.ts";
+import { ballotActs } from "../../../../lib/ballot-authority.ts";
+import { hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -46,14 +47,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const proposal = await db
       .collection("proposals")
       .findOne({ proposalId: amendment.proposalId });
+    const authority = ballotActs(user, {
+      governanceAuthorityBranchId: proposal?.governanceAuthorityBranchId,
+      jurisdictionBranchId: proposal?.jurisdictionBranchId,
+      originatingBranchId: proposal?.originatingBranchId,
+    });
     if (
       (!user.isAdmin && !proposal) ||
-      (proposal &&
-        !hasPermission(user, "amendments.resolve", proposal.originatingBranchId))
+      (proposal && !authority.can("resolveAmendment"))
     )
       return Response.json(
         {
           error:
+            authority.denialMessage("resolveAmendment") ??
             "You are not authorised to resolve amendments for this proposal.",
         },
         { status: 403 },

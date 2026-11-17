@@ -26,7 +26,7 @@ Each matter type declares:
 ## 4. Authorisation Boundaries (`src/lib/rbac.ts`, `src/lib/roles-store.ts`)
 
 - Protected admin API routes enforce `hasPermission(user, permission, branchId)` / `requireApiPermission`.
-- Constitutional governance checks (`canManageBranchBallot`, `canParticipate`) remain independent of configurable administrative roles.
+- Ballot and amendment authority is resolved by `ballotActs` (`src/lib/ballot-authority.ts`) from each act's own permission and branch scope. It does not follow from a role label, `isStaff`, navigation visibility or `canParticipate`.
 
 ## 5. Integration, Read Models & Operational Resilience
 

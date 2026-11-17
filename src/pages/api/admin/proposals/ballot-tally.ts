@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
-import { canManageBranchBallot, getSessionUser } from "../../../../lib/auth.ts";
+import { getSessionUser } from "../../../../lib/auth.ts";
+import { ballotActs } from "../../../../lib/ballot-authority.ts";
 import {
   ballotOutcomeLabel,
   loadBallotTallyCryptoConfig,
@@ -14,7 +15,7 @@ import {
   quorumVerdictLabel,
   readBallotQuorumRecord,
 } from "../../../../lib/quorum.ts";
-import { hasPermission } from "../../../../lib/rbac.ts";
+import { hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 import { normalizeProposalDoc } from "../../../../lib/proposal-helpers.ts";
 import { proposalBallotId } from "../../../../lib/vote-storage.ts";
 
@@ -34,7 +35,7 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   if (
     !user.isAdmin &&
     !user.isBranchAdmin &&
-    !hasPermission(user, "ballots.record_result")
+    !hasPermissionAnywhere(user, "ballots.record_result")
   ) {
     return Response.json(
       { error: "Administrator access required." },
@@ -59,20 +60,16 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   }
 
   const proposal = normalizeProposalDoc(raw as Record<string, any>);
-  const branchScope =
-    typeof proposal.governanceAuthorityBranchId === "string"
-      ? proposal.governanceAuthorityBranchId
-      : undefined;
-  if (
-    !hasPermission(user, "ballots.record_result", branchScope) ||
-    !canManageBranchBallot(user, {
-      governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
-      jurisdictionBranchId: proposal.jurisdictionBranchId,
-    })
-  ) {
+  const authority = ballotActs(user, {
+    governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
+    jurisdictionBranchId: proposal.jurisdictionBranchId,
+    originatingBranchId: proposal.originatingBranchId,
+  });
+  if (!authority.can("recordMatterResult")) {
     return Response.json(
       {
         error:
+          authority.denialMessage("recordMatterResult") ??
           "You are not authorised to view or record an outcome for this ballot.",
       },
       { status: 403 },

@@ -4,12 +4,12 @@ import { ObjectId } from "mongodb";
 import { getDatabase, createMemoryDb } from "./db.ts";
 import {
   canAdministerBranch,
-  canManageBranchBallot,
   canManageBranchProposal,
   canViewIdentifiableBallots,
   createDevSessionCookie,
 } from "./auth.ts";
 import { hasPermission } from "./rbac.ts";
+import { ballotActs } from "./ballot-authority.ts";
 import {
   assignRoleToMember,
   deleteCustomRole,
@@ -116,17 +116,17 @@ describe("RBAC audit & configurable roles", () => {
 
     // Branch ballot authority requires matching governanceAuthorityBranchId and jurisdictionBranchId
     assert.equal(
-      canManageBranchBallot(vicBranchAdmin, {
+      ballotActs(vicBranchAdmin, {
         governanceAuthorityBranchId: "vic",
         jurisdictionBranchId: "vic",
-      }),
+      }).can("bindMatterBallot"),
       true,
     );
     assert.equal(
-      canManageBranchBallot(vicBranchAdmin, {
+      ballotActs(vicBranchAdmin, {
         governanceAuthorityBranchId: "vic",
         jurisdictionBranchId: "nsw",
-      }),
+      }).can("bindMatterBallot"),
       false,
     );
   });

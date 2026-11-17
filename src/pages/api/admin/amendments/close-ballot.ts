@@ -4,15 +4,15 @@ import { getDatabase, runInTransaction, runtimeEnv } from "../../../../lib/db.ts
 import { loadBallotCryptoConfig } from "../../../../lib/ballot-crypto.ts";
 import { recordGovernanceEvent } from "../../../../lib/governance-relationships.ts";
 import { PROPOSAL_VOTES, decodeStoredVote } from "../../../../lib/vote-storage.ts";
-import { canManageBranchBallot } from "../../../../lib/auth.ts";
-import { hasPermission } from "../../../../lib/rbac.ts";
+import { ballotActs } from "../../../../lib/ballot-authority.ts";
+import { hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin && !hasPermission(user, "amendments.manage_ballot"))
+  if (!user.isAdmin && !user.isBranchAdmin && !hasPermissionAnywhere(user, "amendments.manage_ballot"))
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -55,19 +55,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "The source proposal ballot revision has changed." },
         { status: 409 },
       );
-    const branchScope =
-      typeof proposal.governanceAuthorityBranchId === "string"
-        ? proposal.governanceAuthorityBranchId
-        : undefined;
-    if (
-      !hasPermission(user, "amendments.manage_ballot", branchScope) ||
-      !canManageBranchBallot(user, {
-        governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
-        jurisdictionBranchId: proposal.jurisdictionBranchId,
-      })
-    )
+    const authority = ballotActs(user, {
+      governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
+      jurisdictionBranchId: proposal.jurisdictionBranchId,
+      originatingBranchId: proposal.originatingBranchId,
+    });
+    if (!authority.can("closeAmendmentBallot"))
       return Response.json(
-        { error: "You are not authorised to close this branch ballot." },
+        {
+          error:
+            authority.denialMessage("closeAmendmentBallot") ??
+            "You are not authorised to close this branch ballot.",
+        },
         { status: 403 },
       );
     const cryptoConfig = loadBallotCryptoConfig(env);
@@ -115,7 +114,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
             revisionId: amendment.ballotRevisionId,
             decisionEventId,
             actorId: user.memberId,
-            authorityBranchId: branchScope,
+            authorityBranchId: proposal.governanceAuthorityBranchId,
             metadata: { amendmentId, result, tally },
             createdAt: now,
           },

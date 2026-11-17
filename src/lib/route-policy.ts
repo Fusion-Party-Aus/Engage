@@ -1,7 +1,6 @@
 import type { Db } from "mongodb";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { canManageBranchBallot } from "./auth.ts";
 import { BallotBindingError } from "./ballot-binding.ts";
 import { BallotDomainError } from "./ballots.ts";
 import {
@@ -11,7 +10,8 @@ import {
   type GovernanceCommandId,
   type GovernanceScope,
 } from "./governance-commands.ts";
-import { hasPermission, type PermissionKey } from "./rbac.ts";
+import { ballotActs } from "./ballot-authority.ts";
+import { hasPermission, hasPermissionAnywhere, type PermissionKey } from "./rbac.ts";
 import type { PlatformEnv, SessionUser } from "./types.ts";
 
 /**
@@ -309,11 +309,11 @@ const ADMINISTRATOR_ACCESS_REQUIRED = "Administrator access required.";
  * Authorise `user` for a governance command.
  *
  * Without `scope` this is the coarse role gate the routes applied before
- * parsing: national administrator, branch administrator or permission holder.
- * With `scope` it also applies the resolved branch-scope rule — the permission
- * for that branch plus the ballot authority/jurisdiction match. Ordinary
- * moderators cannot satisfy either gate, and a branch grant never exceeds the
- * branch it was issued for.
+ * parsing: national administrator, branch administrator or any permission
+ * holder. With `scope` it applies the command's own ballot act through
+ * `ballotActs`, or, for a command with no ballot act, the permission for its
+ * branch. Ordinary moderators cannot satisfy either gate, and a branch grant
+ * never exceeds the branch it was issued for.
  *
  * Returns `null` when authorised, otherwise the response to send.
  */
@@ -323,19 +323,29 @@ export function authoriseGovernanceCommand(
   scope?: GovernanceScope,
 ): AuthorisationDenial | null {
   if (!user) return { status: 401, body: { error: SIGN_IN_REQUIRED } };
-  const permission = governanceCommand(commandId).requiredPermission;
+  const command = governanceCommand(commandId);
   if (
     !user.isAdmin &&
     !user.isBranchAdmin &&
-    !hasPermission(user, permission)
+    !hasPermissionAnywhere(user, command.requiredPermission)
   )
     return { status: 403, body: { error: ADMINISTRATOR_ACCESS_REQUIRED } };
   if (!scope) return null;
-  const command = governanceCommand(commandId);
-  if (
-    !hasPermission(user, permission, scope.branchScope) ||
-    !canManageBranchBallot(user, scope.ballot)
-  )
+  if (command.ballotAct) {
+    const authority = ballotActs(user, scope.ballot);
+    if (!authority.can(command.ballotAct)) {
+      return {
+        status: authority.denialStatus(command.ballotAct) === 401 ? 401 : 403,
+        body: {
+          error:
+            authority.denialMessage(command.ballotAct) ??
+            command.scopeDeniedMessage,
+        },
+      };
+    }
+    return null;
+  }
+  if (!hasPermission(user, command.requiredPermission, scope.branchScope))
     return { status: 403, body: { error: command.scopeDeniedMessage } };
   return null;
 }

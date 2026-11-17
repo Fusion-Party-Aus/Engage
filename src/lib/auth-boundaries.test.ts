@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { hasPermission, requireApiPermission } from "./rbac.ts";
-import { canManageBranchBallot } from "./auth.ts";
+import { ballotActs } from "./ballot-authority.ts";
 import { createMemoryDb } from "./db.ts";
 import {
   assignRoleToMember,
@@ -64,17 +64,17 @@ describe("hardened authorisation boundaries", () => {
 
     // Even with branch-vic authority, mismatched jurisdictionBranchId is rejected.
     assert.equal(
-      canManageBranchBallot(vicBranchAdmin, {
+      ballotActs(vicBranchAdmin, {
         governanceAuthorityBranchId: "branch-vic",
         jurisdictionBranchId: "branch-nsw",
-      }),
+      }).can("bindMatterBallot"),
       false,
     );
     assert.equal(
-      canManageBranchBallot(vicBranchAdmin, {
+      ballotActs(vicBranchAdmin, {
         governanceAuthorityBranchId: "branch-vic",
         jurisdictionBranchId: "branch-vic",
-      }),
+      }).can("bindMatterBallot"),
       true,
     );
   });

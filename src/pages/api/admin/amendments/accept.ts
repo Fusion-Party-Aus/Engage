@@ -1,16 +1,16 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runInTransaction, runtimeEnv } from "../../../../lib/db.ts";
-import { canManageBranchBallot } from "../../../../lib/auth.ts";
+import { ballotActs } from "../../../../lib/ballot-authority.ts";
 import { recordGovernanceEvent } from "../../../../lib/governance-relationships.ts";
-import { hasPermission } from "../../../../lib/rbac.ts";
+import { hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
   const user = await getSessionUser(request, env);
   if (!user)
     return Response.json({ error: "Sign in required." }, { status: 401 });
-  if (!user.isAdmin && !user.isBranchAdmin && !hasPermission(user, "amendments.manage_ballot"))
+  if (!user.isAdmin && !user.isBranchAdmin && !hasPermissionAnywhere(user, "amendments.manage_ballot"))
     return Response.json(
       { error: "Administrator access required." },
       { status: 403 },
@@ -62,20 +62,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "Endorsed amendment wording revision is missing or changed." },
         { status: 409 },
       );
-    const branchScope =
-      typeof proposal.governanceAuthorityBranchId === "string"
-        ? proposal.governanceAuthorityBranchId
-        : undefined;
-    if (
-      !hasPermission(user, "amendments.manage_ballot", branchScope) ||
-      !canManageBranchBallot(user, {
-        governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
-        jurisdictionBranchId: proposal.jurisdictionBranchId,
-      })
-    )
+    const authority = ballotActs(user, {
+      governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
+      jurisdictionBranchId: proposal.jurisdictionBranchId,
+      originatingBranchId: proposal.originatingBranchId,
+    });
+    if (!authority.can("acceptAmendment"))
       return Response.json(
         {
           error:
+            authority.denialMessage("acceptAmendment") ??
             "You are not authorised to record formal approval for this branch amendment.",
         },
         { status: 403 },
@@ -117,7 +113,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
             revisionId: amendment.ballotRevisionId,
             decisionEventId,
             actorId: user.memberId,
-            authorityBranchId: branchScope,
+            authorityBranchId: proposal.governanceAuthorityBranchId,
             metadata: {
               amendmentId,
               amendmentRevisionId: amendment.ballotAmendmentRevisionId,

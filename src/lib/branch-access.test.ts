@@ -2,9 +2,9 @@ import { it } from "node:test";
 import assert from "node:assert/strict";
 import {
   canAdministerBranch,
-  canManageBranchBallot,
   canManageBranchProposal,
 } from "./auth.ts";
+import { ballotActs } from "./ballot-authority.ts";
 import type { SessionUser } from "./types.ts";
 
 const localOfficer: SessionUser = {
@@ -36,24 +36,24 @@ it("keeps delegated branch administration inside the explicitly assigned branch"
     false,
   );
   assert.equal(
-    canManageBranchBallot(localOfficer, {
+    ballotActs(localOfficer, {
       governanceAuthorityBranchId: "branch-state",
       jurisdictionBranchId: "branch-state",
-    }),
+    }).can("bindMatterBallot"),
     true,
   );
   assert.equal(
-    canManageBranchBallot(localOfficer, {
+    ballotActs(localOfficer, {
       governanceAuthorityBranchId: "branch-state",
       jurisdictionBranchId: "branch-national",
-    }),
+    }).can("bindMatterBallot"),
     false,
   );
   assert.equal(
-    canManageBranchBallot(localOfficer, {
+    ballotActs(localOfficer, {
       governanceAuthorityBranchId: "branch-national",
       jurisdictionBranchId: "branch-national",
-    }),
+    }).can("bindMatterBallot"),
     false,
   );
 });

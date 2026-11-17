@@ -2,7 +2,8 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { saveProposal } from "../../../../lib/proposals-store.ts";
-import { hasPermission, hasPermissionAnywhere } from "../../../../lib/rbac.ts";
+import { ballotActs } from "../../../../lib/ballot-authority.ts";
+import { hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -48,12 +49,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "Amendment cannot be applied after Decide begins." },
         { status: 409 },
       );
-    if (
-      !hasPermission(user, "amendments.apply", proposal.originatingBranchId)
-    )
+    const authority = ballotActs(user, {
+      governanceAuthorityBranchId: proposal.governanceAuthorityBranchId,
+      jurisdictionBranchId: proposal.jurisdictionBranchId,
+      originatingBranchId: proposal.originatingBranchId,
+    });
+    if (!authority.can("applyAmendment"))
       return Response.json(
         {
-          error: "You are not authorised to apply amendments to this proposal.",
+          error:
+            authority.denialMessage("applyAmendment") ??
+            "You are not authorised to apply amendments to this proposal.",
         },
         { status: 403 },
       );

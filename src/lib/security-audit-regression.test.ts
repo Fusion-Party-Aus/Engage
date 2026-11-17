@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canManageBranchBallot } from "./auth.ts";
+import { ballotActs } from "./ballot-authority.ts";
 import { renderPortableText } from "./portable-text.ts";
 import { PATCH as patchMembers } from "../pages/api/admin/members.ts";
 import { PATCH as patchSettings } from "../pages/api/admin/settings/index.ts";
@@ -24,24 +24,24 @@ test("moderator + branch admin of branch-a cannot manage branch-b ballots", () =
   };
 
   assert.equal(
-    canManageBranchBallot(hybridUser, {
+    ballotActs(hybridUser, {
       governanceAuthorityBranchId: "branch-a",
       jurisdictionBranchId: "branch-a",
-    }),
+    }).can("bindMatterBallot"),
     true,
   );
   assert.equal(
-    canManageBranchBallot(hybridUser, {
+    ballotActs(hybridUser, {
       governanceAuthorityBranchId: "branch-b",
       jurisdictionBranchId: "branch-b",
-    }),
+    }).can("bindMatterBallot"),
     false,
   );
   assert.equal(
-    canManageBranchBallot(hybridUser, {
+    ballotActs(hybridUser, {
       governanceAuthorityBranchId: "branch-nat",
       jurisdictionBranchId: "branch-nat",
-    }),
+    }).can("bindMatterBallot"),
     false,
   );
 });

@@ -379,6 +379,51 @@ describe("governance command authorisation", () => {
     );
   });
 
+  it("allows a branch-delegated officer without the branch administrator role", () => {
+    const officer: SessionUser = {
+      ...baseUser,
+      memberId: "delegated-vic",
+      permissions: {
+        national: [],
+        branches: { "branch-vic": ["ballots.bind"] },
+        grants: [],
+      },
+    };
+    assert.equal(
+      authoriseGovernanceCommand(officer, "ballot.bind", matchingScope("branch-vic")),
+      null,
+    );
+    // A grant for one act never travels to another.
+    const denial = authoriseGovernanceCommand(
+      officer,
+      "ballot.record_result",
+      matchingScope("branch-vic"),
+    );
+    assert.equal(denial?.status, 403);
+    assert.equal(denial?.body.error, "Administrator access required.");
+  });
+
+  it("explains a branch authority and jurisdiction mismatch", () => {
+    const officer: SessionUser = {
+      ...baseUser,
+      memberId: "delegated-vic",
+      permissions: {
+        national: [],
+        branches: { "branch-vic": ["ballots.bind"] },
+        grants: [],
+      },
+    };
+    const denial = authoriseGovernanceCommand(officer, "ballot.bind", {
+      branchScope: "branch-vic",
+      ballot: {
+        governanceAuthorityBranchId: "branch-vic",
+        jurisdictionBranchId: "branch-nsw",
+      },
+    });
+    assert.equal(denial?.status, 403);
+    assert.equal(denial?.body.error, "You are not authorised to review this ballot.");
+  });
+
   it("does not let a national permission for one command authorise the other", () => {
     const denial = authoriseGovernanceCommand(
       nationalPermissionHolder("ballots.bind"),

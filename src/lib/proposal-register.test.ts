@@ -262,19 +262,120 @@ describe("admin proposal register pagination", () => {
     assert.equal(page.spaces.length, 2);
   });
 
-  it("limits a branch administrator to their own register", async () => {
+  it("scopes a delegated officer to matters with a permitted act", async () => {
     const db = await seedRegister(60);
-    const scoped = await listProposalRegister(db, { branchScopeIds: ["branch-a"] });
-    assert.equal(scoped.total, 30);
-    assert.equal(scoped.stageCounts.all, 30);
-    assert.ok(scoped.scopedProposalIds.every((id) => {
-      const index = Number(id.slice(4)) - 1;
-      return index % 2 === 0;
-    }));
+    await Promise.all([
+      db.collection("proposals").insertOne({
+        proposalId: "POL-BIND-A",
+        slug: "pol-bind-a",
+        title: "Governed and voted in the officer's branch",
+        stage: "decide",
+        kind: "policy",
+        summary: "Summary",
+        details: "Details",
+        originatingBranchId: "branch-b",
+        governanceAuthorityBranchId: "branch-a",
+        jurisdictionBranchId: "branch-a",
+        updatedAt: new Date(),
+      }),
+      db.collection("proposals").insertOne({
+        proposalId: "POL-JURIS",
+        slug: "pol-juris",
+        title: "Only voted in the officer's branch",
+        stage: "decide",
+        kind: "policy",
+        summary: "Summary",
+        details: "Details",
+        originatingBranchId: "branch-b",
+        governanceAuthorityBranchId: "branch-b",
+        jurisdictionBranchId: "branch-a",
+        updatedAt: new Date(),
+      }),
+      db.collection("proposals").insertOne({
+        proposalId: "POL-ORIG",
+        slug: "pol-orig",
+        title: "Originates in the officer's branch",
+        stage: "decide",
+        kind: "policy",
+        summary: "Summary",
+        details: "Details",
+        originatingBranchId: "branch-a",
+        governanceAuthorityBranchId: "branch-c",
+        jurisdictionBranchId: "branch-c",
+        updatedAt: new Date(),
+      }),
+      db.collection("proposals").insertOne({
+        proposalId: "POL-OUT",
+        slug: "pol-out",
+        title: "Outside the officer's branches",
+        stage: "decide",
+        kind: "policy",
+        summary: "Summary",
+        details: "Details",
+        originatingBranchId: "branch-c",
+        governanceAuthorityBranchId: "branch-c",
+        jurisdictionBranchId: "branch-c",
+        updatedAt: new Date(),
+      }),
+    ]);
 
-    const none = await listProposalRegister(db, { branchScopeIds: [] });
+    const authorityOnly = await listProposalRegister(db, {
+      authorityScope: {
+        all: false,
+        authorityBranchIds: ["branch-a"],
+        originatingBranchIds: [],
+      },
+    });
+    assert.deepEqual(authorityOnly.scopedProposalIds, ["POL-BIND-A"]);
+    assert.equal(authorityOnly.total, 1);
+    assert.equal(authorityOnly.stageCounts.all, 1);
+
+    const withOriginating = await listProposalRegister(db, {
+      authorityScope: {
+        all: false,
+        authorityBranchIds: ["branch-a"],
+        originatingBranchIds: ["branch-a"],
+      },
+    });
+    assert.ok(withOriginating.scopedProposalIds.includes("POL-ORIG"));
+    assert.ok(!withOriginating.scopedProposalIds.includes("POL-JURIS"));
+    assert.ok(!withOriginating.scopedProposalIds.includes("POL-OUT"));
+    assert.equal(withOriginating.total, 32);
+
+    const branchAdmin = await listProposalRegister(db, {
+      authorityScope: {
+        all: false,
+        authorityBranchIds: [],
+        originatingBranchIds: [],
+      },
+      proposalAdminBranchIds: ["branch-b"],
+    });
+    assert.equal(branchAdmin.total, 32);
+    assert.ok(
+      branchAdmin.scopedProposalIds.includes("POL-BIND-A") &&
+        branchAdmin.scopedProposalIds.includes("POL-JURIS") &&
+        !branchAdmin.scopedProposalIds.includes("POL-ORIG"),
+      "a branch administrator still reads matters originating in their branch",
+    );
+
+    const none = await listProposalRegister(db, {
+      authorityScope: {
+        all: false,
+        authorityBranchIds: [],
+        originatingBranchIds: [],
+      },
+    });
     assert.equal(none.total, 0);
     assert.equal(none.entries.length, 0);
+
+    const all = await listProposalRegister(db, {
+      authorityScope: {
+        all: true,
+        authorityBranchIds: [],
+        originatingBranchIds: [],
+      },
+    });
+    assert.equal(all.total, 64);
   });
 
   it("clamps page sizes", () => {

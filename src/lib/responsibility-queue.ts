@@ -1,5 +1,4 @@
 import type { Db } from "mongodb";
-import { canManageBranchBallot } from "./auth.ts";
 import {
   ballotDeadlineShortLabel,
   formatRelativeDeadline,
@@ -9,6 +8,7 @@ import {
   NON_BLOCKING_AMENDMENT_STATUSES,
 } from "./lifecycle-schedule.ts";
 import { VERIFICATION_REVIEWS } from "./membership-verification.ts";
+import { ballotActs, type BallotAct } from "./ballot-authority.ts";
 import { hasPermission, hasPermissionAnywhere, type PermissionKey } from "./rbac.ts";
 import { isPolicyRegistryRecordForResolution } from "./proposal-helpers.ts";
 import type { SessionUser } from "./types.ts";
@@ -228,23 +228,20 @@ function dateLabel(value: Date): string {
 }
 
 /**
- * The ballot authority gate used by the bind, result and amendment-ballot
- * routes: the permission must be held for the matter's governance authority
- * *and* the branch authority and jurisdiction must match. A scattered branch
- * grant therefore cannot act, or see an item, outside its branch.
+ * The ballot authority gate shared with the bind, result and amendment-ballot
+ * routes. A scattered branch grant therefore cannot act, or see an item,
+ * outside its branch.
  */
 function canActOnMatterBallot(
   viewer: SessionUser,
   matter: MatterContext,
-  permission: PermissionKey,
+  act: BallotAct,
 ): boolean {
-  return (
-    hasPermission(viewer, permission, matter.governanceAuthorityBranchId) &&
-    canManageBranchBallot(viewer, {
-      governanceAuthorityBranchId: matter.governanceAuthorityBranchId,
-      jurisdictionBranchId: matter.jurisdictionBranchId,
-    })
-  );
+  return ballotActs(viewer, {
+    governanceAuthorityBranchId: matter.governanceAuthorityBranchId,
+    jurisdictionBranchId: matter.jurisdictionBranchId,
+    originatingBranchId: matter.originatingBranchId,
+  }).can(act);
 }
 
 /** Mirrors the officer advancement gate in `saveProposal` (D5). */
@@ -264,15 +261,16 @@ function canResolveAmendment(
   viewer: SessionUser,
   matter: MatterContext,
 ): boolean {
-  return hasPermission(viewer, "amendments.resolve", matter.originatingBranchId);
+  return canActOnMatterBallot(viewer, matter, "resolveAmendment");
 }
 
 /** Mirrors the amendment ballot open, close and acceptance routes. */
 function canManageAmendmentBallot(
   viewer: SessionUser,
   matter: MatterContext,
+  act: BallotAct,
 ): boolean {
-  return canActOnMatterBallot(viewer, matter, "amendments.manage_ballot");
+  return canActOnMatterBallot(viewer, matter, act);
 }
 
 /** Mirrors the `amendments/apply` route authority. */
@@ -280,7 +278,7 @@ function canApplyAmendment(
   viewer: SessionUser,
   matter: MatterContext,
 ): boolean {
-  return hasPermission(viewer, "amendments.apply", matter.originatingBranchId);
+  return canActOnMatterBallot(viewer, matter, "applyAmendment");
 }
 
 function compareText(left: string, right: string): number {
@@ -448,7 +446,7 @@ async function loadBallotGroups(
     );
 
     if (!matter.ballotRevisionId) {
-      if (!canActOnMatterBallot(viewer, matter, "ballots.bind")) continue;
+      if (!canActOnMatterBallot(viewer, matter, "bindMatterBallot")) continue;
       bindingItems.push({
         id: `ballot-binding:${matter.proposalId}`,
         title: matter.title,
@@ -469,7 +467,7 @@ async function loadBallotGroups(
       !hasResult &&
       state.status !== "certified" &&
       state.status !== "cancelled" &&
-      canActOnMatterBallot(viewer, matter, "ballots.record_result")
+      canActOnMatterBallot(viewer, matter, "recordMatterResult")
     ) {
       const closedAt = state.closesAt ?? matter.ballotClosedAt;
       outcomeItems.push({
@@ -495,7 +493,7 @@ async function loadBallotGroups(
       state.closesAt &&
       state.closesAt.getTime() > now.getTime() &&
       state.closesAt.getTime() <= now.getTime() + SEVEN_DAYS_MS &&
-      canActOnMatterBallot(viewer, matter, "ballots.record_result")
+      canActOnMatterBallot(viewer, matter, "recordMatterResult")
     ) {
       closingItems.push({
         sortAt: state.closesAt.getTime(),
@@ -759,7 +757,7 @@ async function loadAmendmentGroup(
 
     if (status === "ready") {
       if (
-        !canManageAmendmentBallot(viewer, matter) ||
+        !canManageAmendmentBallot(viewer, matter, "openAmendmentBallot") ||
         matter.stage !== "decide" ||
         !matter.ballotRevisionId ||
         matter.ballotRevisionId !== asString(row.baseRevisionId) ||
@@ -779,7 +777,7 @@ async function loadAmendmentGroup(
       if (
         !closesAt ||
         closesAt.getTime() > now.getTime() ||
-        !canManageAmendmentBallot(viewer, matter) ||
+        !canManageAmendmentBallot(viewer, matter, "closeAmendmentBallot") ||
         matter.stage !== "decide" ||
         !matter.ballotRevisionId ||
         matter.ballotRevisionId !== asString(row.ballotRevisionId)
@@ -796,7 +794,7 @@ async function loadAmendmentGroup(
     if (status === "endorsed") {
       if (
         asString(row.ballotDecision?.result) !== "endorsed" ||
-        !canManageAmendmentBallot(viewer, matter) ||
+        !canManageAmendmentBallot(viewer, matter, "acceptAmendment") ||
         !matter.ballotRevisionId ||
         matter.ballotRevisionId !== asString(row.ballotRevisionId) ||
         asString(row.ballotAmendmentRevisionId) !==
