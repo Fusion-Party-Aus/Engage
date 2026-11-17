@@ -49,4 +49,4 @@ The legal/privacy review is a separate obligation and is not one of these fields
 
 ## Until the roster is assigned
 
-The setting can be saved as unassigned, and the page says so. Public promotion of the invitation remains gated until all three people and a correction address are set. Do not assume the person who built Engage holds these roles.
+A new record starts unassigned and the page says so. Saving requires all three people and a correction address, so a partial roster cannot be written. Public promotion of the invitation remains gated until all three people and a correction address are set. Do not assume the person who built Engage holds these roles.
