@@ -6,8 +6,9 @@
 >
 > - Plausible analytics is implemented and enabled only on the production host
 >   (`src/lib/analytics.ts`, `src/layouts/SiteLayout.astro`).
-> - Underground CRM membership verification is implemented, gated by
->   `ENGAGE_CRM_VERIFICATION_ENABLED` and disabled by default.
+> - Underground CRM membership verification is implemented, gated by an
+>   administrator setting under **Platform settings → CRM verification**, and
+>   disabled by default.
 > - Seconding, scheduled advancement and automatic ballot closure are
 >   implemented.
 > - The participation-API legal-acceptance enforcement and ballot privacy notice
@@ -292,7 +293,7 @@ The statutory tort commenced on 10 June 2025 and is broader than the APPs: the O
 
 ### 6.6 Automated decision-making transparency
 
-From 10 December 2026, APP 1.7–1.9 require APP entities to describe certain computer programs that make, or do things substantially and directly related to making, decisions that could significantly affect an individual's rights or interests. Engage's eligibility checks are rule-based and depend on manual membership verification. Engage also computes the outcome of an ordinary Yes/No ballot from the bound votes under one published rule, `simple-majority-d9-v1`, and records the tally, rule basis and computed result on the result; an officer can depart from it only through an explicit, reasoned and audited override. The Terms of Use §9 describes that rule; the Privacy Policy makes no claim about it and is unchanged. Quorum, turnout, ranked-choice counting, confirmation ballots and an abstention denominator are not implemented; if any of those are introduced, the published documents must be updated before they operate. Engage makes no disciplinary decisions.
+From 10 December 2026, APP 1.7–1.9 require APP entities to describe certain computer programs that make, or do things substantially and directly related to making, decisions that could significantly affect an individual's rights or interests. Engage's eligibility checks are rule-based and depend on manual membership verification. Engage computes the approval outcome of an ordinary Yes/No ballot from the bound votes under the D9 rule and, for ballots closing on or after 16 November 2026, applies the two-tier quorum `two-tier-quorum-v1`; it records the tally, rule basis, computed result and quorum evidence on the result. An officer can depart from the approval comparison only through an explicit, reasoned and audited override; a quorum failure cannot be overridden. The Terms of Use §9 describes the current procedure (version 1.3). Ranked-choice counting, confirmation ballots and an abstention denominator are not implemented; if any of those are introduced, the published documents must be updated before they operate. Engage makes no disciplinary decisions.
 
 ### 6.7 Other laws
 

@@ -3,8 +3,14 @@ import { ObjectId, type Db } from "mongodb";
 import { applyExternalMembership } from "./branch-participation.ts";
 import { recordLifecycle } from "./member-lifecycle.ts";
 import { createInAppNotification } from "./notifications.ts";
+import {
+  getCrmSettingsState,
+  DEFAULT_CRM_SETTINGS,
+  type CrmOperationalSettingsValues,
+} from "./operational-settings.ts";
 import { logOperationalEvent } from "./resilience.ts";
-import { listMembers, promotePendingVotePreferences } from "./store.ts";
+import { listMembers } from "./members-store.ts";
+import { promotePendingVotePreferences } from "./voting-store.ts";
 import { sendVerificationNotice } from "./verification-email.ts";
 import {
   CRM_APPLICATION,
@@ -47,11 +53,38 @@ export const VERIFICATION_ATTEMPTS = "membership_verification_attempts";
 export const VERIFICATION_REVIEWS = "membership_verification_reviews";
 export const VERIFICATION_EVENTS = "membership_verification_events";
 
-export const DEFAULT_BATCH_SIZE = 25;
-export const OUTAGE_ALERT_AFTER_ATTEMPTS = 3;
-export const DEFAULT_RECONCILE_INTERVAL_MINUTES = 24 * 60;
+export const DEFAULT_BATCH_SIZE = DEFAULT_CRM_SETTINGS.crmBatchSize;
+export const OUTAGE_ALERT_AFTER_ATTEMPTS =
+  DEFAULT_CRM_SETTINGS.crmOutageAlertAfterAttempts;
+export const DEFAULT_RECONCILE_INTERVAL_MINUTES =
+  DEFAULT_CRM_SETTINGS.crmReconcileIntervalMinutes;
 export const PROCESSING_LEASE_MINUTES = 15;
 export const MAXIMUM_BATCH_SIZE = 100;
+
+/**
+ * Load the administrator-owned CRM verification settings.
+ *
+ * A missing document means the safe defaults, including the disabled gate. A
+ * stored value that cannot be trusted is a configuration error, never a reason
+ * to silently clamp to a different number: the scheduled job fails clearly and
+ * the settings page can repair it.
+ */
+export async function loadCrmVerificationSettings(
+  db: Db,
+): Promise<CrmOperationalSettingsValues> {
+  const state = await getCrmSettingsState(db);
+  if (state.readFailed) {
+    throw new CrmConfigurationError(
+      "Saved CRM verification settings could not be read.",
+    );
+  }
+  if (state.invalidFields.length > 0) {
+    throw new CrmConfigurationError(
+      "Saved CRM verification settings are invalid. Open Platform settings and correct them.",
+    );
+  }
+  return state.values;
+}
 
 export type VerificationReviewReason =
   | "unmatched"
@@ -578,7 +611,7 @@ async function completeAttempt(
 
 async function retryAttempt(
   db: Db,
-  env: Record<string, string | undefined>,
+  settings: CrmOperationalSettingsValues,
   memberId: string,
   now: Date,
 ): Promise<Date> {
@@ -604,14 +637,7 @@ async function retryAttempt(
       },
     },
   );
-  const configuredThreshold = Number(
-    env.ENGAGE_CRM_OUTAGE_ALERT_AFTER_ATTEMPTS ?? OUTAGE_ALERT_AFTER_ATTEMPTS,
-  );
-  const threshold =
-    Number.isFinite(configuredThreshold) && configuredThreshold >= 1
-      ? configuredThreshold
-      : OUTAGE_ALERT_AFTER_ATTEMPTS;
-  if (outageAttempts >= threshold) {
+  if (outageAttempts >= settings.crmOutageAlertAfterAttempts) {
     const day = now.toISOString().slice(0, 10);
     await notifyAdministrators(db, {
       title: "CRM membership checks delayed",
@@ -904,6 +930,8 @@ export async function verifyMemberFromCrm(
   options: {
     fetchImpl?: typeof fetch;
     now?: Date;
+    /** Saved CRM tuning. Loaded from the database when omitted. */
+    crmSettings?: CrmOperationalSettingsValues;
     sendNotice?: (
       db: Db,
       env: Record<string, string | undefined>,
@@ -915,7 +943,10 @@ export async function verifyMemberFromCrm(
   const now = options.now ?? new Date();
   const fetchImpl = options.fetchImpl ?? fetch;
   const sendNotice = options.sendNotice ?? sendVerificationNotice;
-  const config = readUndergroundCrmConfig(env);
+  const crmSettings = options.crmSettings ?? (await loadCrmVerificationSettings(db));
+  const config = readUndergroundCrmConfig(env, {
+    timeoutMs: crmSettings.crmTimeoutMs,
+  });
 
   const member = await findUserById(db, memberId);
   if (!member) return { kind: "skipped", memberId, reason: "account_missing" };
@@ -935,10 +966,18 @@ export async function verifyMemberFromCrm(
       await touchIdentityLink(db, memberId, {
         now,
         outcome: "suspended_membership",
-        nextCheckAt: nextReconcileAt(env, now),
+        nextCheckAt: nextReconcileAt(
+          crmSettings.crmReconcileIntervalMinutes,
+          now,
+        ),
       });
     }
-    return { kind: "review", memberId, reviewId: review.reviewId, reason: review.reason };
+    return {
+      kind: "review",
+      memberId,
+      reviewId: review.reviewId,
+      reason: review.reason,
+    };
   }
 
   let resolution: PersonResolution | PersonResolutionFailure;
@@ -1044,7 +1083,7 @@ export async function verifyMemberFromCrm(
       now,
       outcome: "already_verified",
       crmUpdatedAt: person.updated_at,
-      nextCheckAt: nextReconcileAt(env, now),
+      nextCheckAt: nextReconcileAt(crmSettings.crmReconcileIntervalMinutes, now),
     });
     return {
       kind: "already_verified",
@@ -1070,7 +1109,7 @@ export async function verifyMemberFromCrm(
       now,
       outcome: reason,
       crmUpdatedAt: person.updated_at,
-      nextCheckAt: nextReconcileAt(env, now),
+      nextCheckAt: nextReconcileAt(crmSettings.crmReconcileIntervalMinutes, now),
     });
     return { kind: "review", memberId, reviewId: review.reviewId, reason };
   }
@@ -1122,7 +1161,7 @@ export async function verifyMemberFromCrm(
     now,
     outcome: "verified",
     crmUpdatedAt: person.updated_at,
-    nextCheckAt: nextReconcileAt(env, now),
+    nextCheckAt: nextReconcileAt(crmSettings.crmReconcileIntervalMinutes, now),
   });
   return {
     kind: status === "already" ? "already_verified" : "verified",
@@ -1133,23 +1172,8 @@ export async function verifyMemberFromCrm(
   };
 }
 
-function nextReconcileAt(
-  env: Record<string, string | undefined>,
-  now: Date,
-): Date {
-  const raw = Number(
-    env.ENGAGE_CRM_RECONCILE_INTERVAL_MINUTES ??
-      DEFAULT_RECONCILE_INTERVAL_MINUTES,
-  );
-  const minutes = Number.isFinite(raw) && raw >= 15 ? raw : DEFAULT_RECONCILE_INTERVAL_MINUTES;
-  return new Date(now.getTime() + minutes * 60_000);
-}
-
-function verificationBatchSize(env: Record<string, string | undefined>): number {
-  const raw = Number(env.ENGAGE_CRM_VERIFICATION_BATCH_SIZE ?? DEFAULT_BATCH_SIZE);
-  return Number.isInteger(raw) && raw >= 1
-    ? Math.min(raw, MAXIMUM_BATCH_SIZE)
-    : DEFAULT_BATCH_SIZE;
+function nextReconcileAt(intervalMinutes: number, now: Date): Date {
+  return new Date(now.getTime() + intervalMinutes * 60_000);
 }
 
 async function processAttempt(
@@ -1159,6 +1183,7 @@ async function processAttempt(
   options: {
     fetchImpl?: typeof fetch;
     now: Date;
+    crmSettings: CrmOperationalSettingsValues;
     sendNotice?: (
       db: Db,
       env: Record<string, string | undefined>,
@@ -1172,6 +1197,7 @@ async function processAttempt(
     outcome = await verifyMemberFromCrm(db, env, attempt.memberId, {
       fetchImpl: options.fetchImpl,
       now: options.now,
+      crmSettings: options.crmSettings,
       sendNotice: options.sendNotice,
     });
   } catch (error) {
@@ -1193,7 +1219,7 @@ async function processAttempt(
     throw error;
   }
   if (outcome.kind === "retry") {
-    await retryAttempt(db, env, attempt.memberId, options.now);
+    await retryAttempt(db, options.crmSettings, attempt.memberId, options.now);
   } else if (outcome.kind === "blocked") {
     await blockAttempt(db, attempt.memberId, outcome.reason, options.now);
   } else {
@@ -1209,6 +1235,8 @@ export async function processDueVerificationAttempts(
     fetchImpl?: typeof fetch;
     now?: Date;
     limit?: number;
+    /** Saved CRM tuning. Loaded from the database when omitted. */
+    crmSettings?: CrmOperationalSettingsValues;
     sendNotice?: (
       db: Db,
       env: Record<string, string | undefined>,
@@ -1218,9 +1246,11 @@ export async function processDueVerificationAttempts(
   } = {},
 ): Promise<VerificationCycleReport> {
   const now = options.now ?? new Date();
-  const limit = options.limit ?? verificationBatchSize(env);
+  const crmSettings =
+    options.crmSettings ?? (await loadCrmVerificationSettings(db));
+  const limit = options.limit ?? crmSettings.crmBatchSize;
   // Validate the contract before queueing or claiming work.
-  readUndergroundCrmConfig(env);
+  readUndergroundCrmConfig(env, { timeoutMs: crmSettings.crmTimeoutMs });
   const report: VerificationCycleReport = {
     processed: 0,
     verified: 0,
@@ -1238,6 +1268,7 @@ export async function processDueVerificationAttempts(
     const outcome = await processAttempt(db, env, attempt, {
       fetchImpl: options.fetchImpl,
       now,
+      crmSettings,
       sendNotice: options.sendNotice,
     });
     report.processed += 1;
@@ -1258,6 +1289,8 @@ export async function reconcileLinkedMembers(
     fetchImpl?: typeof fetch;
     now?: Date;
     limit?: number;
+    /** Saved CRM tuning. Loaded from the database when omitted. */
+    crmSettings?: CrmOperationalSettingsValues;
     sendNotice?: (
       db: Db,
       env: Record<string, string | undefined>,
@@ -1267,7 +1300,9 @@ export async function reconcileLinkedMembers(
   } = {},
 ): Promise<{ checked: number; verified: number; reviews: number; retried: number }> {
   const now = options.now ?? new Date();
-  const limit = options.limit ?? verificationBatchSize(env);
+  const crmSettings =
+    options.crmSettings ?? (await loadCrmVerificationSettings(db));
+  const limit = options.limit ?? crmSettings.crmBatchSize;
   const links = await db
     .collection("crm_identity_links")
     .find({
@@ -1289,6 +1324,7 @@ export async function reconcileLinkedMembers(
     const outcome = await verifyMemberFromCrm(db, env, String(link.memberId), {
       fetchImpl: options.fetchImpl,
       now,
+      crmSettings,
       sendNotice: options.sendNotice,
     });
     if (outcome.kind === "verified" || outcome.kind === "already_verified") {
@@ -1313,7 +1349,7 @@ export async function reconcileLinkedMembers(
       await touchIdentityLink(db, String(link.memberId), {
         now,
         outcome: "skipped",
-        nextCheckAt: nextReconcileAt(env, now),
+        nextCheckAt: nextReconcileAt(crmSettings.crmReconcileIntervalMinutes, now),
       });
     }
   }
@@ -1327,6 +1363,8 @@ export async function runVerificationCycle(
     fetchImpl?: typeof fetch;
     now?: Date;
     limit?: number;
+    /** Saved CRM tuning. Loaded from the database when omitted. */
+    crmSettings?: CrmOperationalSettingsValues;
     sendNotice?: (
       db: Db,
       env: Record<string, string | undefined>,
@@ -1336,12 +1374,16 @@ export async function runVerificationCycle(
   } = {},
 ): Promise<VerificationCycleReport & { reconciledChecked: number }> {
   const now = options.now ?? new Date();
+  const crmSettings =
+    options.crmSettings ?? (await loadCrmVerificationSettings(db));
   const attempts = await processDueVerificationAttempts(db, env, {
     ...options,
+    crmSettings,
     now,
   });
   const reconcile = await reconcileLinkedMembers(db, env, {
     ...options,
+    crmSettings,
     now,
   });
   return {

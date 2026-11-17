@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { MongoClient, type Db } from "mongodb";
 import {
-  BALLOT_OUTCOME_RULE_BASIS,
+  LEGACY_BALLOT_OUTCOME_RULE_BASIS,
   FORMAL_DECISIONS_COLLECTION,
   upsertMatterBallot,
 } from "./ballots.ts";
@@ -94,7 +94,9 @@ async function seedProposal(
 }
 
 async function closeBallot(db: Db, proposalId: string): Promise<void> {
-  const now = new Date();
+  // This fixture covers the certification command before the two-tier quorum
+  // rule took effect. Quorum has its own MongoDB coverage in quorum-mongo.test.
+  const now = new Date("2026-11-01T00:00:00.000Z");
   await db
     .collection("proposals")
     .updateOne({ proposalId }, { $set: { ballotClosedAt: now } });
@@ -347,7 +349,7 @@ describe(
       ).result;
       assert.equal(recorded.result, "successful");
       assert.equal(recorded.computedResult, "successful");
-      assert.equal(recorded.ruleBasis, BALLOT_OUTCOME_RULE_BASIS);
+      assert.equal(recorded.ruleBasis, LEGACY_BALLOT_OUTCOME_RULE_BASIS);
       assert.equal(recorded.recordedBy, "dev-admin-01");
       assert.ok(!("_id" in recorded));
       assert.deepEqual(recorded.tally, {

@@ -51,7 +51,7 @@ Confidence is recorded as high, medium or low. Confidence is about the interpret
 | R25 | Production has no scheduler configured. | `docs/architecture/notifications-and-jobs.md`; Coolify compose | High | The document states this explicitly. |
 | R26 | The container limit is 256 MB. | `docker-compose.coolify-production.yml` | High | `mem_limit: 256m`, `cpus: 0.75`. |
 | R27 | Hardcoded colours bypass Horizon tokens. | `index.astro`, `member/index.astro`, `changelog/index.astro` | High | Hex values in page-scoped CSS. |
-| R28 | Inert flags exist. | `.env.example`; architecture doc | High | `FORMAL_BALLOTS_ENABLED` is not read; `ENGAGE_PUBLIC_PULSE_POLL` has no implementation. |
+| R28 | Inert flags exist. | `.env.example`; architecture doc | High | `FORMAL_BALLOTS_ENABLED` is not read; the stored public pulse poll setting has no implementation. |
 
 ### 2.2 Governance and domain findings
 
@@ -91,7 +91,7 @@ Confidence is recorded as high, medium or low. Confidence is about the interpret
 | D3 | Docs verified at `d1a24af` | Baseline is `52ffaf6` | Some claims may predate changes |
 | D4 | `docs/operations.md`, `coolify-deployment.md`, `member-engagement.md`, `engage-ux-journeys.md` are older | Various | They must be read with their dates |
 | D5 | `FORMAL_BALLOTS_ENABLED` appears in local env | Not read by code | An operator may believe it does something |
-| D6 | `ENGAGE_PUBLIC_PULSE_POLL` is a flag | No poll implementation | Roadmap label only |
+| D6 | The public pulse poll setting is a flag | No poll implementation | Roadmap label only |
 
 ## 3. External evidence
 
@@ -321,7 +321,7 @@ The test run was a local run without the real MongoDB suites. CI is configured t
 | C4 | Docs say every governance act is audited; transitions are not | `domain-model.md` vs `store.ts` | Complete the event chain or correct the claim |
 | C5 | `ballots` supports 1-to-many; `ballot_results` is unique per proposal | `ballots.ts` vs `db.ts` | Decide the model (N4) |
 | C6 | `FORMAL_BALLOTS_ENABLED` exists in env; code does not read it | `.env` vs code | Remove or implement |
-| C7 | `ENGAGE_PUBLIC_PULSE_POLL` is a flag; no poll exists | `.env` vs code | Label as roadmap only |
+| C7 | The public pulse poll setting is a flag; no poll exists | `.env` vs code | Label as roadmap only |
 | C8 | Manual verification and CRM verification record different provenance | `saveMember` vs `membership-verification.ts` | Standardise (issue #32) |
 | C9 | Docs verified at an older commit | `docs/README.md` | Update after this RFC |
 | C10 | Role editor exposes raw keys despite the design rules | `RolesManager.tsx` vs `AGENTS.md` | Issue #41 |

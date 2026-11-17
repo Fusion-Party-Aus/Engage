@@ -127,16 +127,17 @@ Reviews are audit records, not a second membership store.
 
 ## Running verification
 
-Configuration (see `.env.example`):
+Credentials and endpoint configuration (see `.env.example`):
 
 ```sh
-ENGAGE_CRM_VERIFICATION_ENABLED=true
 ENGAGE_CRM_BASE_URL=https://crm.example.org
 ENGAGE_CRM_TOKEN=<the CRM people:read token>
 ENGAGE_CRM_FUSION_MEMBERSHIP_TYPE_IDS=["<CRM MembershipType UUID>"]
 ENGAGE_CRM_ELECTORATE_BRANCH_MAP={"federal_district":{"Cooper":"branch-vic"}}
 ENGAGE_CRM_VERIFICATION_CRON_SECRET=<a separate scheduler secret>
 ```
+
+Automatic verification is off by default. Turn it on, and set the batch size, reconcile cadence, outage alert threshold and request timeout, under **Platform settings → CRM verification**. Those values are stored, validated and audited; they are not environment variables.
 
 The CRM token only needs the `people:read` scope. It cannot write CRM data. The plural membership-type list is a JSON array; a single legacy `ENGAGE_CRM_FUSION_MEMBERSHIP_TYPE_ID` is also accepted.
 
@@ -175,18 +176,22 @@ command above.
 
 1. Deploy Underground CRM's generic `people:read` API and create a dedicated
    token. Verify the endpoint from the Engage host.
-2. Deploy Engage with `ENGAGE_CRM_VERIFICATION_ENABLED=false`. The code,
-   collections and indexes are inert.
+2. Deploy Engage with automatic verification off under **Platform settings → CRM verification**. The code, collections and indexes are inert.
 3. Run `pnpm membership:verify` and review the pending count. Run a focused
    `--apply --member <synthetic-member>` against a test account and confirm the
    CRM link, verified status and geographic branch.
-4. Backfill existing pending accounts, then enable the cron call.
+4. Backfill existing pending accounts, then enable the cron call and turn the
+   job on under **Platform settings → CRM verification**.
 5. Monitor the first runs for `retried`, `blocked` and `reviews`. Do not enable
    production operation without explicit authorisation.
 
-Rollback is to disable the cron call and set
-`ENGAGE_CRM_VERIFICATION_ENABLED=false`. Existing verified memberships, branch
+Rollback is to disable the cron call and turn automatic verification off under
+**Platform settings → CRM verification**. Existing verified memberships, branch
 facts, links, votes and reviews remain. Re-enabling is idempotent.
+
+A deployment that previously used a CRM verification enablement environment
+variable must turn the setting on after upgrading. The variable is ignored, and
+a missing setting means off.
 
 ## Tests
 

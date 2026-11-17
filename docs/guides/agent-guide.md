@@ -18,11 +18,11 @@ Then open the files you intend to change. Do not plan from documentation alone.
 
 | If the task concerns… | Start here |
 |---|---|
-| Proposal CRUD, stages, revisions | `src/lib/store.ts`, `src/lib/matters.ts`, `src/lib/proposal-revision.ts` |
-| Comments, stances, feedback | `src/lib/store.ts` (`addComment`, `setCommentFeedback`) |
+| Proposal CRUD, stages, revisions | `src/lib/proposals-store.ts`, `src/lib/proposal-helpers.ts`, `src/lib/matters.ts`, `src/lib/proposal-revision.ts` |
+| Comments, stances, feedback | `src/lib/comments-store.ts` (`addComment`), `src/lib/contribution-feedback.ts` (`setCommentFeedback`) |
 | Amendments | `src/pages/api/amendments.ts`, `src/pages/api/admin/amendments/*`, `src/lib/amendments.ts` |
 | Ballot binding/results | `src/lib/ballot-binding.ts`, `src/lib/ballots.ts`, `src/pages/api/admin/ballots/*` |
-| Votes | `src/lib/store.ts` (`castVote`), `src/lib/vote-storage.ts`, `src/lib/ballot-crypto.ts` |
+| Votes | `src/lib/voting-store.ts` (`castVote`), `src/lib/vote-storage.ts`, `src/lib/ballot-crypto.ts` |
 | Eligibility | `src/lib/branch-participation.ts` (`getProposalEligibility`) |
 | Branches/following | `src/lib/branch-participation.ts`, `src/pages/api/member/branches.ts` |
 | Verification/CRM | `src/lib/membership-verification.ts`, `src/lib/underground-crm.ts` |
@@ -45,6 +45,7 @@ Then open the files you intend to change. Do not plan from documentation alone.
 | "Fix a stale page" | Find the service that owns the data; do not patch around it in the template. |
 | "Add a notification" | Topic + channel consent + dedupe + template + preference UI + test. |
 | "Add an integration" | Adapter in `src/lib/integrations.ts`, explicit env, failure behaviour, docs, feature flag. |
+| "Add a configuration option" | Admin setting in MongoDB with validation, audit and default; not a new environment variable. See `AGENTS.md` section 11. |
 | "Improve a screen" | Follow `AGENTS.md`; use primitives; verify at 390 px and desktop. |
 | "Fix a security bug" | Reproduce in a test first; enforce in the service, not only the route. |
 
@@ -84,7 +85,7 @@ Proposal ballots close by deadline, not by an officer action. No API sets `ballo
 
 ### Result is computed and checked
 
-The officer supplies `successful`, `unsuccessful` or `inconclusive`, and the result must match the outcome computed from the votes bound to the ballot and revision. The only encoded rule is D9: approve greater than reject approves, a tie and zero votes do not, and abstentions never change the comparison because no abstention denominator is defined (D10/O1). No quorum or turnout applies (D8). The basis is versioned as `simple-majority-d9-v1`.
+The officer supplies `successful`, `unsuccessful` or `inconclusive`, and the result must match the outcome computed from the votes bound to the ballot and revision. The approval rule is D9: approve greater than reject approves, a tie and zero votes do not, and abstentions never change the comparison because no abstention denominator is defined (D10/O1). For ballots closing on or after 16 November 2026, D37–D39 add a two-tier quorum: 30 eligible registered members platform-wide, and `max(ceil(sqrt(N)), min(30, ceil(N/2)))` participants from N active eligible members. Failure is `inconclusive`, never `unsuccessful`, and cannot be overridden into approval. The basis is versioned as `two-tier-quorum-simple-majority-v1`; earlier results keep `simple-majority-d9-v1`.
 
 Certification requires a closed ballot (`ballotClosedAt`, a close time that has passed, or a ballot row the system closed); a live ballot is refused with `BALLOT_NOT_CLOSED`. The tally is the whole ballot's truth: unbound or mismatched-revision votes refuse with `BALLOT_TALLY_UNBOUND_VOTES`, unreadable encrypted votes with `BALLOT_TALLY_UNREADABLE`, and missing keys with `BALLOT_DECRYPTION_UNAVAILABLE`. Admin pages derive their displayed tally from the same bound set, so never add a page-level tally that counts by `ballotId` alone. Display reads tolerate a broken key ring and show an explicit "decryption unavailable" state with unreadable votes counted; certification stays strict and refuses.
 
@@ -110,7 +111,7 @@ The dev cookie works only in `development`, `test` or `preview`. It is ignored i
 
 ### Inert flags
 
-`ENGAGE_PUBLIC_PULSE_POLL` and `FORMAL_BALLOTS_ENABLED` do not implement features. Do not build UI that implies they do.
+`FORMAL_BALLOTS_ENABLED` does not implement a feature. The public pulse poll setting under **Platform settings** is also inert: it stores a trial choice but no poll page exists. Do not build UI that implies otherwise.
 
 ### Unwired notifications
 
@@ -167,7 +168,7 @@ Stop and ask a human if:
 - a migration would rewrite governance history;
 - you need a new external service or credential;
 - the only way to make the UI work is to expose raw technical data;
-- tests require a decision about thresholds, quorum, notice or eligibility that is not written down.
+- tests require a decision about notice, abstention effects, ranked choice or eligibility that is not written down. Quorum is recorded in D37–D39; do not substitute a different threshold.
 
 A documented gap is a valid outcome. A guessed rule is not.
 
@@ -191,6 +192,10 @@ export VOTING_TEST_MONGODB_URI=...
 export AUTH_TEST_MONGODB_URI=...
 pnpm test
 ```
+
+Every test database must be dropped in `after`/`afterEach`, including when a case creates a fresh database for isolation. Leaked databases accumulate indexes and collections, and a few hundred of them make the whole suite an order of magnitude slower and can exhaust a small local replica set. A full run should leave the database count unchanged.
+
+Run the suite with `--test-concurrency=1` on a single-node local replica set. Higher concurrency contends on the one primary and is measurably slower (122 s versus 77 s on the reference machine), so parallelism is not a speed-up here.
 
 ## Final report format
 

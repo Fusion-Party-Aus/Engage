@@ -7,6 +7,10 @@ import baselineItems from "../data/policies.json" with { type: "json" };
 import { ensureLegacyProposalRevision } from "./proposal-revision.ts";
 import { ensureBallotResultsIndexes } from "./ballot-results-index-migration.ts";
 import { ensureJobRunIndexes } from "./job-runs.ts";
+import {
+  OPERATIONAL_SETTINGS_COLLECTION,
+  OPERATIONAL_SETTINGS_EVENTS_COLLECTION,
+} from "./operational-settings.ts";
 import type { PlatformEnv, ProposalRecord, ProposalStage } from "./types.ts";
 
 let clientPromise: Promise<MongoClient> | undefined;
@@ -120,22 +124,13 @@ export async function getDatabase(
       clientUri = uri;
       dbInstanceCache.clear();
       const monitorCommands = dbCommandMonitoringEnabled(env);
-      // Local Docker MongoDB can take longer than 400 ms to answer the first
-      // selection; the override prevents a silent fall back to the in-memory
-      // preview during local verification. Production keeps its 3 s default.
-      const configuredTimeout = Number(
-        env.MONGODB_SERVER_SELECTION_TIMEOUT_MS ?? NaN,
-      );
-      const selectionTimeoutMs =
-        Number.isFinite(configuredTimeout) && configuredTimeout > 0
-          ? configuredTimeout
-          : env.APP_MODE === "production"
-            ? 3_000
-            : 400;
+      // One bounded selection timeout. The previous 400 ms development value
+      // silently fell back to the in-memory preview whenever a local Docker
+      // MongoDB was slow to answer its first selection.
       const client = new MongoClient(uri, {
         maxPoolSize: 10,
-        serverSelectionTimeoutMS: selectionTimeoutMs,
-        connectTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
+        serverSelectionTimeoutMS: 3_000,
+        connectTimeoutMS: 3_000,
         monitorCommands,
       });
       if (monitorCommands) {
@@ -243,6 +238,12 @@ export async function initializeDatabase(db: Db): Promise<void> {
     db.collection("membership_verification_reviews").createIndex({status:1,createdAt:1}),
     db.collection("membership_verification_events").createIndex({eventId:1},{unique:true}),
     db.collection("membership_verification_events").createIndex({memberId:1,createdAt:-1}),
+    // Operational settings are administrator-owned documents (#128): health
+    // thresholds, CRM verification tuning and the scheduled-job gates. The
+    // event index backs the "last changed" line on the settings page.
+    db.collection(OPERATIONAL_SETTINGS_EVENTS_COLLECTION).createIndex({eventId:1},{unique:true}),
+    db.collection(OPERATIONAL_SETTINGS_EVENTS_COLLECTION).createIndex({createdAt:-1}),
+    db.collection(OPERATIONAL_SETTINGS_COLLECTION).createIndex({updatedAt:-1}),
     // Public collaboration matters (#143). Contributions are private until an
     // explicit approval; media bytes live in their own collection so a list read
     // can never select them by accident.
@@ -310,6 +311,18 @@ export async function initializeDatabase(db: Db): Promise<void> {
       db
         .collection("ballots")
         .createIndex({ matterId: 1, status: 1 })
+        .catch(() => {}),
+      // One immutable quorum closure record per ballot.
+      db
+        .collection("ballot_quorum_records")
+        .createIndex(
+          { ballotId: 1 },
+          { unique: true, name: "ballot_quorum_ballot_unique" },
+        )
+        .catch(() => {}),
+      db
+        .collection("ballot_quorum_records")
+        .createIndex({ matterId: 1, closedAt: -1 })
         .catch(() => {}),
       db
         .collection("governance_events")

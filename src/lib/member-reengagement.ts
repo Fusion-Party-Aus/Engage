@@ -2,7 +2,8 @@ import type { Db } from 'mongodb';
 import { engageConsentState } from './digest-preferences.ts';
 import { renderReengagementEmail } from './email-templates.ts';
 import { emailOrigin, unsubscribeToken } from './engagement-email.ts';
-import { listProposals, canViewProposal } from './store.ts';
+import { canViewProposal } from "./proposal-helpers.ts";
+import { listProposals } from "./proposals-store.ts";
 import type { PlatformEnv, SessionUser } from './types.ts';
 import { PROPOSAL_VOTES } from './vote-storage.ts';
 

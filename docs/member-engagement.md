@@ -38,12 +38,13 @@ The existing Resend account and verified `AUTH_EMAIL_FROM` are reused. Set serve
 
 | Variable | Purpose |
 | --- | --- |
-| `ENGAGE_DIGEST_ENABLED` | `true` to enable the scheduled sender, otherwise disabled |
 | `ENGAGE_EMAIL_SECRET` | Stable random secret for unsubscribe signatures; keep stable so old links remain valid |
 | `ENGAGE_CRON_SECRET` | Independent random bearer secret for the job endpoint |
 | `RESEND_WEBHOOK_SECRET` | Signing secret for this Resend webhook (`whsec_…`) |
 | `PUBLIC_ORIGIN` / `BETTER_AUTH_URL` | Production HTTPS Engage origin |
 | `RESEND_API_KEY`, `AUTH_EMAIL_FROM` | Existing provider sending configuration |
+
+Turn scheduled digests on under **Platform settings → Scheduled jobs**. They are off by default, and the setting replaces the former digest enablement environment variable.
 
 Create a Resend webhook pointing to `/api/email/webhook` for `email.delivered`, `email.bounced`, `email.complained`, `email.failed`, and `email.delivery_delayed`. Optional opened/clicked events are recorded if supplied by the provider; provider tracking settings are not modified by the application. The verifier follows [Svix raw-payload signature verification](https://docs.svix.com/receiving/verifying-payloads/how-manual), including the five-minute timestamp tolerance.
 

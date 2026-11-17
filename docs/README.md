@@ -36,6 +36,7 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Know what is actually shipped | [status/capability-matrix.md](status/capability-matrix.md) |
 | Know what is broken or undecided | [status/known-gaps.md](status/known-gaps.md) |
 | Know which governance rules the maintainer has approved | [governance/decision-register.md](governance/decision-register.md) |
+| Understand platform and ballot quorum | [governance/ballot-quorum.md](governance/ballot-quorum.md) |
 | Track RFC 0001 implementation progress | [status/rfc0001-programme-tracker.md](status/rfc0001-programme-tracker.md) |
 | Take over the RFC 0001 programme | [status/orchestrator-handover.md](status/orchestrator-handover.md) |
 | Understand a proposed direction | [rfc/README.md](rfc/README.md) |
@@ -65,6 +66,7 @@ docs/
 │   ├── branch-policy-import.md       # Import a branch's adopted policy registry
 │   └── story-contribution-safeguards.md # Credit, subjects, minors, retention
 ├── governance/
+│   ├── ballot-quorum.md              # Two-tier platform and ballot quorum
 │   └── decision-register.md          # Maintainer-approved governance rules
 ├── security/
 │   ├── turnstile.md                  # Turnstile, abuse protection, rate limits

@@ -154,8 +154,6 @@ async function startServer(args, dbName) {
     HOST: "127.0.0.1",
     PORT: String(args.port),
     ENGAGE_DB_COMMAND_MONITOR: "1",
-    ENGAGE_ALLOW_INDEXING: "false",
-    ENGAGE_DIGEST_ENABLED: "false",
     BALLOT_ENCRYPTION_MODE: "off",
   };
   const child = spawn(process.execPath, ["dist/server/entry.mjs"], {

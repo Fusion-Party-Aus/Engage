@@ -8,6 +8,7 @@ import { getSessionUser } from '../../lib/auth.ts';
 import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
 import { deliveryBreakdown, percentage, testDeliveryHistory } from '../../lib/admin-engagement.ts';
 import { getDatabase,runtimeEnv } from '../../lib/db.ts';
+import { getJobsSettingsState } from '../../lib/operational-settings.ts';
 import '../../styles/engagement.css';
 export const prerender=false;
 Astro.response.headers.set('Cache-Control','private, no-store');
@@ -18,15 +19,24 @@ const days=[7,30,90].includes(period) ? period : 30;
 const since=new Date(Date.now()-days*86400000);
 let report:any=null;
 let tests:Awaited<ReturnType<typeof testDeliveryHistory>>=[];
+let digestState='Unavailable';
 try {
  const db=await getDatabase(env);
- const [messages,preferences,existingMembers,accounts,memberships,events,history] = await Promise.all([
+ const [jobsSettings,messages,preferences,existingMembers,accounts,memberships,events,history] = await Promise.all([
+  getJobsSettingsState(db),
   db.collection('engagement_email_outbox').find({createdAt:{$gte:since},kind:{$nin:['test','verification']}}).toArray(),
   db.collection('engagement_email_preferences').find({}).toArray(), ensureDigestCohort(db),
   db.collection('user').find({}).project({_id:1,emailVerified:1,disabled:1}).toArray(),
   db.collection('memberships').find({status:'verified'}).project({memberId:1}).toArray(),
   db.collection<any>('engagement_lifecycle_events').find({}).toArray(), testDeliveryHistory(db,user.memberId),
  ]);
+ digestState = jobsSettings.readFailed
+  ? 'Unavailable'
+  : jobsSettings.invalidFields.length
+   ? 'Configuration invalid'
+   : jobsSettings.values.digestEnabled
+    ? 'enabled'
+    : 'disabled';
  const preferenceByMember=new Map(preferences.map(p=>[p.memberId,p]));
  const verified=new Set(memberships.map(m=>String(m.memberId)));
  const subscribers=accounts.filter(a=>a.emailVerified && !a.disabled && verified.has(String(a._id)) && digestEnabled(preferenceByMember.get(String(a._id)) ?? null,existingMembers.has(String(a._id)))).length;
@@ -52,7 +62,7 @@ const date=(v:any)=>v ? new Date(v).toLocaleString('en-AU',{timeZone:'Australia/
 <AdminLayout title="Member engagement" description="Understand delivery and voting participation, and check a sample email." section="engagement" isAdmin>
  <div class="engagement-dashboard">
   <div class="engagement-toolbar">
-   <span class="engagement-badge">Scheduled digests {env.ENGAGE_DIGEST_ENABLED === 'true' ? 'enabled' : 'disabled'}</span>
+   <span class="engagement-badge">Scheduled digests {digestState}</span>
    <form method="get" class="engagement-controls"><label for="engagement-period">Email reporting period</label><NativeSelect name="days" id="engagement-period" defaultValue={String(days)} wrapperClassName="w-auto" className="w-auto">{[7,30,90].map(n=><option value={n} selected={Number(days) === n}>Last {n} days</option>)}</NativeSelect><Button type="submit" size="sm" variant="outline">Apply</Button></form>
   </div>
   {!report && <p class="engagement-feedback" role="alert">Engagement data could not be loaded. Refresh this page to try again. The testing controls remain available.</p>}
@@ -96,6 +106,11 @@ const date=(v:any)=>v ? new Date(v).toLocaleString('en-AU',{timeZone:'Australia/
     <p class="engagement-caption">Read-only preview. This action never sends messages or changes member preferences.</p>
    </section>
   </div>
+  <section class="engagement-card" aria-labelledby="discord-digest-heading">
+    <header><h2 id="discord-digest-heading">Discord weekly digest</h2><p>Put overlooked proposals in front of members.</p></header>
+    <p class="engagement-caption">Configure the test and live channels, role mentions, weekly schedule and safe test delivery in Platform settings.</p>
+    <Button href="/admin/settings/#discord" variant="outline">Manage Discord integration</Button>
+  </section>
   <details class="engagement-card engagement-diagnostics"><summary>Delivery diagnostics</summary><div>
    <dl class="engagement-metrics"><div><dt>Email provider configuration</dt><dd>{env.RESEND_API_KEY && env.AUTH_EMAIL_FROM && env.ENGAGE_EMAIL_SECRET ? 'Present · acceptance still needs a test' : 'Incomplete'}</dd></div><div><dt>Signed delivery webhook</dt><dd>{env.RESEND_WEBHOOK_SECRET ? 'Secret present · receipt not yet verified' : 'Not configured'}</dd></div><div><dt>Suppressed accounts</dt><dd>{report?.suppressed ?? 'Unavailable'}</dd></div></dl>
    <p>Verify the sender address and its domain in Resend. Configuration being present does not prove the credentials or domain are valid.</p><p>Delivery receipts require the signed provider webhook. Without a receipt, accepted messages remain pending. The latest five tests for your account are shown above; message IDs can be inspected in Resend.</p><p>Timeouts and uncertain outcomes are held for inspection and are not retried automatically. Explicit provider rejection is recorded as failed. Check the provider before retrying a held message.</p><p>Bounces and spam complaints suppress further reminders. Unsubscribing affects Engage digests only. Tests do not add subscribers or enable scheduled delivery.</p>

@@ -3,6 +3,12 @@ import { beforeEach, describe, it } from "node:test";
 import type { Db } from "mongodb";
 import { getDatabase } from "./db.ts";
 import { JOB_RUNS_COLLECTION, type JobRunRecord } from "./job-runs.ts";
+import {
+  CRM_OPERATIONAL_SETTINGS_ID,
+  DEFAULT_CRM_SETTINGS,
+  JOBS_OPERATIONAL_SETTINGS_ID,
+  OPERATIONAL_SETTINGS_COLLECTION,
+} from "./operational-settings.ts";
 import { POST as postDigest } from "../pages/api/email/digest.ts";
 import { POST as postVerification } from "../pages/api/cron/membership-verification.ts";
 import type { PlatformEnv } from "./types.ts";
@@ -15,6 +21,9 @@ import type { PlatformEnv } from "./types.ts";
 
 const DIGEST_SECRET = "digest-secret-value-0123456789";
 const VERIFICATION_SECRET = "verification-secret-value-0123456789";
+/** Removed environment variables, retained only to prove they are ignored. */
+const REMOVED_DIGEST_ENV = ["ENGAGE", "DIGEST", "ENABLED"].join("_");
+const REMOVED_CRM_ENV = ["ENGAGE", "CRM", "VERIFICATION", "ENABLED"].join("_");
 
 const env: PlatformEnv & Record<string, string | undefined> = {
   APP_MODE: "test",
@@ -45,8 +54,33 @@ async function ledger(db: Db): Promise<JobRunRecord[]> {
   return db.collection<JobRunRecord>(JOB_RUNS_COLLECTION).find({}).toArray();
 }
 
+async function enableDigests(db: Db): Promise<void> {
+  await db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).updateOne(
+    { _id: JOBS_OPERATIONAL_SETTINGS_ID },
+    { $set: { digestEnabled: true } },
+    { upsert: true },
+  );
+}
+
+async function enableCrm(db: Db): Promise<void> {
+  await db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).updateOne(
+    { _id: CRM_OPERATIONAL_SETTINGS_ID },
+    {
+      $set: {
+        ...DEFAULT_CRM_SETTINGS,
+        crmVerificationEnabled: true,
+      },
+    },
+    { upsert: true },
+  );
+}
+
 beforeEach(async () => {
-  await (await database()).collection(JOB_RUNS_COLLECTION).deleteMany({});
+  const db = await database();
+  await Promise.all([
+    db.collection(JOB_RUNS_COLLECTION).deleteMany({}),
+    db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).deleteMany({}),
+  ]);
 });
 
 describe("scheduled digest route", () => {
@@ -77,7 +111,7 @@ describe("scheduled digest route", () => {
     const db = await database();
     const response = await postDigest({
       request: digestRequest({ authorization: `Bearer ${DIGEST_SECRET}` }),
-      locals: { runtime: { env: { ...env, ENGAGE_DIGEST_ENABLED: "false" } } },
+      locals: { runtime: { env } },
     } as never);
 
     assert.equal(response.status, 200);
@@ -101,13 +135,14 @@ describe("scheduled digest route", () => {
 
   it("records an authorised failure without exposing configuration", async () => {
     const db = await database();
+    await enableDigests(db);
     const response = await postDigest({
       request: digestRequest({ authorization: `Bearer ${DIGEST_SECRET}` }),
       locals: {
         runtime: {
           env: {
             ...env,
-            ENGAGE_DIGEST_ENABLED: "true",
+            [REMOVED_DIGEST_ENV]: "false",
             ENGAGE_EMAIL_SECRET: "email-signing-secret-0123456789",
           },
         },
@@ -153,7 +188,7 @@ describe("scheduled membership verification route", () => {
       }),
       locals: {
         runtime: {
-          env: { ...env, ENGAGE_CRM_VERIFICATION_ENABLED: "false" },
+          env: { ...env, [REMOVED_CRM_ENV]: "true" },
         },
       },
     } as never);
@@ -167,6 +202,7 @@ describe("scheduled membership verification route", () => {
 
   it("records an authorised failure and keeps the 503 contract", async () => {
     const db = await database();
+    await enableCrm(db);
     const response = await postVerification({
       request: verificationRequest({
         authorization: `Bearer ${VERIFICATION_SECRET}`,
@@ -175,7 +211,7 @@ describe("scheduled membership verification route", () => {
         runtime: {
           env: {
             ...env,
-            ENGAGE_CRM_VERIFICATION_ENABLED: "true",
+            [REMOVED_CRM_ENV]: "false",
             ENGAGE_CRM_TOKEN: "crm-token-value-0123456789abcdefghij",
           },
         },
@@ -198,6 +234,7 @@ describe("scheduled membership verification route", () => {
 
   it("records an authorised successful run with counts only", async () => {
     const db = await database();
+    await enableCrm(db);
     const response = await postVerification({
       request: verificationRequest({
         authorization: `Bearer ${VERIFICATION_SECRET}`,
@@ -206,7 +243,7 @@ describe("scheduled membership verification route", () => {
         runtime: {
           env: {
             ...env,
-            ENGAGE_CRM_VERIFICATION_ENABLED: "true",
+            [REMOVED_CRM_ENV]: "false",
             ENGAGE_CRM_BASE_URL: "https://crm.example.test",
             ENGAGE_CRM_TOKEN: "crm-token-value-0123456789abcdefghij",
             ENGAGE_CRM_FUSION_MEMBERSHIP_TYPE_ID: "membership-type-1",

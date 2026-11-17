@@ -10,7 +10,7 @@ import {
 } from "./lifecycle-schedule.ts";
 import { VERIFICATION_REVIEWS } from "./membership-verification.ts";
 import { hasPermission, hasPermissionAnywhere, type PermissionKey } from "./rbac.ts";
-import { isPolicyRegistryRecordForResolution } from "./store.ts";
+import { isPolicyRegistryRecordForResolution } from "./proposal-helpers.ts";
 import type { SessionUser } from "./types.ts";
 import { proposalBallotId } from "./vote-storage.ts";
 

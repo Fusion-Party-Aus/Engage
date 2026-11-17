@@ -336,6 +336,14 @@ A new feature is expected to be extensible and configurable without a code chang
 - A feature that ships with its copy, questions or options hard-coded, when an editor would predictably need to change them, is incomplete.
 - Do not build a generic form or workflow builder to satisfy this rule. Configuration is a small, typed, reviewed schema, not a programming language.
 
+### Module boundaries (no god modules)
+
+Keep `src/lib/` modules scoped to a single domain responsibility rather than accumulating cross-domain catch-all files.
+
+- **Do not add logic to `src/lib/store.ts`.** It is a deprecated compatibility barrel only, re-exporting from `proposal-helpers.ts`, `proposals-store.ts`, `comments-store.ts`, `contribution-feedback.ts`, `voting-store.ts`, and `members-store.ts`.
+- **Import from the specific domain module.** Production modules in `src/lib/` must import from the narrow domain module they need, never from `./store.ts`.
+- **Decompose before growing.** Avoid multi-domain modules or oversized functions; extract focused helpers or a new domain module rather than letting a single `src/lib/` file grow into a cross-domain god module (enforced by `src/lib/store-architecture.test.ts`).
+
 ## 8. Git & Changelog Discipline
 
 Every meaningful slice of work must be committed to Git using clear Conventional Commits.
@@ -430,3 +438,15 @@ Before declaring work complete, answer:
 - Are verification, commits, and changelog complete?
 
 **If the interface looks like something built for a developer to debug rather than a member or administrator to use, redesign it before calling the work finished.**
+
+## 11. Configuration
+
+The product owns configuration, not the deployment.
+
+- Most, and ideally all, configuration is an administrator setting: stored in MongoDB, validated, audited, and defaulted to a sensible value.
+- Environment variables are reserved for values that cannot live in the database or must exist before it: the database connection, encryption and signing secrets and keys, provider credentials, the public origin, and deployment topology.
+- Every environment variable is a cost. It must be provisioned in every environment, documented in `.env.example`, rotated, and cannot be changed without a redeploy. A new one must be justified explicitly in the change and in `.env.example`.
+- Do not add an environment variable for an operational threshold, retry limit, cadence, feature toggle, display limit or policy timing. Those are administrator settings.
+- Administrator-facing configuration uses plain language, a validated range and an obvious default, and never exposes a raw key or internal name.
+- Tests must not tune behaviour through the deployment environment. Inject the value through the function or the setting under test.
+- When touching an area that already has an environment knob, migrate it to the admin setting rather than adding another.

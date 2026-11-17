@@ -17,6 +17,7 @@ export const CRM_IDENTITY_LINKS = "crm_identity_links";
 export const CRM_APPLICATION = "underground-crm";
 export const CRM_MEMBERSHIP_SOURCE = "underground-crm";
 export const MINIMUM_CRM_TOKEN_LENGTH = 32;
+export const MINIMUM_CRM_TIMEOUT_MS = 1_000;
 export const DEFAULT_CRM_TIMEOUT_MS = 10_000;
 export const MAXIMUM_CRM_TIMEOUT_MS = 60_000;
 
@@ -123,18 +124,21 @@ function envValue(env: Record<string, string | undefined>, key: string): string 
   return String(env[key] ?? "").trim();
 }
 
-export function crmVerificationEnabled(
-  env: Record<string, string | undefined>,
-): boolean {
-  return envValue(env, "ENGAGE_CRM_VERIFICATION_ENABLED").toLowerCase() === "true";
-}
-
 export function normaliseElectorate(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+/**
+ * Read CRM credentials from the deployment environment.
+ *
+ * Credentials and the provider endpoint stay in the environment because they
+ * are secrets or integration wiring. The request timeout is an administrator
+ * setting, so the caller passes the saved value in; it is never read from the
+ * environment here.
+ */
 export function readUndergroundCrmConfig(
   env: Record<string, string | undefined>,
+  options: { timeoutMs?: number } = {},
 ): UndergroundCrmConfig {
   const rawBaseUrl = envValue(env, "ENGAGE_CRM_BASE_URL");
   const token = envValue(env, "ENGAGE_CRM_TOKEN");
@@ -257,15 +261,14 @@ export function readUndergroundCrmConfig(
     electorateBranchMap.set(rawField, values);
   }
 
-  const rawTimeout = envValue(env, "ENGAGE_CRM_TIMEOUT_MS");
-  const timeoutMs = rawTimeout ? Number(rawTimeout) : DEFAULT_CRM_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_CRM_TIMEOUT_MS;
   if (
     !Number.isInteger(timeoutMs) ||
-    timeoutMs < 1_000 ||
+    timeoutMs < MINIMUM_CRM_TIMEOUT_MS ||
     timeoutMs > MAXIMUM_CRM_TIMEOUT_MS
   ) {
     throw new CrmConfigurationError(
-      `ENGAGE_CRM_TIMEOUT_MS must be an integer from 1000 to ${MAXIMUM_CRM_TIMEOUT_MS}.`,
+      `The CRM request timeout must be an integer from ${MINIMUM_CRM_TIMEOUT_MS} to ${MAXIMUM_CRM_TIMEOUT_MS} milliseconds.`,
     );
   }
 

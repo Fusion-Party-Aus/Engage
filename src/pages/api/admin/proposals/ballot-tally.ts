@@ -7,8 +7,16 @@ import {
   resolveBallotClosure,
 } from "../../../../lib/ballots.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
+import {
+  buildQuorumPreview,
+  getQuorumElectoratePreview,
+  quorumRuleLabel,
+  quorumVerdictLabel,
+  readBallotQuorumRecord,
+} from "../../../../lib/quorum.ts";
 import { hasPermission } from "../../../../lib/rbac.ts";
 import { normalizeProposalDoc } from "../../../../lib/store.ts";
+import { proposalBallotId } from "../../../../lib/vote-storage.ts";
 
 export const prerender = false;
 
@@ -89,6 +97,53 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
   });
   const summary = tallies.get(proposal.proposalId) ?? null;
   const closure = resolveBallotClosure({ matter: proposal });
+  const participation = summary?.tally?.total ?? 0;
+  const quorumRecord = await readBallotQuorumRecord(
+    db,
+    proposalBallotId(proposal.proposalId),
+  );
+  const quorumPreview =
+    !quorumRecord && !closure.closed
+      ? buildQuorumPreview(
+          await getQuorumElectoratePreview(db),
+          participation,
+        )
+      : null;
+  const quorum = quorumRecord
+    ? {
+        final: true,
+        status: quorumRecord.status,
+        ruleLabel: quorumRuleLabel(quorumRecord),
+        verdictLabel: quorumVerdictLabel(quorumRecord.verdict),
+        eligibleRegisteredMembers: quorumRecord.eligibleRegisteredMembers,
+        activeEligibleMembers: quorumRecord.activeEligibleMembers,
+        platformQuorumRequired: quorumRecord.platformQuorumRequired,
+        platformQuorumMet: quorumRecord.platformQuorumMet,
+        ballotQuorumRequired: quorumRecord.ballotQuorumRequired,
+        ballotQuorumMet: quorumRecord.ballotQuorumMet,
+        participation:
+          quorumRecord.participatingMembers ?? quorumRecord.tally?.total ?? 0,
+        quorumMet: quorumRecord.quorumMet,
+      }
+    : quorumPreview
+      ? {
+          final: false,
+          status: "current",
+          ruleLabel: quorumRuleLabel({
+            ruleVersion: quorumPreview.ruleVersion,
+          }),
+          verdictLabel: null,
+          eligibleRegisteredMembers:
+            quorumPreview.eligibleRegisteredMembers,
+          activeEligibleMembers: quorumPreview.activeEligibleMembers,
+          platformQuorumRequired: quorumPreview.platformQuorumRequired,
+          platformQuorumMet: quorumPreview.platformQuorumMet,
+          ballotQuorumRequired: quorumPreview.ballotQuorumRequired,
+          ballotQuorumMet: quorumPreview.ballotQuorumMet,
+          participation: quorumPreview.participationCount,
+          quorumMet: quorumPreview.quorumMet,
+        }
+      : null;
 
   return Response.json(
     {
@@ -98,6 +153,7 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
       computedLabel: summary?.computedResult
         ? ballotOutcomeLabel(summary.computedResult)
         : null,
+      quorum,
     },
     { status: 200, headers: { "cache-control": "private, no-store" } },
   );

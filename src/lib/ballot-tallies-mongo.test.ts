@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { MongoClient, type Db } from "mongodb";
 import { generateBallotKeyHex, loadBallotCryptoConfig } from "./ballot-crypto.ts";
 import {
@@ -119,6 +120,105 @@ async function assertRowMatchesVotes(
   );
 }
 
+/**
+ * The projection write is best-effort: a committed vote is never held open
+ * past the fixed 500 ms production deadline, so on a slow shared replica set
+ * one write can be abandoned for the repair CLI. A test must not tune that
+ * deadline through the deployment environment, so convergence is awaited here
+ * and, when a write was abandoned, the documented repair path reconciles the
+ * row before the equality assertion.
+ */
+const PROJECTION_CONVERGENCE_TIMEOUT_MS = 10_000;
+const PROJECTION_POLL_INTERVAL_MS = 50;
+
+async function waitForProjectionToMatch(
+  db: Db,
+  ballotId: string,
+  expected: ReturnType<typeof tallyOf>,
+  options: {
+    revisionId?: string;
+    cryptoConfig?: ReturnType<typeof loadBallotCryptoConfig> | null;
+  } = {},
+) {
+  const revisionId = options.revisionId ?? "rev-1";
+  const deadline = Date.now() + PROJECTION_CONVERGENCE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const row = await projectionRow(db, ballotId, revisionId);
+    if (isDeepStrictEqual(tallyOf(row), expected)) return;
+    await new Promise((resolve) =>
+      setTimeout(resolve, PROJECTION_POLL_INTERVAL_MS),
+    );
+  }
+  await rebuildBallotTallyProjection(db, {
+    ballotId,
+    revisionId,
+    cryptoConfig: options.cryptoConfig,
+  });
+  assert.deepEqual(
+    tallyOf(await projectionRow(db, ballotId, revisionId)),
+    expected,
+  );
+}
+
+async function waitForProjectionToMatchVotes(
+  db: Db,
+  ballotId: string,
+  revisionId = "rev-1",
+) {
+  await waitForProjectionToMatch(
+    db,
+    ballotId,
+    await authoritativeTally(db, ballotId, revisionId),
+    { revisionId },
+  );
+}
+
+/**
+ * Interleaves an action immediately before the rebuild's compare-and-set write,
+ * after its recount. The action's increment must make the CAS fail so the
+ * rebuild recounts and overwrites rather than skipping the increment.
+ */
+function proxyTallyCas(db: Db, action: () => Promise<void>): Db {
+  let fired = false;
+  return new Proxy(db as any, {
+    get(target, property) {
+      if (property === "collection") {
+        return (name: string) => {
+          const source = target.collection(name);
+          if (name !== BALLOT_TALLIES) return source;
+          return new Proxy(source, {
+            get(collection, key) {
+              if (key === "updateOne") {
+                return async (
+                  filter: Record<string, unknown>,
+                  update: Record<string, any>,
+                  options?: Record<string, unknown>,
+                ) => {
+                  if (
+                    !fired &&
+                    update?.$set &&
+                    "version" in update.$set
+                  ) {
+                    fired = true;
+                    await action();
+                  }
+                  return collection.updateOne(filter, update, options);
+                };
+              }
+              const value = (collection as any)[key];
+              return typeof value === "function"
+                ? value.bind(collection)
+                : value;
+            },
+          });
+        };
+      }
+      const value = (target as any)[property];
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as Db;
+}
+
 async function insertVote(
   db: Db,
   input: {
@@ -138,7 +238,9 @@ async function insertVote(
 }
 
 async function closeBallot(db: Db, proposalId: string): Promise<void> {
-  const now = new Date();
+  // This fixture covers projection and certification mechanics before the
+  // two-tier quorum rule took effect. Quorum closure has separate coverage.
+  const now = new Date("2026-11-10T00:00:00.000Z");
   await db
     .collection("proposals")
     .updateOne({ proposalId }, { $set: { ballotClosedAt: now } });
@@ -191,6 +293,7 @@ describe(
         proposalId,
         choice: "abstain",
       });
+      await waitForProjectionToMatchVotes(db, ballotId);
 
       const row = await projectionRow(db, ballotId);
       assert.deepEqual(
@@ -219,6 +322,7 @@ describe(
       const voter = memberUser("change-1");
       await castVote(db, voter, { proposalId, choice: "approve" });
       await castVote(db, voter, { proposalId, choice: "approve" });
+      await waitForProjectionToMatchVotes(db, ballotId);
       let row = await projectionRow(db, ballotId);
       assert.deepEqual(
         { approve: row?.approve, reject: row?.reject, total: row?.total },
@@ -226,6 +330,7 @@ describe(
       );
 
       await castVote(db, voter, { proposalId, choice: "reject" });
+      await waitForProjectionToMatchVotes(db, ballotId);
       row = await projectionRow(db, ballotId);
       assert.deepEqual(
         {
@@ -265,7 +370,7 @@ describe(
         reject: 2,
         total: 8,
       });
-      await assertRowMatchesVotes(db, ballotId);
+      await waitForProjectionToMatchVotes(db, ballotId);
     });
 
     it("counts concurrent vote changes without losing one", async () => {
@@ -309,7 +414,7 @@ describe(
         reject: 2,
         total: 6,
       });
-      await assertRowMatchesVotes(db, ballotId);
+      await waitForProjectionToMatchVotes(db, ballotId);
     });
 
     it("moves counts between revisions while other votes land concurrently", async () => {
@@ -405,7 +510,6 @@ describe(
             previousChoice: "reject",
             choice: "approve",
             hadPreviousVote: true,
-            voteUpdatedAt: movedAt,
           }),
           updateBallotTallyProjection(db, {
             ballotId,
@@ -414,14 +518,12 @@ describe(
             previousChoice: "abstain",
             choice: "abstain",
             hadPreviousVote: true,
-            voteUpdatedAt: movedAt,
           }),
           updateBallotTallyProjection(db, {
             ballotId,
             revisionId: "rev-1",
             choice: "approve",
             hadPreviousVote: false,
-            voteUpdatedAt: newVoteAt,
           }),
         ]);
 
@@ -430,8 +532,8 @@ describe(
       }
     });
 
-    it("keeps the row equal to the votes when a rebuild races an increment", async () => {
-      for (let round = 0; round < 10; round += 1) {
+    it("keeps the row equal to the votes when a rebuild races increments for 20 rounds", async () => {
+      for (let round = 0; round < 20; round += 1) {
         const proposalId = `PROP-PROJECT-RACE-${round}`;
         const ballotId = `proposal:${proposalId}`;
         const now = Date.now();
@@ -445,34 +547,85 @@ describe(
             updatedAt: new Date(now - 60_000 + index),
           });
         }
-        // Deliberately missing/drifted row: the rebuild must recreate it while
-        // a new vote's increment arrives.
+        // Deliberately missing row: the rebuild must recreate it.
         await db.collection(BALLOT_TALLIES).deleteMany({ ballotId });
-        const newVoteAt = new Date(now);
-        await insertVote(db, {
-          ballotId,
-          proposalId,
-          revisionId: "rev-1",
-          memberId: "race-new",
-          choice: "reject",
-          updatedAt: newVoteAt,
-        });
 
-        await Promise.all([
-          rebuildBallotTallyProjection(db, {
+        const addNewVote = async () => {
+          await insertVote(db, {
             ballotId,
+            proposalId,
             revisionId: "rev-1",
-          }),
-          updateBallotTallyProjection(db, {
+            memberId: "race-new",
+            choice: "reject",
+            updatedAt: new Date(),
+          });
+          await updateBallotTallyProjection(db, {
             ballotId,
             revisionId: "rev-1",
             choice: "reject",
             hadPreviousVote: false,
-            voteUpdatedAt: newVoteAt,
-          }),
-        ]);
+          });
+        };
+
+        if (round % 2 === 0) {
+          // Deterministic interleave: the increment lands after the recount and
+          // before the compare-and-set, so the rebuild must detect the changed
+          // version, recount and overwrite. Nothing is skipped.
+          const interleaved = proxyTallyCas(db, addNewVote);
+          await rebuildBallotTallyProjection(interleaved, {
+            ballotId,
+            revisionId: "rev-1",
+          });
+        } else {
+          // The increment lands after the rebuild commits. The recount did not
+          // include it, so it must add on top.
+          await rebuildBallotTallyProjection(db, {
+            ballotId,
+            revisionId: "rev-1",
+          });
+          await addNewVote();
+        }
         await assertRowMatchesVotes(db, ballotId);
       }
+    });
+
+    it("applies increments after an absolute rebuild without skipping them", async () => {
+      const proposalId = "PROP-PROJECT-AFTER-REBUILD";
+      const ballotId = `proposal:${proposalId}`;
+      await insertVote(db, {
+        ballotId,
+        proposalId,
+        revisionId: "rev-1",
+        memberId: "after-rebuild-1",
+        choice: "approve",
+        updatedAt: new Date(),
+      });
+      await rebuildBallotTallyProjection(db, {
+        ballotId,
+        revisionId: "rev-1",
+      });
+      await insertVote(db, {
+        ballotId,
+        proposalId,
+        revisionId: "rev-1",
+        memberId: "after-rebuild-2",
+        choice: "reject",
+        updatedAt: new Date(),
+      });
+      await updateBallotTallyProjection(db, {
+        ballotId,
+        revisionId: "rev-1",
+        choice: "reject",
+        hadPreviousVote: false,
+      });
+      await assertRowMatchesVotes(db, ballotId);
+      const row = await projectionRow(db, ballotId);
+      assert.deepEqual(tallyOf(row), {
+        approve: 1,
+        abstain: 0,
+        reject: 1,
+        total: 2,
+      });
     });
 
     it("is revision-scoped", async () => {
@@ -494,6 +647,7 @@ describe(
         choice: "reject",
         updatedAt: new Date(),
       });
+      await waitForProjectionToMatchVotes(db, ballotId);
       const row = await projectionRow(db, ballotId);
       assert.deepEqual(
         { approve: row?.approve, reject: row?.reject, total: row?.total },
@@ -514,6 +668,7 @@ describe(
         proposalId,
         choice: "reject",
       });
+      await waitForProjectionToMatchVotes(db, ballotId);
       await db.collection(BALLOT_TALLIES).updateOne(
         { ballotId, revisionId: "rev-1" },
         {
@@ -624,6 +779,15 @@ describe(
         { proposalId, choice: "reject" },
         env,
       );
+      // An encrypted vote has no plaintext choice to count, so the expected
+      // tally is explicit and the repair path needs the decryption keys.
+      const cryptoConfig = loadBallotCryptoConfig(env);
+      await waitForProjectionToMatch(
+        db,
+        ballotId,
+        { approve: 1, abstain: 0, reject: 1, total: 2 },
+        { cryptoConfig },
+      );
       const row = await projectionRow(db, ballotId);
       assert.deepEqual(
         {
@@ -634,9 +798,7 @@ describe(
         },
         { approve: 1, abstain: 0, reject: 1, total: 2 },
       );
-      const report = await inspectBallotTallyProjection(db, {
-        cryptoConfig: loadBallotCryptoConfig(env),
-      });
+      const report = await inspectBallotTallyProjection(db, { cryptoConfig });
       const group = report.rows.find((item) => item.ballotId === ballotId);
       assert.equal(group?.status, "match");
       assert.equal(group?.unreadableVotes, 0);

@@ -10,7 +10,7 @@ import {
   canReviewArchivedProposal,
   canViewProposal,
   normalizeProposalDoc,
-} from "./store.ts";
+} from "./proposal-helpers.ts";
 import type { SessionUser, VoteTally } from "./types.ts";
 
 /**

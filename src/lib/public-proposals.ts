@@ -11,7 +11,7 @@ import {
   canViewProposal,
   normalizeProposalDoc,
   normalizeStage,
-} from "./store.ts";
+} from "./proposal-helpers.ts";
 import type {
   ProposalRecord,
   ProposalStage,

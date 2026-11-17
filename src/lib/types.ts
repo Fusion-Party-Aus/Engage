@@ -82,8 +82,6 @@ export interface PlatformEnv {
   APP_MODE?: string;
   MONGODB_URI?: string;
   MONGODB_DB_NAME?: string;
-  /** Local override for a slow Docker MongoDB first selection. Milliseconds. */
-  MONGODB_SERVER_SELECTION_TIMEOUT_MS?: string;
   SESSION_SECRET?: string;
   BETTER_AUTH_URL?: string;
   PUBLIC_ORIGIN?: string;
@@ -105,9 +103,7 @@ export interface PlatformEnv {
   RESEND_WEBHOOK_SECRET?: string;
   ENGAGE_CRON_SECRET?: string;
   ENGAGE_EMAIL_SECRET?: string;
-  ENGAGE_DIGEST_ENABLED?: string;
-  /** Gate and bearer secret for automatic CRM membership verification. */
-  ENGAGE_CRM_VERIFICATION_ENABLED?: string;
+  /** Bearer secret for automatic CRM membership verification. */
   ENGAGE_CRM_VERIFICATION_CRON_SECRET?: string;
   /**
    * Opt-in future link: when "on", a member with an active CRM identity link
@@ -115,28 +111,6 @@ export interface PlatformEnv {
    * member-id profile paths then redirect with 301. Off by default.
    */
   ENGAGE_PROFILE_CRM_IDENTIFIERS?: string;
-  /**
-   * Operational health thresholds (#39). Each scheduled job has a warn and a
-   * fail threshold; warn must be below fail or the check reports unknown. Empty
-   * or invalid values use the documented default, and the health report names
-   * the value and its source.
-   */
-  GOVERNANCE_SCHEDULER_WARN_HOURS?: string;
-  GOVERNANCE_SCHEDULER_STALE_HOURS?: string;
-  DIGEST_WARN_HOURS?: string;
-  DIGEST_STALE_HOURS?: string;
-  MEMBERSHIP_VERIFICATION_WARN_HOURS?: string;
-  MEMBERSHIP_VERIFICATION_STALE_HOURS?: string;
-  BALLOT_CLOSURE_GRACE_HOURS?: string;
-  EMAIL_DELIVERY_WINDOW_HOURS?: string;
-  ENGAGE_ALLOW_INDEXING?: string;
-  ENGAGE_DEFAULT_OG_IMAGE?: string;
-  ENGAGE_PUBLIC_PULSE_POLL?: string;
-  ENGAGE_PRIMARY_CTA_LABEL?: string;
-  ENGAGE_PRIMARY_CTA_HREF?: string;
-  ENGAGE_SOCIAL_LINKS_JSON?: string;
-  ENGAGE_STATE_SITES_JSON?: string;
-  ENGAGE_REPO_URL?: string;
   /**
    * Opt-in MongoDB driver command monitoring for the local rendering
    * performance harness. Ignored in production.

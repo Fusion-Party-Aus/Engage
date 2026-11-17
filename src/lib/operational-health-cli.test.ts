@@ -5,6 +5,14 @@ import { describe, it } from "node:test";
 import { MongoClient, type Db } from "mongodb";
 import { initializeDatabase } from "./db.ts";
 import { JOB_RUNS_COLLECTION, type JobName } from "./job-runs.ts";
+import {
+  CRM_OPERATIONAL_SETTINGS_ID,
+  DEFAULT_CRM_SETTINGS,
+  DEFAULT_OPERATIONAL_THRESHOLDS,
+  JOBS_OPERATIONAL_SETTINGS_ID,
+  OPERATIONAL_SETTINGS_COLLECTION,
+  OPERATIONAL_SETTINGS_ID,
+} from "./operational-settings.ts";
 
 /**
  * End-to-end coverage for `npm run ops:health` (#39): the command must be
@@ -41,16 +49,6 @@ function runOpsHealth(
         env: {
           ...process.env,
           APP_MODE: "test",
-          ENGAGE_DIGEST_ENABLED: "true",
-          ENGAGE_CRM_VERIFICATION_ENABLED: "true",
-          GOVERNANCE_SCHEDULER_WARN_HOURS: "",
-          GOVERNANCE_SCHEDULER_STALE_HOURS: "",
-          DIGEST_WARN_HOURS: "",
-          DIGEST_STALE_HOURS: "",
-          MEMBERSHIP_VERIFICATION_WARN_HOURS: "",
-          MEMBERSHIP_VERIFICATION_STALE_HOURS: "",
-          BALLOT_CLOSURE_GRACE_HOURS: "",
-          EMAIL_DELIVERY_WINDOW_HOURS: "",
           TURNSTILE_ENFORCEMENT: "",
           ...env,
         },
@@ -96,6 +94,20 @@ async function staleJobRuns(db: Db): Promise<void> {
   );
 }
 
+async function enableScheduledJobs(db: Db): Promise<void> {
+  await Promise.all([
+    db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).insertOne({
+      _id: JOBS_OPERATIONAL_SETTINGS_ID,
+      digestEnabled: true,
+    }),
+    db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).insertOne({
+      _id: CRM_OPERATIONAL_SETTINGS_ID,
+      ...DEFAULT_CRM_SETTINGS,
+      crmVerificationEnabled: true,
+    }),
+  ]);
+}
+
 describe("ops:health command", () => {
   it("exits 0 when healthy, 2 when degraded and 1 when failing", { skip: !uri }, async () => {
     const client = await new MongoClient(uri!).connect();
@@ -109,6 +121,27 @@ describe("ops:health command", () => {
         "ballot-digest",
         "membership-verification",
       ]);
+
+      // Removed environment variables have no effect. Without saved settings,
+      // both job gates are off even when the old variables are set to "true".
+      const removedDigestGate = ["ENGAGE", "DIGEST", "ENABLED"].join("_");
+      const removedCrmGate = ["ENGAGE", "CRM", "VERIFICATION", "ENABLED"].join("_");
+      const ignored = await runOpsHealth(["--json"], {
+        ...baseEnv,
+        [removedDigestGate]: "true",
+        [removedCrmGate]: "true",
+      });
+      assert.equal(ignored.code, 2, ignored.stderr);
+      const ignoredReport = JSON.parse(ignored.stdout) as {
+        checks: Array<{ id: string; status: string; summary: string }>;
+      };
+      for (const id of ["digest", "membership-verification"]) {
+        const entry = ignoredReport.checks.find((candidate) => candidate.id === id);
+        assert.equal(entry?.status, "unknown", id);
+        assert.match(entry?.summary ?? "", /turned off/, id);
+      }
+
+      await enableScheduledJobs(db);
 
       const healthy = await runOpsHealth(["--json"], {
         ...baseEnv,
@@ -127,6 +160,27 @@ describe("ops:health command", () => {
       assert.equal(degraded.code, 2, degraded.stderr);
       assert.match(degraded.stdout, /Engage operational health: degraded/);
       assert.match(degraded.stdout, /warn threshold is 1 hour/);
+
+      // A saved administrator setting changes the observed state with no
+      // redeploy and no environment variable.
+      await db.collection<Record<string, unknown> & { _id: string }>(OPERATIONAL_SETTINGS_COLLECTION).insertOne({
+        _id: OPERATIONAL_SETTINGS_ID,
+        ...DEFAULT_OPERATIONAL_THRESHOLDS,
+        schedulerWarnHours: 4,
+        schedulerStaleHours: 30,
+        digestWarnHours: 4,
+        digestStaleHours: 30,
+        verificationWarnHours: 4,
+        verificationStaleHours: 30,
+      });
+      const lifted = await runOpsHealth(["--json"], baseEnv);
+      assert.equal(lifted.code, 0, lifted.stderr);
+      const liftedReport = JSON.parse(lifted.stdout) as {
+        status: string;
+        thresholds: Record<string, { source: string }>;
+      };
+      assert.equal(liftedReport.status, "healthy");
+      assert.equal(liftedReport.thresholds.schedulerWarnHours.source, "settings");
 
       await db.collection(JOB_RUNS_COLLECTION).deleteMany({});
       const failing = await runOpsHealth(["--json"], baseEnv);

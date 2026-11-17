@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowDown,
   ArrowUp,
-  ExternalLink,
   Eye,
   GripVertical,
   History,
@@ -10,6 +9,7 @@ import {
   Plus,
   Server,
   Share2,
+  MessageSquare,
   SlidersHorizontal,
   Trash2,
   Undo2,
@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -31,6 +32,7 @@ import {
 } from '@/components/admin-kit';
 import { PLATFORM_LABELS, SOCIAL_PLATFORMS, isPublicHttpUrl, isSiteLink } from '@/lib/url-validation';
 import { cn } from '@/lib/utils';
+import DiscordIntegrationSettings from './DiscordIntegrationSettings';
 
 interface Social { label: string; href: string; platform?: string }
 interface StateSite { code: string; name: string; websiteHref: string; facebookHref?: string; branchId?: string }
@@ -58,12 +60,13 @@ export interface ConfigEvent {
   createdAt: string;
 }
 
-type SectionKey = 'visibility' | 'features' | 'social' | 'directory' | 'operations' | 'history';
+type SectionKey = 'visibility' | 'features' | 'social' | 'directory' | 'discord' | 'operations' | 'history';
 const SECTIONS: Array<{ key: SectionKey; label: string; hint: string; icon: typeof Eye }> = [
   { key: 'visibility', label: 'Public visibility', hint: 'Search indexing, sharing previews and navigation', icon: Eye },
   { key: 'features', label: 'Features', hint: 'Enable and configure public features', icon: SlidersHorizontal },
   { key: 'social', label: 'Social channels', hint: 'Manage national social links', icon: Share2 },
   { key: 'directory', label: 'Branch directory', hint: 'Manage state and territory website links', icon: MapPin },
+  { key: 'discord', label: 'Discord', hint: 'Weekly digest and notifications', icon: MessageSquare },
   { key: 'operations', label: 'Operations', hint: 'Public transparency and maintainer information', icon: Server },
   { key: 'history', label: 'Change history', hint: 'Review configuration changes and restore values', icon: History },
 ];
@@ -77,6 +80,7 @@ const FIELD_LABELS: Record<string, string> = {
   publicPulsePollEnabled: 'Public pulse poll (planned)',
   socialLinks: 'Social channels',
   stateSites: 'Branch directory',
+  repoUrl: 'Source repository link',
 };
 
 type SaveResult = { ok: true } | { ok: false; error: string; fieldErrors: Record<string, string> };
@@ -494,25 +498,41 @@ function DirectorySection({ config, save, onDirty, ask }: SectionProps) {
   );
 }
 
-/* ---------- Operations (read-only) ---------- */
-function OperationsSection({ config }: SectionProps) {
+/* ---------- Operations ---------- */
+function OperationsSection({ config, save, onDirty, ask }: SectionProps) {
+  const s = useDraftSection(
+    { repoUrl: config.repoUrl },
+    (d) => save('operations', d),
+    undefined,
+    ask,
+  );
+  useEffect(() => onDirty(s.dirty), [s.dirty]);
   return (
-    <SectionCard id="operations" title="Operations" description="Public transparency about how Engage is run. This is maintained alongside the system itself, so it is shown here but not edited here.">
-      <div className="grid gap-4 p-5 text-sm">
-        <p className="max-w-[65ch]">
-          The public <a href="/how-it-works/#operations">How it works</a> page explains backups and maintainer handover. Maintainers need to keep it accurate when deployment or recovery procedures change.
-        </p>
-        <dl className="grid max-w-[40rem] gap-3">
-          <div className="grid gap-0.5">
-            <dt className="text-xs font-semibold text-muted-foreground">Source code</dt>
-            <dd><a href={config.repoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1">{config.repoUrl}<ExternalLink aria-hidden className="size-3.5" /></a></dd>
+    <SectionCard id="operations" title="Operations" description="Where the public source code lives. Other operational notes are maintained in the repository.">
+      <form onSubmit={s.submit} noValidate>
+        <div className="grid gap-5 p-5">
+          <div className="max-w-[40rem]">
+            <FieldRow
+              label="Source repository"
+              htmlFor="repoUrl"
+              hint="Linked from the changelog and How it works. Use the full https:// address of the repository."
+              error={s.errors.repoUrl ?? (s.attempted && !isPublicHttpUrl(s.draft.repoUrl) ? 'Enter a full web address, like https://github.com/YourOrg/Engage.' : undefined)}
+            >
+              <Input
+                id="repoUrl"
+                inputMode="url"
+                value={s.draft.repoUrl}
+                aria-invalid={Boolean(s.errors.repoUrl) || (s.attempted && !isPublicHttpUrl(s.draft.repoUrl))}
+                onChange={(e) => s.setDraft({ repoUrl: e.target.value })}
+              />
+            </FieldRow>
           </div>
-          <div className="grid gap-0.5">
-            <dt className="text-xs font-semibold text-muted-foreground">To change this information</dt>
-            <dd>Ask the maintainers to update the operations guide in the repository.</dd>
-          </div>
-        </dl>
-      </div>
+          <p className="max-w-[65ch] text-sm text-muted-foreground">
+            Backups, recovery and maintainer handover are explained on the public <a href="/how-it-works/#operations">How it works</a> page. Those notes are maintained with the deployment, so they are not edited here.
+          </p>
+        </div>
+        <SaveBar dirty={s.dirty} saving={s.saving} feedback={s.feedback} onDiscard={s.discard} />
+      </form>
     </SectionCard>
   );
 }
@@ -590,9 +610,27 @@ interface SectionProps {
   ask: (request: ConfirmRequest) => void;
 }
 
-export default function PlatformSettings({ initialConfig, initialEvents }: { initialConfig: Config; initialEvents: ConfigEvent[] }) {
+/** Turn field paths like `socialLinks.1.href` into the setting they belong to. */
+function invalidSettingLabels(fields: string[]): string[] {
+  const labels = fields.map((field) => FIELD_LABELS[field.split('.')[0] ?? '']);
+  return [...new Set(labels.filter(Boolean))] as string[];
+}
+
+export default function PlatformSettings({
+  initialConfig,
+  initialEvents,
+  initialInvalidFields = [],
+  initialReadFailed = false,
+}: {
+  initialConfig: Config;
+  initialEvents: ConfigEvent[];
+  initialInvalidFields?: string[];
+  initialReadFailed?: boolean;
+}) {
   const [config, setConfig] = useState(initialConfig);
   const [events, setEvents] = useState(initialEvents);
+  const [invalidFields, setInvalidFields] = useState(initialInvalidFields);
+  const [readFailed, setReadFailed] = useState(initialReadFailed);
   const [active, setActive] = useState<SectionKey>(() => {
     const hash = typeof location !== 'undefined' ? (location.hash.slice(1) as SectionKey) : 'visibility';
     return SECTIONS.some((s) => s.key === hash) ? hash : 'visibility';
@@ -610,9 +648,11 @@ export default function PlatformSettings({ initialConfig, initialEvents }: { ini
   const [version, setVersion] = useState(0);
   useUnsavedGuard(dirty);
 
-  const apply = (payload: { config: Config; events: ConfigEvent[] }) => {
+  const apply = (payload: { config: Config; events: ConfigEvent[]; invalidFields?: string[]; readFailed?: boolean }) => {
     setConfig(payload.config);
     setEvents(payload.events);
+    if (payload.invalidFields) setInvalidFields(payload.invalidFields);
+    if (typeof payload.readFailed === 'boolean') setReadFailed(payload.readFailed);
   };
   const call = async (method: 'PATCH' | 'POST', body: Record<string, unknown>): Promise<SaveResult> => {
     try {
@@ -658,19 +698,34 @@ export default function PlatformSettings({ initialConfig, initialEvents }: { ini
 
   const shared = { config, save, onDirty: setDirty, ask: setConfirm };
   const lastChange = config.updatedAt ? `Last changed ${relativeDate(config.updatedAt)}${config.updatedByName ? ` by ${config.updatedByName}` : ''}` : 'No changes saved yet';
+  const invalidLabels = invalidSettingLabels(invalidFields);
   return (
     <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      {readFailed && (
+        <Alert variant="destructive" className="lg:col-span-2">
+          <AlertTitle>Couldn't load the saved settings</AlertTitle>
+          <AlertDescription>Engage is showing the default settings. Refresh the page before making changes so you don't overwrite the saved values.</AlertDescription>
+        </Alert>
+      )}
+      {!readFailed && invalidLabels.length > 0 && (
+        <Alert variant="warning" className="lg:col-span-2">
+          <AlertTitle>{invalidLabels.length === 1 ? 'One saved setting is invalid' : `${invalidLabels.length} saved settings are invalid`}</AlertTitle>
+          <AlertDescription>
+            {invalidLabels.join(', ')} couldn't be used, so the default values are showing. Enter valid values and save to repair.
+          </AlertDescription>
+        </Alert>
+      )}
       <nav aria-label="Settings sections" className="min-w-0 lg:sticky lg:top-20">
         <ul className="flex min-w-0 gap-1 overflow-x-auto pb-1 lg:grid lg:overflow-visible lg:pb-0">
           {SECTIONS.map(({ key, label, hint, icon: Icon }) => (
-            <li key={key} className="shrink-0">
+            <li key={key} className="min-w-0 shrink-0">
               <Button
                 type="button"
                 variant="ghost"
                 onClick={() => go(key)}
                 aria-current={active === key ? 'page' : undefined}
                 className={cn(
-                  'h-auto w-full items-start justify-start gap-2.5 rounded-lg px-3 py-2 text-left',
+                  'h-auto w-full items-start justify-start gap-2.5 whitespace-normal rounded-lg px-3 py-2 text-left',
                   active === key ? 'bg-[var(--horizon-lavender)] text-[var(--horizon-purple-deep)]' : 'hover:bg-[var(--horizon-lavender-soft)]',
                 )}
               >
@@ -691,6 +746,7 @@ export default function PlatformSettings({ initialConfig, initialEvents }: { ini
         {active === 'features' && <FeaturesSection key={`f${version}`} {...shared} />}
         {active === 'social' && <SocialSection key={`s${version}`} {...shared} />}
         {active === 'directory' && <DirectorySection key={`d${version}`} {...shared} />}
+        {active === 'discord' && <DiscordIntegrationSettings />}
         {active === 'operations' && <OperationsSection {...shared} />}
         {active === 'history' && <HistorySection {...shared} events={events} restore={restore} />}
       </div>

@@ -2,10 +2,9 @@ import type { Db } from "mongodb";
 import {
   ballotOutcomeLabel,
   resolveBallotClosure,
-  type ComputedBallotOutcome,
   type FormalDecisionRecord,
 } from "./ballots.ts";
-import { normalizeProposalDoc, normalizeStage } from "./store.ts";
+import { normalizeProposalDoc, normalizeStage } from "./proposal-helpers.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 import type {
   PolicyProvenance,
@@ -78,7 +77,7 @@ export interface ProposalRegisterRow {
 export interface CertifiedBallotResult {
   ballotId: string;
   result: FormalDecisionRecord["result"];
-  computedResult?: ComputedBallotOutcome;
+  computedResult?: FormalDecisionRecord["computedResult"];
   /** Versioned rule the computed outcome was derived from. */
   ruleBasis?: string;
   /** Votes bound to the ballot and revision at the moment of certification. */
@@ -230,7 +229,10 @@ export function registerPageHref(
 
 export function registerRuleBasisLabel(ruleBasis?: string): string | undefined {
   if (!ruleBasis) return undefined;
-  return ruleBasis === "simple-majority-d9-v1" ? "Simple majority (D9)" : ruleBasis;
+  if (ruleBasis === "simple-majority-d9-v1") return "Simple majority (D9)";
+  if (ruleBasis === "two-tier-quorum-simple-majority-v1")
+    return "Two-tier quorum and simple majority";
+  return ruleBasis;
 }
 
 /**
@@ -425,7 +427,10 @@ function toCertifiedResult(raw: Record<string, any>): CertifiedBallotResult {
     ),
     result: raw.result as FormalDecisionRecord["result"],
     ...(raw.computedResult
-      ? { computedResult: raw.computedResult as ComputedBallotOutcome }
+      ? {
+          computedResult:
+            raw.computedResult as FormalDecisionRecord["computedResult"],
+        }
       : {}),
     ...(raw.ruleBasis ? { ruleBasis: String(raw.ruleBasis) } : {}),
     ...(asTally(raw.tally) ? { tally: asTally(raw.tally)! } : {}),

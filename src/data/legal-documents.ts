@@ -566,7 +566,7 @@ export const termsOfUse: LegalDocument = {
   shortTitle: "Terms of Use",
   description:
     "The rules for browsing and taking part in Engage, Fusion Party Australia's member participation and governance platform.",
-  version: "1.2 (workflow and access wording; publication pending)",
+  version: "1.3 (quorum wording; publication pending)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -576,7 +576,7 @@ export const termsOfUse: LegalDocument = {
   registeredPartyAbbreviation: "votefusion.org",
   address: "254 McLeod Lane, Mansfield VIC 3722",
   contact: "contact@fusionparty.org.au",
-  lastUpdated: "15 November 2026",
+  lastUpdated: "16 November 2026",
   sections: [
     {
       id: "operator",
@@ -802,7 +802,7 @@ export const termsOfUse: LegalDocument = {
       blocks: [
         {
           type: "paragraph",
-          text: `Engage counts the votes bound to each ballot and computes the outcome under the published simple-majority rule (rule version simple-majority-d9-v1): Yes greater than No approves the question, while a tie or a ballot with no votes does not. Abstentions are recorded but do not change that comparison, and no quorum or minimum turnout applies. An authorised administrator records the formal result. If the recorded result differs from the computed outcome, it may be recorded only as an explicit override with a written reason, which is kept with the result and in the audit record. This rule applies to ordinary Yes/No ballots on a matter. Amendment endorsement ballots follow a separate procedure, and their result is recorded by an authorised administrator. Aggregate tallies are public and, in a very small ballot, may effectively reveal how a small number of voters voted.`,
+          text: `Engage counts the votes bound to each ballot and applies two participation tests before it treats a ballot as able to make a decision. Engage must have at least 30 eligible registered members when the ballot closes. The ballot must also meet its own participation requirement, calculated from the number of eligible members who were active on Engage in the 90 days before closure. The requirement is the greater of the square root of that active electorate, rounded up, or half of that electorate rounded up to a maximum of 30. You can vote for, vote against or abstain: all three count towards participation, but abstentions do not change the Yes-versus-No comparison. A ballot that fails either test is inconclusive, not rejected. These rules are an adaptation of Fusion's constitutional quorum principles, not a general-meeting quorum, and apply to ballots that close on or after 16 November 2026. Earlier ballots are not reassessed. The approval rule remains version simple-majority-d9-v1: Yes greater than No approves the question, while a tie or a ballot with no votes does not. An authorised administrator records the formal result. If the recorded result differs from the computed approval outcome, it may be recorded only as an explicit override with a written reason, which is kept with the result and in the audit record. A quorum failure cannot be overridden into approval or rejection. This procedure applies to ordinary Yes/No ballots on a matter. Amendment endorsement ballots follow a separate procedure, and their result is recorded by an authorised administrator. Aggregate tallies are public and, in a very small ballot, may effectively reveal how a small number of voters voted.`,
         },
         {
           type: "paragraph",
