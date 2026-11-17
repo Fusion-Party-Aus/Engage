@@ -8,9 +8,13 @@ This is an operational draft. It is not legal advice, and the items under "Decis
 
 ## What the contributor is told
 
-The form asks for one attestation before sending:
+The form asks for two attestations before sending:
 
-> This is my own story and my own photos, and I have the right to share them, including permission from anyone who can be recognised in a photo. I've read the privacy policy.
+> I'm 18 or over.
+>
+> This is my own story and my own photos, I have the right to share them, and I have permission from anyone who can be recognised in a photo. I've read the privacy policy.
+
+The photo field adds: "If other people are recognisable, ask them first. Photographs must not show identifiable children."
 
 The photo field also says:
 
@@ -40,12 +44,16 @@ Credit follows the contributor's choice on the form. When named credit is chosen
 
 ## Minors
 
-Proposed rule, awaiting approval:
+Pilot rule, adopted 17 November 2026:
 
-- Do not accept photographs of anyone under 18, including a contributor's own children, beyond a photo where the minor is not identifiable (for example, a distant crowd).
-- Do not accept a story that identifies a minor without a parent or guardian's consent, recorded in internal notes.
-- A guardian may contribute on a minor's behalf. Record the relationship and consent. Do not name the minor in public copy.
-- If a submitted photo might show a minor and the reviewer is unsure, decline and ask. Do not guess.
+- Contributors must be 18 or over. The form asks for a simple attestation, with no date of birth and no identity documents.
+- Do not publish photographs containing an identifiable child, even with a parent or guardian's permission.
+- A photograph is acceptable only when any children in it are genuinely unidentifiable and no contextual clue identifies them.
+- Adults may discuss parenting or family life, but do not publish identifying details about a child.
+- Do not accept a submission made on behalf of a child during this pilot.
+- When uncertain, hold the photograph for clarification or decline it.
+
+This is a Fusion editorial safeguard, not a claim about Australian law. A minor's capacity to consent is not settled by a universal age.
 
 ## Reviewer checklist
 
@@ -73,7 +81,7 @@ Permission for AI-assisted edits is off by default and separate from ordinary ed
 
 ## The public gallery
 
-An approved story appears on the invitation's public gallery only when the contributor allowed the website channel. Credit follows their choice; "no name" means no name is stored or printed, though a photograph may still identify them. Hide a story from the gallery if a question arises, rather than withdrawing it, when the material may still be used elsewhere. Hiding and restoring are reviewer actions with an audit trail. Written consultation responses are never published individually.
+Approving a story does not publish it. An approved story appears on the invitation's public gallery only after a reviewer presses "Publish to gallery", and only when the contributor allowed the website channel. Credit follows their choice; "no name" means no name is stored or printed, though a photograph may still identify them. Hide a story from the gallery if a question arises, rather than withdrawing it, when the material may still be used elsewhere. Hiding and restoring are reviewer actions with an audit trail. Written consultation responses are never published individually.
 
 ## Publishing and recording use
 
@@ -92,21 +100,29 @@ Implemented:
 - An approved contribution's reply address is cleared after 12 months. The story stays while it may be in use.
 - `npm run collaboration:retention` reports what would be cleared. `--apply` performs it. Run it monthly and record the output.
 
-Operational commitments, requiring approval:
+Removal commitments, adopted 17 November 2026:
 
-- A correction or removal request sent to the invitation's correction address is actioned within 5 working days.
-- If material was published in error, remove it from the live site within 1 business day, tell the contributor, and record what happened.
-- Approved material still in use is reviewed annually, and removed when it is no longer used.
+| Action | Commitment |
+|---|---|
+| Acknowledge a correction or removal request | Within 1 business day |
+| Hide disputed material from Engage | As soon as practicable, no later than 1 business day |
+| Remove material published in error | Immediately on discovery where possible |
+| Complete the review and resolve the request | Within 5 business days |
+| Remove Fusion-controlled copies elsewhere | Within 5 business days where technically possible |
+| Material already distributed outside Engage | Start takedown requests and explain the limits |
+
+Hiding is quick and reversible. Permanent withdrawal and deletion follow verification, and cannot recall a copy someone already downloaded, reposted or printed. Never promise more than that.
+
+The commitments only hold if someone owns the inbox. The correction address needs a named owner and a named backup, recorded in the pilot's operating notes.
 
 ## Decisions still needed
 
-1. Approve or amend the minors rule above.
-2. Approve the credit format and whether credit must appear beside the image or at the end of a page.
-3. Approve the removal and mistaken-publication timeframes.
-4. Confirm the retention periods in code (`RETENTION` in `src/lib/collaboration.ts`).
-5. Complete legal review of the privacy policy text added in version 1.3 for this purpose.
-6. Decide whether a signed-in member contributing a story needs a separate notice or consent step.
-7. Confirm who owns the monthly retention sweep and where its output is recorded.
+1. Approve the credit format and whether credit must appear beside the image or at the end of a page.
+2. Confirm the retention periods in code (`RETENTION` in `src/lib/collaboration.ts`).
+3. Complete legal review of the privacy policy text added for this purpose (version 1.4).
+4. Decide whether a signed-in member contributing a story needs a separate notice or consent step.
+5. Name the owner and backup for the correction inbox, and confirm who runs the monthly retention sweep and where its output is recorded.
+6. Approve a way to describe individual photographs, if reviewers find the single caption too coarse.
 
 ## Where the rules are enforced
 

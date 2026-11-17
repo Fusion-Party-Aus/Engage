@@ -72,6 +72,7 @@ const ownerAuthorisedApproval: LegalApproval = {
     "Review the story and photograph contribution purpose: publication channels, credit, editing and AI-assisted editing permissions, photographer and third-party rights, and guidance for photographs of minors.",
     "Confirm the retention schedule for story contributions (withdrawal immediate; declined 90 days; approved reply address 12 months) and the review of approved material still in use.",
     "Confirm whether a separate consent step or notice is needed when an existing member contributes a story while signed in.",
+    "Confirm that aggregate invitation counts (arrival, start, submission, account step), with no identifiers and 13-month retention, are consistent with the analytics disclosure.",
     "After publication approval, activate the legal acceptance gate by setting both documents to published status and enabling LEGAL_ACCEPTANCE_ENABLED.",
   ],
 };
@@ -82,7 +83,7 @@ export const privacyPolicy: LegalDocument = {
   shortTitle: "Privacy Policy",
   description:
     "How Fusion Party Australia collects, uses, shares and retains personal information in Engage.",
-  version: "1.3 (story contributions; publication pending)",
+  version: "1.4 (story contributions and aggregate counts; publication pending)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -190,7 +191,12 @@ export const privacyPolicy: LegalDocument = {
         { type: "subheading", text: "Story and photograph contributions" },
         {
           type: "paragraph",
-          text: `You can send a story, photographs, or both to a public invitation without an account and without being a party member. We collect what you write, the photographs and caption you attach, the name you ask us to use, any email address you give us so we can reply, and the permissions you choose for publication channels, credit, ordinary editing and AI-assisted editing. We record the version of the consent you accepted and the time. If a reviewer approves the material, we also record the decision, the actor, the time, and where approved material is used. Photographs are stripped of location, device and other metadata before they are stored.`,
+          text: `You can send a story, photographs, or both to a public invitation without an account and without being a party member. We collect what you write, the photographs and caption you attach, the name you ask us to use, any email address you give us so we can reply, and the permissions you choose for publication channels, credit, ordinary editing and AI-assisted editing. We ask you to confirm that you are 18 or over; we do not collect dates of birth or identity documents. We do not publish photographs that show identifiable children. We record the version of the consent you accepted and the time. If a reviewer approves the material, we also record the decision, the actor, the time, and where approved material is used. Photographs are stripped of location, device and other metadata before they are stored.`,
+        },
+        { type: "subheading", text: "Aggregate interest counts" },
+        {
+          type: "paragraph",
+          text: `For each public invitation we count four events: the page being opened, the first interaction with the form, a contribution being accepted, and the optional account step being opened. A record contains only the invitation, a UTC date, the event type and a count. We do not record a cookie, session, IP address, account identifier or anything typed, and the counts cannot be linked to a person. Counts are kept for about 13 months, then deleted. An editor sees the totals and conversion percentages for the last 30 days.`,
         },
         { type: "subheading", text: "Technical and operational information" },
         {

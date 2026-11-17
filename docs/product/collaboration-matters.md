@@ -15,7 +15,7 @@ This page records the model, the consent rules, the data handling and what is de
 - A submitter chooses publication channels (website, social, email, print), whether to be named, whether ordinary edits are allowed, and separately whether AI-assisted photo edits are allowed. All channels may be left unselected, which means private consultation only.
 - Every contribution lands in a private review queue at `/admin/collaboration/`. A reviewer records `new`, `needs follow-up`, `approved`, `declined` or `withdrawn`.
 - Approval is not publication. Where an approved contribution is actually used is recorded separately, per permitted channel, with a reference.
-- Stories approved for the **website** channel appear on a public gallery at `/collaborate/<slug>/stories/`. A reviewer can hide a story from the gallery without withdrawing it.
+- An approved story with website consent can be **published** to a public gallery at `/collaborate/<slug>/stories/`. Approval and publication are separate: approving for editorial use never makes a story public. A reviewer can hide a published story, or show it again, without changing its approval.
 - Approved material is also handed to the website team by downloading a JSON export. There is no CMS integration yet.
 
 An Engage account and Fusion party membership are separate things, and neither is required here. A contribution creates no account, no membership and no branch affiliation. A contributor who later creates an account is offered an optional next step, not a condition of contributing.
@@ -75,6 +75,21 @@ Server-side enforcement lives in `submitContribution` and `reviewContribution` (
 
 The attestation is a promise, not a check. Reviewers apply [story and photograph contribution safeguards](../guides/story-contribution-safeguards.md), which cover photographer credit, other identifiable people, minors, AI edits and mistaken publication.
 
+## Aggregate interest counts
+
+Each invitation records four events so an editor can see where people stop:
+
+| Stage | When it is counted | Recorded by |
+|---|---|---|
+| Arrival | The invitation page loads in a browser that runs scripts | Browser |
+| Started | First interaction with a form field | Browser |
+| Sent | A contribution is accepted | Server |
+| Opened account creation | The optional account step is opened from the success screen | Browser |
+
+A row holds the invitation, a UTC day, the stage, a count and an expiry. Nothing else. There is no cookie, session, IP address, identifier or typed content, so the numbers measure events, not unique people, and cannot be linked to anyone. Rows expire after about 13 months, and the public event endpoint is rate limited to 30 events a minute per hashed address.
+
+The invitation editor shows the last 30 days: arrivals, starts, sends, account steps, and three conversion percentages. Treat these as a rough drop-off signal. Script blockers and bots mean arrivals are undercounted and occasionally inflated; and an account step is not a registration.
+
 ## Data handling
 
 Collections, all indexed at startup (`src/lib/db.ts`):
@@ -83,16 +98,18 @@ Collections, all indexed at startup (`src/lib/db.ts`):
 - `collaboration_contributions`: answers, caption, name, optional contact email, consent scope, status, notes, media descriptors, version, consent version.
 - `collaboration_media`: the image bytes, MIME type, SHA-256 and original filename.
 - `collaboration_events`: the review audit trail.
+- `collaboration_funnel`: aggregate counts per invitation, day and stage, with a TTL.
 
 Photographs:
 
 - JPEG and PNG only, decided by file signature. The declared MIME type is ignored.
 - Three files maximum, 5 MB each and 12 MB total. `Content-Length` is checked before the body is read.
 - Metadata segments are removed before storage: EXIF, XMP and JPEG comments; PNG `tEXt`, `zTXt`, `iTXt` and `eXIf`. Pixels are not altered.
-- Bytes are stored in a separate collection and are reachable only through `/api/admin/collaboration/media/<mediaId>`, which requires `collaboration.review`. There is no public image route.
+- Bytes are stored in a separate collection. Reviewers read them through `/api/admin/collaboration/media/<mediaId>`, which requires `collaboration.review`. A published story's photographs are also served from `/api/collaboration/media/<mediaId>`, which re-checks approval, explicit publication, website consent, profile and hidden state on every request and is not cached.
 - The list read never selects image bytes.
 - The public gallery route re-checks approval, website consent, profile and hidden state on every request, so no published copy survives withdrawal.
-- Withdrawal deletes the story text, name, reply address and photographs immediately, keeping only the review record and its date. Declined material is cleared 90 days after the decision, and an approved reply address is cleared after 12 months. `npm run collaboration:retention` reports what is due and `--apply` performs it.
+- Withdrawal deletes the stored story text, name, reply address and photographs immediately, keeping only the review record and its date. It cannot recall a copy someone downloaded, screenshotted, reposted or printed before the withdrawal; the safeguards describe how those are chased.
+- Declined material is cleared 90 days after the decision, and an approved reply address is cleared after 12 months. `npm run collaboration:retention` reports what is due and `--apply` performs it.
 
 Abuse protection:
 
@@ -135,7 +152,7 @@ Review contributions at `/admin/collaboration/`, record uses, and download the a
 - Horizon CMS integration. Hand-off is a manual export.
 - Funnel analytics from arrival to submission. No event is emitted today.
 - Automated contributor email, including a withdrawal receipt.
-- Approval of the safeguards draft: the minors rule, credit format, removal timeframes and retention periods. The privacy policy now describes this purpose (version 1.3) but remains owner-authorised and unreviewed, so it must not be published as legally cleared.
+- Approval of the safeguards draft: the minors rule, credit format, removal timeframes and retention periods. The privacy policy now describes this purpose and the aggregate counts (version 1.4) but remains owner-authorised and unreviewed, so it must not be published as legally cleared.
 
 ## Verification
 
@@ -145,4 +162,5 @@ Review contributions at `/admin/collaboration/`, record uses, and download the a
 - Retention coverage in `src/lib/collaboration.test.ts`: withdrawal clears material at once, the sweep is dry by default and only clears past its window, and an approved reply address is cleared after a year.
 - `src/lib/collaboration-mongo.test.ts`: real MongoDB coverage for unique references, version concurrency, BSON media round-trip and export isolation. Run with `VOTING_TEST_MONGODB_URI` set.
 - Rendered journeys on 17 November 2026, in a production build against MongoDB: a guest submits a story with a photograph (201) and sees the success screen with a reference; a private-only response is accepted as consultation input; a second invitation is created as a draft (public page 404), opened (200) and archived (404); review notes survive a reload and a later status change; the private media route returns 401 without a reviewer session; desktop and 390 px mobile layouts have no horizontal overflow and no console or request errors.
-- Gallery journeys: an approved website story appears with the chosen credit and photograph; hiding it removes it from the gallery and its media route returns 404; restoring it brings both back; withdrawal removes it permanently. Written consultation responses never appear.
+- Gallery journeys: approving a website story leaves it out of the gallery; publishing it shows the chosen credit and photograph; hiding removes it and its media route returns 404; showing brings both back with the original publication date; withdrawal removes it permanently. Written consultation responses never appear. Screenshots and the environment note are in [gallery evidence](../status/evidence/collaboration-gallery/README.md).
+- Funnel journeys: a page arrival, first form interaction and successful submission each increment their stage once; the editor's 30-day panel shows the counts and conversions; the stored row contains only invitation, day, stage, count and expiry.
