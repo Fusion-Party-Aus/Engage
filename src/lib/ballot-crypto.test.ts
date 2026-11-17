@@ -11,7 +11,8 @@ import {
   loadBallotCryptoConfig,
 } from "./ballot-crypto.ts";
 import { migrateEncryptedVotes } from "./ballot-encryption-migration.ts";
-import { castVote, getProposalDetail } from "./store.ts";
+import { castVote } from "./voting-store.ts";
+import { getProposalDetail } from "./proposals-store.ts";
 import { PROPOSAL_VOTES, ensureProposalVoteIndex, proposalBallotId } from "./vote-storage.ts";
 import type { SessionUser } from "./types.ts";
 
@@ -326,7 +327,7 @@ test(
 
       // Verify outstandingBallots & listMemberActivityStream recognise encrypted votes
       Object.assign(process.env, rotatedEnv);
-      const { listProposals } = await import("./store.ts");
+      const { listProposals } = await import("./proposals-store.ts");
       const { outstandingBallots } = await import("./engagement-email.ts");
       const { listMemberActivityStream } = await import("./member-activity.ts");
       const proposalsForCheck = await listProposals(db, { user: memberA });

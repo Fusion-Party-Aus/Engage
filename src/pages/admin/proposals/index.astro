@@ -7,7 +7,7 @@ import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, Shiel
 import { getSessionUser } from '../../../lib/auth.ts';
 import { ballotActs, type BallotAct } from '../../../lib/ballot-authority.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { isProposalLocked } from '../../../lib/store.ts';
+import { isProposalLocked } from '../../../lib/proposal-helpers.ts';
 import {
   EMPTY_PROPOSAL_REGISTER,
   listProposalRegister,

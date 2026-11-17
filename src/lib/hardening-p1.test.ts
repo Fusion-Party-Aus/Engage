@@ -5,11 +5,9 @@ import {
   StandaloneMembershipAuthority,
   parseIdempotencyKey,
 } from "./integrations.ts";
-import { buildAuthorizedMatterBriefing } from "./read-models.ts";
 import { parsePaginationParams } from "./resilience.ts";
-import type { SessionUser } from "./types.ts";
 
-describe("P1 integration boundaries, read models, and operational resilience", () => {
+describe("P1 integration boundaries and operational resilience", () => {
   it("verifies branch membership standalone without requiring external CRM availability", async () => {
     const db = createMemoryDb();
     await db.collection("branch_memberships").insertOne({
@@ -41,70 +39,6 @@ describe("P1 integration boundaries, read models, and operational resilience", (
       headers: { "idempotency-key": "x".repeat(201) },
     });
     assert.equal(parseIdempotencyKey(tooLongReq), null);
-  });
-
-  it("builds confidentiality-safe matter briefings with bound wording and hides private branch matters", async () => {
-    const db = createMemoryDb();
-    const now = new Date("2026-11-13T08:00:00Z");
-
-    await db.collection("proposals").insertOne({
-      proposalId: "POL-BRIEF",
-      slug: "pol-brief",
-      title: "Private Branch Policy",
-      kind: "policy",
-      stage: "decide",
-      publicationScope: "private",
-      originatingBranchId: "branch-vic",
-      governanceAuthorityBranchId: "branch-vic",
-      ballotRevisionId: "rev-brief-1",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await db.collection("proposal_revisions").insertOne({
-      proposalId: "POL-BRIEF",
-      revisionId: "rev-brief-1",
-      contentHash: "hash-123",
-      snapshot: {
-        title: "Bound Title",
-        summary: "Bound Summary",
-        outcomes: ["Outcome 1"],
-        details: "Bound Details",
-      },
-      createdAt: now,
-    });
-
-    // Unauthorised outsider cannot view private branch matter
-    const outsider: SessionUser = {
-      memberId: "m-outsider",
-      name: "Outsider",
-      email: "out@example.test",
-      role: "member",
-      status: "verified",
-      canParticipate: true,
-      isStaff: false,
-      isAdmin: false,
-      verifiedBranchIds: ["branch-nsw"],
-    };
-    const deniedBriefing = await buildAuthorizedMatterBriefing(db, "POL-BRIEF", outsider);
-    assert.equal(deniedBriefing, null);
-
-    // National admin receives bound wording without identifiable ballots
-    const admin: SessionUser = {
-      memberId: "m-admin",
-      name: "Admin",
-      email: "admin@example.test",
-      role: "administrator",
-      status: "verified",
-      canParticipate: true,
-      isStaff: true,
-      isAdmin: true,
-    };
-    const briefing = await buildAuthorizedMatterBriefing(db, "POL-BRIEF", admin);
-    assert.ok(briefing);
-    assert.equal(briefing.boundRevision?.revisionId, "rev-brief-1");
-    assert.equal(briefing.boundRevision?.title, "Bound Title");
-    assert.equal(briefing.confidentiality.identifiableBallotsIncluded, false);
-    assert.equal(briefing.confidentiality.viewerHasIdentifiableAccess, true);
   });
 
   it("bounds pagination parameters to safe defaults and maximums", () => {

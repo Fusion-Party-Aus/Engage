@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/button';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { getSiteConfig } from '../../lib/site-config.ts';
-import { listProposals } from '../../lib/store.ts';
+import { listProposals } from '../../lib/proposals-store.ts';
 import { branchPublicSlug, policyBranchPath } from '../../lib/policy-registry.ts';
 export const prerender = false;
 const env = runtimeEnv(Astro.locals);

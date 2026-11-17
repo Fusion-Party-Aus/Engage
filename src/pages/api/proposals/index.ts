@@ -7,7 +7,7 @@ import {
 } from "../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { requireLegalAcceptance } from "../../../lib/legal-acceptance.ts";
-import { listProposals, saveProposal } from "../../../lib/store.ts";
+import { listProposals, saveProposal } from "../../../lib/proposals-store.ts";
 
 export const prerender = false;
 

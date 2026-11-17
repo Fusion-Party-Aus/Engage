@@ -17,7 +17,8 @@ import {
   recordFormalDecision,
   upsertMatterBallot,
 } from "./ballots.ts";
-import { castVote, listProposals } from "./store.ts";
+import { castVote } from "./voting-store.ts";
+import { listProposals } from "./proposals-store.ts";
 import type { PlatformEnv, SessionUser, VoteChoice } from "./types.ts";
 import {
   PROPOSAL_VOTES,

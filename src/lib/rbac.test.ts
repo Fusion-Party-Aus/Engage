@@ -17,7 +17,9 @@ import {
   revokeRoleAssignment,
   saveRoleDefinition,
 } from "./roles-store.ts";
-import { castVote, listMembers, saveMember, saveProposal } from "./store.ts";
+import { castVote } from "./voting-store.ts";
+import { listMembers, saveMember } from "./members-store.ts";
+import { saveProposal } from "./proposals-store.ts";
 import { GET as getAmendments } from "../pages/api/amendments.ts";
 import { POST as postRoles, DELETE as deleteRoles, GET as getRoles } from "../pages/api/admin/roles/index.ts";
 import type { SessionUser } from "./types.ts";

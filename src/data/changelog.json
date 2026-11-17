@@ -1,28 +1,29 @@
 [
   {
-    "hash": "a6b4168",
+    "hash": "28dc590",
     "date": "2026-11-17",
-    "type": "fix",
-    "category": "fix",
-    "scope": "settings",
-    "summary": "Tie-break site settings events by insertion order"
+    "type": "docs",
+    "category": "docs",
+    "scope": "architecture",
+    "summary": "Document domain modules after barrel removal (#119)"
   },
   {
-    "hash": "3453e65",
+    "hash": "a885025",
     "date": "2026-11-17",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record database initialisation change (#136)"
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "store",
+    "summary": "Import domain modules directly and delete the barrel (#119)",
+    "details": "Migrate every page, component and test importer from the deprecated src/lib/store.ts barrel to the owning domain module, then remove the barrel. The architecture test now fails if the barrel returns, if any source file imports it, or if a production lib module imports a page/component directory."
   },
   {
-    "hash": "602ec11",
+    "hash": "ad8deae",
     "date": "2026-11-17",
     "type": "perf",
     "category": "improvement",
     "scope": "db",
-    "summary": "Cut fresh database initialisation cost (#136)",
-    "details": "A fresh test database spent ~1.25 s in `initializeDatabase`, called 18 times per suite (~22 s). Index creation dominated: 92 `createIndex` calls, each a journal commit on a newly created collection. - Group the index catalogue by collection and send one `createIndexes` command per collection (46 commands). Keys, names, uniqueness, partial filters, TTL and `expireAfterSeconds` are unchanged; a failed grouped command falls back to per-index creation so one legacy conflict cannot block the rest, as before. - Bulk-write the 78 baseline policies instead of one upsert per record. - Split startup into `ensureDatabaseIndexes` (new `src/lib/db-indexes.ts`) and `seedBaselineContent`. `initializeDatabase` still runs both, so production startup and `getDatabase` are unchanged. Mongo tests that seed their own content use the schema half; notification-outbox keeps the full path and asserts the seeded register and indexes. - The in-memory preview implements `createIndexes` and `bulkWrite`. Verified on the local replica set: index phase 1.44 s -> 0.76 s and total 1.27 s -> 0.95 s over six interleaved pairs (shared host, so absolute wall time varied). A fresh database has the same 47 collections and 139 indexes, and the same 78 proposals and revisions, before and after. Full suite (833 tests) passed twice; each run left only `admin`, `config`, `engage` and `local`."
+    "summary": "Cut fresh database initialisation cost (#136) (#151)",
+    "details": "* perf(db): cut fresh database initialisation cost (#136) A fresh test database spent ~1.25 s in `initializeDatabase`, called 18 times per suite (~22 s). Index creation dominated: 92 `createIndex` calls, each a journal commit on a newly created collection. - Group the index catalogue by collection and send one `createIndexes` command per collection (46 commands). Keys, names, uniqueness, partial filters, TTL and `expireAfterSeconds` are unchanged; a failed grouped command falls back to per-index creation so one legacy conflict cannot block the rest, as before. - Bulk-write the 78 baseline policies instead of one upsert per record. - Split startup into `ensureDatabaseIndexes` (new `src/lib/db-indexes.ts`) and `seedBaselineContent`. `initializeDatabase` still runs both, so production startup and `getDatabase` are unchanged. Mongo tests that seed their own content use the schema half; notification-outbox keeps the full path and asserts the seeded register and indexes. - The in-memory preview implements `createIndexes` and `bulkWrite`. Verified on the local replica set: index phase 1.44 s -> 0.76 s and total 1.27 s -> 0.95 s over six interleaved pairs (shared host, so absolute wall time varied). A fresh database has the same 47 collections and 139 indexes, and the same 78 proposals and revisions, before and after. Full suite (833 tests) passed twice; each run left only `admin`, `config`, `engage` and `local`. * chore(changelog): record database initialisation change (#136) * fix(settings): tie-break site settings events by insertion order * chore(changelog): record the site event ordering fix"
   },
   {
     "hash": "90bc0c1",

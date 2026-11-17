@@ -1,12 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryDb, getDatabase } from "./db.ts";
-import {
-  saveProposal,
-  deleteProposal,
-  deleteComment,
-  listProposals,
-} from "./store.ts";
+import { saveProposal, deleteProposal, listProposals } from "./proposals-store.ts";
+import { deleteComment } from "./comments-store.ts";
 import { listSense, reviewSense } from "./sense-box.ts";
 import { GET as getBranches } from "../pages/api/admin/branches.ts";
 import { POST as postReferrals } from "../pages/api/admin/branches/referrals.ts";

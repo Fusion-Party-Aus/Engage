@@ -1,14 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryDb } from "./db.ts";
-import {
-  MAX_COMMENT_DEPTH,
-  addComment,
-  deleteComment,
-  getProposalDetail,
-  saveProposal,
-  voteOnComment,
-} from "./store.ts";
+import { MAX_COMMENT_DEPTH, addComment, deleteComment, voteOnComment } from "./comments-store.ts";
+import { getProposalDetail, saveProposal } from "./proposals-store.ts";
 import { toCommentDto } from "./api-contracts.ts";
 import type { SessionUser } from "./types.ts";
 

@@ -2,7 +2,8 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { branchesWithPermission, hasPermission } from "../../../../lib/rbac.ts";
-import { getProposalDetail, isGovernanceResolution } from "../../../../lib/store.ts";
+import { getProposalDetail } from "../../../../lib/proposals-store.ts";
+import { isGovernanceResolution } from "../../../../lib/proposal-helpers.ts";
 import { proposalBallotResultFilter } from "../../../../lib/ballots.ts";
 import { buildProposalPdfReport } from "../../../../lib/proposal-pdf.ts";
 

@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
-import { listProposalRevisions } from "../../../../lib/store.ts";
+import { listProposalRevisions } from "../../../../lib/proposals-store.ts";
 
 export const prerender = false;
 

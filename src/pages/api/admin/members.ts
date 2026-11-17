@@ -8,7 +8,7 @@ import {
 } from "../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { hasPermission, requireApiPermission } from "../../../lib/rbac.ts";
-import { listMembers, saveMember } from "../../../lib/store.ts";
+import { listMembers, saveMember } from "../../../lib/members-store.ts";
 import { resolveOpenVerificationReviews } from "../../../lib/membership-verification.ts";
 import { sendVerificationNotice } from "../../../lib/verification-email.ts";
 export const prerender = false;

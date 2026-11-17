@@ -5,7 +5,7 @@ import PolicyRegistry from '../../components/policy/PolicyRegistry.astro';
 import { Card, CardContent } from '../../components/ui/card';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { groupRegistryByBranch, groupRegistryPolicies } from '../../lib/policy-registry.ts';
-import { isPolicyRegistryRecordForResolution } from '../../lib/store.ts';
+import { isPolicyRegistryRecordForResolution } from '../../lib/proposal-helpers.ts';
 export const prerender = false;
 const db = await getDatabase(runtimeEnv(Astro.locals));
 const q = (Astro.url.searchParams.get('q') ?? '').trim();

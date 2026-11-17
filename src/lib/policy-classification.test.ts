@@ -6,8 +6,8 @@ import {
   isGovernanceResolution,
   isPolicyProposal,
   isPolicyRegistryRecordForResolution,
-  saveProposal,
-} from "./store.ts";
+} from "./proposal-helpers.ts";
+import { saveProposal } from "./proposals-store.ts";
 import { POST as postRatify } from "../pages/api/admin/policies/ratify.ts";
 import { POST as postPublish } from "../pages/api/admin/policies/publish.ts";
 import { POST as postWithdraw } from "../pages/api/admin/policies/withdraw.ts";
