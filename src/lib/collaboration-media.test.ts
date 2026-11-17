@@ -76,9 +76,10 @@ test("an oversized photograph is refused before storage", () => {
   assert.throws(() => prepareImage(oversized), /MB or smaller/);
 });
 
-test("the declared upload size is bounded, and an absent header is not a refusal", () => {
-  assert.doesNotThrow(() => assertUploadSize(null));
+test("an upload must declare a bounded size before its body is read", () => {
   assert.doesNotThrow(() => assertUploadSize("1000"));
+  assert.throws(() => assertUploadSize(null), /Reload the page/);
+  assert.throws(() => assertUploadSize("not-a-number"), /Reload the page/);
   assert.throws(() => assertUploadSize(String(MEDIA_LIMITS.totalBytes + 1024 * 1024)), /MB or less/);
 });
 

@@ -3,9 +3,12 @@ import { test } from "node:test";
 import { createMemoryDb } from "./db.ts";
 import {
   CollaborationError,
+  createInitiative,
   exportApproved,
   getInitiative,
+  getPublicInitiative,
   listContributions,
+  listInitiatives,
   purgeExpiredContent,
   readContributionMedia,
   reviewContribution,
@@ -478,4 +481,372 @@ test("the pilot photographs accepted by the form are JPEG or PNG only", async ()
     /JPEG or PNG/,
   );
   assert.throws(() => prepareImage(Buffer.from("GIF89a")), /JPEG or PNG/);
+});
+
+const newInvitation = {
+  title: "Our stories",
+  summary: "Real stories from people who work with Fusion in their own communities.",
+  purpose: "We want to show the work as it happens, in the words of the people doing it.",
+  question: "What are you working on?",
+  correctionEmail: "stories@fusionparty.org.au",
+};
+
+test("editors create invitations as drafts, with unique addresses, and only they can do it", async () => {
+  const db = await setup();
+  await assert.rejects(createInitiative(db, outsider, newInvitation), /permission/);
+  await assert.rejects(createInitiative(db, null, newInvitation), /Sign in/);
+
+  const first = await createInitiative(db, reviewer, newInvitation);
+  assert.equal(first.status, "draft");
+  assert.equal(first.slug, "our-stories");
+  assert.equal(first.questions.length, 1);
+  assert.equal(await getPublicInitiative(db, first.slug), null);
+
+  const second = await createInitiative(db, reviewer, newInvitation);
+  assert.equal(second.slug, "our-stories-2");
+  assert.equal(await getInitiative(db, second.slug).then((item) => item?.slug), "our-stories-2");
+});
+
+test("creation validates the title, wording, question, correction address and slug input", async () => {
+  const db = await setup();
+  for (const change of [
+    { title: "A" },
+    { summary: "short" },
+    { purpose: "short" },
+    { question: "No" },
+    { correctionEmail: "not-an-email" },
+  ]) {
+    await assert.rejects(createInitiative(db, reviewer, { ...newInvitation, ...change }), CollaborationError);
+  }
+  const punctuation = await createInitiative(db, reviewer, { ...newInvitation, title: "What's your story?!" });
+  assert.equal(punctuation.slug, "what-s-your-story");
+});
+
+test("a draft is private, opening publishes it, and archiving hides it again", async () => {
+  const db = await setup();
+  const created = await createInitiative(db, reviewer, newInvitation);
+  const answer = {
+    ...submission(),
+    initiativeSlug: created.slug,
+    answers: { [created.questions[0]!.key]: "A long enough answer about the work we are doing." },
+  };
+  await assert.rejects(submitContribution(db, answer), /not accepting/);
+
+  const open = await updateInitiative(db, reviewer, {
+    slug: created.slug,
+    title: created.title,
+    summary: created.summary,
+    purpose: created.purpose,
+    status: "open",
+    correctionEmail: created.correctionEmail,
+    questions: created.questions,
+  });
+  assert.equal(open.status, "open");
+  assert.equal((await getPublicInitiative(db, created.slug))?.slug, created.slug);
+  const saved = await submitContribution(db, answer);
+  assert.ok(saved.contributionId);
+
+  const paused = await updateInitiative(db, reviewer, {
+    slug: created.slug,
+    title: created.title,
+    summary: created.summary,
+    purpose: created.purpose,
+    status: "paused",
+    correctionEmail: created.correctionEmail,
+    questions: created.questions,
+  });
+  assert.equal(paused.status, "paused");
+  assert.ok(await getPublicInitiative(db, created.slug));
+  await assert.rejects(submitContribution(db, { ...answer, requestId: REQUEST_ID_2 }), /not accepting/);
+
+  const archived = await updateInitiative(db, reviewer, {
+    slug: created.slug,
+    title: created.title,
+    summary: created.summary,
+    purpose: created.purpose,
+    status: "archived",
+    correctionEmail: created.correctionEmail,
+    questions: created.questions,
+  });
+  assert.equal(archived.status, "archived");
+  assert.ok(archived.archivedAt instanceof Date);
+  assert.equal(await getPublicInitiative(db, created.slug), null);
+
+  const restored = await updateInitiative(db, reviewer, {
+    slug: created.slug,
+    title: created.title,
+    summary: created.summary,
+    purpose: created.purpose,
+    status: "open",
+    correctionEmail: created.correctionEmail,
+    questions: created.questions,
+  });
+  assert.equal(restored.archivedAt, null);
+});
+
+test("multiple invitations keep their contributions and counts separate", async () => {
+  const db = await setup();
+  const second = await createInitiative(db, reviewer, newInvitation);
+  await updateInitiative(db, reviewer, {
+    slug: second.slug,
+    title: second.title,
+    summary: second.summary,
+    purpose: second.purpose,
+    status: "open",
+    correctionEmail: second.correctionEmail,
+    questions: second.questions,
+  });
+
+  await submitContribution(db, submission());
+  await submitContribution(db, {
+    ...submission(),
+    requestId: REQUEST_ID_2,
+    initiativeSlug: second.slug,
+    answers: { [second.questions[0]!.key]: "A long enough answer about our local campaign." },
+  });
+
+  const summaries = await listInitiatives(db);
+  const pilot = summaries.find((item) => item.initiative.slug === PILOT_SLUG);
+  const other = summaries.find((item) => item.initiative.slug === second.slug);
+  assert.equal(pilot?.contributions, 1);
+  assert.equal(pilot?.awaitingReview, 1);
+  assert.equal(other?.contributions, 1);
+
+  const inbox = await listContributions(db, reviewer);
+  assert.equal(inbox.total, 2);
+  assert.deepEqual(
+    inbox.items.map((item) => item.initiativeSlug).sort(),
+    [PILOT_SLUG, second.slug].sort(),
+  );
+});
+
+test("changing a decision never erases earlier review notes, and an explicit blank clears them", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission());
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "needs_follow_up",
+    internalNotes: "Photographer gave permission on 3 November.",
+    contributorMessage: "Could you confirm the location?",
+    version: 0,
+  });
+  const saved = await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 1,
+  });
+  assert.equal(saved.status, "approved");
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(row?.internalNotes, "Photographer gave permission on 3 November.");
+  assert.equal(row?.contributorMessage, "Could you confirm the location?");
+
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    internalNotes: "",
+    version: 2,
+  });
+  const cleared = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(cleared?.internalNotes, "");
+});
+
+test("a submission that answers a removed question is refused instead of silently dropping it", async () => {
+  const db = await setup();
+  await assert.rejects(
+    submitContribution(db, submission({ answers: { removedQuestion: "A real answer that would be lost." } })),
+    /invitation changed/,
+  );
+});
+
+test("a contribution keeps the question wording it answered, even after the invitation changes", async () => {
+  const db = await setup();
+  const created = await submitContribution(db, submission());
+  const initiative = (await getInitiative(db, PILOT_SLUG))!;
+  await updateInitiative(db, reviewer, {
+    slug: PILOT_SLUG,
+    title: "Renamed invitation",
+    summary: initiative.summary,
+    purpose: "A rewritten purpose that no longer matches what the contributor read.",
+    status: "open",
+    correctionEmail: initiative.correctionEmail,
+    questions: [{ key: "newKey", label: "A brand new question" }],
+  });
+  const inbox = await listContributions(db, reviewer);
+  const item = inbox.items.find((entry) => entry.contributionId === created.contributionId)!;
+  assert.equal(
+    item.questions.find((question) => question.key === "meaning")?.label,
+    "What does Fusion mean to you?",
+  );
+  assert.equal(item.initiativeTitle, "Help us tell Fusion's story");
+});
+
+test("private consultation input can be accepted without being approved for publication", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission({ channels: [] }));
+  await assert.rejects(
+    reviewContribution(db, reviewer, {
+      contributionId: result.contributionId,
+      action: "set_status",
+      status: "approved",
+      version: 0,
+    }),
+    /private use only/,
+  );
+  const accepted = await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "accept_input",
+    version: 0,
+  });
+  assert.ok(accepted.acceptedAt);
+  assert.equal(accepted.status, "new");
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(row?.inputAcceptedBy, reviewer.memberId);
+  const events = await db.collection("collaboration_events").find({ contributionId: result.contributionId }).toArray();
+  assert.deepEqual(events.map((event) => event.action), ["accept_input"]);
+  const exported = await exportApproved(db, reviewer);
+  assert.equal((exported.contributions as unknown[]).length, 0);
+});
+
+test("withdrawal and retention clearing are terminal for publication", async () => {
+  const db = await setup();
+  const withdrawn = await submitContribution(db, submission());
+  await reviewContribution(db, reviewer, {
+    contributionId: withdrawn.contributionId,
+    action: "set_status",
+    status: "withdrawn",
+    version: 0,
+  });
+  await assert.rejects(
+    reviewContribution(db, reviewer, {
+      contributionId: withdrawn.contributionId,
+      action: "set_status",
+      status: "approved",
+      version: 1,
+    }),
+    /cannot be reopened/,
+  );
+
+  const cleared = await submitContribution(db, submission({ requestId: REQUEST_ID_2 }));
+  await reviewContribution(db, reviewer, {
+    contributionId: cleared.contributionId,
+    action: "set_status",
+    status: "declined",
+    version: 0,
+  });
+  await db.collection("collaboration_contributions").updateOne(
+    { contributionId: cleared.contributionId },
+    { $set: { updatedAt: new Date(Date.now() - 200 * 86_400_000) } },
+  );
+  await purgeExpiredContent(db, { apply: true });
+  await assert.rejects(
+    reviewContribution(db, reviewer, {
+      contributionId: cleared.contributionId,
+      action: "set_status",
+      status: "approved",
+      version: 1,
+    }),
+    /cannot be reopened/,
+  );
+});
+
+test("the same channel can hold several publication placements", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission({ channels: ["website"] }));
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "record_use",
+    channel: "website",
+    reference: "/about/",
+    version: 1,
+  });
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "record_use",
+    channel: "website",
+    reference: "/campaigns/rail/",
+    version: 2,
+  });
+  const item = (await listContributions(db, reviewer)).items[0]!;
+  assert.deepEqual(item.usedChannels, ["website"]);
+  assert.deepEqual(item.publicationHistory.map((entry) => entry.reference), ["/about/", "/campaigns/rail/"]);
+});
+
+test("AI-assisted edits need a reply address so the contributor can approve the result", async () => {
+  const db = await setup();
+  await assert.rejects(
+    submitContribution(
+      db,
+      submission({ allowEdits: true, allowAiEdits: true, contactAllowed: false }),
+    ),
+    /reply address/,
+  );
+  const accepted = await submitContribution(
+    db,
+    submission({
+      allowEdits: true,
+      allowAiEdits: true,
+      contactAllowed: true,
+      email: "sam@example.com",
+    }),
+  );
+  assert.ok(accepted.contributionId);
+});
+
+test("the queue can be searched by the reference a contributor keeps", async () => {
+  const db = await setup();
+  const first = await submitContribution(db, submission());
+  await submitContribution(db, submission({ requestId: REQUEST_ID_2 }));
+  const found = await listContributions(db, reviewer, { q: first.contributionId.slice(0, 8) });
+  assert.equal(found.total, 1);
+  assert.equal(found.items[0]?.contributionId, first.contributionId);
+  assert.equal((await listContributions(db, reviewer, { q: "zzzzzzzz" })).total, 0);
+  assert.equal((await listContributions(db, reviewer, { q: "ab" })).total, 2);
+});
+
+test("a contribution records the purpose the contributor was shown", async () => {
+  const db = await setup();
+  await submitContribution(db, submission());
+  const item = (await listContributions(db, reviewer)).items[0]!;
+  assert.match(item.initiativePurpose, /honest material/);
+});
+
+test("a consultation invitation collects written responses only", async () => {
+  const db = await setup();
+  const created = await createInitiative(db, reviewer, { ...newInvitation, profile: "consultation" });
+  assert.equal(created.profile, "consultation");
+  await updateInitiative(db, reviewer, {
+    slug: created.slug,
+    title: created.title,
+    summary: created.summary,
+    purpose: created.purpose,
+    status: "open",
+    correctionEmail: created.correctionEmail,
+    questions: created.questions,
+  });
+  const answer = {
+    ...submission(),
+    initiativeSlug: created.slug,
+    answers: { [created.questions[0]!.key]: "A clear written response about the station upgrade." },
+    displayName: "Should Not Be Stored",
+    allowEdits: true,
+    allowAiEdits: false,
+  };
+  await assert.rejects(submitContribution(db, answer, [photo()]), /written responses only/);
+  const saved = await submitContribution(db, { ...answer, requestId: REQUEST_ID_2 });
+  assert.ok(saved.contributionId);
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: saved.contributionId });
+  assert.equal(row?.profile, "consultation");
+  assert.equal(row?.displayName, "");
+  assert.equal(row?.attribution, "anonymous");
+  assert.equal(row?.allowEdits, false);
+  assert.equal(row?.hasMedia, false);
 });
