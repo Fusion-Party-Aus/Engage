@@ -1,5 +1,23 @@
 [
   {
+    "hash": "c9a692b",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Separate accounts, membership and contributing",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "49e9bae",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the contribution form clarification",
+    "details": "Refs #143"
+  },
+  {
     "hash": "e12368c",
     "date": "2026-11-17",
     "type": "fix",
@@ -665,21 +683,5 @@
     "category": "docs",
     "scope": "member",
     "summary": "Record lifecycle audit, consent assessment and rollout checks"
-  },
-  {
-    "hash": "52c6570",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Connect verification, participation and legacy consent journeys"
-  },
-  {
-    "hash": "ee47cdf",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record administrator test email delivery"
   }
 ]
