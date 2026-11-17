@@ -310,6 +310,35 @@ try {
   await memberPage.screenshot({ path: path.join(output, 'amendment-composer-mobile.png'), fullPage: true });
   results.push('mobile amendment layout');
 
+  // 10. Global stylesheet smoke across existing shells and the changed admin
+  // surfaces. This is not a pixel diff, but it catches page errors and
+  // horizontal regressions introduced by the shared CSS import.
+  const smoke = await browser.newContext();
+  await smoke.addCookies([{ name: 'engage_dev_user', value: 'administrator', url: origin }]);
+  const smokePage = await smoke.newPage();
+  smokePage.setDefaultTimeout(20_000);
+  smokePage.on('pageerror', (error) => errors.push(`${smokePage.url()}: ${error}`));
+  smokePage.on('console', (message) => {
+    if (message.type() === 'error' && !message.text().startsWith('Failed to load resource:')) errors.push(`${smokePage.url()}: ${message.text()}`);
+  });
+  for (const [width, height, label] of [[1440, 1000, 'desktop'], [390, 844, 'mobile']]) {
+    await smokePage.setViewportSize({ width, height });
+    for (const route of ['/', '/proposals/', '/admin/sense-box/', `/admin/proposals/${slug}/`]) {
+      await smokePage.goto(`${origin}${route}`);
+      const overflow = await smokePage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      assert.equal(overflow, false, `${label} ${route} has no horizontal overflow`);
+    }
+  }
+  await smokePage.setViewportSize({ width: 1440, height: 1000 });
+  await smokePage.goto(`${origin}/proposals/`);
+  await smokePage.keyboard.press('Tab');
+  const outline = await smokePage.evaluate(() => {
+    const element = document.activeElement;
+    return element ? getComputedStyle(element).outlineStyle : '';
+  });
+  assert.notEqual(outline, 'none', 'keyboard focus remains visible on an existing page');
+  results.push('stylesheet smoke on existing pages and focus visibility');
+
   assert.deepEqual(errors, [], `browser console or page errors: ${errors.join(' | ')}`);
   console.log(JSON.stringify({ ok: true, origin, results, screenshots: output }, null, 2));
 } finally {
