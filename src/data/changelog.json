@@ -1,5 +1,41 @@
 [
   {
+    "hash": "36eef7f",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Correct retention command and override monitoring",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "87bd5bb",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Treat a racing first owner save as a conflict",
+    "details": "Two simultaneous first saves hit the unique settings key. Resolve the duplicate key to a 409 version conflict instead of a 503, with real-MongoDB coverage for the race and for a stale save after success. Refs #143"
+  },
+  {
+    "hash": "8fb8b36",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Separate public story identity from management authority",
+    "details": "Public gallery and profile links now use a random storyId. The submission reference is never exposed publicly, so a visitor cannot replay a published story into a management token. A response is issued only when the request creates the contribution. Replaying an existing submission returns no token even with identical content; matching content is not proof of ownership. The original token still corrects and withdraws, and idempotent retries still avoid duplicates. Adds a unique partial index for storyId and a regression test that uses only information available from the public gallery. Refs #143"
+  },
+  {
+    "hash": "5bd7462",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record secret, fingerprint and documentation fixes",
+    "details": "Refs #143"
+  },
+  {
     "hash": "317ae3b",
     "date": "2026-11-17",
     "type": "docs",
@@ -678,41 +714,5 @@
     "scope": "platform",
     "summary": "Rewrite Engage copy around political participation (#97) (#98)",
     "details": "* fix(copy): clarify participation and public discussion (#97) * docs(copy): record delivered batch and resumable PR (#97) * fix(copy): invite participation across homepage queues and highlights (#97) * fix(copy): explain participation and current decision process (#97) * docs(copy): record guide delivery and preserve changelog history (#97) * fix(copy): make proposal discovery and submission clearer (#97) * docs(copy): checkpoint proposal form delivery (#97) * fix(copy): clarify ballot status, amendments and proposal history (#97) * docs(copy): checkpoint ballot review and validation (#97) * fix(copy): distinguish policy adoption records and community input (#97) * docs(copy): checkpoint policy and community review (#97) * fix(copy): explain sign-in and optional member participation (#97) * test(copy): align membership label assertion and checkpoint progress (#97) * fix(copy): explain member setup, branch following and notifications (#97) * docs(copy): checkpoint member setup and preferences (#97) * fix(copy): make participation emails and unsubscribe wording clearer (#97) * docs(copy): checkpoint participation email review (#97) * fix(copy): clarify officer tasks and member decision authority (#97) * docs(copy): checkpoint governance administration review (#97) * fix(copy): clarify administration settings and public visibility direction (#97) * docs(copy): checkpoint remaining administration review (#97) * fix(copy): reconcile final notices, errors and terminology (#97) * docs(copy): finalise editorial coverage and resumable handover (#97)"
-  },
-  {
-    "hash": "86f9de6",
-    "date": "2026-11-15",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "admin",
-    "summary": "Paginate the proposal register and stop reading ballots (#52) (#103)",
-    "details": "* perf(admin): paginate the proposal register and stop reading ballots The proposals register loaded every proposal, including its rationale, and decrypted every vote for the rows in Decide so it could show live tallies. It sent ~1 MB of HTML and did per-vote work on a list read. The register now reads a bounded page of 25 rows from MongoDB, ordered by proposal id, with search, stage and branch filters applied server-side and the viewer's branch scope preserved. Page links keep the active filters; changing a filter starts at page 1; invalid or out-of-range pages clamp. Pagination uses the existing Button primitive with previous/next, the current page and a status region announcing the visible range. `listProposalRegister` projects the register fields only (no `details` or `detailHtml`) and never touches `proposal_votes`, so no ballot is decrypted on a list read. For a certified ballot it shows the tally, computed result and rule basis stored on `ballot_results` at certification. An open ballot shows \"Open — view ballot\" instead of live counts, and a closed but uncertified ballot links to the workspace to record the outcome. The detail workspace keeps the live bound tally and the result form unchanged; recording from the list would require decrypting every vote. Editing, revising and creating still resolve their full record, including rationale, from any page, with the same scope and lock checks. Measured with `npm run perf:render` (78 synthetic proposals, 1200 votes, 3 runs, administrator): HTML 938,422 B → 283,915 B (−69.7%); document DB commands 19 → 16; document DB time 28.7 ms → 16.0 ms; TTFB 103.1 ms → 57.6 ms. A MongoDB profiler window shows the register request reads proposals, comments, ballot_results, ballots, amendments and revisions, and no `proposal_votes`. Refs #52. * fix(admin): keep legacy register records keyed by policyId and status Legacy proposal documents store the identifier, stage and topic space under `policyId`, `status` and `category`. The register's narrow projection only asked for the current field names, so the shared normaliser would have seen an empty identifier and defaulted the stage to Deliberate. Project the alias fields too (still excluding rationale and ballot data), and match the stage filter against a stored `status` when a document has no `stage`. Adds a regression case for a legacy-shaped record: it keeps its identifier, its normalised stage, its space, and remains searchable by rationale without returning it. Refs #52. * docs(status): record register pagination and the tally-free list read Adds the before/after harness snapshots for `/admin/proposals/` (base `78c07c0`, after `c1f72c0`) and records what the register now reads and shows: one 25-row projected page, no `proposal_votes` access, certified tallies from `ballot_results`, and links instead of live counts for uncertified ballots. Records the trade-offs honestly: inline outcome recording moved to the workspace, \"Open amendments\" counts the whole register rather than the filtered subset, and search moved into MongoDB while still matching rationale. Updates I12/#52 without claiming the member-facing vote scans are done, and notes the small in-memory database fidelity improvements from this slice. * chore(changelog): refresh snapshot for register pagination Regenerates the public changelog from this branch's history: the register pagination, the legacy-record fix and the audit/status updates appear as the newest entries. Side effect of the generator's fixed 80-commit window: the oldest entries fall out of the snapshot. That truncation is the pre-existing generator defect tracked in #96, not a decision in this slice. * chore(changelog): record the register pagination after merging main * chore(changelog): record the register pagination after merging main * chore(changelog): record the register pagination after merging main * feat(admin): add on-demand inline outcome recording and address register review findings"
-  },
-  {
-    "hash": "c94e3f9",
-    "date": "2026-11-15",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "governance",
-    "summary": "Typed ballot commands and central route policy (#53) (#94)",
-    "details": "* refactor(governance): add typed ballot commands and central route policy Extract ballot.bind and ballot.record_result into typed commands that call the existing domain functions, and declare both routes in one policy table. Routes now validate input, run the command and map errors; no permission literals or role checks remain in the route files. No governance behaviour changes. * test(governance): prove ballot command and route policy equivalence Cover policy-table drift, the authorisation matrix for both commands, route authentication, bind idempotency and record_result preconditions against a real MongoDB replica set. Existing route suites continue to exercise the same behaviour. * docs(governance): document the command contract and mark #53 partial Describe the typed command contract, the central route policy table and the two-stage authorisation rule. Record that the ballot lifecycle is extracted while proposals, amendments and membership remain route-local. * chore(changelog): refresh the snapshot for the ballot command layer * fix(governance): preserve bind route error mapping and harden route drift guard Map domain errors per route so a BallotDomainError escaping bind still returns the generic 400, while result keeps its 409. Discover governed routes recursively across .ts, .js and .mjs with all handler export forms. Rename the route-level helper to authoriseGovernanceRouteRole and document the deliberate coarse-gate repeat. Correct the precondition wording: the delegated domain function enforces it. * test(governance): cover bind conflict status, route scope denial and recursive discovery Prove the bind route still returns 400 with one binding event for a conflicting ballot revision, prove an out-of-branch result request is denied with no write, and prove each declared audit event is written. Add temporary-directory fixtures for nested, index, JavaScript and re-exported routes, plus a malformed-body ordering check. * docs(governance): correct command preconditions and route policy scope Preconditions and effects are documentation enforced by the delegated domain function, not re-checked by the command layer. Describe the coarse role gate, its defensive repetition, per-route error mapping and recursive route discovery. * chore(changelog): refresh the snapshot after the PR review fixes * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * fix(governance): inspect multi-binding route exports and clarify command preconditions"
-  },
-  {
-    "hash": "b2fd65a",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Administrator responsibility queue (#54) (#106)",
-    "details": "* feat(admin): add the administrator responsibility queue (#54) Group ballot outcomes, closing ballots, unbound wording, overdue advancement, amendment decisions, member verification and publication into one queue. Every item names the authority that makes it actionable and is filtered server-side by permission and branch scope. A failed source degrades to one short message for its group. * docs(status): record the administrator responsibility queue (#54) The queue is built and tested; multi-amendment derivation, collision review and role legibility remain outstanding. Note that publication failures have no durable failed state to queue. * chore(changelog): refresh the snapshot for the responsibility queue * fix(admin): never imply a ballot close date that was not recorded A legacy closed ballot with no close time now says only that it closed, instead of presenting the current date as the close date. * chore(changelog): refresh the snapshot for the queue close-date fix"
-  },
-  {
-    "hash": "be5f523",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Member-facing decision record (#54) (#105)",
-    "details": "* feat(proposals): add member-facing decision record Compose one matter's immutable voted wording, revision history, amendment outcomes, certified ballot result and publication state in a permission-aware read model. Derive adopted wording under D15 (zero applied amendments) and D16 (one applied amendment), with explicit review states for two or more applied amendments (D17-D18), approved-but-unapplied amendments and mismatched result wording. No individual votes, voter or author identifiers cross the read-model boundary. Add /proposals/[slug]/record/ and link it from the proposal page. * docs(governance): record the decision-record read model Document the member-facing decision record, the D15/D16 derivation, the explicit D17-D18 collision-review seam and the outstanding administrator queue. Mark S2/#54 partial and note the reporting limit on inter-amendment gaps. * chore(changelog): refresh the snapshot for the decision record"
   }
 ]
