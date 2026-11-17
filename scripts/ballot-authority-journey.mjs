@@ -55,6 +55,7 @@ function pass(message) {
 const MATCHING = "jurney-match";
 const MISMATCHED = "jurney-mismatch";
 const OTHER_BRANCH = "jurney-other";
+const JURISDICTION_ONLY = "jurney-jurisdiction";
 const revisionIdFor = (proposalId) => `rev-${proposalId}`;
 const now = new Date();
 const closesAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -131,9 +132,19 @@ try {
       ...matter(OTHER_BRANCH, "jurney-other", "Journey other branch matter", "branch-nsw", "branch-nsw"),
       governanceAuthorityBranchId: "branch-nsw",
     },
+    {
+      ...matter(
+        JURISDICTION_ONLY,
+        "jurney-jurisdiction",
+        "Journey jurisdiction-only matter",
+        "branch-vic",
+        "branch-nsw",
+      ),
+      governanceAuthorityBranchId: "branch-nsw",
+    },
   ]);
   await db.collection("proposal_revisions").insertMany(
-    [MATCHING, MISMATCHED, OTHER_BRANCH].map((proposalId) => ({
+    [MATCHING, MISMATCHED, OTHER_BRANCH, JURISDICTION_ONLY].map((proposalId) => ({
       proposalId,
       revisionId: revisionIdFor(proposalId),
       contentHash: `hash-${proposalId}`,
@@ -213,6 +224,12 @@ try {
   assert.doesNotMatch(html, /id="bind-ballot"/);
   pass("the delegated officer is refused the mismatched-authority workspace");
 
+  response = await get(`/admin/proposals/jurney-jurisdiction/`, memberCookie);
+  assert.equal(response.status, 403);
+  html = await response.text();
+  assert.doesNotMatch(html, /id="bind-ballot"/);
+  pass("the delegated officer is refused a matter merely voted in their branch");
+
   response = await get(`/admin/proposals/?q=Journey`, memberCookie);
   assert.equal(response.status, 200);
   html = await response.text();
@@ -220,6 +237,7 @@ try {
   assert.match(html, /id="bind-revision-jurney-match"/);
   assert.doesNotMatch(html, /id="bind-revision-jurney-mismatch"/);
   assert.doesNotMatch(html, /Journey other branch matter/);
+  assert.doesNotMatch(html, /Journey jurisdiction-only matter/);
   assert.doesNotMatch(html, /id="proposal-editor"/);
   pass("the delegated officer uses a register scoped to their branches, with only their acts offered");
 

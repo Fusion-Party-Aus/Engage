@@ -157,28 +157,52 @@ export function ballotActPermission(act: BallotAct): PermissionKey {
   return ACT_POLICY[act].permission;
 }
 
+/** The exact matter scope of a viewer's act grants, for list queries. */
+export interface BallotAuthorityScope {
+  /** A national grant or administrator covers every matter. */
+  all: boolean;
+  /** Branches whose ballot acts require matching governance authority and jurisdiction. */
+  authorityBranchIds: string[];
+  /** Branches whose resolve/apply acts follow the matter's originating branch. */
+  originatingBranchIds: string[];
+}
+
 /**
- * Branches where the viewer holds at least one ballot or amendment act.
+ * Express {@link ballotActs} as a scope a list query can apply.
  *
- * `null` means a national grant: there is no branch restriction. An empty array
- * means no act permission at any branch. Returns act permissions only, so a
- * register scoped by this list still cannot exceed the viewer's authority.
+ * Derived from the same act policy table, so a register cannot include a matter
+ * on which the viewer has no permitted act. `all` is true for an administrator
+ * or a national grant; otherwise the two branch sets name the only matters that
+ * can qualify.
  */
-export function ballotScopeBranchIds(
+export function ballotAuthorityScope(
   viewer: SessionUser | null | undefined,
-): string[] | null {
-  if (!viewer) return [];
-  if (viewer.isAdmin) return null;
+): BallotAuthorityScope {
+  if (!viewer) {
+    return { all: false, authorityBranchIds: [], originatingBranchIds: [] };
+  }
+  if (viewer.isAdmin) {
+    return { all: true, authorityBranchIds: [], originatingBranchIds: [] };
+  }
   const snapshot = getEffectivePermissionsSnapshot(viewer);
-  const branchIds = new Set<string>();
+  const authorityBranchIds = new Set<string>();
+  const originatingBranchIds = new Set<string>();
   for (const act of BALLOT_ACTS) {
-    const permission = ACT_POLICY[act].permission;
-    if (snapshot.national.includes(permission)) return null;
+    const policy = ACT_POLICY[act];
+    if (snapshot.national.includes(policy.permission)) {
+      return { all: true, authorityBranchIds: [], originatingBranchIds: [] };
+    }
     for (const [branchId, permissions] of Object.entries(snapshot.branches)) {
-      if (permissions.includes(permission)) branchIds.add(branchId);
+      if (!permissions.includes(policy.permission)) continue;
+      if (policy.requireAuthorityMatch) authorityBranchIds.add(branchId);
+      else originatingBranchIds.add(branchId);
     }
   }
-  return [...branchIds].sort();
+  return {
+    all: false,
+    authorityBranchIds: [...authorityBranchIds].sort(),
+    originatingBranchIds: [...originatingBranchIds].sort(),
+  };
 }
 
 /**

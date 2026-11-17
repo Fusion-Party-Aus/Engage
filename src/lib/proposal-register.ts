@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import type { BallotAuthorityScope } from "./ballot-authority.ts";
 import {
   ballotOutcomeLabel,
   resolveBallotClosure,
@@ -129,17 +130,16 @@ export interface ProposalRegisterOptions {
   /** Branch id or `all`. */
   branch?: string;
   /**
-   * Branch ids whose proposals this viewer may administer. Omit for an
-   * unrestricted (staff) register; an empty array matches no proposal.
+   * Exact matter scope for a delegated officer, derived from `ballotActs`.
+   * Omit for staff. `all` reads everything; otherwise only matters with a
+   * permitted act are in scope, which also scopes counts and amendment reads.
    */
-  branchScopeIds?: string[];
+  authorityScope?: BallotAuthorityScope;
   /**
-   * Branch ids where the viewer holds a ballot or amendment act. A matter is in
-   * scope when any of its originating, governance-authority or jurisdiction
-   * branch references is in the set. Delegated officers use this because their
-   * authority can follow the governance branch rather than the origin.
+   * Branches where the viewer administers proposals (branch administrator).
+   * Their originating matters stay readable even when no ballot act applies.
    */
-  anyBranchScopeIds?: string[];
+  proposalAdminBranchIds?: string[];
 }
 
 export interface ProposalRegisterPage {
@@ -324,22 +324,31 @@ function escapeRegex(value: string): string {
 }
 
 function registerScopeFilter(options: {
-  branchScopeIds?: string[];
-  anyBranchScopeIds?: string[];
+  authorityScope?: BallotAuthorityScope;
+  proposalAdminBranchIds?: string[];
 }): Record<string, unknown> {
-  if (options.anyBranchScopeIds !== undefined) {
-    const ids = options.anyBranchScopeIds;
-    return {
-      $or: [
-        { originatingBranchId: { $in: ids } },
-        { governanceAuthorityBranchId: { $in: ids } },
-        { jurisdictionBranchId: { $in: ids } },
-      ],
-    };
+  const scope = options.authorityScope;
+  const adminBranchIds = options.proposalAdminBranchIds ?? [];
+  if (!scope) {
+    return adminBranchIds.length
+      ? { originatingBranchId: { $in: adminBranchIds } }
+      : {};
   }
-  return options.branchScopeIds === undefined
-    ? {}
-    : { originatingBranchId: { $in: options.branchScopeIds } };
+  if (scope.all) return {};
+  const clauses: Record<string, unknown>[] = [
+    ...scope.authorityBranchIds.map((branchId) => ({
+      governanceAuthorityBranchId: branchId,
+      jurisdictionBranchId: branchId,
+    })),
+    ...scope.originatingBranchIds.map((branchId) => ({
+      originatingBranchId: branchId,
+    })),
+    ...adminBranchIds.map((branchId) => ({
+      originatingBranchId: branchId,
+    })),
+  ];
+  // An officer with no act and no proposal administration sees no matter.
+  return clauses.length ? { $or: clauses } : { proposalId: { $in: [] } };
 }
 
 /**
@@ -495,8 +504,8 @@ export async function listProposalRegister(
 ): Promise<ProposalRegisterPage> {
   const pageSize = resolveRegisterPageSize(options.pageSize);
   const scopeFilter = registerScopeFilter({
-    branchScopeIds: options.branchScopeIds,
-    anyBranchScopeIds: options.anyBranchScopeIds,
+    authorityScope: options.authorityScope,
+    proposalAdminBranchIds: options.proposalAdminBranchIds,
   });
   const matchFilter = registerMatchFilter({
     search: options.search,

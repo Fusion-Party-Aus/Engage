@@ -7,7 +7,7 @@ import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, Shiel
 import { getSessionUser } from '../../../lib/auth.ts';
 import {
   ballotActs,
-  ballotScopeBranchIds,
+  ballotAuthorityScope,
   hasAnyBallotAct,
   type BallotAct,
 } from '../../../lib/ballot-authority.ts';
@@ -44,7 +44,7 @@ if (!user) {
 
 const db = await getDatabase(env);
 const branchAdminIds = user.branchAdminIds ?? [];
-const delegatedBranchScope = ballotScopeBranchIds(user);
+const authorityScope = user.isStaff ? undefined : ballotAuthorityScope(user);
 const canOpenRegister = Boolean(
   user.isStaff || user.isBranchAdmin || hasAnyBallotAct(user),
 );
@@ -52,14 +52,20 @@ if (!canOpenRegister) {
   Astro.response.status = 403;
 }
 /**
- * Staff read the whole register. A delegated officer reads matters whose
- * originating, governance or jurisdiction branch is one where they hold a
- * ballot or amendment act, so the register cannot exceed their authority.
+ * Staff read the whole register. A delegated officer reads only matters on
+ * which `ballotActs` permits at least one act; counts, pages and amendment
+ * reads all follow that same filter.
  */
 const registerScopeIds =
-  user.isStaff || delegatedBranchScope === null
-    ? undefined
-    : [...new Set([...branchAdminIds, ...delegatedBranchScope])];
+  authorityScope && !authorityScope.all
+    ? [
+        ...new Set([
+          ...branchAdminIds,
+          ...authorityScope.authorityBranchIds,
+          ...authorityScope.originatingBranchIds,
+        ]),
+      ]
+    : undefined;
 const canAuthorProposal = Boolean(
   user.isAdmin || hasPermissionAnywhere(user, 'proposals.edit'),
 );
@@ -85,7 +91,10 @@ const [branches, register] = await Promise.all([
         search: query,
         stage: stageFilter,
         branch: branchFilter,
-        ...(registerScopeIds ? { anyBranchScopeIds: registerScopeIds } : {}),
+        ...(authorityScope ? { authorityScope } : {}),
+        ...(user.isBranchAdmin && branchAdminIds.length
+          ? { proposalAdminBranchIds: branchAdminIds }
+          : {}),
       })
     : Promise.resolve(EMPTY_PROPOSAL_REGISTER),
 ]);

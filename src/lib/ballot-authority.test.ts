@@ -4,7 +4,7 @@ import {
   BALLOT_ACTS,
   ballotActPermission,
   ballotActs,
-  ballotScopeBranchIds,
+  ballotAuthorityScope,
   hasAnyBallotAct,
   type BallotAct,
   type BallotSubject,
@@ -258,41 +258,72 @@ describe("ballot authority", () => {
     }
   });
 
-  it("reports the branch scope of an officer's act grants", () => {
-    assert.deepEqual(ballotScopeBranchIds(null), []);
-    assert.equal(
-      ballotScopeBranchIds(viewer({ role: "administrator", isAdmin: true })),
-      null,
+  it("expresses the same act grants as a matter scope", () => {
+    const bindVic = viewer({}, { branches: { "branch-vic": ["ballots.bind"] } });
+    const bindScope = ballotAuthorityScope(bindVic);
+    assert.equal(bindScope.all, false);
+    assert.deepEqual(bindScope.authorityBranchIds, ["branch-vic"]);
+    assert.deepEqual(bindScope.originatingBranchIds, []);
+    assert.ok(
+      ballotActs(bindVic, {
+        governanceAuthorityBranchId: "branch-vic",
+        jurisdictionBranchId: "branch-vic",
+      }).can("bindMatterBallot"),
     );
     assert.equal(
-      ballotScopeBranchIds(viewer({}, { national: ["ballots.bind"] })),
-      null,
+      ballotActs(bindVic, {
+        governanceAuthorityBranchId: "branch-vic",
+        jurisdictionBranchId: "branch-nsw",
+      }).allowed.size,
+      0,
+      "a matter governed by the branch but voted on elsewhere is out of scope",
     );
-    assert.deepEqual(
-      ballotScopeBranchIds(
-        viewer(
-          {},
-          {
-            branches: {
-              "branch-vic": ["ballots.bind"],
-              "branch-nsw": ["amendments.apply"],
-            },
-          },
-        ),
-      ),
-      ["branch-nsw", "branch-vic"],
+    assert.equal(
+      ballotActs(bindVic, {
+        governanceAuthorityBranchId: "branch-nsw",
+        jurisdictionBranchId: "branch-vic",
+      }).allowed.size,
+      0,
+      "a matter merely voted on by the branch is out of scope",
     );
-    assert.deepEqual(
-      ballotScopeBranchIds(
-        viewer({}, { branches: { "branch-vic": ["proposals.edit"] } }),
-      ),
-      [],
-      "a non-act permission does not widen the register scope",
+
+    const resolveVic = viewer(
+      {},
+      { branches: { "branch-vic": ["amendments.resolve"] } },
     );
+    const resolveScope = ballotAuthorityScope(resolveVic);
+    assert.deepEqual(resolveScope.authorityBranchIds, []);
+    assert.deepEqual(resolveScope.originatingBranchIds, ["branch-vic"]);
+    assert.ok(
+      ballotActs(resolveVic, {
+        governanceAuthorityBranchId: "branch-nsw",
+        jurisdictionBranchId: "branch-nsw",
+        originatingBranchId: "branch-vic",
+      }).can("resolveAmendment"),
+    );
+
+    assert.equal(
+      ballotAuthorityScope(viewer({ role: "administrator", isAdmin: true })).all,
+      true,
+    );
+    assert.equal(
+      ballotAuthorityScope(viewer({}, { national: ["amendments.apply"] })).all,
+      true,
+    );
+    assert.deepEqual(ballotAuthorityScope(viewer()), {
+      all: false,
+      authorityBranchIds: [],
+      originatingBranchIds: [],
+    });
+    assert.deepEqual(ballotAuthorityScope(null), {
+      all: false,
+      authorityBranchIds: [],
+      originatingBranchIds: [],
+    });
     assert.deepEqual(
-      ballotScopeBranchIds(
+      ballotAuthorityScope(
         viewer({ isBranchAdmin: true, branchAdminIds: ["branch-vic"] }),
-      ),
+      ).authorityBranchIds,
       ["branch-vic"],
       "legacy branch administrators hold the act permissions at their branch",
     );
