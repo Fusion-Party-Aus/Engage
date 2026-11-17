@@ -133,6 +133,13 @@ export interface ProposalRegisterOptions {
    * unrestricted (staff) register; an empty array matches no proposal.
    */
   branchScopeIds?: string[];
+  /**
+   * Branch ids where the viewer holds a ballot or amendment act. A matter is in
+   * scope when any of its originating, governance-authority or jurisdiction
+   * branch references is in the set. Delegated officers use this because their
+   * authority can follow the governance branch rather than the origin.
+   */
+  anyBranchScopeIds?: string[];
 }
 
 export interface ProposalRegisterPage {
@@ -316,10 +323,23 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function registerScopeFilter(branchScopeIds?: string[]): Record<string, unknown> {
-  return branchScopeIds === undefined
+function registerScopeFilter(options: {
+  branchScopeIds?: string[];
+  anyBranchScopeIds?: string[];
+}): Record<string, unknown> {
+  if (options.anyBranchScopeIds !== undefined) {
+    const ids = options.anyBranchScopeIds;
+    return {
+      $or: [
+        { originatingBranchId: { $in: ids } },
+        { governanceAuthorityBranchId: { $in: ids } },
+        { jurisdictionBranchId: { $in: ids } },
+      ],
+    };
+  }
+  return options.branchScopeIds === undefined
     ? {}
-    : { originatingBranchId: { $in: branchScopeIds } };
+    : { originatingBranchId: { $in: options.branchScopeIds } };
 }
 
 /**
@@ -474,7 +494,10 @@ export async function listProposalRegister(
   options: ProposalRegisterOptions = {},
 ): Promise<ProposalRegisterPage> {
   const pageSize = resolveRegisterPageSize(options.pageSize);
-  const scopeFilter = registerScopeFilter(options.branchScopeIds);
+  const scopeFilter = registerScopeFilter({
+    branchScopeIds: options.branchScopeIds,
+    anyBranchScopeIds: options.anyBranchScopeIds,
+  });
   const matchFilter = registerMatchFilter({
     search: options.search,
     stage: options.stage,

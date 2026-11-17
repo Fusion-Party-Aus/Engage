@@ -5,8 +5,14 @@ import { NativeSelect } from '../../../components/ui/native-select';
 import { Textarea } from '../../../components/ui/textarea';
 import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, ShieldAlert } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
-import { ballotActs, type BallotAct } from '../../../lib/ballot-authority.ts';
+import {
+  ballotActs,
+  ballotScopeBranchIds,
+  hasAnyBallotAct,
+  type BallotAct,
+} from '../../../lib/ballot-authority.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { hasPermissionAnywhere } from '../../../lib/rbac.ts';
 import { isProposalLocked } from '../../../lib/proposal-helpers.ts';
 import {
   EMPTY_PROPOSAL_REGISTER,
@@ -35,13 +41,28 @@ const user = await getSessionUser(Astro.request, env);
 if (!user) {
   return Astro.redirect('/member/', 302);
 }
-if (!user.isStaff && !user.isBranchAdmin) {
-  Astro.response.status = 403;
-}
 
 const db = await getDatabase(env);
 const branchAdminIds = user.branchAdminIds ?? [];
-const canOpenRegister = Boolean(user.isStaff || user.isBranchAdmin);
+const delegatedBranchScope = ballotScopeBranchIds(user);
+const canOpenRegister = Boolean(
+  user.isStaff || user.isBranchAdmin || hasAnyBallotAct(user),
+);
+if (!canOpenRegister) {
+  Astro.response.status = 403;
+}
+/**
+ * Staff read the whole register. A delegated officer reads matters whose
+ * originating, governance or jurisdiction branch is one where they hold a
+ * ballot or amendment act, so the register cannot exceed their authority.
+ */
+const registerScopeIds =
+  user.isStaff || delegatedBranchScope === null
+    ? undefined
+    : [...new Set([...branchAdminIds, ...delegatedBranchScope])];
+const canAuthorProposal = Boolean(
+  user.isAdmin || hasPermissionAnywhere(user, 'proposals.edit'),
+);
 const query = (Astro.url.searchParams.get('q') ?? '').trim();
 const stageFilter = parseRegisterStage(Astro.url.searchParams.get('stage'));
 const branchFilter = (Astro.url.searchParams.get('branch') ?? 'all').trim();
@@ -55,16 +76,16 @@ const requestedPage = parseRegisterPage(Astro.url.searchParams.get('page'));
 const [branches, register] = await Promise.all([
   user.isAdmin
     ? db.collection('branches').find({}).sort({ name: 1 }).toArray()
-    : user.isBranchAdmin
-      ? db.collection('branches').find({ branchId: { $in: branchAdminIds } }).sort({ name: 1 }).toArray()
-      : db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
+    : registerScopeIds === undefined
+      ? db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()
+      : db.collection('branches').find({ branchId: { $in: registerScopeIds } }).sort({ name: 1 }).toArray(),
   canOpenRegister
     ? listProposalRegister(db, {
         page: requestedPage,
         search: query,
         stage: stageFilter,
         branch: branchFilter,
-        ...(user.isStaff ? {} : { branchScopeIds: branchAdminIds }),
+        ...(registerScopeIds ? { anyBranchScopeIds: registerScopeIds } : {}),
       })
     : Promise.resolve(EMPTY_PROPOSAL_REGISTER),
 ]);
@@ -239,7 +260,7 @@ const canReviewAmendments = (item: any) => authorityFor(item).allowed.size > 0;
   isAdmin={user.isAdmin}
   isBranchAdmin={Boolean(user.isBranchAdmin)}
 >
-  {!user.isStaff && !user.isBranchAdmin ? (
+  {!canOpenRegister ? (
     <Alert variant="destructive">
       <ShieldAlert />
       <AlertTitle>Access required</AlertTitle>
@@ -247,6 +268,7 @@ const canReviewAmendments = (item: any) => authorityFor(item).allowed.size > 0;
     </Alert>
   ) : (
     <div class="admin-stack">
+      {canAuthorProposal && (
       <details id="proposal-editor" class="admin-disclosure proposal-editor-disclosure" open={Boolean(editingProposal || isRevision || newProposal)}>
         <summary>
           <PlusCircle className="size-4" aria-hidden="true" />
@@ -482,6 +504,7 @@ const canReviewAmendments = (item: any) => authorityFor(item).allowed.size > 0;
           </section>
         </div>
       </details>
+      )}
 
       <!-- Project Detail 1 Top 4-Stat Strip -->
       <div class="project-detail-strip" aria-label="Proposal register summary">

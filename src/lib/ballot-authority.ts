@@ -1,5 +1,9 @@
 import type { PermissionKey } from "./rbac.ts";
-import { hasPermission, hasPermissionAnywhere } from "./rbac.ts";
+import {
+  getEffectivePermissionsSnapshot,
+  hasPermission,
+  hasPermissionAnywhere,
+} from "./rbac.ts";
 import type { SessionUser } from "./types.ts";
 
 /**
@@ -146,6 +150,35 @@ function decide(
 
   // A branch grant made for another branch does not travel.
   return "not-permitted";
+}
+
+/** The permission that grants one act. Used by contract tests and documentation. */
+export function ballotActPermission(act: BallotAct): PermissionKey {
+  return ACT_POLICY[act].permission;
+}
+
+/**
+ * Branches where the viewer holds at least one ballot or amendment act.
+ *
+ * `null` means a national grant: there is no branch restriction. An empty array
+ * means no act permission at any branch. Returns act permissions only, so a
+ * register scoped by this list still cannot exceed the viewer's authority.
+ */
+export function ballotScopeBranchIds(
+  viewer: SessionUser | null | undefined,
+): string[] | null {
+  if (!viewer) return [];
+  if (viewer.isAdmin) return null;
+  const snapshot = getEffectivePermissionsSnapshot(viewer);
+  const branchIds = new Set<string>();
+  for (const act of BALLOT_ACTS) {
+    const permission = ACT_POLICY[act].permission;
+    if (snapshot.national.includes(permission)) return null;
+    for (const [branchId, permissions] of Object.entries(snapshot.branches)) {
+      if (permissions.includes(permission)) branchIds.add(branchId);
+    }
+  }
+  return [...branchIds].sort();
 }
 
 /**

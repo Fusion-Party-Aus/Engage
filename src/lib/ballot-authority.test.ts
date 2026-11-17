@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   BALLOT_ACTS,
+  ballotActPermission,
   ballotActs,
+  ballotScopeBranchIds,
   hasAnyBallotAct,
   type BallotAct,
   type BallotSubject,
 } from "./ballot-authority.ts";
+import { GOVERNANCE_COMMANDS } from "./governance-commands.ts";
 import type { SessionUser } from "./types.ts";
 import type { PermissionKey } from "./rbac.ts";
 
@@ -238,6 +241,60 @@ describe("ballot authority", () => {
     assert.equal(
       hasAnyBallotAct(viewer({ role: "administrator", isAdmin: true })),
       true,
+    );
+  });
+
+  it("keeps governance command act permissions aligned", () => {
+    const ballotCommands = Object.values(GOVERNANCE_COMMANDS).filter(
+      (command) => command.ballotAct,
+    );
+    assert.ok(ballotCommands.length >= 2, "ballot commands declare an act");
+    for (const command of ballotCommands) {
+      assert.equal(
+        ballotActPermission(command.ballotAct!),
+        command.requiredPermission,
+        `${command.id} must use the permission its act declares`,
+      );
+    }
+  });
+
+  it("reports the branch scope of an officer's act grants", () => {
+    assert.deepEqual(ballotScopeBranchIds(null), []);
+    assert.equal(
+      ballotScopeBranchIds(viewer({ role: "administrator", isAdmin: true })),
+      null,
+    );
+    assert.equal(
+      ballotScopeBranchIds(viewer({}, { national: ["ballots.bind"] })),
+      null,
+    );
+    assert.deepEqual(
+      ballotScopeBranchIds(
+        viewer(
+          {},
+          {
+            branches: {
+              "branch-vic": ["ballots.bind"],
+              "branch-nsw": ["amendments.apply"],
+            },
+          },
+        ),
+      ),
+      ["branch-nsw", "branch-vic"],
+    );
+    assert.deepEqual(
+      ballotScopeBranchIds(
+        viewer({}, { branches: { "branch-vic": ["proposals.edit"] } }),
+      ),
+      [],
+      "a non-act permission does not widen the register scope",
+    );
+    assert.deepEqual(
+      ballotScopeBranchIds(
+        viewer({ isBranchAdmin: true, branchAdminIds: ["branch-vic"] }),
+      ),
+      ["branch-vic"],
+      "legacy branch administrators hold the act permissions at their branch",
     );
   });
 

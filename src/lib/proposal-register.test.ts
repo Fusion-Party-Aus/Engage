@@ -277,6 +277,52 @@ describe("admin proposal register pagination", () => {
     assert.equal(none.entries.length, 0);
   });
 
+  it("scopes a delegated officer by any branch reference, not only the origin", async () => {
+    const db = await seedRegister(60);
+    await Promise.all([
+      db.collection("proposals").insertOne({
+        proposalId: "POL-GOV",
+        slug: "pol-gov",
+        title: "Governance-scoped matter",
+        stage: "decide",
+        kind: "policy",
+        summary: "Summary",
+        details: "Details",
+        originatingBranchId: "branch-b",
+        governanceAuthorityBranchId: "branch-a",
+        jurisdictionBranchId: "branch-b",
+        updatedAt: new Date(),
+      }),
+      db.collection("proposals").insertOne({
+        proposalId: "POL-OUT",
+        slug: "pol-out",
+        title: "Outside the officer's branches",
+        stage: "decide",
+        kind: "policy",
+        summary: "Summary",
+        details: "Details",
+        originatingBranchId: "branch-c",
+        governanceAuthorityBranchId: "branch-c",
+        jurisdictionBranchId: "branch-c",
+        updatedAt: new Date(),
+      }),
+    ]);
+
+    const page = await listProposalRegister(db, {
+      anyBranchScopeIds: ["branch-a"],
+    });
+    assert.ok(
+      page.scopedProposalIds.includes("POL-GOV"),
+      "a matter governed by the branch is in scope even when it originates elsewhere",
+    );
+    assert.ok(
+      !page.scopedProposalIds.includes("POL-OUT"),
+      "a matter outside every branch reference stays out of scope",
+    );
+    assert.equal(page.total, 31);
+    assert.equal(page.stageCounts.all, 31);
+  });
+
   it("clamps page sizes", () => {
     assert.equal(resolveRegisterPageSize(undefined), 25);
     assert.equal(resolveRegisterPageSize(0), 25);

@@ -54,6 +54,7 @@ function pass(message) {
 
 const MATCHING = "jurney-match";
 const MISMATCHED = "jurney-mismatch";
+const OTHER_BRANCH = "jurney-other";
 const revisionIdFor = (proposalId) => `rev-${proposalId}`;
 const now = new Date();
 const closesAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -105,7 +106,7 @@ try {
     { branchId: "branch-nsw", name: "New South Wales", kind: "state", recognised: true, parentBranchId: "branch-nat" },
   ]);
 
-  const matter = (proposalId, slug, title, jurisdiction) => ({
+  const matter = (proposalId, slug, title, jurisdiction, originating = "branch-vic") => ({
     proposalId,
     slug,
     title,
@@ -116,7 +117,7 @@ try {
     details: "Wording under review.",
     stage: "decide",
     publicationScope: "national",
-    originatingBranchId: "branch-vic",
+    originatingBranchId: originating,
     governanceAuthorityBranchId: "branch-vic",
     jurisdictionBranchId: jurisdiction,
     ballotClosesAt: closesAt,
@@ -126,9 +127,13 @@ try {
   await db.collection("proposals").insertMany([
     matter(MATCHING, "jurney-matching", "Journey matching authority matter", "branch-vic"),
     matter(MISMATCHED, "jurney-mismatched", "Journey mismatched authority matter", "branch-nsw"),
+    {
+      ...matter(OTHER_BRANCH, "jurney-other", "Journey other branch matter", "branch-nsw", "branch-nsw"),
+      governanceAuthorityBranchId: "branch-nsw",
+    },
   ]);
   await db.collection("proposal_revisions").insertMany(
-    [MATCHING, MISMATCHED].map((proposalId) => ({
+    [MATCHING, MISMATCHED, OTHER_BRANCH].map((proposalId) => ({
       proposalId,
       revisionId: revisionIdFor(proposalId),
       contentHash: `hash-${proposalId}`,
@@ -151,6 +156,10 @@ try {
   assert.equal(response.status, 200);
   assert.match(await response.text(), /No administrator responsibilities/);
   pass("a member without ballot permission has no responsibility queue");
+
+  response = await get(`/admin/proposals/`, memberCookie);
+  assert.equal(response.status, 403);
+  pass("a member without ballot permission is refused the proposal register");
 
   response = await bind(MATCHING, memberCookie);
   assert.equal(response.status, 403);
@@ -204,6 +213,16 @@ try {
   assert.doesNotMatch(html, /id="bind-ballot"/);
   pass("the delegated officer is refused the mismatched-authority workspace");
 
+  response = await get(`/admin/proposals/?q=Journey`, memberCookie);
+  assert.equal(response.status, 200);
+  html = await response.text();
+  assert.match(html, /Journey matching authority matter/);
+  assert.match(html, /id="bind-revision-jurney-match"/);
+  assert.doesNotMatch(html, /id="bind-revision-jurney-mismatch"/);
+  assert.doesNotMatch(html, /Journey other branch matter/);
+  assert.doesNotMatch(html, /id="proposal-editor"/);
+  pass("the delegated officer uses a register scoped to their branches, with only their acts offered");
+
   response = await bind(MATCHING, memberCookie);
   assert.equal(response.status, 201, `bind failed: ${await response.text()}`);
   const bound = await db.collection("proposals").findOne({ proposalId: MATCHING });
@@ -222,7 +241,46 @@ try {
   assert.match((await response.json()).error, /not authorised to review this ballot/i);
   pass("the delegated officer cannot bind a matter whose authority and jurisdiction differ");
 
-  // 4. A national administrator still sees and completes the act.
+  // 4. A national grant widens the register without a branch label.
+  await db
+    .collection("rbac_assignments")
+    .deleteOne({ assignmentId: "assignment_journey_ballot_officer" });
+  await db.collection("rbac_roles").insertOne({
+    roleId: "role_journey_national_ballot",
+    name: "Journey National Ballot Officer",
+    description: "National ballot administration for the journey check.",
+    scope: "national",
+    permissions: ["ballots.bind"],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.collection("rbac_assignments").insertOne({
+    assignmentId: "assignment_journey_national_ballot",
+    memberId: "dev-member-01",
+    roleId: "role_journey_national_ballot",
+    scopeType: "national",
+    branchId: null,
+    status: "active",
+    assignedBy: "journey",
+    assignedAt: now,
+  });
+
+  response = await get(`/admin/proposals/?q=Journey`, memberCookie);
+  assert.equal(response.status, 200);
+  html = await response.text();
+  assert.match(html, /Journey other branch matter/);
+  assert.match(html, /id="bind-revision-jurney-other"/);
+  pass("a national delegated officer uses the register across branches");
+
+  response = await bind(OTHER_BRANCH, memberCookie);
+  assert.equal(response.status, 201, `national bind failed: ${await response.text()}`);
+  const nationalBound = await db
+    .collection("proposals")
+    .findOne({ proposalId: OTHER_BRANCH });
+  assert.equal(nationalBound?.ballotRevisionId, revisionIdFor(OTHER_BRANCH));
+  pass("a national delegated officer completes the act in another branch");
+
+  // 5. A national administrator still sees and completes the act.
   response = await get(`/admin/proposals/jurney-mismatched/`, adminCookie);
   assert.equal(response.status, 200);
   assert.match(await response.text(), /id="bind-ballot"/);
