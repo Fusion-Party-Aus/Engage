@@ -15,6 +15,8 @@ This page records the model, the consent rules, the data handling and what is de
 - Approval is not publication. Where an approved contribution is actually used is recorded separately, per permitted channel, with a reference.
 - Approved material is handed to the website team by downloading a JSON export. There is no CMS integration yet.
 
+An Engage account and Fusion party membership are separate things, and neither is required here. A contribution creates no account, no membership and no branch affiliation. A contributor who later creates an account is offered an optional next step, not a condition of contributing.
+
 ## Model decision: one type, capabilities not cases
 
 `src/lib/matters.ts` registers one new type, `collaboration`. Every governance capability is false and its allowed stages are empty, so a collaboration matter cannot enter Propose, Deliberate, Decide or Implement, cannot be amended, balloted, ratified, superseded, or published as policy. `src/lib/collaboration-matter.test.ts` proves each refusal.
