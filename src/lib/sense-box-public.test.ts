@@ -291,6 +291,46 @@ test('legacy single links are read and folded into the array on the next change'
   assert.equal(row?.linkedProposalId, undefined);
 });
 
+test('public links never expose archived or private proposals', async () => {
+  const db = await setup();
+  const submissionId = await published(db);
+  const archived = await saveProposal(db, admin, {
+    title: 'Archived linked proposal',
+    space: 'Transport',
+    summary: 'A proposal that is later archived.',
+    outcomes: ['Archived'],
+    details: 'Archived detail.',
+    stage: 'deliberate',
+  });
+  await saveProposal(db, admin, { proposalId: archived.proposalId, stage: 'archived' });
+  const privateProposal = await saveProposal(db, admin, {
+    title: 'Private linked proposal',
+    space: 'Transport',
+    summary: 'A proposal that is private to its author and reviewers.',
+    outcomes: ['Private'],
+    details: 'Private detail.',
+    publicationScope: 'private',
+  });
+  await db.collection('sense_submissions').updateOne(
+    { submissionId },
+    { $set: { linkedProposalIds: [archived.proposalId, privateProposal.proposalId] } },
+  );
+  const publicView = await getPublicSense(db, submissionId);
+  assert.equal(publicView?.linkedProposals, undefined);
+  const list = await listPublicSense(db, {});
+  assert.equal(list.items[0]?.linkedProposals, undefined);
+  await assert.rejects(
+    reviewSense(db, organiser, {
+      submissionId,
+      branchId: 'branch-vic',
+      version: 1,
+      action: 'link',
+      proposalId: archived.proposalId,
+    }),
+    /Archived/,
+  );
+});
+
 test('developing a proposal records the source and links the priority atomically', async () => {
   const db = await setup();
   const submissionId = await published(db);

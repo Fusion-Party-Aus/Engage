@@ -38,6 +38,7 @@ const linkedProposals = (
     .find({ stage: { $ne: 'archived' } })
     .project({ _id: 0, proposalId: 1, slug: 1, title: 1, stage: 1, publicationScope: 1, originatingBranchId: 1, jurisdictionBranchId: 1, authorId: 1 })
     .sort({ updatedAt: -1 })
+    // Bound the picker; current links are added separately below.
     .limit(100)
     .toArray()
 )
@@ -53,6 +54,9 @@ for (const linked of submission.linkedProposals ?? []) {
   }
 }
 const internalComments = submission.comments.filter((comment) => comment.visibility === 'internal');
+const hiddenLinkedIds = (submission.linkedProposalIds ?? []).filter(
+  (id) => !submission.linkedProposals?.some((proposal) => proposal.proposalId === id),
+);
 const publicComments = submission.comments.filter((comment) => comment.visibility === 'public');
 const published = submission.visibility === 'published';
 const statusTone = submission.status === 'developing' ? 'warning' : submission.status === 'reviewed' ? 'info' : submission.status === 'archived' ? 'outline' : 'muted';
@@ -178,6 +182,16 @@ const stageLabel = (stage: string) => stage === 'decide' ? 'Voting' : stage === 
                 </span>
                 <form data-sense-action="unlink" data-version={submission.version}>
                   <input type="hidden" name="proposalId" value={proposal.proposalId} />
+                  <Button type="submit" size="sm" variant="ghost">Remove link</Button>
+                  <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
+                </form>
+              </li>
+            ))}
+            {hiddenLinkedIds.map((proposalId) => (
+              <li class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-sm text-muted-foreground">Linked proposal is not available to you.</span>
+                <form data-sense-action="unlink" data-version={submission.version}>
+                  <input type="hidden" name="proposalId" value={proposalId} />
                   <Button type="submit" size="sm" variant="ghost">Remove link</Button>
                   <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
                 </form>

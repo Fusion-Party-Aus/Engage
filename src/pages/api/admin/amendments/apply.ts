@@ -1,48 +1,23 @@
 import type { APIRoute } from "astro";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { Db } from "mongodb";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { saveProposal } from "../../../../lib/proposals-store.ts";
 import { parseOutcomes } from "../../../../lib/proposal-helpers.ts";
+import {
+  proposalRevisionSnapshot,
+  revisionContentHash,
+} from "../../../../lib/proposal-revision.ts";
 import { hasPermission, hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 import {
   amendmentsCompete,
   validateWordingChanges,
 } from "../../../../lib/amendment-suggestions.ts";
 
+// Fixed recovery window: long enough for a normal write to finish, short enough
+// that an officer can retry a crashed application without an operator tool.
 const APPLY_LEASE_MS = 60_000;
-
-interface ProposalSnapshot {
-  title: string;
-  summary: string;
-  outcomes: string[];
-  details: string;
-  targetSection?: string;
-  proposedWording?: string;
-}
-
-function projectedSnapshot(
-  base: Record<string, any>,
-  changes: Record<string, unknown>,
-): ProposalSnapshot {
-  return {
-    title: "title" in changes ? String(changes.title ?? "").trim() : String(base.title ?? ""),
-    summary: "summary" in changes ? String(changes.summary ?? "").trim() : String(base.summary ?? ""),
-    outcomes: "outcomes" in changes
-      ? parseOutcomes(changes.outcomes)
-      : Array.isArray(base.outcomes)
-        ? base.outcomes.map(String)
-        : [],
-    details: "details" in changes ? String(changes.details ?? "").trim() : String(base.details ?? ""),
-    ...(base.targetSection ? { targetSection: String(base.targetSection) } : {}),
-    ...(base.proposedWording ? { proposedWording: String(base.proposedWording) } : {}),
-  };
-}
-
-function snapshotHash(snapshot: ProposalSnapshot): string {
-  return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
-}
 
 async function latestRevision(db: Db, proposalId: string) {
   const rows = await db
@@ -95,11 +70,20 @@ async function releaseClaim(
   amendmentId: string,
   applyingToken: string,
   applyingOperationId: string,
+  reason?: string,
 ) {
   await db.collection("amendments").updateOne(
     { amendmentId, status: "applying", applyingToken, applyingOperationId },
     {
-      $set: { status: "accepted" },
+      $set: {
+        status: "accepted",
+        ...(reason
+          ? {
+              applicationBlockedReason: reason,
+              applicationBlockedAt: new Date(),
+            }
+          : {}),
+      },
       $unset: {
         applyingToken: "",
         applyingOperationId: "",
@@ -108,6 +92,9 @@ async function releaseClaim(
         applyingStartedAt: "",
         applyingLeaseExpiresAt: "",
         applyingBy: "",
+        appliedRevisionId: "",
+        appliedAt: "",
+        appliedBy: "",
       },
     },
   );
@@ -138,15 +125,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     const recovering = amendment.status === "applying";
     if (recovering) {
-      if (
-        !amendment.applyingToken ||
-        !amendment.applyingOperationId ||
-        !amendment.applyingExpectedContentHash
-      )
+      if (!amendment.applyingToken)
         return Response.json(
           {
             error:
-              "This amendment is in an incomplete application state without a recovery record. Review the proposal history before continuing.",
+              "This amendment is in an incomplete application state without a recovery token. Review the proposal history before continuing.",
           },
           { status: 409 },
         );
@@ -192,10 +175,59 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { status: 403 },
       );
 
-    const changes = amendment.changes as Record<string, unknown>;
+    const supported = new Set(["title", "summary", "details", "outcomes"]);
+    const rawChanges = amendment.changes;
+    if (!rawChanges || typeof rawChanges !== "object" || Array.isArray(rawChanges))
+      return Response.json(
+        { error: "This amendment has no usable wording changes." },
+        { status: 409 },
+      );
+    const unsupported = Object.keys(rawChanges).filter((field) => !supported.has(field));
+    if (unsupported.length)
+      return Response.json(
+        {
+          error:
+            "This amendment contains a field that cannot be applied to proposal wording.",
+        },
+        { status: 409 },
+      );
+    const changes = rawChanges as Record<string, unknown>;
     const wordingErrors = validateWordingChanges(changes);
     if (wordingErrors.length)
       return Response.json({ error: wordingErrors[0] }, { status: 400 });
+    const applyChanges = { ...changes };
+    if ("outcomes" in applyChanges)
+      applyChanges.outcomes = parseOutcomes(applyChanges.outcomes);
+
+    if (!recovering) {
+      const current = await latestRevision(db, amendment.proposalId);
+      if (current?.revisionId !== amendment.baseRevisionId) {
+        await db.collection("amendments").updateOne(
+          { amendmentId, status: "accepted" },
+          {
+            $set: {
+              applicationBlockedReason:
+                "The proposal wording changed after this amendment was accepted. Withdraw it or create a new amendment.",
+              applicationBlockedAt: new Date(),
+              applicationBlockedBy: user.memberId,
+            },
+          },
+        );
+        return Response.json(
+          {
+            error:
+              "Amendment base revision is stale. Withdraw this accepted amendment or create a new amendment against the current wording.",
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    const expectedContentHash = recovering && amendment.applyingExpectedContentHash
+      ? String(amendment.applyingExpectedContentHash)
+      : revisionContentHash(
+          proposalRevisionSnapshot({ ...proposal, ...applyChanges }),
+        );
 
     // A warning is not a safeguard. Refuse to apply an amendment that changes
     // the same block as an amendment already applied. The officer still needs
@@ -224,9 +256,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { status: 409 },
       );
 
-    const expectedContentHash = recovering
-      ? String(amendment.applyingExpectedContentHash)
-      : snapshotHash(projectedSnapshot(baseRevision.snapshot ?? {}, changes));
     let applyingToken: string;
     let applyingOperationId: string;
 
@@ -258,7 +287,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
           { status: 409 },
         );
     } else {
-      applyingOperationId = String(amendment.applyingOperationId);
+      applyingOperationId = amendment.applyingOperationId
+        ? String(amendment.applyingOperationId)
+        : randomUUID();
       applyingToken = randomUUID();
       const now = new Date();
       const refresh = await db.collection("amendments").updateOne(
@@ -266,18 +297,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
           amendmentId,
           status: "applying",
           applyingToken: amendment.applyingToken,
-          applyingOperationId: applyingOperationId,
           $or: [
             { applyingLeaseExpiresAt: { $lte: now } },
             {
               applyingLeaseExpiresAt: { $exists: false },
               applyingStartedAt: { $lte: new Date(now.getTime() - APPLY_LEASE_MS) },
             },
+            {
+              applyingLeaseExpiresAt: { $exists: false },
+              applyingStartedAt: { $exists: false },
+            },
           ],
         },
         {
           $set: {
             applyingToken,
+            applyingOperationId,
+            applyingExpectedContentHash: expectedContentHash,
             applyingStartedAt: now,
             applyingLeaseExpiresAt: new Date(now.getTime() + APPLY_LEASE_MS),
             applyingBy: user.memberId,
@@ -320,14 +356,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
         appliedRevisionId: String(current.revisionId),
       });
     }
-    if (current?.revisionId !== amendment.baseRevisionId)
+    if (current?.revisionId !== amendment.baseRevisionId) {
+      await releaseClaim(
+        db,
+        amendmentId,
+        applyingToken,
+        applyingOperationId,
+        "The proposal wording changed after this amendment was accepted. Withdraw it or create a new amendment.",
+      );
       return Response.json(
         {
           error:
-            "The proposal wording changed after this application started. The amendment was not applied. Review the proposal history before retrying.",
+            "The proposal wording changed after this application started. The amendment was released for review; withdraw it or create a new amendment.",
         },
         { status: 409 },
       );
+    }
 
     let updated: Awaited<ReturnType<typeof saveProposal>>;
     try {
@@ -336,7 +380,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         user,
         {
           proposalId: amendment.proposalId,
-          ...changes,
+          ...applyChanges,
         },
         {
           allowAmendmentApply: true,
@@ -349,12 +393,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       throw error;
     }
 
-    const after = await latestRevision(db, amendment.proposalId);
-    if (after?.contentHash !== expectedContentHash)
+    if (!updated.revisionId)
       return Response.json(
         {
           error:
-            "The proposal revision did not match the expected amendment wording. The amendment was not marked applied; review the proposal history before retrying.",
+            "The proposal write did not identify a revision. The amendment was not marked applied; review the proposal history.",
         },
         { status: 409 },
       );
@@ -364,20 +407,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
         amendmentId,
         applyingToken,
         applyingOperationId,
-        String(after.revisionId),
+        updated.revisionId,
         user,
       ))
     )
       return Response.json(
         {
           error:
-            "The proposal changed but the amendment status could not be finalised. Retry apply; the operation is idempotent.",
+            "The proposal changed but the amendment status could not be finalised. Retry after the recovery window; the operation is idempotent.",
         },
         { status: 409 },
       );
     return Response.json({
       proposal: updated,
-      appliedRevisionId: String(after.revisionId),
+      appliedRevisionId: updated.revisionId,
     });
   } catch (error) {
     return Response.json(

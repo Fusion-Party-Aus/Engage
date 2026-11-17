@@ -266,7 +266,9 @@ stateDiagram-v2
   accepted --> applying: claim for application
   applying --> applied: proposal revision written
   applying --> applying: retry after recovery window
+  applying --> accepted: refused or write failed
   accepted --> applied: apply as new proposal revision
+  accepted --> withdrawn: approved but no longer applicable
   rejected --> [*]
   withdrawn --> [*]
   applied --> [*]
@@ -282,7 +284,7 @@ Key rules:
 - An amendment ballot can be opened only while the matter ballot is in Decide and the amendment's base equals the matter's ballot revision.
 - The amendment ballot result is `endorsed`, `not-endorsed` or `inconclusive`. It is supplied by an officer, not computed from the tally.
 - Formal acceptance (`accepted`) is a separate act from endorsement.
-- Applying an accepted amendment claims the amendment (`applying`) before writing the proposal, then finalises `applied` with the produced revision. A failed write releases the claim; an interrupted application can be retried after a recovery window and is idempotent.
+- Applying an accepted amendment claims the amendment (`applying`) before writing the proposal, then finalises `applied` with the produced revision. The base revision is checked before the claim. A failed write, stale base or intervening revision releases the claim; an interrupted application can be retried after a recovery window and is idempotent. Recovery uses the recorded operation identity, replaces the lease token only after expiry, and reconciles an already-written expected revision without applying it again. If an accepted amendment's base moved, it is blocked for application and may be withdrawn with a reason; it cannot be re-resolved to ready.
 - Applying an accepted amendment creates a new proposal revision and requires the proposal to still be in Propose or Deliberate.
 
 ## Decision records

@@ -7,6 +7,10 @@ import { saveProposal } from "./proposals-store.ts";
 import { POST as postAmendment } from "../pages/api/amendments.ts";
 import { POST as resolveAmendment } from "../pages/api/admin/amendments/resolve.ts";
 import { POST as applyAmendment } from "../pages/api/admin/amendments/apply.ts";
+import {
+  proposalRevisionSnapshot,
+  revisionContentHash,
+} from "./proposal-revision.ts";
 import type { SessionUser } from "./types.ts";
 
 const env = { APP_MODE: "development" };
@@ -398,9 +402,145 @@ it("refuses to recover over an unrelated intervening revision", async () => {
   } as never);
   assert.equal(response.status, 409);
   const stored = await db.collection("amendments").findOne({ amendmentId });
-  assert.equal(stored?.status, "applying");
+  assert.equal(stored?.status, "accepted", "a refused recovery must not wedge the amendment in applying");
   const latest = await latestRevision(db, proposal.proposalId);
   assert.deepEqual(latest.snapshot.outcomes, ["Intervening wording"]);
+});
+
+it("refuses a stale accepted amendment before claiming it", async () => {
+  const db = await getDatabase(env);
+  const proposal = await saveProposal(db, admin, {
+    title: `Stale accepted ${crypto.randomUUID()}`,
+    space: "Governance",
+    summary: "A proposal used to test a stale accepted amendment.",
+    outcomes: ["First outcome"],
+    details: "Rationale.",
+    stage: "deliberate",
+  });
+  const base = await latestRevision(db, proposal.proposalId);
+  const amendmentId = crypto.randomUUID();
+  await db.collection("amendments").insertOne({
+    amendmentId,
+    proposalId: proposal.proposalId,
+    baseRevisionId: base.revisionId,
+    currentRevisionId: crypto.randomUUID(),
+    authorId: "dev-member-01",
+    changes: { outcomes: ["Accepted change"] },
+    fields: ["outcomes"],
+    status: "accepted",
+    conflicts: [],
+    createdAt: new Date(),
+  });
+  await saveProposal(db, admin, {
+    proposalId: proposal.proposalId,
+    outcomes: ["Earlier edit"],
+  });
+  const response = await applyAmendment({
+    request: request("/api/admin/amendments/apply", adminCookie, { amendmentId }),
+    locals,
+  } as never);
+  assert.equal(response.status, 409);
+  const stored = await db.collection("amendments").findOne({ amendmentId });
+  assert.equal(stored?.status, "accepted");
+  assert.equal(stored?.applyingToken, undefined);
+  assert.match(String(stored?.applicationBlockedReason), /wording changed/);
+  const withdrawn = await resolveAmendment({
+    request: request("/api/admin/amendments/resolve", adminCookie, {
+      amendmentId,
+      outcome: "withdrawn",
+      reason: "The proposal changed; withdraw this accepted amendment.",
+    }),
+    locals,
+  } as never);
+  assert.equal(withdrawn.status, 200);
+  assert.equal((await db.collection("amendments").findOne({ amendmentId }))?.status, "withdrawn");
+});
+
+it("normalises whitespace identically in the claim and the written revision", async () => {
+  const db = await getDatabase(env);
+  const proposal = await saveProposal(db, admin, {
+    title: `Whitespace ${crypto.randomUUID()}`,
+    space: "Governance",
+    summary: "A proposal used to test whitespace normalisation.",
+    outcomes: ["First outcome"],
+    details: "Rationale.",
+    stage: "deliberate",
+  });
+  const base = await latestRevision(db, proposal.proposalId);
+  const rawTitle = "  Whitespace amended title  ";
+  const expected = revisionContentHash(
+    proposalRevisionSnapshot({ ...proposal, title: rawTitle }),
+  );
+  await saveProposal(db, admin, { proposalId: proposal.proposalId, title: rawTitle });
+  const written = await latestRevision(db, proposal.proposalId);
+  assert.equal(written.contentHash, expected);
+  assert.equal(written.snapshot.title, "Whitespace amended title");
+
+  const amendmentId = crypto.randomUUID();
+  await db.collection("amendments").insertOne({
+    amendmentId,
+    proposalId: proposal.proposalId,
+    baseRevisionId: base.revisionId,
+    currentRevisionId: crypto.randomUUID(),
+    authorId: "dev-member-01",
+    changes: { title: rawTitle },
+    fields: ["title"],
+    status: "applying",
+    applyingToken: "whitespace-token",
+    applyingOperationId: "whitespace-operation",
+    applyingExpectedContentHash: expected,
+    applyingStartedAt: new Date(Date.now() - 120_000),
+    applyingLeaseExpiresAt: new Date(Date.now() - 60_000),
+    applyingBy: "dev-admin-01",
+    conflicts: [],
+    createdAt: new Date(),
+  });
+  const response = await applyAmendment({
+    request: request("/api/admin/amendments/apply", adminCookie, { amendmentId }),
+    locals,
+  } as never);
+  assert.equal(response.status, 200);
+  assert.equal(
+    await db.collection("proposal_revisions").countDocuments({ proposalId: proposal.proposalId }),
+    2,
+  );
+  assert.equal((await db.collection("amendments").findOne({ amendmentId }))?.status, "applied");
+});
+
+it("recovers a legacy applying record without an operation or expected hash", async () => {
+  const db = await getDatabase(env);
+  const proposal = await saveProposal(db, admin, {
+    title: `Legacy recovery ${crypto.randomUUID()}`,
+    space: "Governance",
+    summary: "A proposal used to test legacy applying-record adoption.",
+    outcomes: ["First outcome"],
+    details: "Rationale.",
+    stage: "deliberate",
+  });
+  const base = await latestRevision(db, proposal.proposalId);
+  const amendmentId = crypto.randomUUID();
+  await db.collection("amendments").insertOne({
+    amendmentId,
+    proposalId: proposal.proposalId,
+    baseRevisionId: base.revisionId,
+    currentRevisionId: crypto.randomUUID(),
+    authorId: "dev-member-01",
+    changes: { outcomes: ["Legacy recovery change"] },
+    fields: ["outcomes"],
+    status: "applying",
+    applyingToken: "legacy-token",
+    applyingBy: "dev-admin-01",
+    conflicts: [],
+    createdAt: new Date(),
+  });
+  const response = await applyAmendment({
+    request: request("/api/admin/amendments/apply", adminCookie, { amendmentId }),
+    locals,
+  } as never);
+  assert.equal(response.status, 200);
+  const stored = await db.collection("amendments").findOne({ amendmentId });
+  assert.equal(stored?.status, "applied");
+  assert.equal(stored?.applyingOperationId, undefined);
 });
 
 it("allows only one expired-lease recovery attempt to proceed", async () => {

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { Collection, Db } from "mongodb";
 import { loadBallotCryptoConfigForRead } from "./ballot-crypto.ts";
 import { BALLOTS_COLLECTION, FORMAL_DECISIONS_COLLECTION } from "./ballots.ts";
@@ -24,6 +24,10 @@ import {
   validateStageTransition,
 } from "./proposal-helpers.ts";
 import { geographicScopeForBranch, parseProposalScopeInput } from "./proposal-scope.ts";
+import {
+  proposalRevisionSnapshot,
+  revisionContentHash,
+} from "./proposal-revision.ts";
 import { hasPermission } from "./rbac.ts";
 import { canReviewSense } from "./sense-box.ts";
 
@@ -585,15 +589,6 @@ function parseBallotCloseDate(
   // 30-day ordinary ballot period. An explicit date always wins over this
   // default, so authorised overrides keep working unchanged.
   return defaultBallotClosesAtFrom(now);
-}
-
-function computeSnapshotHash(snapshot: {
-  title: string;
-  summary: string;
-  outcomes: string[];
-  details: string;
-}): string {
-  return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
 }
 
 async function assertStageTransitionAllowed(
@@ -1231,7 +1226,7 @@ export async function saveProposal(
   user: SessionUser,
   body: Record<string, unknown>,
   options: { allowAmendmentApply?: boolean; expectedRevisionId?: string } = {},
-): Promise<ProposalRecord> {
+): Promise<ProposalRecord & { revisionId?: string; revisionContentHash?: string }> {
   const col = db.collection<ProposalRecord>("proposals");
   const existingId =
     typeof body.proposalId === "string"
@@ -1513,17 +1508,8 @@ export async function saveProposal(
       updateSet.provenance = provenance;
     }
 
-    const snapshot = {
-      title: updated.title,
-      summary: updated.summary,
-      outcomes: updated.outcomes,
-      details: updated.details,
-      ...(updated.targetSection ? { targetSection: updated.targetSection } : {}),
-      ...(updated.proposedWording
-        ? { proposedWording: updated.proposedWording }
-        : {}),
-    };
-    const contentHash = computeSnapshotHash(snapshot);
+    const snapshot = proposalRevisionSnapshot(updated);
+    const contentHash = revisionContentHash(snapshot);
     const latestRevisions = await db
       .collection("proposal_revisions")
       .find({ proposalId: existing.proposalId })
@@ -1679,7 +1665,7 @@ export async function saveProposal(
         );
       }
     });
-    return updated;
+    return { ...updated, revisionId: nextRevisionId, revisionContentHash: contentHash };
   }
 
   const ballotClosesAt =
@@ -1791,16 +1777,7 @@ export async function saveProposal(
     updatedAt: now,
   };
 
-  const snapshot = {
-    title: created.title,
-    summary: created.summary,
-    outcomes: created.outcomes,
-    details: created.details,
-    ...(created.targetSection ? { targetSection: created.targetSection } : {}),
-    ...(created.proposedWording
-      ? { proposedWording: created.proposedWording }
-      : {}),
-  };
+  const snapshot = proposalRevisionSnapshot(created);
   const revision = {
     revisionId,
     proposalId,
@@ -1808,7 +1785,7 @@ export async function saveProposal(
     authorId: user.memberId,
     createdAt: now,
     snapshot,
-    contentHash: computeSnapshotHash(snapshot),
+    contentHash: revisionContentHash(snapshot),
     provenance: created.provenance,
   };
   await runInTransaction(db, async (session) => {
@@ -1864,7 +1841,7 @@ export async function saveProposal(
       );
     }
   });
-  return created;
+  return { ...created, revisionId, revisionContentHash: revision.contentHash };
 }
 
 export class ProposalSecondingError extends Error {

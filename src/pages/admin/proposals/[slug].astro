@@ -1253,7 +1253,23 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </form>
                       )}
 
-                      {['accepted', 'applying'].includes(amendment.status) && canManageBallot && (
+                      {amendment.status === 'accepted' && amendment.applicationBlockedReason && canManageProposal && (
+                        <div class="grid gap-3 pt-2">
+                          <p class="admin-inline-note" role="status">{amendment.applicationBlockedReason}</p>
+                          <form class="amendment-resolve-form grid gap-3" data-amendment-id={amendment.amendmentId}>
+                            <input type="hidden" name="outcome" value="withdrawn" />
+                            <Field label="Reason for withdrawal" htmlFor={`amendment-withdraw-${amendment.amendmentId}`}>
+                              <Textarea id={`amendment-withdraw-${amendment.amendmentId}`} name="reason" rows={2} required maxLength={1000} />
+                            </Field>
+                            <div class="admin-actions">
+                              <Button variant="outline" size="sm" type="submit">Withdraw blocked amendment</Button>
+                              <span class="admin-status" role="status" aria-live="polite"></span>
+                            </div>
+                          </form>
+                        </div>
+                      )}
+
+                      {['accepted', 'applying'].includes(amendment.status) && !amendment.applicationBlockedReason && canManageBallot && (
                         <form class="amendment-apply-form grid gap-2 pt-2" data-amendment-id={amendment.amendmentId}>
                           <div class="admin-actions">
                             <Button variant="outline" size="sm" type="submit">

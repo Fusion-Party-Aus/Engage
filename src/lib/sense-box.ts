@@ -139,7 +139,7 @@ async function publicProposalLinks(db: Db, proposalIds: string[]) {
   const ids = Array.from(new Set(proposalIds.filter(Boolean)));
   if (!ids.length) return new Map<string, { slug: string; title: string; stage: string }>();
   const rows = await db.collection('proposals')
-    .find({ proposalId: { $in: ids } })
+    .find({ proposalId: { $in: ids }, stage: { $ne: 'archived' } })
     .project({ _id: 0, proposalId: 1, slug: 1, title: 1, stage: 1, publicationScope: 1, originatingBranchId: 1, jurisdictionBranchId: 1, authorId: 1 })
     .toArray();
   const links = new Map<string, { slug: string; title: string; stage: string }>();
@@ -408,6 +408,7 @@ export async function reviewSense(db: Db, user: SessionUser, body: Record<string
     if (!proposalId) throw new SenseError('Choose a proposal to link.', 400);
     const proposal = await db.collection('proposals').findOne({ proposalId });
     if (!proposal) throw new SenseError('That proposal was not found.', 404);
+    if (proposal.stage === 'archived') throw new SenseError('Archived proposals cannot be linked.', 409);
     if (!canViewProposal(normalizeProposalDoc(proposal), user)) throw new SenseError('That proposal was not found.', 404);
     const legacyId = String(raw.linkedProposalId ?? '');
     update = {
@@ -416,16 +417,33 @@ export async function reviewSense(db: Db, user: SessionUser, body: Record<string
           $each: [legacyId, proposalId].filter(Boolean),
         },
       },
-      $set: { version: version + 1, reviewedBy: user.memberId, reviewedAt: new Date() },
+      $set: {
+        version: version + 1,
+        reviewedBy: user.memberId,
+        reviewedAt: new Date(),
+        linkedProposalAt: new Date(),
+        linkedProposalBy: user.memberId,
+        ...(raw.status === 'new' || raw.status === 'reviewed' ? { status: 'developing' } : {}),
+      },
       $unset: { linkedProposalId: '' },
     };
   } else if (action === 'unlink') {
     const proposalId = typeof body.proposalId === 'string' ? body.proposalId.trim() : '';
     if (!proposalId) throw new SenseError('Choose a proposal to unlink.', 400);
+    const remaining = linkedProposalIds(raw).filter((id) => id !== proposalId);
     update = {
       $pull: { linkedProposalIds: proposalId },
-      $set: { version: version + 1, reviewedBy: user.memberId, reviewedAt: new Date() },
-      ...(String(raw.linkedProposalId ?? '') === proposalId ? { $unset: { linkedProposalId: '' } } : {}),
+      $set: {
+        version: version + 1,
+        reviewedBy: user.memberId,
+        reviewedAt: new Date(),
+        ...(remaining.length === 0 && raw.status === 'developing' ? { status: 'reviewed' } : {}),
+      },
+      ...(remaining.length === 0
+        ? { $unset: { linkedProposalId: '', linkedProposalAt: '', linkedProposalBy: '' } }
+        : String(raw.linkedProposalId ?? '') === proposalId
+          ? { $unset: { linkedProposalId: '' } }
+          : {}),
     };
   } else if (action === 'status') {
     const status = choice(body.status,SENSE_STATUSES,'status');

@@ -42,11 +42,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const col = db.collection("amendments");
     const amendment = await col.findOne({
       amendmentId,
-      status: { $in: ["proposed", "stale", "conflict"] },
+      status: { $in: ["proposed", "stale", "conflict", "accepted"] },
     });
     if (!amendment)
       return Response.json(
         { error: "Amendment is missing or already resolved." },
+        { status: 409 },
+      );
+    if (amendment.status === "accepted" && outcome !== "withdrawn")
+      return Response.json(
+        {
+          error:
+            "An accepted amendment that can no longer apply can only be withdrawn.",
+        },
         { status: 409 },
       );
     const proposal = await db
@@ -74,11 +82,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
       },
     };
     const unset: Record<string, ""> = {};
+    if (amendment.status === "accepted") {
+      unset.applicationBlockedReason = "";
+      unset.applicationBlockedAt = "";
+      unset.applicationBlockedBy = "";
+    }
     if (outcome === "ready") {
       const latest = await db
         .collection("proposal_revisions")
         .find({ proposalId: amendment.proposalId })
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .limit(1)
         .toArray();
       if (!latest[0])

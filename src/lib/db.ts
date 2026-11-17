@@ -524,8 +524,14 @@ export function createMemoryDb(): Db {
             for (const field of Object.keys(update.$unset || {})) delete doc[field];
           };
           if (idx >= 0) {
+            const before = JSON.stringify(store[idx]);
             applySetOperators(store[idx]!);
-            return { matchedCount: 1, modifiedCount: 1, acknowledged: true };
+            const modified = JSON.stringify(store[idx]) !== before;
+            return {
+              matchedCount: 1,
+              modifiedCount: modified ? 1 : 0,
+              acknowledged: true,
+            };
           }
           if (options?.upsert) {
             const _id = new ObjectId();

@@ -174,7 +174,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const latestRows = await db
       .collection("proposal_revisions")
       .find({ proposalId })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(1)
       .toArray();
     const latest = latestRows[0];
