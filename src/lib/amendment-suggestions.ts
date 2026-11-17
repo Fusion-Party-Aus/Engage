@@ -1,0 +1,525 @@
+/**
+ * Block-anchored amendment suggestions.
+ *
+ * An amendment is still stored as whole-field replacement `changes`, because
+ * that is what the ballot and apply path bind. Suggestions are the member-facing
+ * editing model: each one names a stable block in the base revision, quotes the
+ * original text and offers replacement, removal or addition. The server
+ * reconstructs the complete wording from the quoted blocks, so a suggestion can
+ * never silently replace text the member did not see.
+ *
+ * Anchors are block-level rather than character ranges. A paragraph or a single
+ * commitment is the smallest unit a proposal actually publishes, and it gives
+ * reconciliation a stable target when earlier wording changes.
+ */
+
+export const WORDING_FIELDS = ['title', 'summary', 'details', 'outcomes'] as const;
+export type WordingField = (typeof WORDING_FIELDS)[number];
+
+export interface WordingSnapshot {
+  title: string;
+  summary: string;
+  outcomes: string[];
+  details: string;
+}
+
+export interface WordingBlock {
+  /** Stable within a revision: `${field}:${index}`. */
+  blockId: string;
+  field: WordingField;
+  index: number;
+  label: string;
+  value: string;
+}
+
+export type SuggestionMode = 'replace' | 'remove' | 'add';
+
+export interface AmendmentSuggestion {
+  suggestionId: string;
+  field: WordingField;
+  index: number;
+  original: string;
+  proposed: string;
+  comment?: string;
+  mode: SuggestionMode;
+  /** Exact block before an addition, captured from the base revision. */
+  anchorBefore?: string;
+  /** Exact block after an addition, captured from the base revision. */
+  anchorAfter?: string;
+}
+
+export interface SuggestionClassification {
+  suggestionId: string;
+  state: 'clean' | 'moved' | 'conflict';
+  /** Block index in the latest revision when the anchor still exists. */
+  index?: number;
+}
+
+export interface RebaseResult {
+  suggestions: AmendmentSuggestion[];
+  changes: Partial<WordingSnapshot>;
+  unresolved: string[];
+  classifications: SuggestionClassification[];
+}
+
+export function wordingSnapshot(value: Record<string, any>): WordingSnapshot {
+  return {
+    title: String(value.title ?? ''),
+    summary: String(value.summary ?? ''),
+    outcomes: Array.isArray(value.outcomes) ? value.outcomes.map(String) : [],
+    details: String(value.details ?? ''),
+  };
+}
+
+/** Split prose into published blocks: blank-line paragraphs. */
+export function paragraphs(value: string): string[] {
+  const trimmed = value.replace(/\r\n/g, '\n').trim();
+  return trimmed ? trimmed.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean) : [];
+}
+
+function fieldBlocks(snapshot: WordingSnapshot, field: WordingField): string[] {
+  if (field === 'title') return [snapshot.title];
+  if (field === 'outcomes') return snapshot.outcomes;
+  return paragraphs(snapshot[field]);
+}
+
+/**
+ * Capture the block either side of an addition. On rebase, these anchors decide
+ * where the new block belongs; the numeric index alone is not stable when an
+ * earlier revision inserts or removes blocks.
+ */
+export function anchorSuggestions(
+  snapshot: WordingSnapshot,
+  suggestions: AmendmentSuggestion[],
+): AmendmentSuggestion[] {
+  return suggestions.map((suggestion) => {
+    if (suggestion.mode !== 'add' || suggestion.field === 'title') return suggestion;
+    const blocks = fieldBlocks(snapshot, suggestion.field);
+    if (suggestion.index > blocks.length)
+      throw new Error('Choose a valid position for the new wording.');
+    return {
+      ...suggestion,
+      ...(suggestion.index > 0 ? { anchorBefore: blocks[suggestion.index - 1] } : {}),
+      ...(suggestion.index < blocks.length ? { anchorAfter: blocks[suggestion.index] } : {}),
+    };
+  });
+}
+
+function resolveAdditionIndex(
+  latest: WordingSnapshot,
+  suggestion: AmendmentSuggestion,
+): { index?: number; state: 'clean' | 'moved' | 'conflict' } {
+  const blocks = fieldBlocks(latest, suggestion.field);
+  const before = suggestion.anchorBefore
+    ? blocks.flatMap((value, index) => (value === suggestion.anchorBefore ? [index] : []))
+    : [];
+  const after = suggestion.anchorAfter
+    ? blocks.flatMap((value, index) => (value === suggestion.anchorAfter ? [index] : []))
+    : [];
+  if (suggestion.anchorBefore && before.length !== 1) return { state: 'conflict' };
+  if (suggestion.anchorAfter && after.length !== 1) return { state: 'conflict' };
+  if (before.length && after.length) {
+    const beforeIndex = before[0]!;
+    const afterIndex = after[0]!;
+    if (afterIndex !== beforeIndex + 1) return { state: 'conflict' };
+    return { index: afterIndex, state: afterIndex === suggestion.index ? 'clean' : 'moved' };
+  }
+  if (before.length) {
+    const index = before[0]! + 1;
+    return { index, state: index === suggestion.index ? 'clean' : 'moved' };
+  }
+  if (after.length) {
+    const index = after[0]!;
+    return { index, state: index === suggestion.index ? 'clean' : 'moved' };
+  }
+  // An addition created before anchors existed cannot be placed safely once
+  // the surrounding wording changes.
+  return { state: 'conflict' };
+}
+
+export function wordingBlocks(snapshot: WordingSnapshot): WordingBlock[] {
+  const blocks: WordingBlock[] = [
+    { blockId: 'title:0', field: 'title', index: 0, label: 'Title', value: snapshot.title },
+  ];
+  paragraphs(snapshot.summary).forEach((value, index) => {
+    blocks.push({
+      blockId: `summary:${index}`,
+      field: 'summary',
+      index,
+      label: paragraphs(snapshot.summary).length > 1 ? `Summary · paragraph ${index + 1}` : 'Summary',
+      value,
+    });
+  });
+  snapshot.outcomes.forEach((value, index) => {
+    blocks.push({
+      blockId: `outcomes:${index}`,
+      field: 'outcomes',
+      index,
+      label: `Commitment ${index + 1}`,
+      value,
+    });
+  });
+  paragraphs(snapshot.details).forEach((value, index) => {
+    blocks.push({
+      blockId: `details:${index}`,
+      field: 'details',
+      index,
+      label: paragraphs(snapshot.details).length > 1 ? `Rationale · paragraph ${index + 1}` : 'Rationale',
+      value,
+    });
+  });
+  return blocks;
+}
+
+function modeFor(original: string, proposed: string): SuggestionMode {
+  if (!original) return 'add';
+  if (!proposed) return 'remove';
+  return 'replace';
+}
+
+const MAX_SUGGESTIONS = 40;
+const MAX_BLOCK = 5000;
+
+/**
+ * Validate and normalise untrusted client input. The server generates the
+ * suggestion ID; a client cannot use it to address another record.
+ */
+export function normalizeSuggestions(raw: unknown): AmendmentSuggestion[] {
+  if (!Array.isArray(raw) || raw.length === 0) throw new Error('Add at least one suggested change.');
+  if (raw.length > MAX_SUGGESTIONS) throw new Error(`An amendment can include at most ${MAX_SUGGESTIONS} suggestions.`);
+  const seen = new Set<string>();
+  return raw.map((entry, ordinal) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+      throw new Error(`Suggestion ${ordinal + 1} is not valid.`);
+    const value = entry as Record<string, unknown>;
+    const field = value.field;
+    if (typeof field !== 'string' || !WORDING_FIELDS.includes(field as WordingField))
+      throw new Error(`Suggestion ${ordinal + 1} has an unsupported field.`);
+    const index = Number(value.index);
+    if (!Number.isSafeInteger(index) || index < 0 || index > 500)
+      throw new Error(`Suggestion ${ordinal + 1} has an invalid block.`);
+    const original = typeof value.original === 'string' ? value.original.trim() : '';
+    const proposed = typeof value.proposed === 'string' ? value.proposed.trim() : '';
+    const comment = typeof value.comment === 'string' ? value.comment.trim().slice(0, 500) : '';
+    if (!original && !proposed)
+      throw new Error(`Suggestion ${ordinal + 1} does not change anything.`);
+    if (original.length > MAX_BLOCK || proposed.length > MAX_BLOCK)
+      throw new Error(`Suggestion ${ordinal + 1} is too long.`);
+    if (field === 'title' && (!original || !proposed))
+      throw new Error('A title suggestion must replace the existing title.');
+    const key = `${field}:${index}`;
+    if (modeFor(original, proposed) !== 'add' && seen.has(key))
+      throw new Error('Only one suggestion can target the same block.');
+    if (modeFor(original, proposed) !== 'add') seen.add(key);
+    return {
+      suggestionId: `sug-${globalThis.crypto.randomUUID()}`,
+      field: field as WordingField,
+      index,
+      original,
+      proposed,
+      ...(comment ? { comment } : {}),
+      mode: modeFor(original, proposed),
+    };
+  });
+}
+
+function cloneSnapshot(snapshot: WordingSnapshot): WordingSnapshot {
+  return {
+    title: snapshot.title,
+    summary: snapshot.summary,
+    outcomes: [...snapshot.outcomes],
+    details: snapshot.details,
+  };
+}
+
+function setProse(snapshot: WordingSnapshot, field: 'summary' | 'details', parts: string[]) {
+  snapshot[field] = parts.join('\n\n');
+}
+
+/**
+ * Apply suggestions to a snapshot by reconstructing each field from its base
+ * blocks. Additions are collected by insertion point and applied in the order
+ * they were written, so several additions and a removal in the same field do
+ * not shift each other's indices. `strict` requires every quoted original to
+ * match its anchor; rebasing uses non-strict application after anchors move.
+ */
+export function applySuggestions(
+  base: WordingSnapshot,
+  suggestions: AmendmentSuggestion[],
+  options: { strict?: boolean } = {},
+): { changes: Partial<WordingSnapshot>; unresolved: string[] } {
+  const snapshot = cloneSnapshot(base);
+  const touched = new Set<WordingField>();
+  const unresolved: string[] = [];
+  const strict = options.strict !== false;
+
+  const titleSuggestions = suggestions.filter((suggestion) => suggestion.field === 'title');
+  for (const suggestion of titleSuggestions) {
+    if (suggestion.mode !== 'replace' || snapshot.title !== suggestion.original) {
+      unresolved.push('title');
+      continue;
+    }
+    snapshot.title = suggestion.proposed;
+    touched.add('title');
+  }
+
+  const rebuild = (field: 'summary' | 'details' | 'outcomes') => {
+    const baseBlocks = field === 'outcomes' ? [...snapshot.outcomes] : paragraphs(snapshot[field]);
+    const replacements = new Map<number, string>();
+    const removals = new Set<number>();
+    const additions = new Map<number, string[]>();
+    let changed = false;
+    for (const suggestion of suggestions.filter((item) => item.field === field)) {
+      if (suggestion.mode === 'add') {
+        if (suggestion.index > baseBlocks.length) {
+          if (!unresolved.includes(field)) unresolved.push(field);
+          continue;
+        }
+        const list = additions.get(suggestion.index) ?? [];
+        list.push(suggestion.proposed);
+        additions.set(suggestion.index, list);
+        changed = true;
+        continue;
+      }
+      if (suggestion.index >= baseBlocks.length) {
+        if (!unresolved.includes(field)) unresolved.push(field);
+        continue;
+      }
+      if (strict && baseBlocks[suggestion.index] !== suggestion.original) {
+        if (!unresolved.includes(field)) unresolved.push(field);
+        continue;
+      }
+      if (suggestion.mode === 'remove') removals.add(suggestion.index);
+      else replacements.set(suggestion.index, suggestion.proposed);
+      changed = true;
+    }
+    if (!changed) return;
+    const rebuilt: string[] = [];
+    const maxIndex = Math.max(baseBlocks.length, ...additions.keys());
+    for (let index = 0; index <= maxIndex; index += 1) {
+      for (const addition of additions.get(index) ?? []) rebuilt.push(addition);
+      if (index < baseBlocks.length) {
+        if (removals.has(index)) continue;
+        rebuilt.push(replacements.get(index) ?? baseBlocks[index]!);
+      }
+    }
+    if (field === 'outcomes') snapshot.outcomes = rebuilt;
+    else setProse(snapshot, field, rebuilt);
+    touched.add(field);
+  };
+
+  rebuild('summary');
+  rebuild('outcomes');
+  rebuild('details');
+
+  const changes: Partial<WordingSnapshot> = {};
+  for (const field of touched) {
+    if (field === 'title') changes.title = snapshot.title;
+    else if (field === 'summary') changes.summary = snapshot.summary;
+    else if (field === 'details') changes.details = snapshot.details;
+    else changes.outcomes = snapshot.outcomes;
+  }
+  return { changes, unresolved };
+}
+
+/**
+ * Validate the whole-field wording that will be stored and later applied.
+ * This is the authoritative boundary for title/summary length, not the editor.
+ */
+export function validateWordingChanges(changes: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  if ('title' in changes) {
+    if (typeof changes.title !== 'string' || changes.title.trim().length < 4 || changes.title.trim().length > 200)
+      errors.push('The amended title must be 4–200 characters.');
+  }
+  if ('summary' in changes) {
+    if (typeof changes.summary !== 'string' || changes.summary.trim().length < 10 || changes.summary.trim().length > 2000)
+      errors.push('The amended summary must be 10–2,000 characters.');
+  }
+  if ('details' in changes) {
+    if (typeof changes.details !== 'string' || changes.details.length > 20_000)
+      errors.push('The amended rationale must be text under 20,000 characters.');
+  }
+  if ('outcomes' in changes) {
+    if (!Array.isArray(changes.outcomes) || changes.outcomes.some((value) => typeof value !== 'string' || value.length > 500))
+      errors.push('Each amended commitment must be text under 500 characters.');
+  }
+  return errors;
+}
+
+function locateOriginal(snapshot: WordingSnapshot, suggestion: AmendmentSuggestion): number[] {
+  if (suggestion.field === 'title') return snapshot.title === suggestion.original ? [0] : [];
+  if (suggestion.field === 'outcomes') {
+    return snapshot.outcomes.flatMap((value, index) => value === suggestion.original ? [index] : []);
+  }
+  return paragraphs(snapshot[suggestion.field]).flatMap((value, index) => value === suggestion.original ? [index] : []);
+}
+
+export function classifySuggestions(
+  base: WordingSnapshot,
+  latest: WordingSnapshot,
+  suggestions: AmendmentSuggestion[],
+): SuggestionClassification[] {
+  return suggestions.map((suggestion) => {
+    if (suggestion.mode === 'add') {
+      const resolved = resolveAdditionIndex(latest, suggestion);
+      return {
+        suggestionId: suggestion.suggestionId,
+        state: resolved.state,
+        ...(resolved.index !== undefined ? { index: resolved.index } : {}),
+      };
+    }
+    const latestMatches = locateOriginal(latest, suggestion);
+    if (latestMatches.length === 0) {
+      return { suggestionId: suggestion.suggestionId, state: 'conflict' };
+    }
+    // Repeated wording is ambiguous. Only keep the original position when it
+    // still holds the quoted text; otherwise an officer must resolve it.
+    if (latestMatches.length > 1 && !latestMatches.includes(suggestion.index)) {
+      return { suggestionId: suggestion.suggestionId, state: 'conflict' };
+    }
+    const sameIndex = latestMatches.includes(suggestion.index);
+    return {
+      suggestionId: suggestion.suggestionId,
+      state: sameIndex ? 'clean' : 'moved',
+      index: sameIndex ? suggestion.index : latestMatches[0],
+    };
+  });
+}
+
+/** Move each anchor onto matching text in the latest revision. */
+export function rebaseSuggestions(
+  suggestions: AmendmentSuggestion[],
+  latest: WordingSnapshot,
+): RebaseResult {
+  const rebased: AmendmentSuggestion[] = [];
+  const unresolved: string[] = [];
+  const classifications: SuggestionClassification[] = [];
+  for (const suggestion of suggestions) {
+    if (suggestion.mode === 'add') {
+      const resolved = resolveAdditionIndex(latest, suggestion);
+      if (resolved.index === undefined) {
+        unresolved.push(suggestion.field);
+        classifications.push({ suggestionId: suggestion.suggestionId, state: 'conflict' });
+        continue;
+      }
+      const index = resolved.index;
+      rebased.push({ ...suggestion, index });
+      classifications.push({
+        suggestionId: suggestion.suggestionId,
+        state: resolved.state,
+        index,
+      });
+      continue;
+    }
+    const matches = locateOriginal(latest, suggestion);
+    if (matches.length === 0 || (matches.length > 1 && !matches.includes(suggestion.index))) {
+      unresolved.push(suggestion.field);
+      classifications.push({ suggestionId: suggestion.suggestionId, state: 'conflict' });
+      continue;
+    }
+    const index = matches.includes(suggestion.index) ? suggestion.index : matches[0]!;
+    rebased.push({ ...suggestion, index });
+    classifications.push({
+      suggestionId: suggestion.suggestionId,
+      state: index === suggestion.index ? 'clean' : 'moved',
+      index,
+    });
+  }
+  const applied = applySuggestions(latest, rebased, { strict: true });
+  for (const field of applied.unresolved) if (!unresolved.includes(field)) unresolved.push(field);
+  return { suggestions: rebased, changes: applied.changes, unresolved, classifications };
+}
+
+/**
+ * The blocks an amendment intends to change. Two non-rejected amendments that
+ * share a key are competing even when their replacement text differs.
+ */
+export function suggestionTargets(suggestions: AmendmentSuggestion[] | undefined): Set<string> {
+  if (!suggestions?.length) return new Set();
+  return new Set(suggestions.map((suggestion) => `${suggestion.field}:${suggestion.index}`));
+}
+
+export function competingTargets(
+  suggestions: AmendmentSuggestion[] | undefined,
+  otherSuggestions: AmendmentSuggestion[] | undefined,
+): string[] {
+  const ours = suggestionTargets(suggestions);
+  const theirs = suggestionTargets(otherSuggestions);
+  return [...ours].filter((key) => theirs.has(key));
+}
+
+/**
+ * Conservative competition check for the apply boundary. Block suggestions
+ * give exact targets; legacy amendments without suggestions fall back to the
+ * whole fields they replace.
+ */
+export function amendmentsCompete(
+  amendment: { suggestions?: AmendmentSuggestion[]; fields?: unknown; changes?: Record<string, unknown> },
+  other: { suggestions?: AmendmentSuggestion[]; fields?: unknown; changes?: Record<string, unknown> },
+): boolean {
+  if (amendment.suggestions?.length && other.suggestions?.length) {
+    return competingTargets(amendment.suggestions, other.suggestions).length > 0;
+  }
+  const fieldsFor = (value: typeof amendment) => new Set(
+    Array.isArray(value.fields)
+      ? value.fields.map(String)
+      : Object.keys(value.changes ?? {}),
+  );
+  const ours = fieldsFor(amendment);
+  for (const field of fieldsFor(other)) if (ours.has(field)) return true;
+  return false;
+}
+
+export interface DiffSegment {
+  type: 'same' | 'add' | 'remove';
+  text: string;
+}
+
+/**
+ * Word-level diff for display only. It never feeds the stored wording. The
+ * token cap keeps an adversarial paragraph from making the page quadratic.
+ */
+export function diffWords(before: string, after: string): DiffSegment[] {
+  const tokenize = (value: string) => value.split(/(\s+)/).filter((part) => part.length > 0);
+  const left = tokenize(before);
+  const right = tokenize(after);
+  if (left.length * right.length > 80_000) {
+    return [
+      ...(before ? [{ type: 'remove' as const, text: before }] : []),
+      ...(after ? [{ type: 'add' as const, text: after }] : []),
+    ];
+  }
+  const dp: number[][] = Array.from({ length: left.length + 1 }, () => Array(right.length + 1).fill(0));
+  for (let i = left.length - 1; i >= 0; i -= 1) {
+    for (let j = right.length - 1; j >= 0; j -= 1) {
+      dp[i]![j] = left[i] === right[j]
+        ? dp[i + 1]![j + 1]! + 1
+        : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+    }
+  }
+  const segments: DiffSegment[] = [];
+  const push = (type: DiffSegment['type'], text: string) => {
+    const last = segments[segments.length - 1];
+    if (last && last.type === type) last.text += text;
+    else segments.push({ type, text });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    if (left[i] === right[j]) {
+      push('same', left[i]!);
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+      push('remove', left[i]!);
+      i += 1;
+    } else {
+      push('add', right[j]!);
+      j += 1;
+    }
+  }
+  while (i < left.length) push('remove', left[i++]!);
+  while (j < right.length) push('add', right[j++]!);
+  return segments;
+}

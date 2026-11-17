@@ -138,6 +138,7 @@ export function toProposalDetailDto(p: ProposalSummaryView) {
     ...(p.supersededByNote ? { supersededByNote: p.supersededByNote } : {}),
     ...(p.targetSection ? { targetSection: p.targetSection } : {}),
     ...(p.proposedWording ? { proposedWording: p.proposedWording } : {}),
+    ...(p.sourceSenseSubmissionId ? { developedFromSenseBox: true } : {}),
     ...(p.authorName ? { authorName: p.authorName } : {}),
   };
 }
@@ -227,6 +228,19 @@ export function toAmendmentDto(a: Record<string, any>) {
     currentRevisionId: String(a.currentRevisionId ?? ""),
     changes: a.changes ?? {},
     fields: Array.isArray(a.fields) ? a.fields : [],
+    ...(Array.isArray(a.suggestions) && a.suggestions.length
+      ? {
+          suggestions: a.suggestions.map((suggestion: any) => ({
+            suggestionId: String(suggestion.suggestionId ?? ""),
+            field: String(suggestion.field ?? ""),
+            index: Number(suggestion.index ?? 0),
+            original: String(suggestion.original ?? ""),
+            proposed: String(suggestion.proposed ?? ""),
+            ...(suggestion.comment ? { comment: String(suggestion.comment) } : {}),
+            mode: String(suggestion.mode ?? "replace"),
+          })),
+        }
+      : {}),
     status: String(a.status ?? "proposed"),
     conflicts: Array.isArray(a.conflicts) ? a.conflicts : [],
     createdAt: a.createdAt,

@@ -10,6 +10,15 @@ import { getDatabase, runtimeEnv } from "../../lib/db.ts";
 import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import { createAmendmentRevision } from "../../lib/amendments.ts";
 import {
+  anchorSuggestions,
+  applySuggestions,
+  classifySuggestions,
+  normalizeSuggestions,
+  validateWordingChanges,
+  wordingSnapshot,
+  type AmendmentSuggestion,
+} from "../../lib/amendment-suggestions.ts";
+import {
   canReviewArchivedProposal,
   canViewProposal,
   normalizeProposalDoc,
@@ -64,28 +73,43 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const body = (await request.json()) as Record<string, unknown>;
     const proposalId = String(body.proposalId ?? "");
     const baseRevisionId = String(body.baseRevisionId ?? "");
-    const changes =
+    if (!proposalId || !baseRevisionId)
+      return Response.json(
+        { error: "Provide the proposal and the exact wording revision you are amending." },
+        { status: 400 },
+      );
+    const changesInput =
       body.changes &&
       typeof body.changes === "object" &&
       !Array.isArray(body.changes)
         ? (body.changes as Record<string, unknown>)
         : {};
-    const fields = Object.keys(changes);
-    if (
-      !proposalId ||
-      !baseRevisionId ||
-      !fields.length ||
-      fields.some(
-        (f) => !["title", "summary", "details", "outcomes"].includes(f),
-      )
-    )
+    const hasSuggestions = body.suggestions !== undefined;
+    if (hasSuggestions && body.changes !== undefined)
       return Response.json(
-        {
-          error:
-            "Provide proposalId, baseRevisionId and changes to supported content fields.",
-        },
+        { error: "Submit either block suggestions or replacement wording, not both." },
         { status: 400 },
       );
+    const supportedFields = ["title", "summary", "details", "outcomes"];
+    if (!hasSuggestions) {
+      const fields = Object.keys(changesInput);
+      if (!fields.length || fields.some((f) => !supportedFields.includes(f)))
+        return Response.json(
+          { error: "Provide the wording changes you want to make." },
+          { status: 400 },
+        );
+      for (const [field, value] of Object.entries(changesInput)) {
+        const valid =
+          field === "outcomes"
+            ? Array.isArray(value) && value.every((item) => typeof item === "string")
+            : typeof value === "string";
+        if (!valid)
+          return Response.json(
+            { error: `The proposed ${field} is not valid.` },
+            { status: 400 },
+          );
+      }
+    }
     const db = await getDatabase(env);
     const gate = await requireLegalAcceptance(db, user, env);
     if (gate) return gate;
@@ -111,27 +135,83 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "Amendments can only be proposed before the Decide stage." },
         { status: 409 },
       );
+
+    let changes: Record<string, unknown>;
+    let suggestions: AmendmentSuggestion[] | undefined;
+    if (hasSuggestions) {
+      try {
+        suggestions = normalizeSuggestions(body.suggestions);
+        suggestions = anchorSuggestions(wordingSnapshot(base.snapshot), suggestions);
+      } catch (error) {
+        return Response.json(
+          { error: error instanceof Error ? error.message : "Check the suggested changes." },
+          { status: 400 },
+        );
+      }
+      const applied = applySuggestions(wordingSnapshot(base.snapshot), suggestions, { strict: true });
+      if (applied.unresolved.length)
+        return Response.json(
+          {
+            error:
+              "Some suggested changes no longer match the wording you are editing. Reload the proposal and try again.",
+          },
+          { status: 409 },
+        );
+      changes = applied.changes as Record<string, unknown>;
+    } else {
+      changes = changesInput;
+    }
+    const fields = Object.keys(changes);
+    if (!fields.length)
+      return Response.json(
+        { error: "The suggested changes do not alter the wording." },
+        { status: 400 },
+      );
+    const wordingErrors = validateWordingChanges(changes);
+    if (wordingErrors.length)
+      return Response.json({ error: wordingErrors[0] }, { status: 400 });
+
     const latestRows = await db
       .collection("proposal_revisions")
       .find({ proposalId })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(1)
       .toArray();
     const latest = latestRows[0];
     const stale = latest?.revisionId !== baseRevisionId;
-    const conflicts = stale
-      ? fields.filter(
+    let conflicts: string[] = [];
+    if (stale && latest) {
+      if (suggestions) {
+        const classifications = classifySuggestions(
+          wordingSnapshot(base.snapshot),
+          wordingSnapshot(latest.snapshot),
+          suggestions,
+        );
+        const conflicted = new Set<string>();
+        for (const classification of classifications) {
+          if (classification.state !== "conflict") continue;
+          const field = suggestions.find(
+            (suggestion) => suggestion.suggestionId === classification.suggestionId,
+          )?.field;
+          if (field) conflicted.add(field);
+        }
+        conflicts = [...conflicted];
+      } else {
+        conflicts = fields.filter(
           (field) =>
             JSON.stringify(base.snapshot[field]) !==
             JSON.stringify(latest.snapshot[field]),
-        )
-      : [];
+        );
+      }
+    }
     const amendmentId = randomUUID();
     const currentRevisionId = await createAmendmentRevision(
       db,
       amendmentId,
       changes,
       user.memberId,
+      null,
+      suggestions,
     );
     const record = {
       amendmentId,
@@ -141,6 +221,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       currentRevisionId,
       changes,
       fields,
+      ...(suggestions ? { suggestions } : {}),
       status: conflicts.length ? "conflict" : stale ? "stale" : "proposed",
       conflicts,
       createdAt: new Date(),

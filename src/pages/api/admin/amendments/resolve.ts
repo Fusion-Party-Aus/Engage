@@ -2,6 +2,12 @@ import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { createAmendmentRevision } from "../../../../lib/amendments.ts";
+import {
+  rebaseSuggestions,
+  validateWordingChanges,
+  wordingSnapshot,
+  type AmendmentSuggestion,
+} from "../../../../lib/amendment-suggestions.ts";
 import { hasPermission, hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -36,11 +42,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const col = db.collection("amendments");
     const amendment = await col.findOne({
       amendmentId,
-      status: { $in: ["proposed", "stale", "conflict"] },
+      status: { $in: ["proposed", "stale", "conflict", "accepted"] },
     });
     if (!amendment)
       return Response.json(
         { error: "Amendment is missing or already resolved." },
+        { status: 409 },
+      );
+    if (amendment.status === "accepted" && outcome !== "withdrawn")
+      return Response.json(
+        {
+          error:
+            "An accepted amendment that can no longer apply can only be withdrawn.",
+        },
         { status: 409 },
       );
     const proposal = await db
@@ -67,11 +81,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
         resolvedAt: new Date(),
       },
     };
+    const unset: Record<string, ""> = {};
+    if (amendment.status === "accepted") {
+      unset.applicationBlockedReason = "";
+      unset.applicationBlockedAt = "";
+      unset.applicationBlockedBy = "";
+    }
     if (outcome === "ready") {
       const latest = await db
         .collection("proposal_revisions")
         .find({ proposalId: amendment.proposalId })
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .limit(1)
         .toArray();
       if (!latest[0])
@@ -79,22 +99,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
           { error: "Current proposal revision not found." },
           { status: 409 },
         );
+      const resolutionChanges =
+        body.changes &&
+        typeof body.changes === "object" &&
+        !Array.isArray(body.changes)
+          ? (body.changes as Record<string, unknown>)
+          : null;
       let changes = amendment.changes as Record<string, unknown>;
-      if (amendment.status === "conflict") {
-        const resolutionChanges =
-          body.changes &&
-          typeof body.changes === "object" &&
-          !Array.isArray(body.changes)
-            ? (body.changes as Record<string, unknown>)
-            : null;
-        if (!resolutionChanges)
-          return Response.json(
-            {
-              error:
-                "Overlapping amendment fields require explicit replacement changes to resolve.",
-            },
-            { status: 409 },
-          );
+      let resolvedSuggestions: AmendmentSuggestion[] | undefined = Array.isArray(
+        amendment.suggestions,
+      )
+        ? (amendment.suggestions as AmendmentSuggestion[])
+        : undefined;
+
+      if (resolutionChanges) {
         if (
           !Object.keys(resolutionChanges).length ||
           Object.keys(resolutionChanges).some(
@@ -109,17 +127,47 @@ export const POST: APIRoute = async ({ request, locals }) => {
             { status: 400 },
           );
         changes = resolutionChanges;
+        // An explicit officer rewrite supersedes the original block anchors.
+        resolvedSuggestions = undefined;
+        unset.suggestions = "";
+      } else if (resolvedSuggestions?.length) {
+        const rebased = rebaseSuggestions(
+          resolvedSuggestions,
+          wordingSnapshot(latest[0].snapshot),
+        );
+        if (rebased.unresolved.length)
+          return Response.json(
+            {
+              error:
+                "Some suggested blocks no longer match the latest wording. Enter replacement wording for those blocks before marking this amendment ready.",
+            },
+            { status: 409 },
+          );
+        changes = rebased.changes as Record<string, unknown>;
+        resolvedSuggestions = rebased.suggestions;
+      } else if (amendment.status === "conflict") {
+        return Response.json(
+          {
+            error:
+              "Overlapping amendment fields require explicit replacement changes to resolve.",
+          },
+          { status: 409 },
+        );
       }
       const parentRevisionId =
         typeof amendment.currentRevisionId === "string"
           ? amendment.currentRevisionId
           : null;
+      const wordingErrors = validateWordingChanges(changes);
+      if (wordingErrors.length)
+        return Response.json({ error: wordingErrors[0] }, { status: 400 });
       const revisionId = await createAmendmentRevision(
         db,
         amendmentId,
         changes,
         user.memberId,
         parentRevisionId,
+        resolvedSuggestions,
       );
       set.changes = changes;
       set.fields = Object.keys(changes);
@@ -127,6 +175,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       set.currentRevisionId = revisionId;
       set.conflicts = [];
       set.rebasedFromRevisionId = amendment.baseRevisionId;
+      if (resolvedSuggestions?.length) set.suggestions = resolvedSuggestions;
     }
     const result = await col.updateOne(
       {
@@ -134,7 +183,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
         status: amendment.status,
         baseRevisionId: amendment.baseRevisionId,
       },
-      { $set: set },
+      {
+        $set: set,
+        ...(Object.keys(unset).length ? { $unset: unset } : {}),
+      },
     );
     if (!result.modifiedCount)
       return Response.json(

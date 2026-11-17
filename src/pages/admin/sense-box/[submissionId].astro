@@ -1,0 +1,292 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { ArrowUpRight, FileText, Globe2, Lock } from 'lucide-react';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { getSenseSubmission, senseDestinations } from '../../../lib/sense-box.ts';
+import { SENSE_TOPICS, SENSE_STATUSES, type SenseComment } from '../../../lib/sense-box-options.ts';
+import { canViewProposal, normalizeProposalDoc } from '../../../lib/proposal-helpers.ts';
+import { Badge } from '../../../components/ui/badge';
+import { Button } from '../../../components/ui/button';
+import { NativeSelect } from '../../../components/ui/native-select';
+import SenseDiscussion from '../../../components/sense/SenseDiscussion';
+import Card from '../../../components/admin/Card.astro';
+import CardContent from '../../../components/admin/CardContent.astro';
+import CardDescription from '../../../components/admin/CardDescription.astro';
+import CardHeader from '../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../components/admin/CardTitle.astro';
+import Field from '../../../components/admin/Field.astro';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/');
+const db = await getDatabase(env);
+const submissionId = Astro.params.submissionId ?? '';
+const submission = await getSenseSubmission(db, user, submissionId);
+if (!submission) return Astro.rewrite('/404/');
+
+const destinations = await senseDestinations(db);
+const branchName = destinations.find((branch) => branch.branchId === submission.branchId)?.name ?? 'Fusion';
+const linkedProposals = (
+  await db.collection('proposals')
+    .find({ stage: { $ne: 'archived' } })
+    .project({ _id: 0, proposalId: 1, slug: 1, title: 1, stage: 1, publicationScope: 1, originatingBranchId: 1, jurisdictionBranchId: 1, authorId: 1 })
+    .sort({ updatedAt: -1 })
+    // Bound the picker; current links are added separately below.
+    .limit(100)
+    .toArray()
+)
+  .filter((proposal) => canViewProposal(normalizeProposalDoc(proposal), user))
+  .map((proposal) => ({ proposalId: String(proposal.proposalId), title: String(proposal.title), stage: String(proposal.stage) }));
+for (const linked of submission.linkedProposals ?? []) {
+  if (linked.proposalId && !linkedProposals.some((proposal) => proposal.proposalId === linked.proposalId)) {
+    linkedProposals.unshift({
+      proposalId: linked.proposalId,
+      title: linked.title,
+      stage: linked.stage,
+    });
+  }
+}
+const internalComments = submission.comments.filter((comment) => comment.visibility === 'internal');
+const hiddenLinkedIds = (submission.linkedProposalIds ?? []).filter(
+  (id) => !submission.linkedProposals?.some((proposal) => proposal.proposalId === id),
+);
+const publicComments = submission.comments.filter((comment) => comment.visibility === 'public');
+const published = submission.visibility === 'published';
+const statusTone = submission.status === 'developing' ? 'warning' : submission.status === 'reviewed' ? 'info' : submission.status === 'archived' ? 'outline' : 'muted';
+const stageLabel = (stage: string) => stage === 'decide' ? 'Voting' : stage === 'deliberate' ? 'In discussion' : stage === 'implement' ? 'Implemented' : 'Gathering support';
+---
+<AdminLayout
+  title={submission.title}
+  description="Review this community priority, publish it, link it to a proposal, or develop a formal proposal."
+  section="sense-box"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  <div class="admin-stack" data-submission-id={submission.submissionId}>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <Button href="/admin/sense-box/" variant="ghost" size="sm">← Sense Box inbox</Button>
+      <div class="flex flex-wrap items-center gap-2">
+        <Badge variant={statusTone}>{SENSE_STATUSES[submission.status]}</Badge>
+        <Badge variant={published ? 'success' : 'muted'}>{published ? 'Published' : 'Private'}</Badge>
+      </div>
+    </div>
+
+    <Card class="gap-0">
+      <CardHeader>
+        <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>{branchName}</span>
+          {submission.locality && <span>· {submission.locality}</span>}
+          <span>· {new Date(submission.createdAt).toLocaleDateString('en-AU')}</span>
+          <Badge variant="outline">{SENSE_TOPICS[submission.topic]}</Badge>
+        </div>
+        <CardTitle class="mt-2 text-2xl">{submission.title}</CardTitle>
+        <CardDescription class="whitespace-pre-wrap">{submission.detail}</CardDescription>
+      </CardHeader>
+      <CardContent class="flex flex-wrap gap-3 border-t pt-4">
+        <Button href={`/proposals/new/?sense=${submission.submissionId}`} size="sm">
+          <FileText aria-hidden="true" /> {published ? 'Develop a proposal' : 'Develop an independent proposal'}
+        </Button>
+        {published && (
+          <Button href={`/sense-box/${submission.submissionId}/`} variant="outline" size="sm">
+            <ArrowUpRight aria-hidden="true" /> View public page
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+
+    <div class="grid gap-4 md:grid-cols-2">
+      <Card class="gap-0">
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2 text-base">
+            {published ? <Globe2 aria-hidden="true" /> : <Lock aria-hidden="true" />}
+            {published ? 'Public' : 'Private'}
+          </CardTitle>
+          <CardDescription>
+            {published
+              ? 'This priority and its public discussion are visible without signing in.'
+              : 'Only reviewers for this branch can see this priority. Publishing is a separate, explicit decision.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {submission.publishedAt && (
+            <p class="mt-0 text-sm text-muted-foreground">Published {new Date(submission.publishedAt).toLocaleDateString('en-AU')}.</p>
+          )}
+          {!submission.publicationConsent ? (
+            <Alert variant="warning">
+              <AlertTitle>Collected under the private-review promise</AlertTitle>
+              <AlertDescription>
+                <p>This priority was submitted before public publication was offered. It cannot be published without a new consent or a separate republishing process. Use it only as a private lead.</p>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <form data-sense-action={published ? 'unpublish' : 'publish'} data-version={submission.version} class="flex flex-wrap items-center gap-3">
+                <Button type="submit" size="sm" variant={published ? 'outline' : 'default'}>
+                  {published ? 'Withdraw from public view' : 'Publish priority'}
+                </Button>
+                <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
+              </form>
+              {!published && (
+                <p class="mt-3 mb-0 text-sm text-muted-foreground">
+                  Check that the priority does not contain personal or sensitive information before publishing.
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card class="gap-0">
+        <CardHeader>
+          <CardTitle class="text-base">Review status</CardTitle>
+          <CardDescription>Track how this priority is being handled.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form data-sense-action="status" data-version={submission.version} class="flex flex-wrap items-end gap-3">
+            <Field label="Status" htmlFor="sense-detail-status">
+              <NativeSelect id="sense-detail-status" name="status" defaultValue={submission.status} size="sm">
+                {Object.entries(SENSE_STATUSES).map(([key, label]) => (
+                  <option value={key} selected={submission.status === key}>{label}</option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Button type="submit" size="sm" variant="outline">Save status</Button>
+            <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+
+    <Card class="gap-0">
+      <CardHeader>
+        <CardTitle class="text-base">Linked proposal</CardTitle>
+        <CardDescription>
+          Link this priority to a proposal that already addresses it. Linking does not change the proposal or publish this priority.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {submission.linkedProposals?.length ? (
+          <ul class="m-0 grid list-none gap-2 p-0">
+            {submission.linkedProposals.map((proposal) => (
+              <li class="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <a href={`/proposals/${proposal.slug}/`}>{proposal.title}</a>
+                  <span class="text-sm text-muted-foreground"> · {stageLabel(proposal.stage)}</span>
+                </span>
+                <form data-sense-action="unlink" data-version={submission.version}>
+                  <input type="hidden" name="proposalId" value={proposal.proposalId} />
+                  <Button type="submit" size="sm" variant="ghost">Remove link</Button>
+                  <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
+                </form>
+              </li>
+            ))}
+            {hiddenLinkedIds.map((proposalId) => (
+              <li class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-sm text-muted-foreground">Linked proposal is not available to you.</span>
+                <form data-sense-action="unlink" data-version={submission.version}>
+                  <input type="hidden" name="proposalId" value={proposalId} />
+                  <Button type="submit" size="sm" variant="ghost">Remove link</Button>
+                  <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="mt-0 text-sm text-muted-foreground">Not linked to a proposal.</p>
+        )}
+        <form data-sense-action="link" data-version={submission.version} class="mt-4 flex flex-wrap items-end gap-3">
+          <Field label="Add a proposal" htmlFor="sense-linked-proposal" class="min-w-64">
+            <NativeSelect id="sense-linked-proposal" name="proposalId" defaultValue="">
+              <option value="">Choose a proposal</option>
+              {linkedProposals.map((proposal) => (
+                <option value={proposal.proposalId}>
+                  {proposal.title} · {stageLabel(proposal.stage)}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Button type="submit" size="sm" variant="outline">Add link</Button>
+          <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
+        </form>
+      </CardContent>
+    </Card>
+
+    <Card class="gap-0">
+      <CardHeader>
+        <CardTitle class="text-base">Organiser discussion</CardTitle>
+        <CardDescription>Private working notes. Members cannot see this thread.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <SenseDiscussion
+          client:idle
+          submissionId={submission.submissionId}
+          comments={internalComments as SenseComment[]}
+          visibility="internal"
+          canPost
+          canModerate
+          emptyText="No organiser notes yet."
+        />
+      </CardContent>
+    </Card>
+
+    {published && (
+      <Card class="gap-0">
+        <CardHeader>
+          <CardTitle class="text-base">Public discussion</CardTitle>
+          <CardDescription>{`${publicComments.length} ${publicComments.length === 1 ? 'comment' : 'comments'} visible on the public page. Reviewers can remove comments that breach the participation rules.`}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SenseDiscussion
+            client:visible
+            submissionId={submission.submissionId}
+            comments={publicComments as SenseComment[]}
+            visibility="public"
+            canPost={Boolean(user.canParticipate)}
+            canModerate
+            emptyText="No public comments yet."
+          />
+        </CardContent>
+      </Card>
+    )}
+  </div>
+</AdminLayout>
+
+<script>
+  document.querySelectorAll<HTMLFormElement>('[data-sense-action]').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      const message = form.querySelector<HTMLElement>('[role="status"]');
+      if (button) button.disabled = true;
+      if (message) message.textContent = 'Saving…';
+      try {
+        const action = form.dataset.senseAction ?? 'status';
+        const data = new FormData(form);
+        const response = await fetch('/api/sense-box', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            submissionId: form.closest('[data-submission-id]')?.getAttribute('data-submission-id') ?? location.pathname.split('/').filter(Boolean).at(-1),
+            version: Number(form.dataset.version),
+            action,
+            ...(action === 'status' ? { status: data.get('status') } : {}),
+            ...(action === 'link' || action === 'unlink' ? { proposalId: data.get('proposalId') } : {}),
+          }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Could not save this change.');
+        location.reload();
+      } catch (error) {
+        if (message) message.textContent = error instanceof Error ? error.message : 'Could not save this change.';
+        if (button) button.disabled = false;
+      }
+    });
+  });
+</script>

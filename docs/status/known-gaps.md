@@ -94,13 +94,13 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 ## Priority 2 — data integrity, security and operations
 
-### 9. No inter-amendment conflict detection
+### 9. Inter-amendment conflict precedence is visible but not resolved
 
-Two amendments can edit the same field and both be `ready`. Conflict detection compares an amendment against the proposal revision, not against other amendments. Applying them sequentially may produce an unintended combined wording.
+Two amendments can edit the same block and both be `ready`. Conflict detection previously compared an amendment only against the proposal revision, not against other amendments.
 
-**Partially addressed for reporting:** the member-facing decision record (#54) derives adopted wording only for zero or one applied amendment (D15/D16). Two or more applied amendments show an explicit collision-review-required state and produce no derived text. The administrator responsibility queue surfaces amendment decisions that already have an existing officer action, but there is no collision-review workflow and the collision rule itself is unbuilt.
+**Partly addressed (`feat/sense-box-collaboration-inline-amendments`, #148):** block-anchored suggestions now record the exact title, summary, commitment or rationale paragraph they change, and additions record the blocks either side of the insertion point. Member and administrator views show when two non-rejected amendments target the same block, and the resolve path can rebase a suggestion whose quoted text moved. The apply route refuses a second amendment when an already-applied amendment changed the same block, so two competing amendments cannot both be applied silently. Application is claimed before the proposal write and finalised afterwards; a failed write releases the claim and an interrupted application can be retried. An explicit precedence decision remains unbuilt: an officer must resolve the blocked pair outside the current workflow.
 
-**Direction:** Detect field overlap at resolution time and require an explicit precedence decision.
+**Remaining direction:** add a recorded precedence decision and test same-block, disjoint-block and three-amendment cases at the apply/ballot boundary (#34, #148).
 
 ### 10. Results are checked against the tally but the voting rules are incomplete
 
@@ -193,11 +193,11 @@ Projections and indexes are no-ops and there are no transactions. Development an
 
 **Direction:** Run persistence-sensitive tests against real MongoDB. Do not rely on in-memory behaviour for uniqueness or minimisation.
 
-### 18. Amendments can open a ballot without being resolved
+### 18. Amendment ballot UI offered a proposed amendment the route refused
 
-`open-ballot` accepts `proposed` as well as `ready`. A proposed amendment can therefore skip the review/rebind step.
+The `open-ballot` route requires `ready`, and its tests assert that a `proposed` amendment is refused. The administrator proposal views nevertheless rendered the open-ballot form for `proposed` as well, producing a 404 after submit.
 
-**Direction:** Require `ready`, or document why an unreviewed amendment is permitted in the ballot.
+**Resolved (`feat/sense-box-collaboration-inline-amendments`, #148):** both administrator views now offer the ballot action only for `ready`. The route remains the authority; no governance rule changed.
 
 ### 19. Branch referral creation skips the permission catalogue
 

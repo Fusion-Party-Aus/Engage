@@ -1,4 +1,7 @@
+@layer ui-sdk;
+
 @import "tailwindcss";
+@import "@ui-sdk/core/web.css" layer(components);
 @import "./typeset.css";
 @import "@fontsource-variable/outfit";
 @import "@fontsource-variable/newsreader";

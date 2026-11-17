@@ -11,6 +11,7 @@ import { SENSE_TOPICS } from '../lib/sense-box-options';
 export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '' }: { branches: { branchId: string; name: string; label?: string; code?: string }[]; initialBranch: string; turnstileSiteKey?: string }) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [receipt, setReceipt] = useState<{ submissionId: string; statusPath: string } | null>(null);
   const [error, setError] = useState('');
   const id = useRef('');
   const [branchId, setBranchId] = useState(initialBranch);
@@ -38,6 +39,7 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
       if (!response.ok) {
         throw new Error(result.error);
       }
+      setReceipt(result.receipt ?? null);
       setSaved(true);
     } catch (caught) {
       // Any failed or uncertain POST may have consumed the single-use Turnstile token.
@@ -52,9 +54,19 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
     return (
       <div role="status" className="space-y-4">
         <h2>Thank you for sharing</h2>
-        <p>Your priority has been sent to the selected branch’s Sense Box. Organisers can consider it alongside other contributions.</p>
-        <p>We don’t collect contact details here, so you won’t receive a personal reply.</p>
-        <Button href="/proposals/">Explore Engage proposals</Button>
+        <p>Your priority has been sent to the selected branch’s Sense Box. An organiser will review it.</p>
+        <p>If it is published, it will appear with other community priorities and verified members can discuss it. We don’t collect contact details, so this status page is the only way to follow it.</p>        {receipt && (
+          <div className="rounded-lg border p-4">
+            <p className="mt-0"><strong>Keep this link to check what happens next.</strong></p>
+            <p className="text-sm text-muted-foreground">Anyone with the link can see the status. It does not show your account or contact details.</p>
+            <Button href={receipt.statusPath}>Check this priority’s status</Button>
+            <p className="mb-0 mt-3 text-sm text-muted-foreground">Reference: <code>{receipt.submissionId}</code></p>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button href="/sense-box/#priorities" variant="outline">Read published priorities</Button>
+          <Button href="/proposals/" variant="outline">Explore proposals</Button>
+        </div>
       </div>
     );
   }
@@ -120,7 +132,7 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
         <label className="flex items-start gap-3">
           <Checkbox name="consent" required className="mt-1 size-5 shrink-0" />
           <span className="text-sm">
-            I agree to Fusion using my input to understand community priorities and develop ideas. It will be visible to authorised organisers for my branch and national administrators. Summaries may inform public proposals. <a href="/privacy/">Privacy policy</a>
+            I agree to Fusion reviewing my input and, if it is published, showing my priority and its discussion publicly. My name and contact details are not collected. <a href="/privacy/">Privacy policy</a>
           </span>
         </label>
 

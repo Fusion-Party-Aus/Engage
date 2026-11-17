@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { Collection, Db } from "mongodb";
 import { loadBallotCryptoConfigForRead } from "./ballot-crypto.ts";
 import { BALLOTS_COLLECTION, FORMAL_DECISIONS_COLLECTION } from "./ballots.ts";
@@ -24,7 +24,54 @@ import {
   validateStageTransition,
 } from "./proposal-helpers.ts";
 import { geographicScopeForBranch, parseProposalScopeInput } from "./proposal-scope.ts";
+import {
+  proposalRevisionSnapshot,
+  revisionContentHash,
+} from "./proposal-revision.ts";
 import { hasPermission } from "./rbac.ts";
+import { canReviewSense } from "./sense-box.ts";
+
+function normalisedSourceText(value: unknown): string {
+  return String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/**
+ * A private Sense Box priority may be used as an internal lead, but its text
+ * must not be reproduced in a public proposal. This catches the obvious copy
+ * paths without pretending to be a semantic plagiarism detector.
+ */
+function reproducesPrivateSource(
+  source: Record<string, any>,
+  proposal: {
+    title: string;
+    summary: string;
+    details: string;
+    outcomes?: string[];
+    targetSection?: string;
+    proposedWording?: string;
+    attachmentDescription?: string;
+  },
+): boolean {
+  const title = normalisedSourceText(source.title);
+  if (proposal.title.trim().toLowerCase() === title) return true;
+  const text = normalisedSourceText([
+    proposal.title,
+    proposal.summary,
+    proposal.details,
+    ...(proposal.outcomes ?? []),
+    proposal.targetSection,
+    proposal.proposedWording,
+    proposal.attachmentDescription,
+  ].join("\n"));
+  if (title.length >= 20 && text.includes(title)) return true;
+  const detail = normalisedSourceText(source.detail);
+  if (detail.length >= 60 && text.includes(detail)) return true;
+  const fragments = String(source.detail ?? "")
+    .split(/(?<=[.!?])\s+|\n{2,}/)
+    .map(normalisedSourceText)
+    .filter((fragment) => fragment.length >= 40);
+  return fragments.some((fragment) => text.includes(fragment));
+}
 import type {
   CommentRecord,
   PendingVotePreferenceRecord,
@@ -542,15 +589,6 @@ function parseBallotCloseDate(
   // 30-day ordinary ballot period. An explicit date always wins over this
   // default, so authorised overrides keep working unchanged.
   return defaultBallotClosesAtFrom(now);
-}
-
-function computeSnapshotHash(snapshot: {
-  title: string;
-  summary: string;
-  outcomes: string[];
-  details: string;
-}): string {
-  return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
 }
 
 async function assertStageTransitionAllowed(
@@ -1187,8 +1225,8 @@ export async function saveProposal(
   db: Db,
   user: SessionUser,
   body: Record<string, unknown>,
-  options: { allowAmendmentApply?: boolean } = {},
-): Promise<ProposalRecord> {
+  options: { allowAmendmentApply?: boolean; expectedRevisionId?: string } = {},
+): Promise<ProposalRecord & { revisionId?: string; revisionContentHash?: string }> {
   const col = db.collection<ProposalRecord>("proposals");
   const existingId =
     typeof body.proposalId === "string"
@@ -1199,6 +1237,18 @@ export async function saveProposal(
   const existing = existingId
     ? await col.findOne({ proposalId: existingId })
     : null;
+  if (existing && options.expectedRevisionId) {
+    const latest = await db
+      .collection("proposal_revisions")
+      .find({ proposalId: existing.proposalId })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(1)
+      .toArray();
+    if (latest[0]?.revisionId !== options.expectedRevisionId)
+      throw new Error(
+        "The proposal wording changed while the amendment was being applied. Reload the proposal and review its current revision.",
+      );
+  }
   // A declared policy change is fixed at creation. Rewriting what a live
   // proposal targets would let a draft claim authority over different policy.
   const declaresChange =
@@ -1458,21 +1508,12 @@ export async function saveProposal(
       updateSet.provenance = provenance;
     }
 
-    const snapshot = {
-      title: updated.title,
-      summary: updated.summary,
-      outcomes: updated.outcomes,
-      details: updated.details,
-      ...(updated.targetSection ? { targetSection: updated.targetSection } : {}),
-      ...(updated.proposedWording
-        ? { proposedWording: updated.proposedWording }
-        : {}),
-    };
-    const contentHash = computeSnapshotHash(snapshot);
+    const snapshot = proposalRevisionSnapshot(updated);
+    const contentHash = revisionContentHash(snapshot);
     const latestRevisions = await db
       .collection("proposal_revisions")
       .find({ proposalId: existing.proposalId })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(1)
       .toArray();
     const previousRevision = latestRevisions[0];
@@ -1624,7 +1665,7 @@ export async function saveProposal(
         );
       }
     });
-    return updated;
+    return { ...updated, revisionId: nextRevisionId, revisionContentHash: contentHash };
   }
 
   const ballotClosesAt =
@@ -1636,6 +1677,45 @@ export async function saveProposal(
   const proposalId =
     existingId ||
     `PROP-${String(count + 1).padStart(3, "0")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+
+  // A proposal may be drafted from a Sense Box priority by a reviewer. The
+  // source is provenance only: it never publishes the submission, changes a
+  // ballot, or grants the proposal any authority.
+  const requestedSenseSource =
+    typeof body.sourceSenseSubmissionId === "string"
+      ? body.sourceSenseSubmissionId.trim()
+      : "";
+  if (existing && requestedSenseSource)
+    throw new Error("A proposal's Sense Box source is fixed when it is created.");
+  let senseSource: Record<string, any> | null = null;
+  let senseSourcePublished = false;
+  if (!existing && requestedSenseSource) {
+    senseSource = await db.collection("sense_submissions").findOne({ submissionId: requestedSenseSource });
+    if (!senseSource) throw new Error("That Sense Box priority was not found.");
+    if (!canReviewSense(user, String(senseSource.branchId)))
+      throw new Error("You are not authorised to develop that Sense Box priority.");
+    const sourceIsPublished = senseSource.visibility === "published" && Boolean(senseSource.publishedAt);
+    if (!sourceIsPublished) {
+      if (body.privateSourceAcknowledgement !== true)
+        throw new Error(
+          "This Sense Box priority has not been published. Confirm that the proposal is independently written before submitting.",
+        );
+      if (reproducesPrivateSource(senseSource, {
+        title,
+        summary: rawSummary,
+        details,
+        outcomes,
+        targetSection,
+        proposedWording,
+        attachmentDescription,
+      }))
+        throw new Error(
+          "This proposal reproduces text from a priority that has not been published. Write the proposal independently, or publish the priority first.",
+        );
+    }
+    senseSourcePublished = sourceIsPublished;
+  }
+
   const baseSlug = slugify(title) || proposalId.toLowerCase();
   const slugConflict = await col.findOne({ slug: baseSlug });
   const slug = slugConflict
@@ -1678,6 +1758,18 @@ export async function saveProposal(
           changeType: policyChange.changeType,
         }
       : {}),
+    ...(requestedSenseSource ? { sourceSenseSubmissionId: requestedSenseSource } : {}),
+    ...(senseSource
+      ? {
+          sourceSensePrivacyBasis: senseSourcePublished ? "published-source" : "independent-wording",
+          ...(!senseSourcePublished
+            ? {
+                sourceSensePrivacyReviewedAt: now,
+                sourceSensePrivacyReviewedBy: user.memberId,
+              }
+            : {}),
+        }
+      : {}),
     provenance,
     authorId: user.memberId,
     authorName: user.name || "Verified Member",
@@ -1685,16 +1777,7 @@ export async function saveProposal(
     updatedAt: now,
   };
 
-  const snapshot = {
-    title: created.title,
-    summary: created.summary,
-    outcomes: created.outcomes,
-    details: created.details,
-    ...(created.targetSection ? { targetSection: created.targetSection } : {}),
-    ...(created.proposedWording
-      ? { proposedWording: created.proposedWording }
-      : {}),
-  };
+  const snapshot = proposalRevisionSnapshot(created);
   const revision = {
     revisionId,
     proposalId,
@@ -1702,7 +1785,7 @@ export async function saveProposal(
     authorId: user.memberId,
     createdAt: now,
     snapshot,
-    contentHash: computeSnapshotHash(snapshot),
+    contentHash: revisionContentHash(snapshot),
     provenance: created.provenance,
   };
   await runInTransaction(db, async (session) => {
@@ -1711,6 +1794,31 @@ export async function saveProposal(
     await db
       .collection("proposal_revisions")
       .insertOne(revision, sessionOpts);
+    if (senseSource) {
+      // One priority may inform several proposals. Adding the link is
+      // idempotent and does not claim an exclusive source. A legacy single
+      // link is folded into the array before it is removed.
+      const legacyLink = senseSource.linkedProposalId
+        ? [String(senseSource.linkedProposalId)]
+        : [];
+      await db.collection("sense_submissions").updateOne(
+        { submissionId: requestedSenseSource },
+        {
+          $addToSet: {
+            linkedProposalIds: {
+              $each: [...legacyLink, proposalId],
+            },
+          },
+          $set: {
+            linkedProposalAt: now,
+            linkedProposalBy: user.memberId,
+            ...(senseSource.status !== "archived" ? { status: "developing" } : {}),
+          },
+          $unset: { linkedProposalId: "" },
+        },
+        sessionOpts,
+      );
+    }
     if (stage === "decide") {
       await recordGovernanceEvent(
         db,
@@ -1733,7 +1841,7 @@ export async function saveProposal(
       );
     }
   });
-  return created;
+  return { ...created, revisionId, revisionContentHash: revision.contentHash };
 }
 
 export class ProposalSecondingError extends Error {

@@ -18,12 +18,13 @@ import { FileText } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { Field } from '../../components/ui/field';
-import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { NativeSelect } from '../../components/ui/native-select';
 import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
 import DiscussionThread from '../../components/proposal/DiscussionThread';
+import AmendmentComposer from '../../components/proposal/AmendmentComposer';
+import AmendmentSuggestions from '../../components/proposal/AmendmentSuggestions.astro';
+import { competingTargets, wordingSnapshot } from '../../lib/amendment-suggestions.ts';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import {
@@ -73,6 +74,7 @@ const [
   evidenceMap,
   targetPolicyForChange,
   quorumRecord,
+  senseOrigin,
 ] = proposal
   ? await Promise.all([
       proposal.supersededByProposalId
@@ -100,8 +102,14 @@ const [
         ? db.collection('policy_registry').findOne({ policyId: proposal.targetPolicyId })
         : Promise.resolve(null),
       readBallotQuorumRecord(db, proposalBallotId(proposal.proposalId)),
+      proposal.sourceSenseSubmissionId
+        ? db.collection('sense_submissions').findOne(
+            { submissionId: proposal.sourceSenseSubmissionId, visibility: 'published' },
+            { projection: { _id: 0, submissionId: 1, title: 1 } },
+          )
+        : Promise.resolve(null),
     ])
-  : [null, [], null, null, [], [], [], null, [], new Map(), null, null];
+  : [null, [], null, null, [], [], [], null, [], new Map(), null, null, null];
 
 const supersededByProposal = supersededByDetail?.proposal ?? null;
 const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
@@ -125,6 +133,22 @@ const allAmendmentRevisions = amendmentRows.length
       .sort({ createdAt: 1 })
       .toArray()
   : [];
+
+const latestWording = revisions[0]?.snapshot ? wordingSnapshot(revisions[0].snapshot) : null;
+
+// Inter-amendment conflict detection is display-only. The governance decision
+// about precedence remains with an officer; this only makes the overlap visible
+// before either amendment can be applied.
+const amendmentOrdinal = new Map(amendmentRows.map((row: any, index: number) => [row.amendmentId, index + 1]));
+for (const amendment of amendmentRows as any[]) {
+  const competing = (amendmentRows as any[]).filter(
+    (other: any) =>
+      other.amendmentId !== amendment.amendmentId &&
+      !['rejected', 'withdrawn'].includes(String(other.status)) &&
+      competingTargets(amendment.suggestions, other.suggestions).length > 0,
+  );
+  amendment.competingWith = competing.map((other: any) => `Amendment #${amendmentOrdinal.get(other.amendmentId)}`);
+}
 
 const evidencePolicyPublic = Boolean(
   policyRecord && ['published', 'withdrawn', 'superseded', 'repealed'].includes(String(policyRecord.publicationStatus ?? '')),
@@ -930,6 +954,14 @@ const initialsFor = (name: string) =>
             <!-- Policy change wording and key commitments -->
             <section id="proposal-decision" class="decision-content" aria-label="Proposal summary and commitments">
 
+            {proposal.sourceSenseSubmissionId && (
+              <p class="proposal-origin">
+                {senseOrigin
+                  ? <>This proposal began as a <a href={`/sense-box/${senseOrigin.submissionId}/`}>Sense Box priority</a>.</>
+                  : 'This proposal began as a Sense Box priority.'}
+              </p>
+            )}
+
             {proposal.targetSection && (
               <section aria-labelledby="target-section-heading">
                 <div class="doc-section__header">
@@ -1174,7 +1206,7 @@ const initialsFor = (name: string) =>
                     <span class="doc-count tabular">{amendmentRows.length}</span>
                   </div>
                   <p class="doc-section__sub">
-                    Amendments propose exact changes to the text. Voting on an amendment is separate from voting on the main proposal.
+                    Suggest exact changes to a title, summary, commitment or rationale paragraph. Voting on an amendment is separate from voting on the main proposal.
                   </p>
                 </div>
               </div>
@@ -1221,6 +1253,11 @@ const initialsFor = (name: string) =>
                             This amendment overlaps with wording changed since its base revision. An administrator must resolve the conflict before it can be applied.
                           </p>
                         )}
+                        {amendment.competingWith?.length > 0 && (
+                          <p class="amendment-conflict" role="status">
+                            Another amendment changes the same wording block. Review both before applying either.
+                          </p>
+                        )}
                         {amendment.resolution?.reason && (
                           <p class="amendment-resolution-note">
                             <strong>Review note ({amendment.resolution.outcome}):</strong> {amendment.resolution.reason}
@@ -1228,21 +1265,30 @@ const initialsFor = (name: string) =>
                         )}
 
                         <div class="amendment-card__body">
-                          {Object.entries(amendment.changes ?? {}).map(([field, value]: [string, any]) => (
-                            <details class="diff-drawer" open={amendmentRows.length === 1 && index === 0}>
-                              <summary>Compare proposed change to <code>{field}</code></summary>
-                              <div class="amendment-diff">
-                                <div class="diff-pane diff-pane--before">
-                                  <span class="diff-label">Original wording</span>
-                                  <pre>{Array.isArray(base?.snapshot?.[field]) ? base.snapshot[field].join('\n') : String(base?.snapshot?.[field] ?? '')}</pre>
+                          {Array.isArray(amendment.suggestions) && amendment.suggestions.length && latestWording ? (
+                            <AmendmentSuggestions
+                              suggestions={amendment.suggestions}
+                              base={base?.snapshot ? wordingSnapshot(base.snapshot) : latestWording}
+                              latest={latestWording}
+                              competing={amendment.competingWith ?? []}
+                            />
+                          ) : (
+                            Object.entries(amendment.changes ?? {}).map(([field, value]: [string, any]) => (
+                              <details class="diff-drawer" open={amendmentRows.length === 1 && index === 0}>
+                                <summary>Compare proposed change to <code>{field}</code></summary>
+                                <div class="amendment-diff">
+                                  <div class="diff-pane diff-pane--before">
+                                    <span class="diff-label">Original wording</span>
+                                    <pre>{Array.isArray(base?.snapshot?.[field]) ? base.snapshot[field].join('\n') : String(base?.snapshot?.[field] ?? '')}</pre>
+                                  </div>
+                                  <div class="diff-pane diff-pane--after">
+                                    <span class="diff-label">Proposed replacement</span>
+                                    <pre>{Array.isArray(value) ? value.join('\n') : String(value ?? '')}</pre>
+                                  </div>
                                 </div>
-                                <div class="diff-pane diff-pane--after">
-                                  <span class="diff-label">Proposed replacement</span>
-                                  <pre>{Array.isArray(value) ? value.join('\n') : String(value ?? '')}</pre>
-                                </div>
-                              </div>
-                            </details>
-                          ))}
+                              </details>
+                            ))
+                          )}
 
                           {amendment.revisionHistory?.length > 1 && (
                             <details class="diff-drawer">
@@ -1284,25 +1330,16 @@ const initialsFor = (name: string) =>
                 </div>
               )}
 
-              {user?.canParticipate && ['propose', 'deliberate'].includes(proposal.stage) && (
-                <details class="amendment-compose">
+              {user?.canParticipate && ['propose', 'deliberate'].includes(proposal.stage) && latestWording && (
+                <details class="amendment-compose" open={amendmentRows.length === 0}>
                   <summary>+ Propose a formal wording amendment</summary>
                   <div class="amendment-compose__body">
-                    <p>
-                      Propose a change to the latest saved wording (<code>{String(revisions[0]?.revisionId ?? 'initial').slice(0, 8)}</code>). For general feedback, use the Discussion section below.
-                    </p>
-                    <form id="amendment-form" class="grid gap-3" data-proposal-id={proposal.proposalId} data-revision-id={revisions[0]?.revisionId ?? ''}>
-                      <Field label="Proposed title (optional)" htmlFor="amendment-title">
-                        <Input id="amendment-title" name="title" maxLength={200} placeholder="Leave blank to keep current title" />
-                      </Field>
-                      <Field label="Replacement summary" hint="At least 10 characters" htmlFor="amendment-summary">
-                        <Textarea id="amendment-summary" name="summary" rows={3} minLength={10} maxLength={2000} placeholder="Write the replacement summary exactly as you want it to appear." required />
-                      </Field>
-                      <div class="form-actions">
-                        <Button type="submit" size="sm">Submit formal amendment</Button>
-                        <span class="amendment-compose-status" role="status" aria-live="polite"></span>
-                      </div>
-                    </form>
+                    <AmendmentComposer
+                      client:idle
+                      proposalId={proposal.proposalId}
+                      baseRevisionId={revisions[0]?.revisionId ?? ''}
+                      snapshot={latestWording}
+                    />
                   </div>
                 </details>
               )}
@@ -1682,42 +1719,6 @@ const initialsFor = (name: string) =>
     });
   }
 
-  const amendmentForm = document.getElementById('amendment-form') as HTMLFormElement | null;
-  amendmentForm?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!amendmentForm.reportValidity()) return;
-    trackEngage('contribution_attempted', { action: 'amendment' });
-    const status = amendmentForm.querySelector<HTMLElement>('.amendment-compose-status');
-    const button = amendmentForm.querySelector<HTMLButtonElement>('button[type="submit"]');
-    if (button) button.disabled = true;
-    try {
-      const fd = new FormData(amendmentForm);
-      const changes: Record<string, string> = {};
-      for (const field of ['title', 'summary']) {
-        const value = String(fd.get(field) ?? '').trim();
-        if (value) changes[field] = value;
-      }
-      const response = await fetch('/api/amendments', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          proposalId: amendmentForm.dataset.proposalId,
-          baseRevisionId: amendmentForm.dataset.revisionId,
-          changes,
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || 'Could not submit the amendment.');
-      trackEngage('contribution_result', { action: 'amendment', outcome: 'success' });
-      if (status) status.textContent = 'Amendment submitted. Reloading…';
-      location.reload();
-    } catch (error) {
-      trackEngage('contribution_result', { action: 'amendment', outcome: 'failed' });
-      if (status) status.textContent = error instanceof Error ? error.message : 'Could not submit the amendment.';
-      if (button) button.disabled = false;
-    }
-  });
-
   document.querySelectorAll<HTMLFormElement>('.amendment-vote-form').forEach((form) => {
     const status = form.querySelector<HTMLElement>('[role="status"]');
     form.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((button) =>
@@ -1766,6 +1767,7 @@ const initialsFor = (name: string) =>
 
 <style>
   .decision-content { background: #fff; border: 1px solid var(--horizon-line); border-radius: 1rem; padding: clamp(1.25rem, 2.2vw, 1.75rem); }
+  .proposal-origin { margin: 0 0 1.25rem; padding: .6rem .85rem; border-left: 3px solid var(--horizon-accent); background: var(--horizon-lavender-soft); color: var(--horizon-muted); font-size: .9rem; }
   .proposal-workspace > .proposal-main, .proposal-workspace > .proposal-rail { display: contents; }
   .proposal-main > * { grid-column: 1; }
   .proposal-rail > * { grid-column: 2; }

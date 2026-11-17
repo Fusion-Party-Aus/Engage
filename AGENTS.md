@@ -192,6 +192,14 @@ Rules:
 - A one-off layout (grid, strip, rail) may use page CSS. A one-off control (button, field, pill, table) may not.
 - Pages that bypass these rules are defects. Migrate them when touched; never copy them as precedent.
 
+### UI SDK
+
+`@ui-sdk/react` and `@ui-sdk/core` provide unstyled behaviours. They complement the shadcn primitives; they do not replace the Horizon control layer.
+
+- Before using ui-sdk, follow the ui-sdk skill if it is installed, and read `node_modules/@ui-sdk/react/docs/llms.txt`.
+- To build a new component, search `node_modules/@ui-sdk/react/docs/core.md` by heading, then read `rendering.md` next to it.
+- Import ui-sdk's default styles once through `src/styles/global.css`. Do not add a second global stylesheet import.
+
 **Audit check.** For every changed file, run:
 
 ```sh
