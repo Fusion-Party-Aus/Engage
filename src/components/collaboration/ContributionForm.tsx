@@ -93,6 +93,7 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
     <form onSubmit={submit} className="grid gap-8">
       <FieldSet>
         <FieldLegend>Your story</FieldLegend>
+        <FieldDescription>Answer as many as you like. A few honest sentences, a photo, or both is plenty.</FieldDescription>
         <FieldGroup>
           {questions.map((question, index) => (
             <Field
