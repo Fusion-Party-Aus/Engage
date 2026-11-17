@@ -1,0 +1,155 @@
+{
+  "generatedAt": "2026-11-15T14:50:20.087Z",
+  "git": {
+    "commit": "57402f0",
+    "branch": null
+  },
+  "environment": {
+    "node": "v24.22.1",
+    "platform": "darwin",
+    "runs": 5,
+    "port": 4399,
+    "syntheticData": {
+      "votes": 1200,
+      "comments": 600,
+      "ballots": 10
+    },
+    "note": "Local synthetic measurements. Indicative only; not production SLA evidence."
+  },
+  "pages": [
+    {
+      "id": "home",
+      "label": "/ (public home)",
+      "path": "/",
+      "identity": "anonymous",
+      "document": {
+        "status": 200,
+        "durationMs": 28.6,
+        "htmlBytes": 55474,
+        "dbCommands": 7,
+        "dbDurationMs": 29.688,
+        "dbByCommand": {
+          "find": {
+            "count": 3,
+            "durationMs": 10.776
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 5.302
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 4.545
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 35.1,
+        "navigationMs": 111,
+        "lcpMs": 124,
+        "cls": 0.002,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": 85,
+        "maxEventDurationMs": null,
+        "jsBytes": 15728,
+        "cssBytes": 116948,
+        "fontBytes": 79636,
+        "imageBytes": 129419,
+        "scriptCount": 4,
+        "requestCount": 15,
+        "failedRequests": [],
+        "dbCommands": 7,
+        "dbDurationMs": 27.586,
+        "dbByCommand": {
+          "find": {
+            "count": 3,
+            "durationMs": 9.247
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 15.052
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 3.286
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "home",
+      "label": "/ (public home)",
+      "path": "/",
+      "identity": "member",
+      "document": {
+        "status": 200,
+        "durationMs": 41.5,
+        "htmlBytes": 66853,
+        "dbCommands": 14,
+        "dbDurationMs": 32.537,
+        "dbByCommand": {
+          "find": {
+            "count": 9,
+            "durationMs": 37.499
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 20.943
+          },
+          "update": {
+            "count": 1,
+            "durationMs": 2.442
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 5.663
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 40,
+        "navigationMs": 115.9,
+        "lcpMs": 116,
+        "cls": 0.002,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": null,
+        "jsBytes": 15728,
+        "cssBytes": 116948,
+        "fontBytes": 79636,
+        "imageBytes": 3667,
+        "scriptCount": 4,
+        "requestCount": 14,
+        "failedRequests": [],
+        "dbCommands": 21,
+        "dbDurationMs": 48.441,
+        "dbByCommand": {
+          "find": {
+            "count": 15,
+            "durationMs": 26.823
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 10.304
+          },
+          "update": {
+            "count": 2,
+            "durationMs": 5.423
+          },
+          "aggregate": {
+            "count": 1,
+            "durationMs": 2.656
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    }
+  ]
+}

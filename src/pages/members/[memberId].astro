@@ -1,0 +1,667 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import ErrorPage from '../../components/site/ErrorPage.astro';
+import MemberAvatar from '../../components/member/MemberAvatar';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import {
+  getMemberProfilePage,
+  resolveMemberProfileRoute,
+  type MemberProfileTab,
+} from '../../lib/member-profile.ts';
+import type { ProposalStage } from '../../lib/types.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const [db, viewer] = await Promise.all([
+  getDatabase(env),
+  getSessionUser(Astro.request, env),
+]);
+
+const requestedPage = Number.parseInt(
+  Astro.url.searchParams.get('page') ?? '1',
+  10,
+);
+const route = await resolveMemberProfileRoute(
+  db,
+  Astro.params.memberId ?? '',
+  env,
+);
+let data: Awaited<ReturnType<typeof getMemberProfilePage>> = null;
+if (route && (route.profileVisible || viewer?.memberId === route.memberId)) {
+  if (route.redirect) {
+    return Astro.redirect(`${route.redirect}${Astro.url.search}`, 301);
+  }
+  data = await getMemberProfilePage(db, route.memberId, {
+    tab: Astro.url.searchParams.get('tab'),
+    page: Number.isFinite(requestedPage) ? requestedPage : 1,
+    viewer,
+    profileIdentifier: route.canonicalIdentifier,
+  });
+}
+
+if (!data) Astro.response.status = 404;
+
+const profile = data?.profile ?? null;
+const isOwner = Boolean(profile && viewer?.memberId === profile.memberId);
+
+const tabHref = (tab: MemberProfileTab) =>
+  profile ? `${profile.href}?tab=${tab}` : '/';
+const pageHref = (page: number) =>
+  profile ? `${profile.href}?tab=${data?.tab ?? 'comments'}&page=${page}` : '/';
+
+const tabLabel: Record<MemberProfileTab, string> = {
+  comments: 'Comments',
+  proposals: 'Proposals',
+  amendments: 'Amendments',
+};
+
+const tabEmpty: Record<MemberProfileTab, string> = {
+  comments: isOwner
+    ? 'You have not commented on a proposal yet.'
+    : 'No public comments yet.',
+  proposals: isOwner
+    ? 'You have not suggested a proposal yet.'
+    : 'No public proposals yet.',
+  amendments: isOwner
+    ? 'You have not proposed an amendment yet.'
+    : 'No public amendments yet.',
+};
+
+const dateLabel = (date: Date) =>
+  date.toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
+const relativeLabel = (date: Date) => {
+  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 30) return `${days} days ago`;
+  return dateLabel(date);
+};
+
+const stanceLabel: Record<string, string> = {
+  support: 'Support',
+  concern: 'Concern',
+  amendment: 'Amendment',
+  comment: 'Comment',
+};
+const stanceVariant = (stance: string) =>
+  stance === 'support'
+    ? ('success' as const)
+    : stance === 'concern'
+      ? ('destructive' as const)
+      : stance === 'amendment'
+        ? ('info' as const)
+        : ('muted' as const);
+
+const stageLabel = (stage: ProposalStage) => {
+  if (stage === 'propose') return 'New idea';
+  if (stage === 'deliberate') return 'In discussion';
+  if (stage === 'decide') return 'Open vote';
+  if (stage === 'implement') return 'Implementation';
+  return 'Archived';
+};
+const stageVariant = (stage: ProposalStage) => {
+  if (stage === 'propose') return 'warning' as const;
+  if (stage === 'deliberate') return 'secondary' as const;
+  if (stage === 'decide') return 'info' as const;
+  if (stage === 'implement') return 'success' as const;
+  return 'muted' as const;
+};
+const amendmentVariant = (status: string) =>
+  ['endorsed', 'applied', 'accepted'].includes(status)
+    ? ('success' as const)
+    : status === 'conflict'
+      ? ('destructive' as const)
+      : status === 'voting'
+        ? ('info' as const)
+        : ('warning' as const);
+const amendmentStatusLabel = (status: string) => {
+  const labels: Record<string, string> = {
+    proposed: 'Proposed',
+    ready: 'Ready',
+    voting: 'Voting',
+    endorsed: 'Endorsed',
+    accepted: 'Accepted',
+    applied: 'Applied',
+    rejected: 'Rejected',
+    conflict: 'Conflict',
+    stale: 'Stale',
+    withdrawn: 'Withdrawn',
+  };
+  return (
+    labels[status] ??
+    (status ? status[0]!.toUpperCase() + status.slice(1) : 'Proposed')
+  );
+};
+
+const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · Engage';
+---
+
+<SiteLayout
+  title={pageTitle}
+  description={
+    profile
+      ? `Public contributions from ${profile.name} to Fusion policy discussions.`
+      : 'This member profile is not available.'
+  }
+  canonical={profile?.href}
+  noIndex={!profile || !profile.visible}
+>
+  {!profile || !data ? (
+    <ErrorPage
+      code="404"
+      label="Profile not found"
+      title="We couldn’t find that member."
+      description="The profile may have been removed, or the link is out of date."
+      actions={[
+        { href: '/proposals/', label: 'Browse proposals', variant: 'default' },
+        { href: '/', label: 'Engage home', variant: 'outline' },
+      ]}
+    />
+  ) : (
+    <div class="page-wrap section-space profile-page">
+      <header class="profile-hero">
+        <div class="profile-identity">
+          <MemberAvatar
+            className="profile-avatar size-16"
+            fallbackClassName="profile-avatar__fallback"
+            initials={profile.initials}
+          />
+          <div class="profile-identity__copy">
+            <h1>{profile.name}</h1>
+            <p class="profile-affiliation">
+              {profile.affiliations.length > 0
+                ? profile.affiliations.join(' · ')
+                : 'Engage member'}
+            </p>
+            {profile.joinedAt && (
+              <p class="profile-joined">
+                Member since {dateLabel(profile.joinedAt)}
+              </p>
+            )}
+            {!profile.visible && (
+              <Badge className="mt-1.5" variant="muted">
+                Hidden from others
+              </Badge>
+            )}
+          </div>
+          {isOwner && (
+            <Button
+              className="profile-edit"
+              href="/member/?view=account"
+              size="sm"
+              variant="outline"
+            >
+              Edit profile
+            </Button>
+          )}
+        </div>
+
+        {profile.bio && <p class="profile-bio">{profile.bio}</p>}
+
+        <div class="profile-stats" aria-label="Contribution summary">
+          <a class="profile-stat" href={tabHref('comments')}>
+            <span class="profile-stat__label">Comments</span>
+            <span class="profile-stat__value tabular">
+              {profile.stats.comments}
+            </span>
+          </a>
+          <a class="profile-stat" href={tabHref('proposals')}>
+            <span class="profile-stat__label">Proposals</span>
+            <span class="profile-stat__value tabular">
+              {profile.stats.proposals}
+            </span>
+          </a>
+          <a class="profile-stat" href={tabHref('amendments')}>
+            <span class="profile-stat__label">Amendments</span>
+            <span class="profile-stat__value tabular">
+              {profile.stats.amendments}
+            </span>
+          </a>
+          <a class="profile-stat" href={tabHref('comments')}>
+            <span class="profile-stat__label">Comment score</span>
+            <span class="profile-stat__value tabular">
+              {profile.stats.commentScore}
+            </span>
+          </a>
+        </div>
+      </header>
+
+      <nav class="profile-tabs" aria-label="Contribution history">
+        {(['comments', 'proposals', 'amendments'] as const).map((tab) => (
+          <a
+            aria-current={data.tab === tab ? 'page' : undefined}
+            class="profile-tab"
+            href={tabHref(tab)}
+          >
+            {tabLabel[tab]}
+            <span class="profile-tab__count tabular">
+              {tab === 'comments'
+                ? profile.stats.comments
+                : tab === 'proposals'
+                  ? profile.stats.proposals
+                  : profile.stats.amendments}
+            </span>
+          </a>
+        ))}
+      </nav>
+
+      <section aria-labelledby="profile-feed-heading" class="profile-activity">
+        <h2 class="sr-only" id="profile-feed-heading">
+          {tabLabel[data.tab]}
+        </h2>
+
+        {data.items.length === 0 ? (
+          <p class="profile-empty">{tabEmpty[data.tab]}</p>
+        ) : (
+          <ol class="profile-feed">
+            {data.items.map((item) => (
+              <li class="profile-item">
+                {item.kind === 'comment' && (
+                  <article>
+                    <div class="profile-item__head">
+                      <Badge variant={stanceVariant(item.stance)}>
+                        {stanceLabel[item.stance] ?? 'Comment'}
+                      </Badge>
+                      <time
+                        class="profile-item__time tabular"
+                        datetime={item.createdAt.toISOString()}
+                        title={dateLabel(item.createdAt)}
+                      >
+                        {relativeLabel(item.createdAt)}
+                      </time>
+                      <span class="profile-item__score tabular">
+                        {item.score} {Math.abs(item.score) === 1 ? 'point' : 'points'}
+                      </span>
+                    </div>
+                    <p class="profile-item__context">
+                      {item.isReply ? 'Replied in' : 'Commented on'}{' '}
+                      <a href={item.href.split('#')[0]}>
+                        {item.proposalTitle}
+                      </a>
+                    </p>
+                    <p class="profile-item__body">{item.body}</p>
+                    <p class="profile-item__actions">
+                      <a class="profile-item__link" href={item.href}>
+                        View comment
+                      </a>
+                    </p>
+                  </article>
+                )}
+
+                {item.kind === 'proposal' && (
+                  <article>
+                    <div class="profile-item__head">
+                      <Badge variant={stageVariant(item.stage)}>
+                        {stageLabel(item.stage)}
+                      </Badge>
+                      <time
+                        class="profile-item__time tabular"
+                        datetime={item.createdAt.toISOString()}
+                        title={dateLabel(item.createdAt)}
+                      >
+                        {relativeLabel(item.createdAt)}
+                      </time>
+                    </div>
+                    <h3>
+                      <a href={item.href}>{item.title}</a>
+                    </h3>
+                    <p class="profile-item__body">{item.summary}</p>
+                    <p class="profile-item__context">Proposed in {item.space}</p>
+                  </article>
+                )}
+
+                {item.kind === 'amendment' && (
+                  <article>
+                    <div class="profile-item__head">
+                      <Badge variant={amendmentVariant(item.status)}>
+                        {amendmentStatusLabel(item.status)}
+                      </Badge>
+                      <time
+                        class="profile-item__time tabular"
+                        datetime={item.createdAt.toISOString()}
+                        title={dateLabel(item.createdAt)}
+                      >
+                        {relativeLabel(item.createdAt)}
+                      </time>
+                    </div>
+                    <h3>
+                      <a href={item.href}>{item.title}</a>
+                    </h3>
+                    <p class="profile-item__context">
+                      Amendment to {item.proposalTitle} ·{' '}
+                      {item.fieldCount} {item.fieldCount === 1 ? 'field' : 'fields'}
+                    </p>
+                    <p class="profile-item__actions">
+                      <a class="profile-item__link" href={item.href}>
+                        View amendment
+                      </a>
+                    </p>
+                  </article>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {data.pagination.pageCount > 1 && (
+          <nav class="profile-pagination" aria-label="Contribution history pages">
+            {data.pagination.hasPrevious ? (
+              <Button
+                href={pageHref(data.pagination.page - 1)}
+                size="sm"
+                variant="outline"
+              >
+                Previous
+              </Button>
+            ) : (
+              <Button disabled size="sm" variant="outline">
+                Previous
+              </Button>
+            )}
+            <span class="tabular">
+              Page {data.pagination.page} of {data.pagination.pageCount}
+            </span>
+            {data.pagination.hasNext ? (
+              <Button
+                href={pageHref(data.pagination.page + 1)}
+                size="sm"
+                variant="outline"
+              >
+                Next
+              </Button>
+            ) : (
+              <Button disabled size="sm" variant="outline">
+                Next
+              </Button>
+            )}
+          </nav>
+        )}
+      </section>
+    </div>
+  )}
+</SiteLayout>
+
+<style>
+  .profile-page {
+    max-width: 58rem;
+  }
+
+  .profile-hero {
+    display: grid;
+    gap: 1rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .profile-identity {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .profile-avatar {
+    flex-shrink: 0;
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple);
+  }
+
+  .profile-avatar__fallback {
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 600;
+  }
+
+  .profile-identity__copy {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .profile-identity h1 {
+    margin: 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(1.85rem, 3vw, 2.35rem);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--horizon-ink);
+    overflow-wrap: anywhere;
+  }
+
+  .profile-affiliation {
+    margin: 0.25rem 0 0;
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--horizon-muted);
+  }
+
+  .profile-joined {
+    margin: 0.15rem 0 0;
+    font-size: 0.78rem;
+    color: var(--horizon-muted);
+  }
+
+  .profile-edit {
+    flex-shrink: 0;
+  }
+
+  .profile-bio {
+    max-width: 44rem;
+    margin: 0;
+    font-size: 0.98rem;
+    line-height: 1.6;
+    color: var(--horizon-ink);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .profile-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin: 0;
+  }
+
+  .profile-stat {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.7rem;
+    background: var(--horizon-lavender-soft);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+
+  .profile-stat:hover {
+    border-color: var(--horizon-line-strong);
+    background: var(--horizon-lavender);
+  }
+
+  .profile-stat__label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .profile-stat__value {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--horizon-purple-deep);
+  }
+
+  .profile-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.3rem;
+    margin: 1.25rem 0 0.25rem;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .profile-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.6rem;
+    padding: 0.5rem 0.1rem;
+    color: var(--horizon-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .profile-tab:hover {
+    color: var(--horizon-ink);
+  }
+
+  .profile-tab[aria-current='page'] {
+    color: var(--horizon-ink);
+  }
+
+  .profile-tab[aria-current='page']::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    background: var(--horizon-purple);
+  }
+
+  .profile-tab__count {
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple-deep);
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .profile-feed {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .profile-item {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--horizon-line);
+  }
+
+  .profile-item__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .profile-item__time,
+  .profile-item__score {
+    font-size: 0.74rem;
+    color: var(--horizon-muted);
+  }
+
+  .profile-item h3 {
+    margin: 0.45rem 0 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .profile-item h3 a,
+  .profile-item__context a,
+  .profile-item__link {
+    color: var(--horizon-purple);
+    text-decoration: none;
+  }
+
+  .profile-item h3 a:hover,
+  .profile-item__context a:hover,
+  .profile-item__link:hover {
+    text-decoration: underline;
+  }
+
+  .profile-item__context {
+    margin: 0.3rem 0 0;
+    font-size: 0.8rem;
+    color: var(--horizon-muted);
+  }
+
+  .profile-item__body {
+    display: -webkit-box;
+    margin: 0.45rem 0 0;
+    overflow: hidden;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--horizon-ink);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+  }
+
+  .profile-item__actions {
+    margin: 0.45rem 0 0;
+  }
+
+  .profile-item__link {
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .profile-empty {
+    margin: 1rem 0 0;
+    padding: 1rem;
+    border: 1px solid var(--horizon-line);
+    border-radius: 0.7rem;
+    background: var(--horizon-lavender-soft);
+    color: var(--horizon-muted);
+    font-size: 0.9rem;
+  }
+
+  .profile-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    font-size: 0.82rem;
+    color: var(--horizon-muted);
+  }
+
+  .profile-tab:focus-visible,
+  .profile-stat:focus-visible,
+  .profile-item a:focus-visible {
+    outline: 2px solid var(--horizon-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  @media (max-width: 640px) {
+    .profile-identity {
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .profile-edit {
+      margin-left: auto;
+    }
+
+    .profile-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>

@@ -1,6 +1,6 @@
 # Data and persistence
 
-**Status:** Current · **Verified:** 14 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 ## Connection model
 
@@ -23,12 +23,14 @@
 |---|---|
 | `proposals` | Matters: wording, stage, type, scope, authority, ballot binding |
 | `proposal_revisions` | Immutable wording snapshots with hashes and parent chain |
-| `comments` | Deliberation contributions, stances, endorsements, feedback |
+| `comments` | Deliberation contributions, stances, upvote/downvote member ids (aggregated in DTOs), feedback, `parentCommentId`/`depth` thread structure and deletion placeholders |
 | `amendments` | Amendment records and their lifecycle state |
 | `amendment_revisions` | Immutable amendment wording snapshots |
 | `proposal_votes` | Current vote per member per ballot, plaintext or encrypted |
+| `ballot_tallies` | Display-only aggregate per `(ballotId, revisionId)`: approve/abstain/reject/total and `updatedAt`. Never authoritative and never contains a voter reference; see [read models](../architecture/extensibility-and-hardening.md#5-integration-read-models--operational-resilience) |
 | `ballots` | Ballot projection: purpose, electorate, revision, status, close time |
 | `ballot_results` | Immutable formal decision records |
+| `ballot_quorum_records` | One immutable quorum closure snapshot per ballot, keyed by `ballotId` |
 | `ballot_binding_events` | Audit of ballot-to-revision binding |
 | `ballot_schedule_events` | Audit of deadline/scheduling changes |
 | `governance_events` | Append-only governance audit events |
@@ -186,6 +188,25 @@ Only `publicationStatus: "published"` is authoritative public policy.
 
 External-source records cannot be edited or revoked locally.
 
+### Public profile
+
+The Better Auth `user` document carries the public profile fields:
+
+```ts
+{
+  name,                       // display name, editable through Better Auth
+  bio?,                       // plain text, max 500 characters
+  profileVisible?,            // false hides the profile; absent means visible
+  profileUpdatedAt?,          // last owner edit
+  createdAt,
+  disabled?                   // a disabled account has no public profile
+}
+```
+
+`src/lib/member-profile.ts` builds the profile and its paginated history on read. It queries `comments` by `memberId`, `proposals` by `authorId` and `amendments` by `authorId`, then filters every proposal through `canViewProposal` and the archived-review rule before exposing a count, title, excerpt or link. Deleted comments and withdrawn amendments are excluded. A profile with `profileVisible: false` is returned only to its owner and is suppressed from author links everywhere else. The profile never copies contribution records into a separate collection, so there is no drift between a profile and the discussion it summarises.
+
+The canonical profile path is the member id by default. With `ENGAGE_PROFILE_CRM_IDENTIFIERS=on`, `resolveMemberProfileRoute` reads an active `crm_identity_links` record and uses `crmPersonId` as the canonical path; a member-id path then redirects with 301. The lookup is local and a profile request never calls the CRM. If a CRM person id would collide with another member's id, it is not used as the canonical path, and the colliding path returns 404 rather than guessing which person was meant. The flag is off by default.
+
 ## Indexes and uniqueness
 
 `initializeDatabase()` creates roughly forty indexes in two batches. The important uniqueness constraints are:
@@ -202,7 +223,11 @@ External-source records cannot be edited or revoked locally.
 - unique role assignments and RBAC role IDs where applicable;
 - TTL index on `rate_limits.expiresAt` for abuse-protection windows.
 
+Public profile reads are supported by `comments { memberId: 1, deletedAt: 1, createdAt: -1 }`, the existing `proposals { authorId: 1, createdAt: 1 }` index and `amendments { authorId: 1, createdAt: -1 }` ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)).
+
 A known gap: there is no unique `(branchId, memberId)` index on `branch_memberships`; correctness relies on application upserts.
+
+`ballot_quorum_records` has a unique `ballotId` index and a non-unique `matterId, closedAt` index. The unique index makes the closure snapshot insert-once even under a replayed scheduler run.
 
 Index creation is idempotent but is not a migration system. Changing an index requires an explicit migration or a startup upgrade path, as `ensureProposalVoteIndex` does for the legacy vote index. The `ballot_results` index change is an explicit, preflighted migration: startup reports a legacy collection and never reshapes it. See [Ballot-results index migration](../ballot-results-index-migration.md).
 
@@ -221,7 +246,7 @@ The lifecycle scheduler (`src/lib/governance-scheduler.ts`) writes each schedule
 | Operation | Reads | Writes |
 |---|---|---|
 | Advance due deliberation | `proposals` (`stage: deliberate`, `deliberationEndsAt <= now`), `amendments`, `proposal_revisions`, `proposal_votes` | `proposals` (`stage`, `ballotRevisionId`, `ballotRevisionBoundAt/By`, `ballotClosesAt`, `updatedAt`), one `proposal.stage_transition` event |
-| Close due ballot | `proposals` (`stage: decide`, `ballotClosesAt <= now`, no `ballotClosedAt`) | `proposals.ballotClosedAt`, `ballots.status` when a projection row exists, one `ballot.closed` event |
+| Close due ballot | `proposals` (`stage: decide`, `ballotClosesAt <= now`, no `ballotClosedAt`), memberships, `user`, CRM links, activity records, votes | `proposals.ballotClosedAt`, `ballots.status` when a projection row exists, one `ballot.closed` event, one `ballot_quorum_records` snapshot |
 
 Both operations report rather than guess when a record cannot be scheduled safely: unresolved amendments, votes bound to a different wording revision, a missing seconding anchor, or a 60-day ceiling already in the past. The JSON report has `advanced`, `skipped`, `closed`, `blockers` and `errors` arrays and exits non-zero on errors. The scheduler is idempotent: a missed run is caught up by the next one because deadlines are absolute, and a repeated run does nothing.
 

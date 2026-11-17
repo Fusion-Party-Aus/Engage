@@ -1,6 +1,6 @@
 # Build, deployment and operations
 
-**Status:** Current · **Verified:** 15 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 This page is the engineering path. For host-specific procedures, the older deployment documents remain useful but must be read with their dates: `docs/coolify-deployment.md`, `docs/coolify-cutover-checklist.md`, `docs/operations.md`, `docs/nuc-deployment.md`. Where they conflict with this page, treat this page as current and record the drift.
 
@@ -27,9 +27,8 @@ Configuration is read through `runtimeEnv(locals)` and typed as `PlatformEnv`. `
 | Database | `MONGODB_URI`, `MONGODB_DB_NAME`, initial Mongo credentials for Compose |
 | Auth | `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 | Email | `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, `RESEND_WEBHOOK_SECRET` |
-| Jobs | `ENGAGE_CRON_SECRET`, `ENGAGE_EMAIL_SECRET`, `ENGAGE_DIGEST_ENABLED` |
-| Operations | `GOVERNANCE_SCHEDULER_WARN_HOURS`, `GOVERNANCE_SCHEDULER_STALE_HOURS`, `DIGEST_WARN_HOURS`, `DIGEST_STALE_HOURS`, `MEMBERSHIP_VERIFICATION_WARN_HOURS`, `MEMBERSHIP_VERIFICATION_STALE_HOURS`, `BALLOT_CLOSURE_GRACE_HOURS`, `EMAIL_DELIVERY_WINDOW_HOURS` (optional; defaults in the health section) |
-| CRM | `ENGAGE_CRM_*` (base URL, token, membership types, verification flag) |
+| Jobs | `ENGAGE_CRON_SECRET`, `ENGAGE_EMAIL_SECRET` |
+| CRM | `ENGAGE_CRM_*` base URL, token, membership type IDs and electorate map. Enablement and tuning are administrative settings. |
 | Ballots | `BALLOT_ENCRYPTION_MODE`, `BALLOT_ENCRYPTION_KEYS`, active key ID, blind-index key |
 | Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
 | Site | `ENGAGE_ALLOW_INDEXING`, CTA, social/state-site JSON, repo URL, OG image |
@@ -63,7 +62,7 @@ CI provisions a single-node MongoDB 8.0 replica set. Use the same when changing 
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request to `main` and on pushes to `main`, `fix/**` and `codex/**`: install, an isolated MongoDB replica set, `pnpm check`, the documentation link check, `pnpm test`, `pnpm build`, the member lifecycle browser journey, then the perimeter security browser harness.
+`.github/workflows/ci.yml` runs on every pull request to `main` and on pushes to `main`, `fix/**` and `codex/**`: install, an isolated MongoDB replica set, `pnpm check`, the documentation link check, `pnpm test`, `pnpm build`, the member lifecycle browser journey, then the perimeter security, threaded discussion and public member profile browser harnesses.
 
 The perimeter harness (`scripts/security-perimeter-browser.mjs`, also `pnpm perimeter:browser`) starts the built server on the in-memory database and drives real Chromium with Cloudflare and Plausible intercepted. It proves the response headers and CSP, that every allowed external host still reaches the network layer, that same-origin fetches and native form posts are accepted, and that cross-origin and cookie-without-Origin writes are refused. It has a hard 180-second deadline and always stops Chromium and the preview server, so a hung page fails the step instead of the job. Playwright is installed once per job and reused through `ENGAGE_PLAYWRIGHT_MODULE`; it is not an application dependency.
 
@@ -74,7 +73,10 @@ Local use:
 ```sh
 pnpm build
 ENGAGE_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs pnpm perimeter:browser
+ENGAGE_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/member-profile-browser.mjs
 ```
+
+The member profile harness proves the discussion author links, the public profile tabs and statistics, the exact-comment deep link, empty tabs and the 404 for an unknown member on desktop and mobile. It writes screenshots to `docs/screenshots/member-profile/`.
 
 The gap: CI runs the production build directly on the runner, not through Cloudflare/Coolify or a real MongoDB. Proxy headers on static assets, Astro's early cross-site 403 and production responses are still deployment checks.
 
@@ -186,9 +188,9 @@ A job that has never run reports `failing`, because the absence of evidence is t
 
 | Job | Invocation | Documented cadence | Warn (default) | Fail (default) |
 |---|---|---|---|---|
-| Governance scheduler | `npm run governance:scheduler -- --apply` from cron or a Coolify job | Every 15 minutes is safe; hourly is the practical minimum for deadline accuracy | 2 hours (`GOVERNANCE_SCHEDULER_WARN_HOURS`) | 26 hours (`GOVERNANCE_SCHEDULER_STALE_HOURS`) |
-| Ballot digest | `POST /api/email/digest` with `Authorization: Bearer $ENGAGE_CRON_SECRET` | Every 15 minutes while `ENGAGE_DIGEST_ENABLED=true` | 1 hour (`DIGEST_WARN_HOURS`) | 24 hours (`DIGEST_STALE_HOURS`) |
-| Membership verification | `POST /api/cron/membership-verification` with `Authorization: Bearer $ENGAGE_CRM_VERIFICATION_CRON_SECRET` | Every 15 minutes while CRM verification is enabled | 2 hours (`MEMBERSHIP_VERIFICATION_WARN_HOURS`) | 24 hours (`MEMBERSHIP_VERIFICATION_STALE_HOURS`) |
+| Governance scheduler | `npm run governance:scheduler -- --apply` from cron or a Coolify job | Every 15 minutes is safe; hourly is the practical minimum for deadline accuracy | 2 hours | 26 hours |
+| Ballot digest | `POST /api/email/digest` with `Authorization: Bearer $ENGAGE_CRON_SECRET` | Every 15 minutes while scheduled digests are on under **Platform settings → Scheduled jobs** | 1 hour | 24 hours |
+| Membership verification | `POST /api/cron/membership-verification` with `Authorization: Bearer $ENGAGE_CRM_VERIFICATION_CRON_SECRET` | Every 15 minutes while CRM verification is on under **Platform settings → CRM verification** | 2 hours | 24 hours |
 
 Warn is a small multiple of cadence — roughly 4–8 expected ticks, or two hourly scheduler ticks — not a single missed tick. A scheduler jitter, a slow run or one failed provider call must not page anyone: those are covered by the run's own `ok` and error evidence. An exhausted warn threshold means ticks are being missed repeatedly, which is worth knowing within an hour or two rather than a day. Fail is the wide outer bound where the job's guarantee is clearly broken and someone must act.
 
@@ -222,18 +224,39 @@ Overall state is the worst check, ordered `ok < unknown < degraded < failing`.
 | `email-delivery` | Recent `engagement_email_outbox` rows with status `failed` or `held` | `ok` or `degraded` |
 | `turnstile` | Existing Turnstile configuration helper | `ok` enforced, `ok` outside production when not enforced, `degraded` when disabled in production, `failing` when misconfigured in production |
 
-Thresholds are named in the report and in every check that applied one. Change them with environment variables; the report records each value, its variable name and whether it is the default or came from the environment. Every job check has both a warn and a fail threshold. If a configured warn value is not below the fail value, that check reports `unknown` with the conflicting values rather than quietly picking one.
+Thresholds are named in the report and in every check that applied one. Each entry records the value and whether it came from the saved setting or the documented default. Change them in Engage under **Platform settings → Operational thresholds**; a saved change takes effect on the next evaluation, with no redeploy and no environment change. Every job check has both a warn and a fail threshold. If a saved warn value is not below the fail value, or a saved value is outside its permitted range, that check reports `unknown` with the conflicting values rather than quietly picking one.
 
-| Variable | Default | Effect |
-|---|---|---|
-| `GOVERNANCE_SCHEDULER_WARN_HOURS` | 2 | Degraded when the last apply run is older |
-| `GOVERNANCE_SCHEDULER_STALE_HOURS` | 26 | Failing when the last apply run is older |
-| `DIGEST_WARN_HOURS` | 1 | Degraded when the last digest apply run is older |
-| `DIGEST_STALE_HOURS` | 24 | Failing when the last digest apply run is older |
-| `MEMBERSHIP_VERIFICATION_WARN_HOURS` | 2 | Degraded when the last verification apply run is older |
-| `MEMBERSHIP_VERIFICATION_STALE_HOURS` | 24 | Failing when the last verification apply run is older |
-| `BALLOT_CLOSURE_GRACE_HOURS` | 2 | Grace before an unclosed deadline is failing rather than degraded |
-| `EMAIL_DELIVERY_WINDOW_HOURS` | 24 | Window counted for failed or held email |
+| Setting | Default | Permitted | Effect |
+|---|---|---|---|
+| Governance scheduler warn | 2 hours | 1–168 | Degraded when the last apply run is older |
+| Governance scheduler fail | 26 hours | 2–720 | Failing when the last apply run is older |
+| Ballot digest warn | 1 hour | 1–168 | Degraded when the last digest apply run is older |
+| Ballot digest fail | 24 hours | 2–720 | Failing when the last digest apply run is older |
+| Membership verification warn | 2 hours | 1–168 | Degraded when the last verification apply run is older |
+| Membership verification fail | 24 hours | 2–720 | Failing when the last verification apply run is older |
+| Ballot closure grace | 2 hours | 0–48 | Grace before an unclosed deadline is failing rather than degraded |
+| Email delivery window | 24 hours | 1–168 | Window counted for failed or held email |
+
+Values are whole hours. A save is validated as a complete set, so a partial or out-of-range change is rejected at the field and nothing is stored. Each successful change appends an audit event to `operational_settings_events` with the administrator, the time, and only the fields that changed, with their before and after values. The settings page shows the last change. The saved values live in one document in `operational_settings` with `_id: "thresholds"`.
+
+A stored value that is missing, not a whole number or outside its range is never trusted silently: the affected check reports `unknown` with a plain-language message, the report labels that threshold as the default it fell back to, and the settings page marks the saved value as invalid. Repair it by saving valid values.
+
+These are operational reporting values only. Changing them never alters ballot eligibility, closure semantics, quorum or recorded results.
+
+### CRM verification and scheduled jobs
+
+CRM verification and the scheduled digest are off until an administrator turns them on. A missing setting means off, matching the safe default when the former environment variables were unset. The enablement gate is the only way to turn a job on; the external scheduler still has to call the endpoint.
+
+| Setting | Default | Permitted | Effect |
+|---|---|---|---|
+| Automatic CRM verification | Off | On or off | Permits the scheduled verification cycle to run |
+| Members per cycle | 25 | 1–100 | Members processed by one scheduled cycle |
+| Recheck linked members every | 1,440 minutes | 15–43,200 | How often an already verified member is checked again |
+| Alert after failed attempts | 3 | 1–20 | Consecutive CRM failures before administrators are notified |
+| CRM request timeout | 10,000 ms | 1,000–60,000 | How long a CRM response is awaited |
+| Scheduled ballot digests | Off | On or off | Permits the scheduled digest endpoint to send reminders |
+
+The CRM settings live in one document in `operational_settings` with `_id: "crm"`; the digest gate lives in `_id: "jobs"`. Each save is validated as a complete set, takes effect on the next run, and appends an event to `operational_settings_events` with the admin, time and only the changed fields. A stored value that is missing or outside its range is never clamped: the settings page marks it invalid and the scheduled cycle fails with a plain-language message until it is corrected.
 
 ### What each state means
 
@@ -241,12 +264,12 @@ Thresholds are named in the report and in every check that applied one. Change t
 - **Governance scheduler failing.** Nothing advances at the deliberation deadline or records ballot closure. Voting still refuses an expired ballot at vote time, and officers can still act manually. Run the scheduler with `--apply` and read its report.
 - **Ballot deadlines failing.** The scheduler ran (or did not) and a ballot stayed open past its deadline with no closure record. This is evidence about closure, not about a result: no result is recorded by closure.
 - **Digest degraded.** The digest is late past its warn threshold, or the last run held messages. Members may not receive ballot reminders.
-- **Digest failing.** Members receive no ballot reminders. Check the endpoint's bearer secret, `ENGAGE_DIGEST_ENABLED`, and delivery holds.
+- **Digest failing.** Members receive no ballot reminders. Check the endpoint's bearer secret, whether scheduled digests are on under **Platform settings**, and delivery holds.
 - **Membership verification degraded.** The cycle is late past its warn threshold, or attempts are queued. The next successful cycle clears the backlog.
 - **Membership verification failing.** Membership status stops tracking the CRM. Existing statuses are unchanged; no one is suspended by a failed run.
 - **Email delivery degraded.** Failed or held outbox rows need review in email administration. Bounced or complained addresses stay suppressed.
 - **Turnstile degraded or failing.** In production a missing key fails protected actions closed, so magic-link sign-in and public submission stop working. Set both Turnstile keys.
-- **Unknown.** The feature is not enabled in this deployment, a warn/fail threshold pair is invalid, or a check could not read its evidence. It is not proof of health.
+- **Unknown.** The feature is turned off in Platform settings, a saved threshold or CRM setting is missing or invalid, a warn value is not below its fail value, or a check could not read its evidence. It is not proof of health.
 
 ### Escalation
 
@@ -271,7 +294,10 @@ Thresholds are named in the report and in every check that applied one. Change t
 - **No scheduler is enabled in Coolify production.** This slice records and reports runs; it does not create them. #39 stays open until an external scheduler is configured and observed.
 - **No production verification.** Everything here was verified against a local replica set. There is no evidence of a production run.
 - **No metrics, traces or alert delivery.** The health command is the alerting input; nothing sends alerts yet.
-- **No admin page.** Health is a command and a coarse probe in this slice.
+- **No admin health page.** Health is a command and a coarse probe in this slice. The only administrator surface is the operational settings under **Platform settings**, not a live health view.
+- **Operational tuning has moved to administrator settings.** The eight health thresholds, the CRM batch size, reconcile cadence, outage alert attempts, request timeout, and the digest and CRM enablement gates are all stored, validated and audited in Engage ([#128](https://github.com/Fusion-Party-Aus/Engage/issues/128)). Site settings still read environment fallbacks; production verification of the settings migrations remains outstanding.
+
+**Deployment migration.** A deployment that previously used the former digest or CRM verification environment variables must, after upgrading, turn the job on under **Platform settings → Scheduled jobs** or **Platform settings → CRM verification**. Those variables are ignored, and the safe default when a setting is missing is off. CRM tuning values that were previously set in the environment also need to be entered once in **Platform settings → CRM verification**; the documented defaults apply until then.
 
 
 ## Changelog

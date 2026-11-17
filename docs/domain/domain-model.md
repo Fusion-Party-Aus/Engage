@@ -1,6 +1,6 @@
 # Domain model
 
-**Status:** Current · **Verified:** 13 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 This page defines the concepts an engineer or agent must understand before changing behaviour. It describes the model the code actually implements. Where the model is incomplete, that is stated.
 
@@ -64,6 +64,24 @@ flowchart TB
 An account is the Better Auth `user` document. Its `_id` is the `memberId` used everywhere else. There is no separate profile collection.
 
 An account can be disabled. A disabled account cannot obtain or retain a session. Disabling is not a membership status.
+
+### Public profile
+
+A public profile is a read model over the account and its existing contributions, at `/members/<memberId>/`. By default the identifier is the Better Auth `user._id`: opaque, stable and already stored on comments, proposals and amendments. It is not an email address. A future CRM seam is available but off by default: with `ENGAGE_PROFILE_CRM_IDENTIFIERS=on`, an active `crm_identity_links` record supplies the CRM person id as the canonical path and legacy member-id paths redirect with 301. A profile request reads the link locally and never calls the CRM.
+
+The account supplies the display name, an optional plain-text biography (`user.bio`, at most 500 characters) and the profile visibility switch, edited by the owner at `/api/member/profile`. Everything else is derived on read from existing records:
+
+- comment, proposal and amendment counts;
+- comment score: the sum of net scores (`upvotes - downvotes`) across visible, non-deleted comments;
+- geographic affiliation from active `branch_memberships` (national, state or territory; constituent branches are not published).
+
+There is still no separate profile collection. Nothing is duplicated from `comments`, `proposals`, `amendments` or ballots.
+
+Visibility is viewer-relative. A contribution appears only if the viewer could already open its proposal through `canViewProposal`; archived proposals follow the same reviewer rule as the proposal page. Deleted comments and withdrawn amendments are excluded from history and comment score. Private or branch-scoped contributions therefore never leak through counts, titles, excerpts or the profile itself. If the account document is gone but a visible contribution remains, the display name comes from the author name stored on that contribution; a name that exists only on a private proposal does not create a profile.
+
+The owner may hide the profile. A hidden profile returns 404 to everyone else and its author links are suppressed; the owner can still preview it from My Engage. A disabled account behaves the same way. There is no self-service account deletion, so historic comments remain in their discussions.
+
+The comment score is display-only. It never affects eligibility, permissions, ballot weight or proposal authority. There is no leaderboard or reputation tier.
 
 ### Platform membership
 
@@ -195,14 +213,20 @@ A comment is the unit of deliberation. It has:
 
 - an author, body (5–5,000 characters) and timestamp;
 - a **stance**: `support`, `concern`, `amendment` or `comment`;
-- endorsements (`upvotes` plus event history);
-- optional structured **contribution feedback**.
+- **comment votes**: `upvotes` and `downvotes` store one choice per member. A member has at most one active vote per comment; voting the other way switches the vote, and voting the same way again clears it. Readers see the net score and upvote percentage, never the identity or individual choice of another voter. Comment votes are display-only and are not ballots;
+- optional structured **contribution feedback**;
+- an optional **parent comment** (`parentCommentId`) and stored `depth`. A reply is a comment whose parent is another comment in the same proposal. Replies are rendered underneath their parent; they are never flattened into the top-level list or reordered by the top-level sort;
+- a **deletion placeholder**. When a comment with replies is deleted, its body is cleared, `deletedAt` is set and the record is retained so surviving replies keep their context. A comment with no replies is deleted outright.
 
-A stance is a label. `amendment` as a stance does **not** create an amendment record. Real amendments are separate.
+A stance is a label. `amendment` as a stance does **not** create an amendment record. Real amendments are separate. A reply chooses its own stance; it does not inherit the parent's.
 
-### Endorsement
+### Comment ranking
 
-An endorsement is a member adding or removing themselves from a comment's `upvotes`. It is display-only. It never counts toward a ballot, threshold or promotion.
+The default **Best** order applies to each sibling group. It uses the Wilson score lower bound over upvotes and downvotes, so a comment with one upvote and no downvotes does not outrank a comment with broad support. Ties fall back to net score, then older first, then `commentId`. **Top score** orders by net score, then confidence. **Newest** and **Oldest** are chronological. A parent is always followed by its own descendants; sorting never flattens a thread.
+
+### Comment vote
+
+A comment vote is an upvote or downvote on a contribution. A member has at most one active vote per comment; voting the other way switches it, and voting the same way again clears it. The net score and upvote percentage are display-only and never count toward a ballot, threshold, promotion or quorum. Voter identities stay server-side and are never returned to another member.
 
 ### Contribution feedback
 
@@ -275,7 +299,7 @@ The `ballots` collection is partly a projection. Records may be synthesised for 
 
 A vote is one member's current choice on one ballot: `approve`, `abstain` or `reject`, with an optional reason and timestamp. A member may change their vote while the ballot is open. Legacy `do-not-approve` is read as `reject`.
 
-Votes are stored in `proposal_votes`. Depending on configuration they are plaintext or AES-256-GCM encrypted with a blind index. Abstain is recorded and displayed; it has no computed effect because no threshold model exists.
+Votes are stored in `proposal_votes`. Depending on configuration they are plaintext or AES-256-GCM encrypted with a blind index. Abstain is recorded and displayed. It counts towards quorum participation but has no effect on the Yes-versus-No approval comparison, because no abstention denominator has been decided (D10/O1).
 
 An unverified member may save a **pending vote preference**, promoted after verification only if the bound revision still matches.
 
@@ -283,9 +307,9 @@ An unverified member may save a **pending vote preference**, promoted after veri
 
 A ballot result is an immutable record that a named officer recorded an outcome for a specific ballot revision, citing an external `decisionEventId`. The result vocabulary is `successful`, `unsuccessful` or `inconclusive`.
 
-The result is **not derived from the tally**. Thresholds, quorum, turnout, tie-breaking and non-voter treatment are not implemented because Fusion has not supplied them.
+For ballots closing on or after 16 November 2026, the result is tested against the tally and the two-tier quorum. The computed result is `successful` when quorum is met and Yes is greater than No, `unsuccessful` when quorum is met and Yes does not exceed No, and `inconclusive` when either quorum test fails. An officer may override the approval comparison with a written reason, but cannot override a quorum failure into approval or rejection. Ballots closed earlier keep the approval-only rule. The full calculation is in [../governance/ballot-quorum.md](../governance/ballot-quorum.md).
 
-Recording a result certifies the ballot. It does not publish policy and does not move the matter by itself.
+Recording a result certifies the ballot. It does not publish policy and does not move the matter by itself. An inconclusive result leaves the matter open to an explicit return to Deliberate; it does not automatically retry.
 
 ### Policy registry record
 
@@ -323,9 +347,10 @@ Channel consent is independent: push defaults off and is never inferred from ema
 | Revision | `proposal_revisions`, `revisionId` | Never call a raw ID a revision in UI |
 | Vote | `proposal_votes`, `VoteRecord` | Formal ballot only |
 | Comment / stance | `comments`, `CommentRecord` | Not a vote |
-| Endorse | `upvotes`, `upvoteEvents` | Display-only support |
+| Comment vote | `upvotes`, `downvotes`, `upvoteEvents` | Display-only; aggregate score and percentage only |
 | Wording change | Amendment, `amendments` | A first-class record with its own ballot |
-| Ballot outcome | `ballot_results`, `result` | Officer-recorded, not computed |
+| Ballot outcome | `ballot_results`, `result` | Recorded against a computed approval and quorum check |
+| Quorum at closure | `ballot_quorum_records` | Immutable closure snapshot; rule version `two-tier-quorum-v1` |
 | Official policy | `policy_registry` with `publicationStatus: "published"` | Not a proposal, not a ballot result |
 | Withdrawn / replaced | `withdrawn`, `superseded` | History is retained |
 | Verify a member | `memberships.status = "verified"` | Not the same as a role |

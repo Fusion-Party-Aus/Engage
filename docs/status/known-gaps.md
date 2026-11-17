@@ -1,6 +1,6 @@
 # Known gaps, defects and open decisions
 
-**Status:** Current · **Verified:** 13 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 > **RFC 0001 programme status.** The Sprint 1 integrity, lifecycle, rendering
 > performance and Turnstile slices were merged to `main` as `3b36947` (PR #51) on
@@ -22,7 +22,7 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 **Resolved on `feat/rfc0001-sprint1-integration`:** a zero-vote return clears the binding and emits `ballot.unbound`; re-entry binds the current revision; edits are refused once votes exist.
 
-**Evidence:** `saveProposal` binds only when `ballotRevisionId` is unset (`src/lib/store.ts`). The field is never cleared.
+**Evidence:** `saveProposal` binds only when `ballotRevisionId` is unset (`src/lib/proposals-store.ts`). The field is never cleared.
 
 **Direction:** On re-entry to Decide with zero votes, either rebind explicitly and record an event, or refuse the transition until an officer chooses. Never rebind silently when votes exist. This needs a governance decision about re-opening.
 
@@ -106,7 +106,11 @@ Two amendments can edit the same field and both be `ready`. Conflict detection c
 
 **Resolved on `main` (`762f76c`, PR #86):** `recordFormalDecision` computes the outcome from the votes bound to the ballot and exact revision at certification. Certification requires a closed ballot (`BALLOT_NOT_CLOSED` for a live one, and for a ballot with no recorded close). Unbound or mismatched-revision votes refuse with `BALLOT_TALLY_UNBOUND_VOTES`; unreadable encrypted votes with `BALLOT_TALLY_UNREADABLE`; missing keys with `BALLOT_DECRYPTION_UNAVAILABLE`. A contradicting officer result is refused unless an explicit override with a written reason is recorded. The result stores the tally, `ruleBasis: "simple-majority-d9-v1"` and `computedResult`; the `decision.recorded` event carries the actor, reason, computed result and recorded result. Historical results are returned unchanged. Admin pages and the proposal PDF show the computed result and override. Terms of Use §9 describes the rule (version 1.1); the Privacy Policy needed no change. Tests: `ballot-outcome.test.ts`, `ballot-outcome-mongo.test.ts`, `proposal-pdf.test.ts`.
 
-**Still open:** the abstention denominator (decision register O1), quorum and turnout (none are authorised, D8), ranked choice (O2), confirmation ballots (O3) and election rules. Simple majority (D9) is the only rule encoded; a tie and zero votes are not successful. **Amendment endorsement ballots** (`src/pages/api/admin/amendments/close-ballot.ts`) remain officer-supplied and are not covered by this check, because the amendment-resolution method is undecided (O2/D18). Do not implement validation for them without that decision. Do not treat the computed check as a complete rule engine.
+**Display tallies are a projection, not a result.** Public lists now read `ballot_tallies`, one aggregate row per `(ballotId, revisionId)` written after a committed vote, and show `Voting open — tally updating` when the row is missing or older than ten minutes. The projection stores no voter reference and is never read by certification, which still recomputes from the bound votes. Normal writes are single atomic increments and a revision move is transactional; the only recount path is absolute and compare-and-set on a row version, retrying if the row changed and abandoned at its deadline, so an increment is never skipped. A row that is internally inconsistent is displayed as tally pending, never as a number. Existing ballots are not backfilled at startup, so deployments must run `npm run ballots:tally-projection` once if they want immediate counts; the same tool reports and repairs any row a failed or abandoned write left behind.
+
+**Quorum added 16 November 2026 (#122):** ballots closing on or after that date also pass the two-tier quorum in [../governance/ballot-quorum.md](../governance/ballot-quorum.md). The scheduler writes one immutable `ballot_quorum_records` snapshot in the closure transaction; certification refuses a missing snapshot (`BALLOT_QUORUM_SNAPSHOT_MISSING`), an unreadable closure tally (`BALLOT_QUORUM_UNAVAILABLE`), a participation mismatch (`BALLOT_QUORUM_PARTICIPATION_MISMATCH`) and any attempt to override a quorum failure into approval or rejection (`BALLOT_QUORUM_NOT_MET`). Earlier closures are `legacy-not-applied` and keep the approval-only rule.
+
+**Still open:** the abstention denominator for approval (decision register O1), ranked choice (O2), confirmation ballots (O3), election rules, Committee/Operations Manual confirmation of the quorum adaptation (O11), and an in-product audited correction path for a defective closure record. A correction currently needs a reviewed code-level or database change plus a governance event; do not edit `ballot_quorum_records` directly. **Amendment endorsement ballots** (`src/pages/api/admin/amendments/close-ballot.ts`) remain officer-supplied and are not covered by this check, because the amendment-resolution method is undecided (O2/D18). Do not implement validation for them without that decision. Do not treat the computed check as a complete rule engine.
 
 ### 11. National membership row can conflict with CRM assignment
 
@@ -128,9 +132,24 @@ Manual `saveMember` verification records `updatedBy` and `verifiedAt` but not `v
 
 ### 14. Comment moderation has no record
 
-Comments can be deleted by staff, but there is no moderation state, reason or audit event. `comments.moderate` is declared but unused.
+Comments can be deleted by staff, but there is no moderation state, reason or audit event. `comments.moderate` is declared but unused in the admin UI.
+
+**Threading safeguard (implemented):** deleting a comment that still has replies clears the body, sets `deletedAt`/`deletedBy` and keeps a placeholder so the surviving replies keep their parent. A comment with no replies is still deleted outright. The stored body is never returned to readers once deleted. This is not a moderation record: the actor and time are stored on the placeholder, but there is no reason, review queue or audit event.
 
 **Direction:** Decide whether moderation is deletion or a visible state. Record the actor, reason and time either way.
+
+### 14a. Public profile limitations
+
+**Implemented:** public profiles at `/members/<memberId>/` aggregate existing comments, proposals and amendments, with owner-editable biography and display-only comment score ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)).
+
+**Limits today:**
+
+- Self-service account deletion is not implemented. Hiding a profile or disabling an account returns 404 for the profile and suppresses author links, but historic comments on visible proposals remain part of the discussion.
+- Initials-only avatars are the current product decision. There is no image upload, storage or external image fetch.
+- The default profile URL contains the opaque Better Auth `memberId`. It is not an email address. A CRM-identifier seam is implemented but off by default: `ENGAGE_PROFILE_CRM_IDENTIFIERS=on` makes an active CRM identity link canonical and 301s member-id paths. Leave it off until upstream CRM support is confirmed.
+- Biography has no revision history. This is not required today.
+- When the account document is gone but a visible contribution remains, the profile uses the author name stored on that contribution. A name that exists only on a private proposal does not create a profile.
+- The comment score is display-only by design. It has no leaderboard, tier or permission effect.
 
 ### 15. Perimeter security is incomplete
 
@@ -198,7 +217,9 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 
 **Partially resolved (operational observability slice, #39):** authorised runs now record a durable `job_runs` ledger entry (90-day TTL) for the governance scheduler, digest and CRM verification, including failures, with no secrets or member data. `npm run ops:health` evaluates governance scheduling, ballot deadlines, digest cadence, verification backlog, recent email delivery and Turnstile, with named thresholds and exit codes `0` healthy, `2` degraded, `1` failing. `/api/health` publishes coarse `governanceScheduler` and `jobs` states and stays 200 when only a job is degraded.
 
-**Still missing:** the external scheduler itself is not configured in Coolify production, no run has been observed in production, there is no metrics/tracing backend, no alert delivery and no admin health page. `ops:health` is the input an external monitor would alert on.
+**Operational tuning is now administrator settings ([#128](https://github.com/Fusion-Party-Aus/Engage/issues/128)):** the eight operational health thresholds, the CRM batch size, reconcile cadence, outage alert attempts, request timeout, and the digest and CRM enablement gates are stored in MongoDB, validated with bounds and audited with actor and before/after values. They are edited under **Platform settings → Operational thresholds**, **CRM verification** and **Scheduled jobs**, and are no longer environment variables. A missing setting defaults to off for both jobs and to the documented tuning defaults. Site setting environment fallbacks and production verification remain on #128.
+
+**Still missing:** the external scheduler itself is not configured in Coolify production, no run has been observed in production, there is no metrics/tracing backend, no alert delivery and no admin health page (only the operational settings). `ops:health` is the input an external monitor would alert on.
 
 **Direction:** Configure and monitor an external scheduler. Treat missing jobs as an operational incident.
 
@@ -243,6 +264,19 @@ There are no metrics, traces or alerting. Failures in email, cron or verificatio
 
 The identifiable-ballot boundary is national administrator or a delegated national permission. A dedicated election-officer role is recommended but not modelled.
 
+### 28. Comment ranking and vote privacy have no operational controls
+
+**Implemented:** comments now take upvotes and downvotes, one active vote per member, and the default **Best** order ranks sibling groups by the Wilson score lower bound over up and down votes. Identities are never returned in a DTO; a viewer sees aggregate counts, the upvote percentage and only their own choice ([#57](https://github.com/Fusion-Party-Aus/Engage/issues/57)).
+
+**Residual risks:**
+
+- Comment votes have no dedicated rate limit or audit trail. A member can toggle a vote repeatedly, and a changed vote leaves no audit record. This is different from formal ballots, which have their own integrity controls. Concurrent vote writes are atomic: each comment carries a `voteVersion` and an update only applies when that version is unchanged, so simultaneous votes are retried against the latest state rather than overwriting each other. Retries run on a 5 s time budget with exponential backoff and jitter, so a cold replica set or a burst of voters converges while a stuck write still fails in bounded time. Budget expiry logs the comment ID, attempt count and budget only, never voter identities or choices.
+- The API returns aggregate `downvoteCount` to build the client-side ranking. Voter identities are not exposed, but an exact aggregate downvote tally is available to any viewer of the proposal. If the product should behave like Reddit's hidden downvote count, the DTO must expose only score and percentage and the client must rank from those.
+- The Wilson constant (`z = 1.281551565545`), the score tie-break and the age tie-break are product defaults, not governance-approved rules. They are display ranking only and must never be presented as a measure of member support or a ballot signal.
+- Reply depth is capped visually at four levels and stored at 20. That is a usability ceiling, not a moderation rule.
+
+**Evidence:** `CommentRecord.upvotes`/`downvotes`, `voteOnComment`, `toCommentDto`, `src/lib/comment-thread.ts` (`commentConfidence`, `compareComments`), `src/lib/comment-replies.test.ts` and the discussion browser harness.
+
 ## Governance decisions
 
 The maintainer answered the RFC 0001 questionnaire on 14 November 2026. The
@@ -257,7 +291,7 @@ list below is retained only to show which questions are settled and which remain
 | **G6** Whether seconding is required | **Answered:** required before Deliberate (D3). Mechanism not yet implemented. |
 | **G7** Deliberation and ballot periods | **Answered:** 30 days deliberation, 30 days ballot, 60-day ceiling (D4–D7). |
 | **G8** Qualifying membership for each ballot class | **Answered in principle:** eligibility at vote time; one geographic and one constituent branch; National for all (D2, D21). |
-| **G9** Thresholds, quorum, ties, abstentions | **Partly answered:** simple majority, tie fails, no quorum (D8, D9). Abstention denominator remains open (D10, O1). |
+| **G9** Thresholds, quorum, ties, abstentions | **Mostly answered:** simple majority, tie fails (D9); two-tier quorum for ballots closing on or after 16 November 2026 (D37–D39); abstention denominator remains open (D10, O1), though abstentions now count towards quorum. |
 | **G10** Early closure | **Deferred:** no irreversible-outcome early closure until a correct model exists (D12). |
 | **G11** Preferential amendment method | **Direction only:** direct choice for two, ranked choice for three or more; method and tie handling unspecified (D18). |
 | **G12** Delegated or automatic ratification | **Answered in principle:** automatic for zero or one amendment; collision review for two or more (D14–D20). |
@@ -266,7 +300,7 @@ list below is retained only to show which questions are settled and which remain
 | **G18–G21** Status and adoption of Reclaim/national records | Out of scope while the import is deferred. |
 
 The full historical register is in `docs/engage-product-direction-governance-audit-2026-11-07.md`.
-New open decisions are tracked as O1–O8 in the decision register.
+New open decisions are tracked as O1–O11 in the decision register.
 
 ## Verification limitations
 
@@ -308,6 +342,7 @@ The actionable gaps were opened as GitHub issues on 13 November 2026. This page 
 | Rendering performance and list read path | #52 |
 | Governance command layer and route policy | #53 |
 | Decision record and responsibility queue | #54 |
+| Public member profiles and contribution history | #113 |
 | Ballot-results index migration safety — resolved 15 November 2026 | #55 |
 
-Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain partly blocked on unresolved governance or legal decisions; implement only the parts the decision register settles. #28's Yes-versus-No computed check is implemented against D8/D9, while the abstention denominator (O1, D10) remains undecided.
+Issue #36 is deferred to a separate provenance and reconciliation project and is not part of RFC 0001. Issues #28, #30 and #40 remain partly blocked on unresolved governance or legal decisions; implement only the parts the decision register settles. #28's Yes-versus-No computed check is implemented against D9; the two-tier quorum is implemented against D37–D39, while the abstention denominator (O1, D10) remains undecided.

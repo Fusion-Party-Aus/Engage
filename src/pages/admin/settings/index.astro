@@ -4,6 +4,29 @@ import PlatformSettings from '../../../components/PlatformSettings';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { getSiteConfig, listSiteConfigEvents } from '../../../lib/site-config.ts';
+import {
+  CRM_SETTING_FIELDS,
+  JOBS_SETTING_FIELDS,
+  OPERATIONAL_THRESHOLD_BY_KEY,
+  OPERATIONAL_THRESHOLD_GROUPS,
+  getCrmSettingsState,
+  getJobsSettingsState,
+  getOperationalSettingsState,
+  listOperationalSettingsEvents,
+} from '../../../lib/operational-settings.ts';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+import { Switch } from '../../../components/ui/switch';
+import Card from '../../../components/admin/Card.astro';
+import CardContent from '../../../components/admin/CardContent.astro';
+import CardDescription from '../../../components/admin/CardDescription.astro';
+import CardFooter from '../../../components/admin/CardFooter.astro';
+import CardHeader from '../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../components/admin/CardTitle.astro';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import Field from '../../../components/admin/Field.astro';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -14,8 +37,57 @@ const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.req
 if (!user) return Astro.redirect('/member/');
 if (!user.isAdmin) return Astro.redirect('/admin/');
 
-const [config, events] = await Promise.all([getSiteConfig(db, env), listSiteConfigEvents(db)]);
+const [
+  config,
+  events,
+  thresholdState,
+  thresholdEvents,
+  crmState,
+  crmEvents,
+  jobsState,
+  jobsEvents,
+] = await Promise.all([
+  getSiteConfig(db, env),
+  listSiteConfigEvents(db),
+  getOperationalSettingsState(db),
+  listOperationalSettingsEvents(db, 20, 'thresholds'),
+  getCrmSettingsState(db),
+  listOperationalSettingsEvents(db, 20, 'crm'),
+  getJobsSettingsState(db),
+  listOperationalSettingsEvents(db, 20, 'jobs'),
+]);
 const plain = (value: unknown): any => JSON.parse(JSON.stringify(value));
+
+const groups = OPERATIONAL_THRESHOLD_GROUPS.map((group) => ({
+  ...group,
+  fields: group.fields.map((key) => OPERATIONAL_THRESHOLD_BY_KEY.get(key)!),
+}));
+
+const formatChange = (event: (typeof thresholdEvents)[number] | undefined) =>
+  event?.createdAt
+    ? event.createdAt.toLocaleString('en-AU', {
+        timeZone: 'Australia/Melbourne',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : '';
+
+const lastThresholdChange = thresholdEvents[0];
+const lastCrmChange = crmEvents[0];
+const lastJobsChange = jobsEvents[0];
+const changedOn = formatChange(lastThresholdChange);
+const crmChangedOn = formatChange(lastCrmChange);
+const jobsChangedOn = formatChange(lastJobsChange);
+const actorName = (event: (typeof thresholdEvents)[number] | undefined) =>
+  event?.actorName || "an administrator";
+
+const fieldHint = (field: (typeof CRM_SETTING_FIELDS)[number] | (typeof JOBS_SETTING_FIELDS)[number]) =>
+  field.kind === 'boolean'
+    ? `Default ${field.default ? 'on' : 'off'}.`
+    : `Default ${field.default} ${field.unit}. Enter ${field.min}–${field.max}.`;
 ---
 
 <AdminLayout
@@ -26,4 +98,386 @@ const plain = (value: unknown): any => JSON.parse(JSON.stringify(value));
   isBranchAdmin={user.isBranchAdmin}
 >
   <PlatformSettings client:load initialConfig={plain(config)} initialEvents={plain(events)} />
+
+  <section class="mt-10 border-t border-border pt-8" aria-labelledby="operational-thresholds-heading">
+    <div class="mb-4 max-w-2xl">
+      <h2 id="operational-thresholds-heading" class="m-0 text-lg font-semibold">Operational thresholds</h2>
+      <p class="mt-1 mb-0 text-sm text-muted-foreground">When scheduled work is reported as late or failing.</p>
+    </div>
+
+    {thresholdState.readFailed && (
+      <Alert variant="destructive" class="mb-4">
+        <AlertTitle>Couldn't load the saved thresholds</AlertTitle>
+        <AlertDescription>Refresh the page to try again. Health checks report unknown until the values can be read.</AlertDescription>
+      </Alert>
+    )}
+
+    {!thresholdState.readFailed && thresholdState.invalidFields.length > 0 && (
+      <Alert variant="warning" class="mb-4">
+        <AlertTitle>{thresholdState.invalidFields.length === 1 ? 'One saved threshold is invalid' : `${thresholdState.invalidFields.length} saved thresholds are invalid`}</AlertTitle>
+        <AlertDescription>Health checks report those thresholds as unknown. Enter valid values and save to repair them.</AlertDescription>
+      </Alert>
+    )}
+
+    <div class="mb-4" hidden data-operational-success="thresholds">
+      <Alert variant="success" role="status" tabindex="-1">
+        <AlertTitle>Thresholds saved</AlertTitle>
+        <AlertDescription>Health checks will use the new values from their next run.</AlertDescription>
+      </Alert>
+    </div>
+
+    <div class="mb-4" hidden data-operational-error="thresholds">
+      <Alert variant="destructive" tabindex="-1">
+        <AlertTitle>Couldn't save thresholds</AlertTitle>
+        <AlertDescription data-operational-error-message>Try again.</AlertDescription>
+      </Alert>
+    </div>
+
+    <Card class="gap-0">
+      <CardHeader class="border-b pb-4">
+        <CardTitle class="text-base">Scheduled work</CardTitle>
+        <CardDescription>Warn must be fewer hours than fail. All values are whole hours.</CardDescription>
+      </CardHeader>
+      <CardContent class="p-0">
+        <form id="operational-thresholds-form" action="/api/admin/operational-settings" method="post" novalidate data-operational-form data-section="thresholds">
+          {groups.map((group) => (
+            <fieldset class="m-0 grid gap-4 border-0 border-b border-border px-5 py-5 last:border-b-0 sm:grid-cols-2">
+              <legend class="sr-only">{group.title}</legend>
+              <div class="sm:col-span-2">
+                <h3 class="m-0 text-sm font-semibold">{group.title}</h3>
+                <p class="mt-1 mb-0 text-sm text-muted-foreground">{group.description}</p>
+              </div>
+              {group.fields.map((field) => (
+                <Field
+                  label={`${field.label} (hours)`}
+                  htmlFor={field.key}
+                  hint={`Default ${field.default} hours. Enter ${field.min}–${field.max}.`}
+                  errorId={`${field.key}-error`}
+                >
+                  <Input
+                    id={field.key}
+                    name={field.key}
+                    type="number"
+                    inputMode="numeric"
+                    step={1}
+                    min={field.min}
+                    max={field.max}
+                    required
+                    autoComplete="off"
+                    defaultValue={String(thresholdState.values[field.key])}
+                    disabled={thresholdState.readFailed}
+                    aria-describedby={`${field.key}-hint ${field.key}-error`}
+                  />
+                </Field>
+              ))}
+            </fieldset>
+          ))}
+        </form>
+      </CardContent>
+      <CardFooter class="flex-wrap items-center justify-between gap-4 border-t pt-5">
+        <p class="m-0 text-sm text-muted-foreground" data-operational-last-change="thresholds">
+          {lastThresholdChange
+            ? `Last changed ${changedOn} by ${actorName(lastThresholdChange)}.`
+            : 'Using the default thresholds. No changes saved yet.'}
+        </p>
+        <Button type="submit" form="operational-thresholds-form" disabled={thresholdState.readFailed}>Save thresholds</Button>
+      </CardFooter>
+    </Card>
+  </section>
+
+  <section class="mt-10 border-t border-border pt-8" aria-labelledby="crm-verification-heading">
+    <div class="mb-4 max-w-2xl">
+      <h2 id="crm-verification-heading" class="m-0 text-lg font-semibold">CRM verification</h2>
+      <p class="mt-1 mb-0 text-sm text-muted-foreground">How memberships are checked against the CRM.</p>
+    </div>
+
+    {crmState.readFailed && (
+      <Alert variant="destructive" class="mb-4">
+        <AlertTitle>Couldn't load the saved CRM settings</AlertTitle>
+        <AlertDescription>Refresh the page to try again. Automatic verification stays off until the values can be read.</AlertDescription>
+      </Alert>
+    )}
+
+    {!crmState.readFailed && crmState.invalidFields.length > 0 && (
+      <Alert variant="warning" class="mb-4">
+        <AlertTitle>{crmState.invalidFields.length === 1 ? 'One saved CRM setting is invalid' : `${crmState.invalidFields.length} saved CRM settings are invalid`}</AlertTitle>
+        <AlertDescription>The scheduled cycle will not run until they are corrected. Save valid values to repair them.</AlertDescription>
+      </Alert>
+    )}
+
+    <div class="mb-4" hidden data-operational-success="crm">
+      <Alert variant="success" role="status" tabindex="-1">
+        <AlertTitle>CRM verification saved</AlertTitle>
+        <AlertDescription>The next scheduled cycle will use the new values.</AlertDescription>
+      </Alert>
+    </div>
+
+    <div class="mb-4" hidden data-operational-error="crm">
+      <Alert variant="destructive" tabindex="-1">
+        <AlertTitle>Couldn't save CRM verification</AlertTitle>
+        <AlertDescription data-operational-error-message>Try again.</AlertDescription>
+      </Alert>
+    </div>
+
+    <Card class="gap-0">
+      <CardHeader class="border-b pb-4">
+        <CardTitle class="text-base">Verification cycle</CardTitle>
+        <CardDescription>Verification only runs when enabled here and the scheduled job calls the endpoint.</CardDescription>
+      </CardHeader>
+      <CardContent class="p-0">
+        <form id="crm-settings-form" action="/api/admin/operational-settings" method="post" novalidate data-operational-form data-section="crm">
+          <fieldset class="m-0 grid gap-4 border-0 px-5 py-5 sm:grid-cols-2">
+            <legend class="sr-only">CRM verification</legend>
+            {CRM_SETTING_FIELDS.map((field) => (
+              <Field
+                label={field.label}
+                htmlFor={field.key}
+                hint={fieldHint(field)}
+                errorId={`${field.key}-error`}
+                class={field.kind === 'boolean' ? 'sm:col-span-2' : undefined}
+              >
+                {field.kind === 'boolean' ? (
+                  <div class="flex min-h-9 items-center">
+                    <Switch
+                      client:load
+                      id={field.key}
+                      defaultChecked={Boolean(crmState.values[field.key])}
+                      disabled={crmState.readFailed}
+                      aria-describedby={`${field.key}-hint ${field.key}-error`}
+                      data-setting-switch="true"
+                      data-setting-key={field.key}
+                    />
+                  </div>
+                ) : (
+                  <Input
+                    id={field.key}
+                    name={field.key}
+                    type="number"
+                    inputMode="numeric"
+                    step={1}
+                    min={field.min}
+                    max={field.max}
+                    required
+                    autoComplete="off"
+                    defaultValue={String(crmState.values[field.key])}
+                    disabled={crmState.readFailed}
+                    aria-describedby={`${field.key}-hint ${field.key}-error`}
+                  />
+                )}
+              </Field>
+            ))}
+          </fieldset>
+        </form>
+      </CardContent>
+      <CardFooter class="flex-wrap items-center justify-between gap-4 border-t pt-5">
+        <p class="m-0 text-sm text-muted-foreground" data-operational-last-change="crm">
+          {lastCrmChange
+            ? `Last changed ${crmChangedOn} by ${actorName(lastCrmChange)}.`
+            : 'Using the default CRM settings. Automatic verification is off.'}
+        </p>
+        <Button type="submit" form="crm-settings-form" disabled={crmState.readFailed}>Save CRM settings</Button>
+      </CardFooter>
+    </Card>
+  </section>
+
+  <section class="mt-10 border-t border-border pt-8" aria-labelledby="scheduled-jobs-heading">
+    <div class="mb-4 max-w-2xl">
+      <h2 id="scheduled-jobs-heading" class="m-0 text-lg font-semibold">Scheduled jobs</h2>
+      <p class="mt-1 mb-0 text-sm text-muted-foreground">Which jobs the external scheduler is allowed to run.</p>
+    </div>
+
+    {jobsState.readFailed && (
+      <Alert variant="destructive" class="mb-4">
+        <AlertTitle>Couldn't load the saved job settings</AlertTitle>
+        <AlertDescription>Refresh the page to try again. Scheduled jobs stay off until the values can be read.</AlertDescription>
+      </Alert>
+    )}
+
+    {!jobsState.readFailed && jobsState.invalidFields.length > 0 && (
+      <Alert variant="warning" class="mb-4">
+        <AlertTitle>The saved job setting is invalid</AlertTitle>
+        <AlertDescription>The scheduled job will not run until it is corrected. Save a valid value to repair it.</AlertDescription>
+      </Alert>
+    )}
+
+    <div class="mb-4" hidden data-operational-success="jobs">
+      <Alert variant="success" role="status" tabindex="-1">
+        <AlertTitle>Scheduled job settings saved</AlertTitle>
+        <AlertDescription>The next authorised run will use the new setting.</AlertDescription>
+      </Alert>
+    </div>
+
+    <div class="mb-4" hidden data-operational-error="jobs">
+      <Alert variant="destructive" tabindex="-1">
+        <AlertTitle>Couldn't save scheduled job settings</AlertTitle>
+        <AlertDescription data-operational-error-message>Try again.</AlertDescription>
+      </Alert>
+    </div>
+
+    <Card class="gap-0">
+      <CardHeader class="border-b pb-4">
+        <CardTitle class="text-base">Ballot digest</CardTitle>
+        <CardDescription>Reminder emails are sent only when enabled here and the scheduled job calls the endpoint.</CardDescription>
+      </CardHeader>
+      <CardContent class="p-0">
+        <form id="jobs-settings-form" action="/api/admin/operational-settings" method="post" novalidate data-operational-form data-section="jobs">
+          <fieldset class="m-0 grid gap-4 border-0 px-5 py-5">
+            <legend class="sr-only">Scheduled jobs</legend>
+            {JOBS_SETTING_FIELDS.map((field) => (
+              <Field
+                label={field.label}
+                htmlFor={field.key}
+                hint={fieldHint(field)}
+                errorId={`${field.key}-error`}
+              >
+                <div class="flex min-h-9 items-center">
+                  <Switch
+                    client:load
+                    id={field.key}
+                    defaultChecked={jobsState.values.digestEnabled}
+                    disabled={jobsState.readFailed}
+                    aria-describedby={`${field.key}-hint ${field.key}-error`}
+                    data-setting-switch="true"
+                    data-setting-key={field.key}
+                  />
+                </div>
+              </Field>
+            ))}
+          </fieldset>
+        </form>
+      </CardContent>
+      <CardFooter class="flex-wrap items-center justify-between gap-4 border-t pt-5">
+        <p class="m-0 text-sm text-muted-foreground" data-operational-last-change="jobs">
+          {lastJobsChange
+            ? `Last changed ${jobsChangedOn} by ${actorName(lastJobsChange)}.`
+            : 'Using the default job settings. Scheduled digests are off.'}
+        </p>
+        <Button type="submit" form="jobs-settings-form" disabled={jobsState.readFailed}>Save job settings</Button>
+      </CardFooter>
+    </Card>
+  </section>
 </AdminLayout>
+
+<script>
+  for (const form of document.querySelectorAll<HTMLFormElement>('[data-operational-form]')) {
+    const section = form.dataset.section ?? '';
+    const success = document.querySelector<HTMLElement>(`[data-operational-success="${section}"]`);
+    const failure = document.querySelector<HTMLElement>(`[data-operational-error="${section}"]`);
+    const failureMessage = failure?.querySelector<HTMLElement>('[data-operational-error-message]');
+    const lastChange = document.querySelector<HTMLElement>(`[data-operational-last-change="${section}"]`);
+    const submit = document.querySelector<HTMLButtonElement>(`button[form="${form.id}"]`);
+    const submitLabel = submit?.textContent ?? 'Save';
+
+    const hide = (element: HTMLElement | null) => {
+      element?.setAttribute('hidden', '');
+    };
+    const show = (element: HTMLElement | null) => {
+      element?.removeAttribute('hidden');
+    };
+    const focusTarget = (element: HTMLElement | null) =>
+      element?.querySelector<HTMLElement>('[data-slot="alert"]') ?? null;
+
+    const clearMessages = () => {
+      hide(success);
+      hide(failure);
+      for (const error of form.querySelectorAll<HTMLElement>('[data-slot="field-error"]')) {
+        error.textContent = '';
+        error.setAttribute('hidden', '');
+      }
+      for (const input of form.querySelectorAll<HTMLElement>('[aria-invalid]')) {
+        input.removeAttribute('aria-invalid');
+      }
+    };
+
+    const showFailure = (message: string) => {
+      if (failureMessage) failureMessage.textContent = message;
+      show(failure);
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearMessages();
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = 'Saving…';
+      }
+
+      try {
+        const values: Record<string, string | boolean> = {};
+        for (const input of form.querySelectorAll<HTMLInputElement>('input[name]')) {
+          if (input.type === 'hidden') continue;
+          values[input.name] = input.value;
+        }
+        for (const control of form.querySelectorAll<HTMLElement>('[data-setting-switch]')) {
+          const key = control.dataset.settingKey;
+          if (!key) continue;
+          values[key] = control.getAttribute('aria-checked') === 'true';
+        }
+
+        const response = await fetch(form.action, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ section, ...values }),
+        });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const fieldErrors = (data.fieldErrors ?? {}) as Record<string, string>;
+          let firstInvalid: HTMLElement | null = null;
+          for (const [key, message] of Object.entries(fieldErrors)) {
+            const error = form.querySelector<HTMLElement>(`[id="${key}-error"]`);
+            const control =
+              form.querySelector<HTMLElement>(`[name="${key}"]`) ??
+              form.querySelector<HTMLElement>(`[data-setting-key="${key}"]`);
+            if (error) {
+              error.textContent = message;
+              error.removeAttribute('hidden');
+            }
+            if (control) {
+              control.setAttribute('aria-invalid', 'true');
+              firstInvalid ??= control;
+            }
+          }
+          showFailure(
+            typeof data.error === 'string'
+              ? data.error
+              : "Couldn't save settings. Try again.",
+          );
+          if (firstInvalid) firstInvalid.focus();
+          else focusTarget(failure)?.focus();
+          return;
+        }
+
+        show(success);
+        focusTarget(success)?.focus();
+        const latest = Array.isArray(data.events) ? data.events[0] : null;
+        if (lastChange) {
+          if (Array.isArray(data.changedFields) && data.changedFields.length === 0) {
+            lastChange.textContent = 'No values changed.';
+          } else if (latest?.createdAt) {
+            const when = new Date(latest.createdAt).toLocaleString('en-AU', {
+              timeZone: 'Australia/Melbourne',
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            });
+            lastChange.textContent = `Last changed ${when} by ${latest.actorName || 'an administrator'}.`;
+          } else {
+            lastChange.textContent = 'No values changed.';
+          }
+        }
+      } catch {
+        showFailure("Couldn't reach the server. Check your connection and try again.");
+        focusTarget(failure)?.focus();
+      } finally {
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = submitLabel;
+        }
+      }
+    });
+  }
+</script>

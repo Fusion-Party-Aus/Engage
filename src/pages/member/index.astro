@@ -31,6 +31,13 @@ import { listMemberNotifications } from '../../lib/notifications.ts';
 import { getVapidConfig, listMemberPushSubscriptions } from '../../lib/web-push.ts';
 import { buildMemberCatchUp, listMemberActivityStream, loadMemberActivityInputs, type MemberCatchUpGroup } from '../../lib/member-activity.ts';
 import {
+  catchUpSinceLabel as buildCatchUpSinceLabel,
+  countCatchUpItems,
+  filterCatchUpGroups,
+  MEMBER_CATCHUP_COOKIE,
+  resolveCatchUpWindow,
+} from '../../lib/member-catchup.ts';
+import {
   devLoginEnabled,
   emailLoginConfigured,
   getSessionUser,
@@ -45,6 +52,7 @@ import { ballotExpired, ballotDeadlineLabel, closesWithinSevenDays } from '../..
 import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
 import { outstandingBallots, type DigestBallot } from '../../lib/engagement-email.ts';
 import { listProposals, listUserActivity } from '../../lib/store.ts';
+import { getMemberProfileSettings, memberProfileHref } from '../../lib/member-profile.ts';
 import {
   ensureNationalBranchAssignment,
   getMemberBranchProfile,
@@ -139,38 +147,23 @@ const deliberationOpportunities = visibleProposals
 const branchPriority: Record<string, number> = { decide: 0, deliberate: 1, propose: 2, implement: 3, archived: 4 };
 
 const now = new Date();
-const LAST_SEEN_COOKIE = 'engage_member_last_seen';
-const rawLastSeen = Astro.cookies.get(LAST_SEEN_COOKIE)?.value;
-const parsedLastSeen = rawLastSeen ? new Date(rawLastSeen) : null;
-const lastSeen =
-  parsedLastSeen && !Number.isNaN(parsedLastSeen.getTime()) && parsedLastSeen <= now
-    ? parsedLastSeen
-    : null;
-const catchUpSince = lastSeen ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-const catchUpGroups = allCatchUpGroups
-  .map((group) => {
-    const items = group.items.filter((item) => item.date >= catchUpSince);
-    return items.length
-      ? { ...group, items, lastDate: items[0]!.date }
-      : null;
-  })
-  .filter((group): group is MemberCatchUpGroup => Boolean(group));
-const catchUpTotal = catchUpGroups.reduce((total, group) => total + group.items.length, 0);
+// Reading My Engage never advances the unread cursor. Updates stay until the
+// member marks them as seen (POST /api/member/updates/dismiss).
+const catchUpWindow = resolveCatchUpWindow(
+  Astro.cookies.get(MEMBER_CATCHUP_COOKIE)?.value,
+  now,
+);
+const hasCatchUpCursor = catchUpWindow.hasCursor;
+const catchUpGroups = filterCatchUpGroups(
+  allCatchUpGroups,
+  catchUpWindow.since,
+);
+const catchUpTotal = countCatchUpItems(catchUpGroups);
 const governanceChanges = allCatchUpGroups
   .flatMap((group) => group.items)
   .filter((item) => ['decision', 'policy', 'amendment'].includes(item.kind))
   .sort((left, right) => right.date.getTime() - left.date.getTime())
   .slice(0, 10);
-
-if (user && (!lastSeen || now.getTime() - lastSeen.getTime() > 30 * 60 * 1000)) {
-  Astro.cookies.set(LAST_SEEN_COOKIE, now.toISOString(), {
-    path: '/member',
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: Astro.url.protocol === 'https:',
-    maxAge: 60 * 60 * 24 * 180,
-  });
-}
 
 const branchNameById = new Map(memberBranches.map((branch: any) => [branch.branchId, String(branch.name)]));
 const outstandingItems = awaitingDecision.map((proposal) => ({
@@ -191,9 +184,8 @@ const eligibilityNote =
         : `Open to ${ballotScopes[0]} members.`
       : 'Includes party-wide and branch-scoped ballots.';
 
-const catchUpSinceLabel = lastSeen
-  ? `Updates since ${lastSeen.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}.`
-  : 'Showing updates from the last seven days.';
+const catchUpSinceLabel = buildCatchUpSinceLabel(catchUpWindow);
+const updatesSeen = Astro.url.searchParams.get('updates') === 'seen';
 
 const branchActivity = memberBranches.map((branch: any) => ({
   branch,
@@ -235,6 +227,10 @@ const memberView =
   requestedView === 'activity' || requestedView === 'account' || requestedView === 'notifications' || requestedView === 'branches'
     ? requestedView
     : 'overview';
+const memberProfileSettings =
+  user && memberView === 'account'
+    ? await getMemberProfileSettings(db, user.memberId).catch(() => null)
+    : null;
 
 // Contextual Intent Preservation (Message Match & Safe Same-Origin Redirect)
 const rawReturnTo = Astro.url.searchParams.get('returnTo')?.trim() ?? '';
@@ -542,6 +538,12 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           </Alert>
         )}
 
+        {updatesSeen && (
+          <Alert variant="success" role="status">
+            <AlertDescription>Updates marked as seen.</AlertDescription>
+          </Alert>
+        )}
+
         <section class="lifecycle-card" aria-labelledby="lifecycle-heading">
           <h2 id="lifecycle-heading">{nextAction?.title}</h2>
           <p>{nextAction?.detail}</p>
@@ -606,10 +608,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             </div>
           </a>
           <a href="#catchup-heading" class="member-stat">
-            <span class="member-stat__label">Catch-up updates</span>
+            <span class="member-stat__label">Updates waiting</span>
             <div class="member-stat__bottom">
               <strong class="member-stat__value tabular">{catchUpTotal}</strong>
-              <span class="member-stat__hint">{lastSeen ? 'Since last visit' : 'Last 7 days'}</span>
+              <span class="member-stat__hint">{hasCatchUpCursor ? 'Since last cleared' : 'Last 7 days'}</span>
             </div>
           </a>
           <a href="/member/?view=activity#activity-heading" class="member-stat">
@@ -682,8 +684,9 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             groups={catchUpGroups}
             total={catchUpTotal}
             sinceLabel={catchUpSinceLabel}
-            hasLastVisit={Boolean(lastSeen)}
+            hasCursor={hasCatchUpCursor}
             idPrefix="notifications-catchup"
+            dismissReturnTo="/member/?view=notifications"
           />
 
           <EmailPreferences
@@ -886,7 +889,8 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               groups={catchUpGroups}
               total={catchUpTotal}
               sinceLabel={catchUpSinceLabel}
-              hasLastVisit={Boolean(lastSeen)}
+              hasCursor={hasCatchUpCursor}
+              dismissReturnTo="/member/"
             />
 
             <GovernanceLog items={governanceChanges} />
@@ -928,8 +932,9 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 groups={catchUpGroups}
                 total={catchUpTotal}
                 sinceLabel={catchUpSinceLabel}
-                hasLastVisit={Boolean(lastSeen)}
+                hasCursor={hasCatchUpCursor}
                 idPrefix="activity-catchup"
+                dismissReturnTo="/member/?view=activity"
               />
             </div>
           </div>
@@ -957,6 +962,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               role={user.role}
               status={user.status}
               canParticipate={user.canParticipate}
+              bio={memberProfileSettings?.bio ?? ''}
+              profileVisible={memberProfileSettings?.profileVisible ?? true}
+              profileSettingsAvailable={Boolean(memberProfileSettings)}
+              profileHref={memberProfileHref(user.memberId)}
               branches={memberBranches.map((branch) => ({
                 id: branch.branchId,
                 name: branch.name,

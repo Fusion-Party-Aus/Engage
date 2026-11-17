@@ -29,6 +29,7 @@ export const JOB_RUN_RETENTION_DAYS = 90;
 export type JobName =
   | "governance-scheduler"
   | "ballot-digest"
+  | "discord-digest"
   | "membership-verification"
   | "notification-outbox-drain";
 

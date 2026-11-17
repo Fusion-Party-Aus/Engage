@@ -29,7 +29,7 @@ expose it.
 
 ### Deliberately not challenged
 
-- Authenticated voting (`POST /api/votes`), deliberation and endorsements
+- Authenticated voting (`POST /api/votes`), deliberation and comment votes
   (`POST/PATCH/PUT/DELETE /api/comments`), amendments and all other
   authenticated writes. These already require a verified session, and D32 says
   routine challenges must not interrupt authenticated voting.

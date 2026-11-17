@@ -107,7 +107,7 @@ if every test still passes because the test was changed to match.
 9. **Historical governance records are not deleted.** Matters with revisions beyond the initial draft, votes, ballots, results or registry records cannot be hard-deleted (I1).
 10. **Identifiable ballot choices stay behind `canViewIdentifiableBallots`.** No public API, log, list, export or UI may expose them (D26).
 11. **Server-side authorisation is authoritative.** UI visibility is not authority.
-12. **No invented governance rules.** Do not invent quorum, turnout, abstention effects, ranked-choice method, notice periods, confirmation ballots, election procedure or publication authority. Use O1–O10 and stop at the seam.
+12. **No invented governance rules.** Quorum and turnout are now recorded in D37–D39 for ballots closing on or after 16 November 2026; do not invent a different threshold, an abstention denominator, ranked-choice method, notice period, confirmation ballot, election procedure or publication authority. Use O1–O11 and stop at the seam.
 13. **No fabricated history.** Do not backfill adoption dates, ballots, results or publication events. Do not import or map National Neon policy (#36, D33).
 14. **Ambiguous wording is never automatically ratified.** Every adopted text must derive reproducibly from immutable revisions and amendment outcomes (D19, D20).
 
@@ -136,9 +136,9 @@ implementation, then update the decision register or open a decision.
 | Notifications (#33) | `dispatchMemberNotification` still has no production caller. Scheduled transitions notify nobody. |
 | Security perimeter (#38) | Turnstile and rate limiting only. CSP, HSTS, frame/content-type headers, full CSRF/Origin coverage remain. |
 | Observability (#39) | No metrics, traces or alerting. Scheduler and Turnstile failures are visible only in logs. |
-| Command layer (#53) | No typed governance commands or central route policy. `store.ts` is still a god module. |
+| Command layer (#53) | No typed governance commands or central route policy. The former `store.ts` god module is now split into domain modules (#115); the remaining work is the command layer itself. |
 | Decision record (#54) | No complete member-facing lineage view or administrator responsibility queue. |
-| Rendering performance (#52) | Admin register is still ~1 MB HTML; per-vote decryption and full vote scans remain on list reads; React remains on the signed-in header path. |
+| Rendering performance (#52) | Per-vote decryption and full vote scans remain on list reads; React remains on member settings, admin timelines and the proposal ballot islands, but no longer on the signed-in header. |
 | Membership (#32) | No unique `(branchId, memberId)` index or duplicate-resolving migration. |
 | Legacy lifecycle records | Proposals already in Deliberate without `secondedAt` never auto-advance. They are reported, not rewritten. A human decision is needed. |
 
@@ -176,7 +176,7 @@ its own branch, tests, docs and PR sized for review.
 
 ### Stage 1 — finish Phase 1 correctness
 
-3. **Computed outcome validation (#28).** Compare the stored tally: Yes greater than No is successful, a tie is not. Require an audited override to record a contradicting result. Do **not** decide abstentions or quorum.
+3. **Computed outcome validation (#28, #122).** Compare the stored tally: Yes greater than No is successful, a tie is not. Require an audited override to record a contradicting approval result. For ballots closing on or after 16 November 2026, apply the recorded two-tier quorum at closure and refuse to override a quorum failure. Do **not** decide the abstention denominator.
 4. **Real-MongoDB governance coverage.** Add replica-set cases for the deletion guard, transition-event atomicity and result idempotency where they are currently only exercised in memory.
 
 ### Stage 2 — architecture, serially
@@ -189,7 +189,7 @@ its own branch, tests, docs and PR sized for review.
 7. **Notification outbox (#33) and durable job runner.** Scheduled transitions, ballot closure and outcomes should produce durable in-app/email notices with dedupe, preferences and a delivery record. Decide what is essential versus engagement.
 8. **Observability and scheduler operations (#39).** Metrics and alerts for missed scheduler runs, Turnstile misconfiguration/unavailability, failed email and queue depth. Wire the scheduler to a monitored cron.
 9. **Remaining perimeter work (#38).** CSP/HSTS/frame/content-type headers, general API rate limiting, complete CSRF/Origin coverage.
-10. **Performance follow-ups (from the audit).** Remove React from the signed-in header path; tally read model; short-TTL caching for stable public reads only. Never cache member or ballot state.
+10. **Performance follow-ups (from the audit).** Tally read model; short-TTL caching for stable public reads only. Never cache member or ballot state.
 
 ### Stage 4 — product and governance capabilities
 
@@ -211,7 +211,7 @@ Good candidates for parallel subagents:
 
 Serialise anything that touches:
 
-- `src/lib/store.ts` governance mutations,
+- `src/lib/proposals-store.ts` and `src/lib/voting-store.ts` governance mutations,
 - ballot binding or vote persistence,
 - formal result or audit schema,
 - amendment state transitions,

@@ -776,7 +776,7 @@ export async function listBranchPeople(
   for (const row of subscriptions) memberIds.add(row.memberId);
 
   const query = search.trim().toLowerCase();
-  const { listMembers } = await import("./store.ts");
+  const { listMembers } = await import("./members-store.ts");
   const members = await listMembers(db, query);
   const memberById = new Map(members.map((member) => [member.memberId, member]));
 
@@ -1026,7 +1026,7 @@ export async function verifyBranchMember(
     reason: input.reason,
   });
 
-  const { promotePendingVotePreferences } = await import("./store.ts");
+  const { promotePendingVotePreferences } = await import("./voting-store.ts");
   await promotePendingVotePreferences(db, memberId);
   return record;
 }
@@ -1239,7 +1239,7 @@ export async function applyExternalMembership(
   });
 
   if (fact.status === "active") {
-    const { promotePendingVotePreferences } = await import("./store.ts");
+    const { promotePendingVotePreferences } = await import("./voting-store.ts");
     await promotePendingVotePreferences(db, memberId);
   }
   return record;

@@ -52,7 +52,6 @@ const server = spawn(process.execPath, ["dist/server/entry.mjs"], {
     BETTER_AUTH_SECRET: "rfc0001-e2e-secret-not-used-in-production",
     RESEND_API_KEY: "",
     AUTH_EMAIL_FROM: "",
-    ENGAGE_DIGEST_ENABLED: "false",
     LEGAL_ACCEPTANCE_ENABLED: "false",
   },
 });

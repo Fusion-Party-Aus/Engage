@@ -73,6 +73,13 @@ export async function listProposals(
      * every other read keeps failing loudly.
      */
     tolerateUnreadableVotes?: boolean;
+    /**
+     * Public list reads set this to false and overlay the display-only
+     * `ballot_tallies` projection instead. The read then never touches
+     * `proposal_votes` and never decrypts a ballot. Defaults to true so every
+     * other caller keeps the authoritative live tally.
+     */
+    includeVoteTallies?: boolean;
   } = {},
 ): Promise<ProposalSummaryView[]> {
   const rawProposals = await db
@@ -95,26 +102,29 @@ export async function listProposals(
   // Read-only path: a broken key ring must not fail a list that renders no
   // encrypted votes. Encrypted votes still fail loudly at decode time.
   const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
+  const includeVoteTallies = options.includeVoteTallies !== false;
   const [allComments, allVotes] = await Promise.all([
     db
       .collection<CommentRecord>("comments")
       .find({})
       .project({ proposalId: 1, policyId: 1 })
       .toArray(),
-    db
-      .collection<VoteRecord>(PROPOSAL_VOTES)
-      .find({})
-      .project({
-        proposalId: 1,
-        policyId: 1,
-        ballotId: 1,
-        revisionId: 1,
-        amendmentRevisionId: 1,
-        choice: 1,
-        voterBlindIndex: 1,
-        voteEnvelope: 1,
-      })
-      .toArray(),
+    includeVoteTallies
+      ? db
+          .collection<VoteRecord>(PROPOSAL_VOTES)
+          .find({})
+          .project({
+            proposalId: 1,
+            policyId: 1,
+            ballotId: 1,
+            revisionId: 1,
+            amendmentRevisionId: 1,
+            choice: 1,
+            voterBlindIndex: 1,
+            voteEnvelope: 1,
+          })
+          .toArray()
+      : Promise.resolve([] as Array<Record<string, any>>),
   ]);
 
   const commentCounts = new Map<string, number>();
@@ -285,6 +295,14 @@ export async function getProposalDetail(
     ...c,
     stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
     upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
+    downvotes: Array.isArray(c.downvotes) ? c.downvotes : [],
+    parentCommentId:
+      typeof c.parentCommentId === "string" && c.parentCommentId
+        ? c.parentCommentId
+        : null,
+    depth: Number.isFinite(c.depth) ? Number(c.depth) : 0,
+    // Deleted contributions keep their place in the thread, never their text.
+    ...(c.deletedAt ? { body: "" } : {}),
   }));
   // Read-only path: tolerate a broken key ring so the page can render an
   // operational message instead of failing before it is read.
@@ -658,6 +676,12 @@ async function assertProposalUnlocked(
         ? body.attachmentDescription
         : undefined,
     kind: typeof body.kind === "string" ? body.kind : undefined,
+    targetSection:
+      typeof body.targetSection === "string" ? body.targetSection : undefined,
+    proposedWording:
+      typeof body.proposedWording === "string"
+        ? body.proposedWording
+        : undefined,
   });
 
   if (substantiveChanges.length > 0) {
@@ -1267,12 +1291,19 @@ export async function saveProposal(
     throw new Error("Title must be between 4 and 200 characters.");
   }
 
+  // A change inherits the published policy's topic. The policy already carries
+  // its subject, so the member is never asked to choose it again.
+  const inheritedPolicySpace =
+    policyChange && typeof policyChange.target.category === "string"
+      ? policyChange.target.category.trim()
+      : "";
   const space =
-    typeof body.space === "string" && body.space.trim()
+    inheritedPolicySpace ||
+    (typeof body.space === "string" && body.space.trim()
       ? body.space.trim()
       : typeof body.category === "string" && body.category.trim()
         ? body.category.trim()
-        : (existing?.space ?? "General");
+        : (existing?.space ?? "General"));
   if (space.length < 2 || space.length > 100) {
     throw new Error("Space / topic must be between 2 and 100 characters.");
   }
@@ -1312,6 +1343,30 @@ export async function saveProposal(
     typeof body.attachmentDescription === "string"
       ? body.attachmentDescription.trim()
       : (existing?.attachmentDescription ?? "");
+
+  // Action-specific content. A repeal carries a rationale, not new commitments;
+  // a replacement carries wording; an amendment may name the part it changes.
+  const effectiveChangeType = policyChange?.changeType ?? existing?.changeType;
+  const targetSection =
+    effectiveChangeType === "amend"
+      ? typeof body.targetSection === "string"
+        ? body.targetSection.trim()
+        : (existing?.targetSection ?? "")
+      : "";
+  if (targetSection.length > 300) {
+    throw new Error(
+      "The part of the policy to change must be 300 characters or fewer.",
+    );
+  }
+  const proposedWording =
+    effectiveChangeType === "replace"
+      ? typeof body.proposedWording === "string"
+        ? body.proposedWording.trim()
+        : (existing?.proposedWording ?? "")
+      : "";
+  if (proposedWording.length > 5000) {
+    throw new Error("Proposed wording must be 5,000 characters or fewer.");
+  }
 
   const kind = normalizeKind(
     body.kind ?? existing?.kind ?? "policy",
@@ -1358,6 +1413,8 @@ export async function saveProposal(
       summary: rawSummary,
       outcomes,
       details,
+      targetSection: targetSection || undefined,
+      proposedWording: proposedWording || undefined,
       attachmentUrl: attachmentUrl || undefined,
       attachmentDescription: attachmentDescription || undefined,
       kind,
@@ -1377,6 +1434,8 @@ export async function saveProposal(
       summary: updated.summary,
       outcomes: updated.outcomes,
       details: updated.details,
+      ...(targetSection ? { targetSection } : {}),
+      ...(proposedWording ? { proposedWording } : {}),
       attachmentUrl: updated.attachmentUrl,
       attachmentDescription: updated.attachmentDescription,
       kind: updated.kind,
@@ -1391,6 +1450,8 @@ export async function saveProposal(
     };
     const unsetFields: Record<string, 1> = {};
     if (scopeWasSubmitted && !geographicScope) unsetFields.scope = 1;
+    if (!targetSection) unsetFields.targetSection = 1;
+    if (!proposedWording) unsetFields.proposedWording = 1;
     if (user.isStaff && body.provenance === null) {
       unsetFields.provenance = 1;
     } else if (user.isStaff && body.provenance !== undefined) {
@@ -1402,6 +1463,10 @@ export async function saveProposal(
       summary: updated.summary,
       outcomes: updated.outcomes,
       details: updated.details,
+      ...(updated.targetSection ? { targetSection: updated.targetSection } : {}),
+      ...(updated.proposedWording
+        ? { proposedWording: updated.proposedWording }
+        : {}),
     };
     const contentHash = computeSnapshotHash(snapshot);
     const latestRevisions = await db
@@ -1588,6 +1653,8 @@ export async function saveProposal(
     summary: rawSummary,
     outcomes,
     details,
+    ...(targetSection ? { targetSection } : {}),
+    ...(proposedWording ? { proposedWording } : {}),
     ...(attachmentUrl ? { attachmentUrl } : {}),
     ...(attachmentDescription ? { attachmentDescription } : {}),
     kind: createdKind,
@@ -1623,6 +1690,10 @@ export async function saveProposal(
     summary: created.summary,
     outcomes: created.outcomes,
     details: created.details,
+    ...(created.targetSection ? { targetSection: created.targetSection } : {}),
+    ...(created.proposedWording
+      ? { proposedWording: created.proposedWording }
+      : {}),
   };
   const revision = {
     revisionId,

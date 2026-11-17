@@ -103,24 +103,14 @@ export interface PlatformEnv {
   RESEND_WEBHOOK_SECRET?: string;
   ENGAGE_CRON_SECRET?: string;
   ENGAGE_EMAIL_SECRET?: string;
-  ENGAGE_DIGEST_ENABLED?: string;
-  /** Gate and bearer secret for automatic CRM membership verification. */
-  ENGAGE_CRM_VERIFICATION_ENABLED?: string;
+  /** Bearer secret for automatic CRM membership verification. */
   ENGAGE_CRM_VERIFICATION_CRON_SECRET?: string;
   /**
-   * Operational health thresholds (#39). Each scheduled job has a warn and a
-   * fail threshold; warn must be below fail or the check reports unknown. Empty
-   * or invalid values use the documented default, and the health report names
-   * the value and its source.
+   * Opt-in future link: when "on", a member with an active CRM identity link
+   * gets the CRM person id as the canonical public profile path. Legacy
+   * member-id profile paths then redirect with 301. Off by default.
    */
-  GOVERNANCE_SCHEDULER_WARN_HOURS?: string;
-  GOVERNANCE_SCHEDULER_STALE_HOURS?: string;
-  DIGEST_WARN_HOURS?: string;
-  DIGEST_STALE_HOURS?: string;
-  MEMBERSHIP_VERIFICATION_WARN_HOURS?: string;
-  MEMBERSHIP_VERIFICATION_STALE_HOURS?: string;
-  BALLOT_CLOSURE_GRACE_HOURS?: string;
-  EMAIL_DELIVERY_WINDOW_HOURS?: string;
+  ENGAGE_PROFILE_CRM_IDENTIFIERS?: string;
   ENGAGE_ALLOW_INDEXING?: string;
   ENGAGE_DEFAULT_OG_IMAGE?: string;
   ENGAGE_PUBLIC_PULSE_POLL?: string;
@@ -282,6 +272,10 @@ export interface ProposalRecord {
   targetPolicyId?: string;
   targetPolicyRevisionId?: string;
   changeType?: PolicyChangeType;
+  /** The commitment or section an amendment proposes to change. */
+  targetSection?: string;
+  /** Replacement wording offered with a replacement proposal. */
+  proposedWording?: string;
 
   // Backwards compatibility aliases
   policyId?: string;
@@ -352,10 +346,24 @@ export interface CommentRecord {
   authorName: string;
   stance: CommentStance;
   body: string;
+  /** Comment this one replies to. Absent or null for a top-level contribution. */
+  parentCommentId?: string | null;
+  /** Nesting depth: 0 for a top-level contribution. */
+  depth?: number;
   upvotes: string[];
+  /** Member ids of downvotes. Aggregated only; never returned to a viewer. */
+  downvotes?: string[];
   upvoteEvents?: Array<{ memberId: string; at: Date }>;
+  /** Compare-and-swap version for atomic comment vote updates. */
+  voteVersion?: number;
   feedback?: ContributionFeedback;
   feedbackHistory?: ContributionFeedbackHistoryEntry[];
+  /**
+   * Set when the body was removed but replies still depend on the comment.
+   * The record is retained as a placeholder so replies stay in context.
+   */
+  deletedAt?: Date;
+  deletedBy?: string;
   createdAt: Date;
 }
 

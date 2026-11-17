@@ -1,6 +1,6 @@
 # Capability matrix
 
-**Status:** Current · **Verified:** 13 November 2026
+**Status:** Current · **Verified:** 16 November 2026
 
 This page answers "does Engage do this today?" Use it instead of inferring from a screen, a collection name or a design document.
 
@@ -41,7 +41,15 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | CRM write-back or webhook | Not implemented | Scheduled/queued pull only |
 | Shared Fusion identity / SSO / Fusion Auth | Planned | No code or dependency |
 | Legal acceptance gate | Implemented but inactive | Requires flag and published documents |
-| Self-service email change or account deletion | Not implemented | Not in scope today |
+| Self-service email change | Not implemented | Not in scope today |
+| Self-service account deletion | Not implemented | Needs a separate retention and audit decision |
+| Public member profile | Implemented | `/members/[memberId]/`; viewer-relative history and statistics, no separate profile store ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)) |
+| Editable public profile | Implemented | Owner-only `POST /api/member/profile`; plain text biography ≤500 characters and a visibility switch |
+| Public-profile opt-out | Implemented | A hidden profile returns 404 to others and author links are suppressed; the owner can preview it |
+| CRM profile identifier redirect | Implemented, off by default | `ENGAGE_PROFILE_CRM_IDENTIFIERS=on` uses an active CRM identity link as the canonical path and 301s member-id paths; no CRM call on a profile request |
+| Comment score | Implemented, display only | Sum of net scores on visible, non-deleted comments; no eligibility, permission or ballot effect |
+| Public leaderboards or score-weighted privileges | Not implemented, by design | Comment score never ranks members or grants authority |
+| Initials-only avatars | Implemented | Product decision for now; no image upload or storage |
 
 ## Branches
 
@@ -66,11 +74,16 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 |---|---|---|
 | Comments on proposals | Implemented | 5–5,000 characters |
 | Stances: support, concern, amendment, comment | Implemented | A stance is a label, not a procedural act |
-| Endorse comments | Implemented | Display-only |
+| Comment votes | Implemented | Upvote or downvote; one active vote per member; switching replaces the previous vote; aggregate score and upvote percentage only ([#57](https://github.com/Fusion-Party-Aus/Engage/issues/57)) |
+| Comment vote privacy | Implemented | Individual voter identities are never returned in a DTO; members see only their own choice |
 | Contribution feedback with evidence | Implemented | Four statuses plus history |
 | Comment editing | Not implemented | Comments are immutable; deletion only |
 | Comment moderation state and audit | Partial | `comments.moderate` declared; no moderation record |
-| Threaded replies | Not implemented | Flat comments |
+| Threaded replies | Implemented | `parentCommentId` and stored `depth`; one recursive component; replies stay under their parent and siblings stay chronological ([#57](https://github.com/Fusion-Party-Aus/Engage/issues/57)) |
+| Thread collapsing | Implemented | Per-comment reply disclosure with keyboard-operable toggle |
+| Comment sorting | Implemented | Best (confidence-weighted Wilson lower bound, default), Top score, Newest, Oldest; applies to siblings at every depth with deterministic tie-breaking |
+| Public contribution history | Implemented | Profile tabs for comments, proposals and amendments; paginated; deep links to `#comment-*` and `#amendment-*` ([#113](https://github.com/Fusion-Party-Aus/Engage/issues/113)) |
+| Profile author links | Implemented | Comment names/avatars, the proposal author and amendment authors link to the profile when authorship is recorded |
 
 ## Amendments
 
@@ -85,7 +98,7 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Apply as new proposal revision | Implemented | `apply.ts` |
 | Inter-amendment conflict detection | Not implemented | Two amendments may edit the same field |
 | Preferential amendment resolution | Not implemented | — |
-| Amend/repeal from a policy page | Not implemented | No `targetPolicyId`/change type |
+| Amend/repeal from a policy page | Implemented | `/proposals/new/?targetPolicyId=…`; action-specific form (D35) |
 
 ## Ballots and decisions
 
@@ -106,7 +119,12 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Scheduled ballot opening | Not implemented | No scheduler or `opensAt` |
 | Explicit proposal-ballot close | Not implemented | Deadline is the only close |
 | Record a formal result | Implemented | Officer supplies result + decision event |
-| Compute result from tally | **Not implemented, by design** | No thresholds, quorum or ties |
+| Compute approval from tally | Implemented | D9 simple majority; tie and zero votes do not approve |
+| Platform quorum (30 eligible registered members) | Implemented for ballots closing on or after 16 November 2026 | `quorum.ts`; D37 |
+| Ballot quorum (`max(ceil(sqrt(N)), min(30, ceil(N/2)))`) | Implemented for ballots closing on or after 16 November 2026 | `quorum.ts`; D37 |
+| Immutable quorum closure record | Implemented | `ballot_quorum_records` |
+| Inconclusive outcome on quorum failure | Implemented | Cannot be overridden into approval |
+| Audited correction of a defective quorum record | Not implemented | Requires a reviewed data change plus governance event |
 | Multiple ballot instances per matter | Not implemented | One current ballot per proposal |
 | Confirmation ballot | Not implemented | — |
 | Seconding | Not implemented | — |
@@ -194,7 +212,7 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 
 These are not oversights in the matrix; they are open product decisions:
 
-- thresholds, quorum, turnout, tie-breaking, abstention and non-voter treatment;
+- tie-breaking beyond D9, the abstention denominator for approval, and non-voter treatment (quorum and turnout are defined for ballots closing on or after 16 November 2026 by D37–D39);
 - notice periods, campaign windows and scheduled opening;
 - qualifying membership rules for each class of ballot;
 - ratifying authority by jurisdiction;

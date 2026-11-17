@@ -1,4 +1,5 @@
 import { ensureDigestCohort } from "./digest-preferences.ts";
+import { ensureBallotTallyIndexes } from "./ballot-tallies.ts";
 import { ensureVoteStorage, PROPOSAL_VOTES } from "./vote-storage.ts";
 import { MongoClient, ObjectId, type ClientSession, type Db } from "mongodb";
 import { createHash } from "node:crypto";
@@ -6,6 +7,10 @@ import baselineItems from "../data/policies.json" with { type: "json" };
 import { ensureLegacyProposalRevision } from "./proposal-revision.ts";
 import { ensureBallotResultsIndexes } from "./ballot-results-index-migration.ts";
 import { ensureJobRunIndexes } from "./job-runs.ts";
+import {
+  OPERATIONAL_SETTINGS_COLLECTION,
+  OPERATIONAL_SETTINGS_EVENTS_COLLECTION,
+} from "./operational-settings.ts";
 import type { PlatformEnv, ProposalRecord, ProposalStage } from "./types.ts";
 
 let clientPromise: Promise<MongoClient> | undefined;
@@ -230,9 +235,16 @@ export async function initializeDatabase(db: Db): Promise<void> {
     db.collection("membership_verification_reviews").createIndex({status:1,createdAt:1}),
     db.collection("membership_verification_events").createIndex({eventId:1},{unique:true}),
     db.collection("membership_verification_events").createIndex({memberId:1,createdAt:-1}),
+    // Operational settings are administrator-owned documents (#128): health
+    // thresholds, CRM verification tuning and the scheduled-job gates. The
+    // event index backs the "last changed" line on the settings page.
+    db.collection(OPERATIONAL_SETTINGS_EVENTS_COLLECTION).createIndex({eventId:1},{unique:true}),
+    db.collection(OPERATIONAL_SETTINGS_EVENTS_COLLECTION).createIndex({createdAt:-1}),
+    db.collection(OPERATIONAL_SETTINGS_COLLECTION).createIndex({updatedAt:-1}),
   ]);
   try {
     await ensureVoteStorage(db);
+    await ensureBallotTallyIndexes(db);
     await Promise.all([
       db
         .collection("proposals")
@@ -256,7 +268,16 @@ export async function initializeDatabase(db: Db): Promise<void> {
         .catch(() => {}),
       db
         .collection("comments")
+        .createIndex({ proposalId: 1, parentCommentId: 1, createdAt: 1 })
+        .catch(() => {}),
+      db
+        .collection("comments")
         .createIndex({ memberId: 1, createdAt: 1 })
+        .catch(() => {}),
+      // Public profile history (#113): visible, non-deleted comments per member.
+      db
+        .collection("comments")
+        .createIndex({ memberId: 1, deletedAt: 1, createdAt: -1 })
         .catch(() => {}),
       db
         .collection(PROPOSAL_VOTES)
@@ -277,6 +298,18 @@ export async function initializeDatabase(db: Db): Promise<void> {
       db
         .collection("ballots")
         .createIndex({ matterId: 1, status: 1 })
+        .catch(() => {}),
+      // One immutable quorum closure record per ballot.
+      db
+        .collection("ballot_quorum_records")
+        .createIndex(
+          { ballotId: 1 },
+          { unique: true, name: "ballot_quorum_ballot_unique" },
+        )
+        .catch(() => {}),
+      db
+        .collection("ballot_quorum_records")
+        .createIndex({ matterId: 1, closedAt: -1 })
         .catch(() => {}),
       db
         .collection("governance_events")
@@ -355,6 +388,11 @@ export async function initializeDatabase(db: Db): Promise<void> {
       db
         .collection("amendments")
         .createIndex({ proposalId: 1, status: 1, createdAt: 1 })
+        .catch(() => {}),
+      // Public profile history (#113): amendments authored by one member.
+      db
+        .collection("amendments")
+        .createIndex({ authorId: 1, createdAt: -1 })
         .catch(() => {}),
       db
         .collection("amendment_revisions")

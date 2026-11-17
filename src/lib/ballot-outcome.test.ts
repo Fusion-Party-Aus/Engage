@@ -40,8 +40,11 @@ test("abstentions never change the Yes-versus-No comparison (D10/O1)", () => {
   assert.equal(computeBallotOutcome({ approve: 1, reject: 2 }), "unsuccessful");
 });
 
-test("the rule basis is versioned", () => {
-  assert.equal(BALLOT_OUTCOME_RULE_BASIS, "simple-majority-d9-v1");
+test("the rule basis is versioned with the quorum gate", () => {
+  assert.equal(
+    BALLOT_OUTCOME_RULE_BASIS,
+    "two-tier-quorum-simple-majority-v1",
+  );
 });
 
 test("summing stored choices keeps abstentions in the tally but out of the comparison", () => {

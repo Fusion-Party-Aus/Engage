@@ -8,6 +8,17 @@ import { ballotDeadlineLabel } from "./ballot-deadline.ts";
 import { runInTransaction } from "./db.ts";
 import { recordGovernanceEvent } from "./governance-relationships.ts";
 import { normalizeMatterType, type MatterTypeId } from "./matters.ts";
+import {
+  QUORUM_RULE_EFFECTIVE_AT,
+  buildBallotQuorumRecord,
+  buildLegacyQuorumRecord,
+  buildUnavailableQuorumRecord,
+  insertBallotQuorumRecord,
+  readBallotQuorumRecord,
+  readQuorumElectorate,
+  type BallotQuorumRecord,
+  type QuorumVerdict,
+} from "./quorum.ts";
 import type { VoteChoice, VoteTally } from "./types.ts";
 import {
   PROPOSAL_VOTES,
@@ -18,6 +29,7 @@ import {
 export const BALLOT_SCHEMA_VERSION = 1;
 export const BALLOTS_COLLECTION = "ballots";
 export const FORMAL_DECISIONS_COLLECTION = "ballot_results";
+export { BALLOT_QUORUM_COLLECTION } from "./quorum.ts";
 
 /**
  * Versioned basis for a computed ballot outcome.
@@ -27,24 +39,37 @@ export const FORMAL_DECISIONS_COLLECTION = "ballot_results";
  * - D10 / O1: abstentions may be recorded, but their effect on a denominator is
  *   undefined. Abstentions are therefore recorded and excluded from the
  *   comparison instead of being added to, or removed from, any denominator.
- * - D8: no quorum, turnout or minimum-participation threshold is applied.
+ * - D37 / D38: a ballot is also tested against the two-tier platform and ballot
+ *   quorum. Failure makes it inconclusive, never rejected.
  *
- * Changing the comparison requires a new basis identifier; recorded results keep
- * the identifier they were certified under.
+ * Changing the comparison or the quorum rule requires a new basis identifier;
+ * recorded results keep the identifier they were certified under.
  */
-export const BALLOT_OUTCOME_RULE_BASIS = "simple-majority-d9-v1";
+export const BALLOT_OUTCOME_RULE_BASIS = "two-tier-quorum-simple-majority-v1";
+export const LEGACY_BALLOT_OUTCOME_RULE_BASIS = "simple-majority-d9-v1";
 
 export type ComputedBallotOutcome = "successful" | "unsuccessful";
 
 /**
- * Compare Yes against No only (D9, D10/O1, D8). Zero votes and ties are not
- * successful.
+ * Compare Yes against No only (D9, D10/O1). Zero votes and ties are not
+ * successful. Quorum is a separate test applied by `recordFormalDecision`.
  */
 export function computeBallotOutcome(tally: {
   approve: number;
   reject: number;
 }): ComputedBallotOutcome {
   return tally.approve > tally.reject ? "successful" : "unsuccessful";
+}
+
+/** Map the quorum verdict onto the persisted result vocabulary. */
+export function ballotResultForVerdict(
+  verdict: QuorumVerdict,
+): "successful" | "unsuccessful" | "inconclusive" {
+  return verdict === "adopted"
+    ? "successful"
+    : verdict === "rejected"
+      ? "unsuccessful"
+      : "inconclusive";
 }
 
 /** Title-case label for a stored result or computed outcome. */
@@ -458,6 +483,189 @@ export async function assertBallotClosedForCertification(
   );
 }
 
+/**
+ * Evaluate and persist the binding quorum record at ballot closure.
+ *
+ * One immutable record is written per ballot. Membership counts and the final
+ * tally are read inside the caller's transaction, so a concurrent membership
+ * update either belongs to this closure or falls outside it; the two cannot be
+ * mixed. If the votes cannot be read, the electorate is still recorded and the
+ * record is marked unavailable rather than silently omitting participation.
+ */
+export async function recordBallotQuorumAtClosure(
+  db: Db,
+  input: {
+    ballotId: string;
+    matterId: string;
+    revisionId: string;
+    closedAt: Date;
+    now?: Date;
+    cryptoConfig?: BallotCryptoConfig | null;
+    session?: ClientSession;
+  },
+): Promise<BallotQuorumRecord> {
+  const existing = await readBallotQuorumRecord(
+    db,
+    input.ballotId,
+    input.session,
+  );
+  if (existing) return existing;
+
+  const electorate = await readQuorumElectorate(db, {
+    now: input.closedAt,
+    session: input.session,
+  });
+  if (!input.revisionId.trim()) {
+    return insertBallotQuorumRecord(
+      db,
+      buildUnavailableQuorumRecord({
+        ballotId: input.ballotId,
+        matterId: input.matterId,
+        revisionId: "",
+        closedAt: input.closedAt,
+        recordedAt: input.now ?? input.closedAt,
+        electorate,
+        reason:
+          "The ballot has no bound wording revision, so participation and quorum could not be calculated.",
+      }),
+      input.session,
+    );
+  }
+  let tally: VoteTally;
+  try {
+    tally = await readBoundBallotTally(db, {
+      ballotId: input.ballotId,
+      revisionId: input.revisionId,
+      cryptoConfig: input.cryptoConfig,
+      session: input.session,
+    });
+  } catch (error) {
+    const reason =
+      error instanceof BallotDomainError
+        ? error.message
+        : "Some recorded votes could not be read when the ballot closed, so participation and quorum could not be calculated.";
+    return insertBallotQuorumRecord(
+      db,
+      buildUnavailableQuorumRecord({
+        ballotId: input.ballotId,
+        matterId: input.matterId,
+        revisionId: input.revisionId,
+        closedAt: input.closedAt,
+        recordedAt: input.now ?? input.closedAt,
+        electorate,
+        reason,
+      }),
+      input.session,
+    );
+  }
+
+  return insertBallotQuorumRecord(
+    db,
+    buildBallotQuorumRecord({
+      ballotId: input.ballotId,
+      matterId: input.matterId,
+      revisionId: input.revisionId,
+      closedAt: input.closedAt,
+      recordedAt: input.now ?? input.closedAt,
+      electorate,
+      tally,
+    }),
+    input.session,
+  );
+}
+
+/**
+ * Load the recorded quorum for certification.
+ *
+ * A ballot that closed before the rule took effect is recorded as
+ * `legacy-not-applied` and keeps the old approval-only test. A ballot that
+ * closed after adoption but has no closure record is refused: reconstructing it
+ * from today's membership would silently invent a historical result. The
+ * scheduler writes the record atomically with closure; a missing record is an
+ * operational fault that must be reviewed.
+ */
+export async function ensureBallotQuorumRecordForCertification(
+  db: Db,
+  input: {
+    ballotId: string;
+    matterId: string;
+    revisionId: string;
+    now: Date;
+    cryptoConfig?: BallotCryptoConfig | null;
+    session?: ClientSession;
+  },
+): Promise<BallotQuorumRecord> {
+  const existing = await readBallotQuorumRecord(
+    db,
+    input.ballotId,
+    input.session,
+  );
+  if (existing) return existing;
+
+  const sessionOpts = input.session ? { session: input.session } : undefined;
+  const [ballot, proposal] = await Promise.all([
+    db
+      .collection(BALLOTS_COLLECTION)
+      .findOne(
+        { ballotId: input.ballotId },
+        { projection: { status: 1, closesAt: 1 }, ...(sessionOpts ?? {}) },
+      ),
+    db
+      .collection("proposals")
+      .findOne(
+        { proposalId: input.matterId },
+        {
+          projection: { ballotClosedAt: 1, ballotClosesAt: 1 },
+          ...(sessionOpts ?? {}),
+        },
+      ),
+  ]);
+  const closure = resolveBallotClosure({
+    ballot: ballot as { status?: string; closesAt?: Date } | null,
+    matter: proposal as
+      | { ballotClosedAt?: Date; ballotClosesAt?: Date }
+      | null,
+    now: input.now,
+  });
+  if (!closure.closed) {
+    throw new BallotDomainError(
+      "This ballot has not closed, so its quorum cannot be recorded.",
+      409,
+      "BALLOT_NOT_CLOSED",
+    );
+  }
+  const closedAt =
+    closure.closesAt ??
+    (proposal?.ballotClosedAt
+      ? new Date(proposal.ballotClosedAt as Date)
+      : input.now);
+  if (closedAt.getTime() < QUORUM_RULE_EFFECTIVE_AT.getTime()) {
+    const tally = await readBoundBallotTally(db, {
+      ballotId: input.ballotId,
+      revisionId: input.revisionId,
+      cryptoConfig: input.cryptoConfig,
+      session: input.session,
+    });
+    return insertBallotQuorumRecord(
+      db,
+      buildLegacyQuorumRecord({
+        ballotId: input.ballotId,
+        matterId: input.matterId,
+        revisionId: input.revisionId,
+        closedAt,
+        recordedAt: input.now,
+        tally,
+      }),
+      input.session,
+    );
+  }
+  throw new BallotDomainError(
+    "This ballot closed after the two-tier quorum rule took effect, but no quorum record exists. An authorised officer must review the closure before a result can be certified.",
+    409,
+    "BALLOT_QUORUM_SNAPSHOT_MISSING",
+  );
+}
+
 export interface BallotElectorate {
   scope: "national" | "branch";
   branchId: string;
@@ -487,6 +695,21 @@ export interface FormalDecisionOverride {
   at: Date;
 }
 
+export interface FormalDecisionQuorum {
+  ruleVersion: string;
+  status: BallotQuorumRecord["status"];
+  applied: boolean;
+  eligibleRegisteredMembers?: number;
+  activeEligibleMembers?: number;
+  platformQuorumRequired?: number;
+  platformQuorumMet?: boolean;
+  ballotQuorumRequired?: number;
+  ballotQuorumMet?: boolean;
+  participatingMembers?: number;
+  quorumMet?: boolean;
+  verdict: QuorumVerdict;
+}
+
 export interface FormalDecisionRecord {
   decisionEventId: string;
   ballotId: string;
@@ -498,7 +721,13 @@ export interface FormalDecisionRecord {
   tally?: VoteTally;
   /** Versioned rule the computed outcome was derived from. */
   ruleBasis?: string;
-  computedResult?: ComputedBallotOutcome;
+  /**
+   * The result the votes and quorum compute. `inconclusive` is possible when a
+   * quorum test fails, even though a Yes/No comparison exists.
+   */
+  computedResult?: "successful" | "unsuccessful" | "inconclusive";
+  /** The closure quorum evidence the result was certified against. */
+  quorum?: FormalDecisionQuorum;
   /** Present only when the recorded result contradicts the computed outcome. */
   override?: FormalDecisionOverride;
   authorityBranchId?: string;
@@ -763,12 +992,13 @@ export async function listMatterBallots(
  * and is idempotent when retried with the same `decisionEventId` and payload.
  *
  * Certification requires a closed ballot. The result is checked against the
- * outcome computed from the votes bound to the ballot and revision (D8, D9;
- * abstentions excluded per D10/O1). A contradicting result — including
- * `inconclusive`, which can never equal a computed outcome — is accepted only as
- * an explicit override with a written reason, and the override is recorded on the
- * result and in the audit event. Existing results are returned unchanged and are
- * never rewritten.
+ * outcome computed from the votes bound to the ballot and revision. Approval is
+ * D9 (abstentions excluded per D10/O1); ballots closing on or after the quorum
+ * effective date also require the two-tier quorum and can only be recorded as
+ * inconclusive when either test fails. A contradicting approval result is
+ * accepted only as an explicit override with a written reason, and the override
+ * is recorded on the result and in the audit event. Existing results are returned
+ * unchanged and are never rewritten.
  */
 export async function recordFormalDecision(
   db: Db,
@@ -839,13 +1069,63 @@ export async function recordFormalDecision(
         session,
       );
 
+      const quorum = await ensureBallotQuorumRecordForCertification(db, {
+        ballotId,
+        matterId: input.matterId,
+        revisionId: input.revisionId,
+        now,
+        cryptoConfig: input.cryptoConfig,
+        session,
+      });
+      if (quorum.status === "unavailable") {
+        throw new BallotDomainError(
+          "This ballot's quorum could not be calculated when it closed. The closure record must be reviewed before a result can be certified.",
+          409,
+          "BALLOT_QUORUM_UNAVAILABLE",
+        );
+      }
+
       const tally = await readBoundBallotTally(db, {
         ballotId,
         revisionId: input.revisionId,
         cryptoConfig: input.cryptoConfig,
         session,
       });
-      const computedResult = computeBallotOutcome(tally);
+      if (
+        quorum.status === "evaluated" &&
+        ((quorum.participatingMembers !== undefined &&
+          quorum.participatingMembers !== tally.total) ||
+          (quorum.tally !== undefined &&
+            (quorum.tally.approve !== tally.approve ||
+              quorum.tally.abstain !== tally.abstain ||
+              quorum.tally.reject !== tally.reject)))
+      ) {
+        throw new BallotDomainError(
+          "The recorded votes no longer match the votes bound to this ballot at closure. Review the ballot before recording a result.",
+          409,
+          "BALLOT_QUORUM_PARTICIPATION_MISMATCH",
+        );
+      }
+      // Quorum is a gate, not an officer discretion. A ballot that failed
+      // either test can only be recorded as inconclusive.
+      if (
+        quorum.status === "evaluated" &&
+        quorum.quorumMet !== true &&
+        input.result !== "inconclusive"
+      ) {
+        throw new BallotDomainError(
+          "This ballot did not meet quorum. It can only be recorded as inconclusive; it cannot be treated as approved or rejected.",
+          409,
+          "BALLOT_QUORUM_NOT_MET",
+        );
+      }
+      const computedVerdict: QuorumVerdict =
+        quorum.status === "evaluated"
+          ? quorum.verdict
+          : computeBallotOutcome(tally) === "successful"
+            ? "adopted"
+            : "rejected";
+      const computedResult = ballotResultForVerdict(computedVerdict);
       const isOverride = input.result !== computedResult;
       if (isOverride && !overrideReason) {
         throw new BallotDomainError(
@@ -864,6 +1144,36 @@ export async function recordFormalDecision(
         );
       }
 
+      const quorumEvidence: FormalDecisionQuorum = {
+        ruleVersion: quorum.ruleVersion,
+        status: quorum.status,
+        applied: quorum.status === "evaluated",
+        ...(quorum.eligibleRegisteredMembers !== undefined
+          ? { eligibleRegisteredMembers: quorum.eligibleRegisteredMembers }
+          : {}),
+        ...(quorum.activeEligibleMembers !== undefined
+          ? { activeEligibleMembers: quorum.activeEligibleMembers }
+          : {}),
+        ...(quorum.platformQuorumRequired !== undefined
+          ? { platformQuorumRequired: quorum.platformQuorumRequired }
+          : {}),
+        ...(quorum.platformQuorumMet !== undefined
+          ? { platformQuorumMet: quorum.platformQuorumMet }
+          : {}),
+        ...(quorum.ballotQuorumRequired !== undefined
+          ? { ballotQuorumRequired: quorum.ballotQuorumRequired }
+          : {}),
+        ...(quorum.ballotQuorumMet !== undefined
+          ? { ballotQuorumMet: quorum.ballotQuorumMet }
+          : {}),
+        ...(quorum.participatingMembers !== undefined
+          ? { participatingMembers: quorum.participatingMembers }
+          : {}),
+        ...(quorum.quorumMet !== undefined
+          ? { quorumMet: quorum.quorumMet }
+          : {}),
+        verdict: computedVerdict,
+      };
       const record: FormalDecisionRecord = {
         decisionEventId: input.decisionEventId,
         ballotId,
@@ -872,8 +1182,12 @@ export async function recordFormalDecision(
         revisionId: input.revisionId,
         result: input.result,
         tally,
-        ruleBasis: BALLOT_OUTCOME_RULE_BASIS,
+        ruleBasis:
+          quorum.status === "legacy-not-applied"
+            ? LEGACY_BALLOT_OUTCOME_RULE_BASIS
+            : BALLOT_OUTCOME_RULE_BASIS,
         computedResult,
+        quorum: quorumEvidence,
         ...(isOverride
           ? {
               override: {
@@ -915,7 +1229,11 @@ export async function recordFormalDecision(
             result: input.result,
             computedResult,
             tally,
-            ruleBasis: BALLOT_OUTCOME_RULE_BASIS,
+            ruleBasis:
+              quorum.status === "legacy-not-applied"
+                ? LEGACY_BALLOT_OUTCOME_RULE_BASIS
+                : BALLOT_OUTCOME_RULE_BASIS,
+            quorum: quorumEvidence,
             ...(isOverride
               ? { override: { by: input.recordedBy, reason: overrideReason } }
               : {}),

@@ -47,9 +47,13 @@ export {
 } from "./proposals-store.ts";
 
 export {
+  MAX_COMMENT_DEPTH,
   addComment,
   deleteComment,
   toggleUpvoteComment,
+  voteOnComment,
+  type CommentVoteAction,
+  type CommentVoteResult,
 } from "./comments-store.ts";
 
 export {

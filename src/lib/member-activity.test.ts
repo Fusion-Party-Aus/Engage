@@ -186,7 +186,7 @@ test(
         events.some(
           (event) =>
             event.kind === "contribution" &&
-            event.details?.[0]?.label === "1 endorsement",
+            event.details?.[0]?.label === "1 point",
         ),
       );
       assert.ok(

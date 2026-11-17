@@ -10,6 +10,7 @@ import {
   Plus,
   Server,
   Share2,
+  MessageSquare,
   SlidersHorizontal,
   Trash2,
   Undo2,
@@ -31,6 +32,7 @@ import {
 } from '@/components/admin-kit';
 import { PLATFORM_LABELS, SOCIAL_PLATFORMS, isPublicHttpUrl, isSiteLink } from '@/lib/url-validation';
 import { cn } from '@/lib/utils';
+import DiscordIntegrationSettings from './DiscordIntegrationSettings';
 
 interface Social { label: string; href: string; platform?: string }
 interface StateSite { code: string; name: string; websiteHref: string; facebookHref?: string; branchId?: string }
@@ -58,12 +60,13 @@ export interface ConfigEvent {
   createdAt: string;
 }
 
-type SectionKey = 'visibility' | 'features' | 'social' | 'directory' | 'operations' | 'history';
+type SectionKey = 'visibility' | 'features' | 'social' | 'directory' | 'discord' | 'operations' | 'history';
 const SECTIONS: Array<{ key: SectionKey; label: string; hint: string; icon: typeof Eye }> = [
   { key: 'visibility', label: 'Public visibility', hint: 'Search indexing, sharing previews and navigation', icon: Eye },
   { key: 'features', label: 'Features', hint: 'Enable and configure public features', icon: SlidersHorizontal },
   { key: 'social', label: 'Social channels', hint: 'Manage national social links', icon: Share2 },
   { key: 'directory', label: 'Branch directory', hint: 'Manage state and territory website links', icon: MapPin },
+  { key: 'discord', label: 'Discord', hint: 'Weekly digest and notifications', icon: MessageSquare },
   { key: 'operations', label: 'Operations', hint: 'Public transparency and maintainer information', icon: Server },
   { key: 'history', label: 'Change history', hint: 'Review configuration changes and restore values', icon: History },
 ];
@@ -691,6 +694,7 @@ export default function PlatformSettings({ initialConfig, initialEvents }: { ini
         {active === 'features' && <FeaturesSection key={`f${version}`} {...shared} />}
         {active === 'social' && <SocialSection key={`s${version}`} {...shared} />}
         {active === 'directory' && <DirectorySection key={`d${version}`} {...shared} />}
+        {active === 'discord' && <DiscordIntegrationSettings />}
         {active === 'operations' && <OperationsSection {...shared} />}
         {active === 'history' && <HistorySection {...shared} events={events} restore={restore} />}
       </div>

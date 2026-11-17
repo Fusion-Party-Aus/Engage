@@ -17,7 +17,7 @@ sequenceDiagram
 
   Author->>Engage: Create matter (generally Propose; administrators may create directly in Deliberate)
   Member->>Engage: Second the proposal (Propose only) — records secondedAt + deliberationEndsAt
-  Member->>Engage: Comment, endorse, propose amendment
+  Member->>Engage: Comment, reply, vote, propose amendment
   Officer->>Engage: Advance to Deliberate (existing workflow transition)
   Officer->>Engage: Resolve / rebase / reject amendments
   Scheduler->>Engage: At deliberationEndsAt — system advances to Decide and binds the latest revision
@@ -39,7 +39,7 @@ sequenceDiagram
 | Stage | Member-facing meaning | What is expected | Substantive edits |
 |---|---|---|---|
 | `propose` | **Propose** | The idea is being written and shaped. Another member may second it, starting the 30-day deliberation clock. | Author or officer |
-| `deliberate` | **Deliberate** | Members discuss, endorse and propose amendments. The system advances the matter at the deliberation deadline. | Officer; wording may change into a new revision |
+| `deliberate` | **Deliberate** | Members discuss, reply, vote on contributions and propose amendments. The system advances the matter at the deliberation deadline. | Officer; wording may change into a new revision |
 | `decide` | **Decide** | A formal ballot is open on a fixed revision. | Locked |
 | `implement` | **Implement** | The outcome is recorded and being carried out. | Locked |
 | `archived` | **Archived** | Closed without further active work. | Restricted to authorised viewers |
@@ -146,7 +146,7 @@ A proposal created directly in Deliberate by an officer has no seconder and no d
 
 Returning a seconded proposal to Propose does not clear the seconder or the clock: the schedule is anchored to the original seconding. Whether a materially rewritten proposal needs renewed seconding is an open question and is not implemented.
 
-Seconding advances the matter to `deliberate`. Comments, endorsements and amendments become the substantive input. Deliberation can continue in `decide` and `implement` as discussion, but it can no longer change the ballot wording.
+Seconding advances the matter to `deliberate`. Comments, threaded replies, comment votes and amendments become the substantive input. Deliberation can continue in `decide` and `implement` as discussion, but it can no longer change the ballot wording.
 
 ### 4. Contributions and amendments
 
@@ -200,6 +200,23 @@ Legacy ballots with no readable deadline remain open and are listed by the migra
 
 Amendment ballots have an explicit close action.
 
+### 8a. Quorum snapshot at closure
+
+For ballots closing on or after 16 November 2026, the closure transaction also
+writes one immutable `ballot_quorum_records` row. It reads the eligible
+registered membership, the 90-day active electorate and the bound vote tally in
+the same transaction as `ballot.closed`. The snapshot records both thresholds,
+both results, unique participation, whether approval was satisfied and the
+verdict. The full rule and its constitutional basis are in
+[ballot-quorum.md](../governance/ballot-quorum.md).
+
+Certification loads that snapshot and never recalculates it from current
+membership. A ballot closed after the rule took effect without a snapshot is
+refused with `BALLOT_QUORUM_SNAPSHOT_MISSING`. A ballot closed before the rule is
+recorded as `legacy-not-applied` and keeps the approval-only test. If the tally
+could not be read at closure, the record is marked `unavailable` and
+certification is refused with `BALLOT_QUORUM_UNAVAILABLE`.
+
 ### 9. Result recording
 
 An officer records a result through `POST /api/admin/ballots/result`. Requirements:
@@ -216,23 +233,25 @@ A ballot with no recorded close date is refused rather than assumed closed. Lega
 
 The officer-supplied result is checked against the outcome computed from the votes bound to that ballot and immutable revision. The comparison is deliberately narrow:
 
-- **Yes greater than No approves; a tie does not** (D9). A tie and a ballot with zero votes therefore compute `unsuccessful`.
-- **Abstentions never change the comparison** (D10/O1). They are counted and stored but excluded from the Yes-versus-No test; no denominator is used, because the maintainer has not defined one.
-- **No quorum, turnout or minimum-participation threshold applies** (D8).
+- **Yes greater than No approves; a tie does not** (D9). A tie and a ballot with zero votes therefore compute `unsuccessful` when quorum is satisfied.
+- **Abstentions never change the comparison** (D10/O1). They are counted and stored but excluded from the Yes-versus-No test; no denominator is used, because the maintainer has not defined one. They do count towards quorum participation (D38).
+- **Two quorum tests apply** to ballots closing on or after 16 November 2026 (D37–D39): platform quorum (30 eligible registered members) and ballot quorum (`max(ceil(sqrt(N)), min(30, ceil(N/2)))` for N active eligible members). A failure makes the computed result `inconclusive`, not `unsuccessful`.
 
 The tally is the whole ballot's truth. A vote on the ballot that is missing a revision reference or names another revision is refused with `BALLOT_TALLY_UNBOUND_VOTES` rather than silently dropped; unreadable encrypted votes are refused with `BALLOT_TALLY_UNREADABLE`, and missing or invalid decryption keys return `BALLOT_DECRYPTION_UNAVAILABLE` (503). Admin pages compute the tally they display from the same bound set that certification enforces and withhold the outcome when that set is defective, but they are a guide only: certification always recomputes and refuses. A broken key ring degrades the admin pages to an explicit "decryption unavailable" state, with any unreadable votes counted separately; it never permits certification.
 
 Amendment endorsement ballots are **not** covered by this check. `POST /api/admin/amendments/close-ballot` still records `endorsed`, `not-endorsed` or `inconclusive` as an officer judgement, because the amendment-resolution method and ranked-choice handling are undecided (D18, O2).
 
-The rule is versioned as `simple-majority-d9-v1`. The record keeps the evidence at the moment of certification: `tally` (approve, abstain, reject, total), `ruleBasis`, `computedResult`, the recorded `result`, and, when used, `override` (reason, actor, time).
+The current rule is versioned as `two-tier-quorum-simple-majority-v1`. Ballots closed before 16 November 2026 keep `simple-majority-d9-v1`. The result record keeps the evidence at the moment of certification: `tally` (approve, abstain, reject, total), `ruleBasis`, `computedResult`, `quorum` (rule version, status, counts, thresholds, participation and verdict), the recorded `result`, and, when used, `override` (reason, actor, time).
 
-A result that differs from the computed outcome is refused unless the officer supplies a written reason of 1000 characters or fewer; it is then recorded as an explicit override. `inconclusive` can never equal a computed outcome, so it is always an explicit override. A reason supplied when the result already matches the votes is refused with `RESULT_OVERRIDE_REASON_UNEXPECTED` rather than ignored, so a written reason is never silently dropped. The `decision.recorded` governance event carries the actor, the reason, the computed result, the recorded result, the tally and the rule basis. Engage never silently accepts a contradiction and never silently rewrites a recorded result; a retry that changes the override reason is refused as a conflict.
+A result that differs from the computed outcome is refused unless the officer supplies a written reason of 1000 characters or fewer; it is then recorded as an explicit override. `inconclusive` is always an override **unless quorum failed**, in which case it is the computed result and needs no reason. A quorum failure can never be overridden into `successful` or `unsuccessful`; it is refused with `BALLOT_QUORUM_NOT_MET`. If the recorded participation no longer matches the bound tally, certification refuses with `BALLOT_QUORUM_PARTICIPATION_MISMATCH`. A reason supplied when the result already matches the votes is refused with `RESULT_OVERRIDE_REASON_UNEXPECTED` rather than ignored, so a written reason is never silently dropped. The `decision.recorded` governance event carries the actor, the reason, the computed result, the recorded result, the tally, the rule basis and the quorum evidence. Engage never silently accepts a contradiction and never silently rewrites a recorded result; a retry that changes the override reason is refused as a conflict.
 
 The record is immutable, one per ballot, and certifies the ballot in the same transaction as the result and the audit event. Historical results recorded before the comparison existed remain readable with their original fields; they are returned unchanged on an identical retry and are not backfilled.
 
 ### 10. Formal decision processing
 
 The formal decision is the ballot result. It creates a `governance_events` `decision.recorded` entry. Moving to Implement is a separate workflow transition that checks for a successful result on the exact revision.
+
+An `inconclusive` result does not move the matter. It is not a rejection and it does not automatically reopen the ballot. An authorised officer may return the matter to Deliberate through the existing `decide → deliberate` transition for further discussion, or archive it. Reopening Decide remains a separate act subject to the existing binding, revision and result-cardinality rules; Engage does not silently restart voting.
 
 ### 11. Ratification
 
@@ -277,8 +296,14 @@ A published policy is changed by a normal proposal, not by editing the registry.
 - Creation requires a **currently published** policy. The proposal stores
   `targetPolicyId`, `targetPolicyRevisionId` and `changeType`; these are fixed
   at creation.
+- The proposal form follows the chosen action. An amendment may name the
+  commitment or section to change, a replacement may carry proposed wording, and
+  a repeal asks for a rationale instead of new commitments. Detailed
+  commitments and supporting material stay optional.
 - Governance authority, jurisdiction and publication scope are inherited from
-  the target policy, never chosen by the submitter.
+  the target policy, never chosen by the submitter. The policy's existing topic
+  is inherited too, so a change proposal does not ask the member to select it
+  again.
 - Ratification requires the target policy to still be published at the exact
   revision named by the proposal. If the wording changed, ratification fails
   and a new change proposal is required.
@@ -443,7 +468,7 @@ The ballot model reserves a `consultation` purpose, but no production consultati
 |---|---|---|---|
 | Create matter | Participation | Verified member | Proposal + revision |
 | Second a proposal | Participation | Verified member who is not the author | `secondedBy`, `secondedAt`, `deliberationEndsAt`, event |
-| Comment / endorse | Participation | Verified member | Comment record / upvote event |
+| Comment / reply / vote | Participation | Verified member | Comment record, parent link, vote record |
 | Submit amendment | Participation | Verified member | Amendment + amendment revision |
 | Advance to Deliberate | Workflow | Staff or origin branch admin | Stage change, lifecycle event |
 | Resolve amendment | Workflow | Branch/national administrator | Amendment revision + decision |
@@ -482,7 +507,7 @@ A workflow state can be reversed. A protected act cannot: later corrections are 
 
 ## What is deliberately missing
 
-- Quorum, turnout, minimum-participation, non-voter and abstention-denominator rules (D8, D10/O1). Ordinary Yes/No ballots use simple majority without them (D9).
+- Non-voter rules and the abstention denominator (D10/O1). Quorum and turnout are now defined by D37–D39 for ballots closing on or after 16 November 2026; the approval comparison remains simple majority (D9).
 - Notice periods, campaign windows and scheduled ballot opening.
 - Eligibility snapshots at ballot open.
 - A hard seconding gate on Propose → Deliberate, competing seconders, and renewed seconding after a material wording change (see the assumption under Deliberation).

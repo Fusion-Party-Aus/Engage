@@ -15,6 +15,7 @@ import { findMemberVotes, proposalBallotId } from "./vote-storage.ts";
 
 export { escapeEmailHtml };
 import { digestEnabled, ensureDigestCohort } from "./digest-preferences.ts";
+import { getJobsSettingsState } from "./operational-settings.ts";
 export function safeEqual(a: string, b: string) {
   const aa = Buffer.from(a), bb = Buffer.from(b);
   return aa.length === bb.length && timingSafeEqual(aa, bb);
@@ -100,7 +101,10 @@ export async function outstandingBallots(db: Db, user: SessionUser, proposals: P
 
 /** A scheduler invokes this in bounded batches. Never retries an ambiguous external send automatically. */
 export async function runBallotDigests(db: Db, env: PlatformEnv, send: typeof fetch = fetch, now = new Date()) {
-  if (env.ENGAGE_DIGEST_ENABLED !== "true") return {disabled:true, sent:0, held:0};
+  const jobs = await getJobsSettingsState(db);
+  if (jobs.readFailed) throw new Error("Saved scheduled job settings could not be read.");
+  if (jobs.invalidFields.length) throw new Error("Saved scheduled job settings are invalid. Open Platform settings and correct them.");
+  if (!jobs.values.digestEnabled) return {disabled:true, sent:0, held:0};
   if (!env.RESEND_API_KEY || !env.AUTH_EMAIL_FROM || !env.ENGAGE_EMAIL_SECRET) throw new Error("Digest email configuration is incomplete");
   const origin = emailOrigin(env);
   const existingMembers = await ensureDigestCohort(db);

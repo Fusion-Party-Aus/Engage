@@ -69,12 +69,34 @@ jobs:
         env:
           ENGAGE_PLAYWRIGHT_MODULE: ${{ runner.temp }}/engage-browser/node_modules/playwright/index.mjs
         run: node scripts/security-perimeter-browser.mjs
+      - name: Threaded discussion browser verification
+        env:
+          ENGAGE_PLAYWRIGHT_MODULE: ${{ runner.temp }}/engage-browser/node_modules/playwright/index.mjs
+        run: node scripts/discussion-thread-browser.mjs
+      - name: Public member profile browser verification
+        env:
+          ENGAGE_PLAYWRIGHT_MODULE: ${{ runner.temp }}/engage-browser/node_modules/playwright/index.mjs
+        run: node scripts/member-profile-browser.mjs
       - name: Save synthetic lifecycle screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: member-lifecycle-screenshots
           path: docs/screenshots/member-lifecycle/
+          if-no-files-found: ignore
+      - name: Save discussion thread screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discussion-thread-screenshots
+          path: docs/screenshots/discussion-thread/
+          if-no-files-found: ignore
+      - name: Save member profile screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: member-profile-screenshots
+          path: docs/screenshots/member-profile/
           if-no-files-found: ignore
       - name: MongoDB logs on failure
         if: failure()

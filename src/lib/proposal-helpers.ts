@@ -160,6 +160,8 @@ export function getSubstantiveChanges(
     attachmentDescription?: string;
     kind?: string;
     branch?: string;
+    targetSection?: string;
+    proposedWording?: string;
   },
 ): string[] {
   const changes: string[] = [];
@@ -213,6 +215,18 @@ export function getSubstantiveChanges(
     ) {
       changes.push("outcomes");
     }
+  }
+  if (
+    updates.targetSection !== undefined &&
+    updates.targetSection.trim() !== (existing.targetSection || "").trim()
+  ) {
+    changes.push("targetSection");
+  }
+  if (
+    updates.proposedWording !== undefined &&
+    updates.proposedWording.trim() !== (existing.proposedWording || "").trim()
+  ) {
+    changes.push("proposedWording");
   }
   return changes;
 }
@@ -304,6 +318,10 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
             ? { changeType: raw.changeType }
             : {}),
         }
+      : {}),
+    ...(raw.targetSection ? { targetSection: String(raw.targetSection) } : {}),
+    ...(raw.proposedWording
+      ? { proposedWording: String(raw.proposedWording) }
       : {}),
     authorId: raw.authorId ? String(raw.authorId) : undefined,
     authorName: raw.authorName ? String(raw.authorName) : undefined,

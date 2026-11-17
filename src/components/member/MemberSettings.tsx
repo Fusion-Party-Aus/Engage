@@ -4,12 +4,15 @@ import { passkeyClient } from '@better-auth/passkey/client';
 import { getAuthenticatorName, type Passkey } from '@better-auth/passkey';
 import { Fingerprint, KeyRound, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldSeparator, FieldTitle } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +37,10 @@ export interface MemberSettingsProps {
   role: MemberRole;
   status: MembershipStatus;
   canParticipate: boolean;
+  bio: string;
+  profileVisible: boolean;
+  profileSettingsAvailable: boolean;
+  profileHref: string;
   branches: { id: string; name: string; status?: 'member' | 'follower' }[];
   stats: { votes: number; contributions: number; ideas: number };
 }
@@ -205,6 +212,129 @@ function ProfileSection({ name, email, onSaved }: { name: string; email: string;
             {message}
           </p>
           <Button disabled={!changed || invalid || saving} size="sm" type="submit">
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </CardFooter>
+      </SettingsSection>
+    </form>
+  );
+}
+
+function PublicProfileSection({
+  bio,
+  profileHref,
+  profileVisible,
+  profileSettingsAvailable,
+}: Pick<
+  MemberSettingsProps,
+  'bio' | 'profileHref' | 'profileVisible' | 'profileSettingsAvailable'
+>) {
+  const [draft, setDraft] = useState(bio);
+  const [savedBio, setSavedBio] = useState(bio);
+  const [visible, setVisible] = useState(profileVisible);
+  const [savedVisible, setSavedVisible] = useState(profileVisible);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
+  const trimmed = draft.trim();
+  const tooLong = trimmed.length > 500;
+  const unavailable = !profileSettingsAvailable;
+  const changed = trimmed !== savedBio.trim() || visible !== savedVisible;
+
+  async function save(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (unavailable || tooLong || !changed || saving) return;
+    setSaving(true);
+    setFailed(false);
+    setMessage('Saving…');
+    try {
+      const response = await fetch('/api/member/profile', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ bio: trimmed, profileVisible: visible }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setFailed(true);
+        setMessage(result?.error || 'Could not save your profile. Try again.');
+      } else {
+        setSavedBio(trimmed);
+        setSavedVisible(visible);
+        setMessage('Your public profile has been saved.');
+      }
+    } catch {
+      setFailed(true);
+      setMessage('Could not save your profile. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={save} noValidate>
+      <SettingsSection
+        description="Optional biography and whether your profile appears to others."
+        title="Public profile"
+      >
+        <CardContent className="flex-1 px-0 py-(--card-spacing)">
+          {unavailable && (
+            <Alert className="mx-(--card-spacing) mb-4" variant="destructive">
+              <AlertDescription>
+                Couldn’t load your profile settings. Reload the page before saving.
+              </AlertDescription>
+            </Alert>
+          )}
+          <FieldGroup className="gap-5">
+            <SettingField
+              description={`${trimmed.length}/500 characters. Plain text only.`}
+              error={tooLong ? 'Keep your biography to 500 characters or fewer.' : undefined}
+              htmlFor="member-bio"
+              label="Biography"
+            >
+              <Textarea
+                aria-invalid={tooLong}
+                disabled={unavailable || saving}
+                id="member-bio"
+                maxLength={500}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="A short introduction for people reading your contributions."
+                rows={4}
+                value={draft}
+              />
+            </SettingField>
+            <FieldSeparator />
+            <SettingField
+              description="When off, your profile and author links are hidden."
+              htmlFor="member-profile-visible"
+              label="Show my profile"
+            >
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={visible}
+                  disabled={unavailable || saving}
+                  id="member-profile-visible"
+                  onCheckedChange={setVisible}
+                />
+                <span className="text-xs font-semibold">
+                  {visible ? 'Visible' : 'Hidden'}
+                </span>
+              </div>
+            </SettingField>
+          </FieldGroup>
+        </CardContent>
+        <CardFooter className="flex-wrap justify-end gap-3 border-t px-5 py-3">
+          <Button href={profileHref} size="sm" variant="outline">
+            View public profile
+          </Button>
+          <p
+            aria-live="polite"
+            className={failed ? 'mr-auto text-sm font-semibold [color:var(--horizon-danger-ink)]' : 'mr-auto text-sm text-muted-foreground'}
+            role="status"
+          >
+            {message}
+          </p>
+          <Button disabled={unavailable || !changed || tooLong || saving} size="sm" type="submit">
             {saving ? 'Saving…' : 'Save changes'}
           </Button>
         </CardFooter>
@@ -635,6 +765,12 @@ export default function MemberSettings(props: MemberSettingsProps) {
         <MemberPreview branches={props.branches} name={name} stats={props.stats} status={props.status} />
         <ProfileSection email={props.email} name={name} onSaved={setName} />
       </div>
+      <PublicProfileSection
+        bio={props.bio}
+        profileHref={props.profileHref}
+        profileSettingsAvailable={props.profileSettingsAvailable}
+        profileVisible={props.profileVisible}
+      />
       <PasskeysSection />
       <div className="grid w-full gap-4 xl:grid-cols-2">
         <AccessSection branches={props.branches} canParticipate={props.canParticipate} role={props.role} />

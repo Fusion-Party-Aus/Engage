@@ -136,6 +136,8 @@ export function toProposalDetailDto(p: ProposalSummaryView) {
       ? { supersededByProposalId: p.supersededByProposalId }
       : {}),
     ...(p.supersededByNote ? { supersededByNote: p.supersededByNote } : {}),
+    ...(p.targetSection ? { targetSection: p.targetSection } : {}),
+    ...(p.proposedWording ? { proposedWording: p.proposedWording } : {}),
     ...(p.authorName ? { authorName: p.authorName } : {}),
   };
 }
@@ -149,15 +151,28 @@ export function toCommentDto(
   viewer?: SessionUser | null,
 ) {
   const upvotes = Array.isArray(c.upvotes) ? c.upvotes : [];
+  const downvotes = Array.isArray(c.downvotes) ? c.downvotes : [];
+  const total = upvotes.length + downvotes.length;
+  const parentCommentId =
+    typeof c.parentCommentId === "string" && c.parentCommentId
+      ? c.parentCommentId
+      : null;
   return {
     commentId: c.commentId,
     proposalId: c.proposalId,
+    parentCommentId,
     authorName: c.authorName,
     stance: c.stance,
-    body: c.body,
+    body: c.deletedAt ? "" : c.body,
     upvoteCount: upvotes.length,
+    downvoteCount: downvotes.length,
+    score: upvotes.length - downvotes.length,
+    upvotePercent:
+      total > 0 ? Math.round((upvotes.length / total) * 100) : 0,
     upvotedByMe: Boolean(viewer && upvotes.includes(viewer.memberId)),
+    downvotedByMe: Boolean(viewer && downvotes.includes(viewer.memberId)),
     isMine: Boolean(viewer && c.memberId === viewer.memberId),
+    deleted: Boolean(c.deletedAt),
     createdAt: c.createdAt,
     ...(c.feedback
       ? {

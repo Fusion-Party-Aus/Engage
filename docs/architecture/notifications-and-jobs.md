@@ -49,6 +49,32 @@ Provider: Resend REST API, called directly.
 
 Governance events reach the inbox through the notification outbox described below. The in-app inbox is the baseline delivery channel for a formal ballot notice: the preference model has no per-topic in-app opt-out.
 
+### Discord (one-way weekly digest)
+
+Public proposal digest through a Discord webhook, with a deliberately **neglect-first**
+Attention Debt selection algorithm. Unlike per-member email reminders, this is a
+server-wide, non-personalised invitation to contribute; it is not tied to individual
+vote status or email notification consent.
+
+- Candidate selection is public national Deliberate/Decide proposals only.
+- The inaugural cohort opened together, so historical proposal creation dates
+  have no effect on the score.
+- Low activity, unfeatured proposals and time-critical ballots receive more
+  exposure through a seeded weighted lottery with repeat cooldown.
+- Only credible fresh public aggregate turnout is shown; never a private vote
+  or identifiable ballot choice.
+- Each post is a single embed with one linked field per featured proposal; the
+  test post is clearly labelled and proposal titles cannot inject mentions.
+- An admin-only preview and explicit test send target a separate test Discord
+  server; live sending is disabled by default.
+- Webhook URLs, role IDs, enablement and Melbourne posting schedule are edited in
+  **Admin → Platform settings → Discord**. They live in a separate, encrypted
+  integration settings store; webhook values never enter public site settings or
+  settings-history snapshots. The existing auth bootstrap key protects ciphertext.
+- The external cron is an hourly *trigger*; Engage decides if the configured
+  local posting day/hour is due and keeps one attempt per Melbourne week.
+- See [Discord weekly digest setup](../integrations/discord-weekly-digest.md).
+
 ### Web Push
 
 - `push_subscriptions` stores endpoints keyed by a hash of `memberId\0endpoint`.
@@ -184,6 +210,9 @@ produces a notification.
 | `/api/email/unsubscribe` | GET, POST | HMAC token | One-click unsubscribe |
 | `/api/email/webhook` | POST | Svix signature | Delivery/bounce/complaint events |
 | `/api/email/digest` | POST | Bearer `ENGAGE_CRON_SECRET` | Send due digest batches |
+| `/api/admin/discord-settings` | GET / PATCH | `settings.manage`; Origin required on PATCH | Configure Discord channels, role mentions, enabled state and weekly schedule |
+| `/api/admin/discord-digest` | GET / POST | Admin session; Origin required on POST | Preview and explicitly test-send to separate Discord server |
+| `/api/cron/discord-digest` | POST | Bearer `ENGAGE_CRON_SECRET` | Run one public Discord digest per Melbourne week |
 
 ## Scheduled work
 
@@ -191,8 +220,9 @@ There is **no in-process scheduler**. `setInterval` is not used. Scheduled work 
 
 | Job | Endpoint | Secret | Gate |
 |---|---|---|---|
-| Ballot digest email | `POST /api/email/digest` | `ENGAGE_CRON_SECRET` | `ENGAGE_DIGEST_ENABLED === "true"` |
-| CRM membership verification | `POST /api/cron/membership-verification` | `ENGAGE_CRM_VERIFICATION_CRON_SECRET` | CRM verification enabled (409 when off) |
+| Ballot digest email | `POST /api/email/digest` | `ENGAGE_CRON_SECRET` | On under **Platform settings → Scheduled jobs** (returns `disabled` when off) |
+| Discord weekly digest | `POST /api/cron/discord-digest` | `ENGAGE_CRON_SECRET` | Enabled and scheduled through Admin → Platform settings → Discord |
+| CRM membership verification | `POST /api/cron/membership-verification` | `ENGAGE_CRM_VERIFICATION_CRON_SECRET` | On under **Platform settings → CRM verification** (409 when off) |
 | Health probe | `GET /api/health` | None | Always available |
 
 Two scheduled jobs are CLIs rather than endpoints: `npm run governance:scheduler -- --apply`
@@ -201,6 +231,8 @@ delivers queued governance notifications. Run the drain immediately after the
 scheduler.
 
 The documented digest cadence is every 15 minutes. Coolify production currently has **no enabled scheduled tasks**; the operator must configure them. The systemd units in `deploy/systemd/` run the LAN-only Coolify poller, not application jobs.
+
+Both job gates and the CRM tuning are administrator settings stored in MongoDB, not environment configuration. A missing setting means off, so a deployment upgrading from the former environment variables must turn the job on under **Platform settings** after deploying. See [build, deployment and operations](build-deploy-operations.md#crm-verification-and-scheduled-jobs).
 
 Consequences of missing schedulers:
 
@@ -222,6 +254,7 @@ Every authorised run — success or failure — is recorded in the `job_runs` le
 | `ballot-migration.ts` | Legacy Decide-stage ballot inventory/migration |
 | `migrate-proposal-votes.mjs` / `.ts` | Move legacy votes into `proposal_votes` |
 | `migrate-encrypted-votes.ts` | Encrypt existing votes; supports dry run and rotation |
+| `ballot-tally-projection.ts` | `npm run ballots:tally-projection`: report, rebuild and verify the display-only `ballot_tallies` rows (dry-run by default, `--apply`, `--verify`) |
 | `schedule-open-ballots.ts` | One-off deadline assignment for open ballots |
 | `seed-branches.ts` | Seed standard branches |
 | `migrate-branch-participation.ts` | Branch participation migration |

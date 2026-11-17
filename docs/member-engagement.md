@@ -11,6 +11,7 @@
 - Most approved: highest approve share of approve/reject votes, at least five decisive votes. Abstentions are displayed but excluded from that denominator. This does not imply formal adoption.
 - Most active: all-time formal proposal ballots plus discussion posts. Amendment ballots and pending preferences are excluded. This measures contributions, not unique people.
 - My Engage includes eligible unvoted ballots closing within seven days (including bound amendment ballots), explicit Melbourne deadlines, participation follow-through, and email preferences. Existing activity and catch-up views remain available.
+- My Engage **Updates waiting** lists activity on proposals the member follows, voted on or authored. A member who has never cleared updates sees the last seven days. Reading My Engage, or opening one item, never advances the cursor: updates persist across navigation until the member chooses **Mark updates as seen**, which advances `engage_member_last_seen` to the dismissal time. The stat, the Notifications tab badge and the list use the same window. This is a presentation state only; it does not change notification read state, ballot confidentiality or any governance record.
 - Existing accounts default to reminders on; new accounts default off until they opt in. At first startup, a durable `engagement_email_rollouts` record snapshots the existing account IDs. Repeated startups never expand this cohort. Explicit preferences and unsubscribe records always override the default, and bounce/complaint suppression blocks delivery. Existing users do not need to return or complete onboarding to receive reminders. Onboarding explains the applicable default, timing, unsubscribe and delivery reporting, with a direct reminder preference form. Verification/sign-in emails are separate.
 - Inline HTML email uses Horizon violet, cyan, lavender and Newsreader/Georgia + Outfit/Arial fallbacks; includes plain text and a visible unsubscribe link. No choices or vote reasons appear in email or provider tracking metadata.
 
@@ -37,12 +38,13 @@ The existing Resend account and verified `AUTH_EMAIL_FROM` are reused. Set serve
 
 | Variable | Purpose |
 | --- | --- |
-| `ENGAGE_DIGEST_ENABLED` | `true` to enable the scheduled sender, otherwise disabled |
 | `ENGAGE_EMAIL_SECRET` | Stable random secret for unsubscribe signatures; keep stable so old links remain valid |
 | `ENGAGE_CRON_SECRET` | Independent random bearer secret for the job endpoint |
 | `RESEND_WEBHOOK_SECRET` | Signing secret for this Resend webhook (`whsec_…`) |
 | `PUBLIC_ORIGIN` / `BETTER_AUTH_URL` | Production HTTPS Engage origin |
 | `RESEND_API_KEY`, `AUTH_EMAIL_FROM` | Existing provider sending configuration |
+
+Turn scheduled digests on under **Platform settings → Scheduled jobs**. They are off by default, and the setting replaces the former digest enablement environment variable.
 
 Create a Resend webhook pointing to `/api/email/webhook` for `email.delivered`, `email.bounced`, `email.complained`, `email.failed`, and `email.delivery_delayed`. Optional opened/clicked events are recorded if supplied by the provider; provider tracking settings are not modified by the application. The verifier follows [Svix raw-payload signature verification](https://docs.svix.com/receiving/verifying-payloads/how-manual), including the five-minute timestamp tolerance.
 

@@ -3,7 +3,7 @@ import { after, before, describe, it } from "node:test";
 import { MongoClient, type Db } from "mongodb";
 import { loadBallotCryptoConfig, generateBallotKeyHex } from "./ballot-crypto.ts";
 import {
-  BALLOT_OUTCOME_RULE_BASIS,
+  LEGACY_BALLOT_OUTCOME_RULE_BASIS,
   BallotDomainError,
   FORMAL_DECISIONS_COLLECTION,
   proposalBallotResultFilter,
@@ -92,9 +92,13 @@ async function castChoices(
   }
 }
 
-/** Close the ballot exactly as the scheduler does, so certification is allowed. */
+/**
+ * Close the ballot exactly as the scheduler does before the two-tier quorum
+ * rule took effect. These cases pin approval and certification mechanics;
+ * quorum closure and certification have their own coverage in quorum-mongo.test.
+ */
 async function closeBallot(db: Db, proposalId: string): Promise<void> {
-  const now = new Date();
+  const now = new Date("2026-11-10T00:00:00.000Z");
   await db
     .collection("proposals")
     .updateOne({ proposalId }, { $set: { ballotClosedAt: now } });
@@ -150,7 +154,8 @@ describe(
 
       assert.equal(record.result, "successful");
       assert.equal(record.computedResult, "successful");
-      assert.equal(record.ruleBasis, BALLOT_OUTCOME_RULE_BASIS);
+      assert.equal(record.ruleBasis, LEGACY_BALLOT_OUTCOME_RULE_BASIS);
+      assert.equal(record.quorum?.status, "legacy-not-applied");
       assert.deepEqual(record.tally, {
         approve: 3,
         abstain: 2,
@@ -163,7 +168,7 @@ describe(
         .collection(FORMAL_DECISIONS_COLLECTION)
         .findOne({ ballotId: proposalBallotId(proposalId) });
       assert.equal(stored?.computedResult, "successful");
-      assert.equal(stored?.ruleBasis, BALLOT_OUTCOME_RULE_BASIS);
+      assert.equal(stored?.ruleBasis, LEGACY_BALLOT_OUTCOME_RULE_BASIS);
       assert.equal((stored?.tally as { approve: number }).approve, 3);
 
       const ballot = await db
@@ -175,12 +180,19 @@ describe(
         .collection(GOVERNANCE_EVENTS_COLLECTION)
         .findOne({ matterId: proposalId, eventType: "decision.recorded" });
       assert.equal(event?.actorId, "admin-1");
-      assert.deepEqual(event?.metadata, {
-        result: "successful",
-        computedResult: "successful",
-        tally: { approve: 3, abstain: 2, reject: 1, total: 6 },
-        ruleBasis: BALLOT_OUTCOME_RULE_BASIS,
+      assert.deepEqual(event?.metadata?.tally, {
+        approve: 3,
+        abstain: 2,
+        reject: 1,
+        total: 6,
       });
+      assert.equal(event?.metadata?.result, "successful");
+      assert.equal(event?.metadata?.computedResult, "successful");
+      assert.equal(
+        event?.metadata?.ruleBasis,
+        LEGACY_BALLOT_OUTCOME_RULE_BASIS,
+      );
+      assert.equal(event?.metadata?.quorum?.status, "legacy-not-applied");
       assert.equal(event?.reason, undefined);
     });
 
@@ -557,7 +569,7 @@ describe(
       };
       assert.equal(payload.result.computedResult, "successful");
       assert.equal(payload.result.result, "unsuccessful");
-      assert.equal(payload.result.ruleBasis, BALLOT_OUTCOME_RULE_BASIS);
+      assert.equal(payload.result.ruleBasis, LEGACY_BALLOT_OUTCOME_RULE_BASIS);
       const override = payload.result.override as {
         reason: string;
         by: string;

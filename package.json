@@ -20,6 +20,7 @@
     "ballots:schedule": "node --experimental-strip-types scripts/schedule-open-ballots.ts",
     "ballots:migrate": "node --experimental-strip-types scripts/ballot-migration.ts",
     "ballots:results-index": "node --experimental-strip-types scripts/migrate-ballot-results-index.ts",
+    "ballots:tally-projection": "node --experimental-strip-types scripts/ballot-tally-projection.ts",
     "governance:scheduler": "node --experimental-strip-types scripts/run-governance-scheduler.ts",
     "notifications:drain": "node --experimental-strip-types scripts/drain-notification-outbox.ts",
     "ops:health": "node --experimental-strip-types scripts/operational-health.ts",

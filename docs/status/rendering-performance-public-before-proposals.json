@@ -1,0 +1,139 @@
+{
+  "generatedAt": "2026-11-15T14:51:08.100Z",
+  "git": {
+    "commit": "57402f0",
+    "branch": null
+  },
+  "environment": {
+    "node": "v24.22.1",
+    "platform": "darwin",
+    "runs": 5,
+    "port": 4399,
+    "syntheticData": {
+      "votes": 1200,
+      "comments": 600,
+      "ballots": 10
+    },
+    "note": "Local synthetic measurements. Indicative only; not production SLA evidence."
+  },
+  "pages": [
+    {
+      "id": "proposals",
+      "label": "/proposals/",
+      "path": "/proposals/",
+      "identity": "anonymous",
+      "document": {
+        "status": 200,
+        "durationMs": 36.7,
+        "htmlBytes": 94882,
+        "dbCommands": 7,
+        "dbDurationMs": 17.953,
+        "dbByCommand": {
+          "find": {
+            "count": 4,
+            "durationMs": 15.885
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 6.866
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 34.5,
+        "navigationMs": 106.6,
+        "lcpMs": 100,
+        "cls": 0.002,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": 104,
+        "maxEventDurationMs": null,
+        "jsBytes": 15728,
+        "cssBytes": 113068,
+        "fontBytes": 79636,
+        "imageBytes": 3667,
+        "scriptCount": 4,
+        "requestCount": 14,
+        "failedRequests": [],
+        "dbCommands": 7,
+        "dbDurationMs": 17.655,
+        "dbByCommand": {
+          "find": {
+            "count": 4,
+            "durationMs": 9.971
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 4.606
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    },
+    {
+      "id": "proposals",
+      "label": "/proposals/",
+      "path": "/proposals/",
+      "identity": "member",
+      "document": {
+        "status": 200,
+        "durationMs": 45.2,
+        "htmlBytes": 102665,
+        "dbCommands": 15,
+        "dbDurationMs": 27.309,
+        "dbByCommand": {
+          "find": {
+            "count": 11,
+            "durationMs": 23.797
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 9.245
+          },
+          "update": {
+            "count": 1,
+            "durationMs": 1.875
+          }
+        }
+      },
+      "browser": {
+        "status": 200,
+        "ttfbMs": 37.5,
+        "navigationMs": 118.3,
+        "lcpMs": 112,
+        "cls": 0.002,
+        "longTaskMs": 0,
+        "longTaskCount": 0,
+        "maxLongTaskMs": null,
+        "maxEventDurationMs": null,
+        "jsBytes": 15728,
+        "cssBytes": 113068,
+        "fontBytes": 79636,
+        "imageBytes": 3667,
+        "scriptCount": 4,
+        "requestCount": 14,
+        "failedRequests": [],
+        "dbCommands": 22,
+        "dbDurationMs": 32.396,
+        "dbByCommand": {
+          "find": {
+            "count": 17,
+            "durationMs": 25.718
+          },
+          "getMore": {
+            "count": 3,
+            "durationMs": 3.748
+          },
+          "update": {
+            "count": 2,
+            "durationMs": 4.79
+          }
+        },
+        "interaction": null,
+        "consoleErrors": []
+      }
+    }
+  ]
+}

@@ -2,21 +2,23 @@ import type { APIRoute } from "astro";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { safeEqual } from "../../../lib/engagement-email.ts";
 import { withJobRun } from "../../../lib/job-runs.ts";
-import {
-  CrmConfigurationError,
-  crmVerificationEnabled,
-} from "../../../lib/underground-crm.ts";
+import { getCrmSettingsState } from "../../../lib/operational-settings.ts";
+import { CrmConfigurationError } from "../../../lib/underground-crm.ts";
 import { runVerificationCycle } from "../../../lib/membership-verification.ts";
 import type { PlatformEnv } from "../../../lib/types.ts";
 
 export const prerender = false;
 
+const noStore = { "cache-control": "no-store" };
+
 /**
  * Scheduled automatic membership verification and reconciliation.
  *
- * This endpoint is disabled unless a deployment explicitly enables it. A CRM
- * outage is handled inside the cycle as a retryable operational failure; it is
- * never treated as a verification failure and never revokes a membership.
+ * The job is off until an administrator turns it on under Platform settings.
+ * The gate and tuning are read from the database, never from the deployment
+ * environment. A CRM outage is handled inside the cycle as a retryable
+ * operational failure; it is never treated as a verification failure and never
+ * revokes a membership.
  *
  * Authorised runs are recorded in the job-run ledger, successful or not. An
  * unauthenticated call (401) and a disabled feature (409) are not scheduled
@@ -32,19 +34,44 @@ export const POST: APIRoute = async ({ request, locals }) => {
   ) {
     return Response.json({ error: "Unauthorised" }, { status: 401 });
   }
-  if (!crmVerificationEnabled(env)) {
-    return Response.json(
-      { error: "Automatic CRM membership verification is not enabled." },
-      { status: 409 },
-    );
-  }
 
   try {
     const db = await getDatabase(env);
+    const settings = await getCrmSettingsState(db);
+    if (settings.readFailed) {
+      return Response.json(
+        {
+          error:
+            "Saved CRM verification settings could not be read. Try again.",
+        },
+        { status: 503, headers: noStore },
+      );
+    }
+    if (settings.invalidFields.length > 0) {
+      return Response.json(
+        {
+          error:
+            "Saved CRM verification settings are invalid. Open Platform settings and correct them.",
+        },
+        { status: 503, headers: noStore },
+      );
+    }
+    if (!settings.values.crmVerificationEnabled) {
+      return Response.json(
+        {
+          error: "Automatic CRM membership verification is not enabled.",
+        },
+        { status: 409, headers: noStore },
+      );
+    }
+
     const report = await withJobRun(
       db,
       "membership-verification",
-      () => runVerificationCycle(db, env),
+      () =>
+        runVerificationCycle(db, env, {
+          crmSettings: settings.values,
+        }),
       {
         mode: "apply",
         summarise: (cycle) => ({
@@ -57,9 +84,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         }),
       },
     );
-    return Response.json(report, {
-      headers: { "cache-control": "no-store" },
-    });
+    return Response.json(report, { headers: noStore });
   } catch (error) {
     return Response.json(
       {
@@ -68,7 +93,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
             ? error.message
             : "Membership verification could not run; existing statuses are unchanged.",
       },
-      { status: 503, headers: { "cache-control": "no-store" } },
+      { status: 503, headers: noStore },
     );
   }
 };
