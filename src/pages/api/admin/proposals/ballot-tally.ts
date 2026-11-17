@@ -1,22 +1,11 @@
 import type { APIRoute } from "astro";
 import { canManageBranchBallot, getSessionUser } from "../../../../lib/auth.ts";
-import {
-  ballotOutcomeLabel,
-  loadBallotTallyCryptoConfig,
-  readBoundBallotTallies,
-  resolveBallotClosure,
-} from "../../../../lib/ballots.ts";
+import { readBallotOutcome } from "../../../../lib/ballot-outcome.ts";
+import type { BallotQuorumView } from "../../../../lib/ballot-outcome.ts";
+import { loadBallotTallyCryptoConfig } from "../../../../lib/ballots.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
-import {
-  buildQuorumPreview,
-  getQuorumElectoratePreview,
-  quorumRuleLabel,
-  quorumVerdictLabel,
-  readBallotQuorumRecord,
-} from "../../../../lib/quorum.ts";
 import { hasPermission } from "../../../../lib/rbac.ts";
 import { normalizeProposalDoc } from "../../../../lib/proposal-helpers.ts";
-import { proposalBallotId } from "../../../../lib/vote-storage.ts";
 
 export const prerender = false;
 
@@ -86,75 +75,69 @@ export const GET: APIRoute = async ({ request, url, locals }) => {
     );
   }
 
-  const tallies = await readBoundBallotTallies(db, {
-    ballots: [
-      {
-        matterId: proposal.proposalId,
-        revisionId: String(proposal.ballotRevisionId),
-      },
-    ],
+  const outcome = await readBallotOutcome(db, {
+    proposalId: proposal.proposalId,
     cryptoConfig: loadBallotTallyCryptoConfig(env),
   });
-  const summary = tallies.get(proposal.proposalId) ?? null;
-  const closure = resolveBallotClosure({ matter: proposal });
-  const participation = summary?.tally?.total ?? 0;
-  const quorumRecord = await readBallotQuorumRecord(
-    db,
-    proposalBallotId(proposal.proposalId),
-  );
-  const quorumPreview =
-    !quorumRecord && !closure.closed
-      ? buildQuorumPreview(
-          await getQuorumElectoratePreview(db),
-          participation,
-        )
-      : null;
-  const quorum = quorumRecord
-    ? {
-        final: true,
-        status: quorumRecord.status,
-        ruleLabel: quorumRuleLabel(quorumRecord),
-        verdictLabel: quorumVerdictLabel(quorumRecord.verdict),
-        eligibleRegisteredMembers: quorumRecord.eligibleRegisteredMembers,
-        activeEligibleMembers: quorumRecord.activeEligibleMembers,
-        platformQuorumRequired: quorumRecord.platformQuorumRequired,
-        platformQuorumMet: quorumRecord.platformQuorumMet,
-        ballotQuorumRequired: quorumRecord.ballotQuorumRequired,
-        ballotQuorumMet: quorumRecord.ballotQuorumMet,
-        participation:
-          quorumRecord.participatingMembers ?? quorumRecord.tally?.total ?? 0,
-        quorumMet: quorumRecord.quorumMet,
-      }
-    : quorumPreview
-      ? {
-          final: false,
-          status: "current",
-          ruleLabel: quorumRuleLabel({
-            ruleVersion: quorumPreview.ruleVersion,
-          }),
-          verdictLabel: null,
-          eligibleRegisteredMembers:
-            quorumPreview.eligibleRegisteredMembers,
-          activeEligibleMembers: quorumPreview.activeEligibleMembers,
-          platformQuorumRequired: quorumPreview.platformQuorumRequired,
-          platformQuorumMet: quorumPreview.platformQuorumMet,
-          ballotQuorumRequired: quorumPreview.ballotQuorumRequired,
-          ballotQuorumMet: quorumPreview.ballotQuorumMet,
-          participation: quorumPreview.participationCount,
-          quorumMet: quorumPreview.quorumMet,
-        }
-      : null;
+  if (!outcome) {
+    return Response.json({ error: "Proposal not found." }, { status: 404 });
+  }
 
   return Response.json(
     {
       proposalId: proposal.proposalId,
-      closed: closure.closed,
-      summary,
-      computedLabel: summary?.computedResult
-        ? ballotOutcomeLabel(summary.computedResult)
-        : null,
-      quorum,
+      closed: outcome.closure.closed,
+      summary: outcome.tally,
+      computedLabel: outcome.tally?.computedLabel ?? null,
+      quorum: quorumResponse(outcome.quorum),
     },
     { status: 200, headers: { "cache-control": "private, no-store" } },
   );
 };
+
+function quorumResponse(quorum: BallotQuorumView | null) {
+  if (!quorum) return null;
+  if (quorum.status === "recorded") {
+    const record = quorum.record;
+    return {
+      final: true,
+      status: record.status,
+      ruleLabel: quorum.ruleLabel,
+      verdictLabel: quorum.verdictLabel,
+      eligibleRegisteredMembers: record.eligibleRegisteredMembers,
+      activeEligibleMembers: record.activeEligibleMembers,
+      platformQuorumRequired: record.platformQuorumRequired,
+      platformQuorumMet: record.platformQuorumMet,
+      ballotQuorumRequired: record.ballotQuorumRequired,
+      ballotQuorumMet: record.ballotQuorumMet,
+      participation:
+        record.participatingMembers ?? record.tally?.total ?? 0,
+      quorumMet: record.quorumMet,
+    };
+  }
+  if (quorum.status === "preview") {
+    const preview = quorum.preview;
+    return {
+      final: false,
+      status: "current",
+      ruleLabel: quorum.ruleLabel,
+      verdictLabel: null,
+      eligibleRegisteredMembers: preview.eligibleRegisteredMembers,
+      activeEligibleMembers: preview.activeEligibleMembers,
+      platformQuorumRequired: preview.platformQuorumRequired,
+      platformQuorumMet: preview.platformQuorumMet,
+      ballotQuorumRequired: preview.ballotQuorumRequired,
+      ballotQuorumMet: preview.ballotQuorumMet,
+      participation: preview.participationCount,
+      quorumMet: preview.quorumMet,
+    };
+  }
+  return {
+    final: true,
+    status: "unavailable",
+    ruleLabel: quorum.ruleLabel,
+    verdictLabel: "Inconclusive",
+    quorumMet: false,
+    anomalies: [quorum.reason],
+  };
+}
