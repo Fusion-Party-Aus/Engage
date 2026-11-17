@@ -1,0 +1,70 @@
+---
+import { Badge } from '../ui/badge';
+import DiffText from './DiffText.astro';
+import {
+  classifySuggestions,
+  wordingBlocks,
+  type AmendmentSuggestion,
+  type WordingSnapshot,
+} from '../../lib/amendment-suggestions';
+
+interface Props {
+  suggestions: AmendmentSuggestion[];
+  base: WordingSnapshot;
+  latest: WordingSnapshot;
+  competing?: string[];
+}
+const { suggestions, base, latest, competing = [] } = Astro.props;
+const classifications = classifySuggestions(base, latest, suggestions);
+const labels = new Map(wordingBlocks(base).map((block) => [block.blockId, block.label]));
+const labelFor = (suggestion: AmendmentSuggestion) =>
+  labels.get(`${suggestion.field}:${suggestion.index}`) ??
+  (suggestion.field === 'outcomes'
+    ? `Commitment ${suggestion.index + 1}`
+    : suggestion.field === 'title'
+      ? 'Title'
+      : `${suggestion.field === 'summary' ? 'Summary' : 'Rationale'} · paragraph ${suggestion.index + 1}`);
+const stateFor = (suggestionId: string) =>
+  classifications.find((classification) => classification.suggestionId === suggestionId)?.state ?? 'clean';
+const stateLabel = { clean: 'Applies cleanly', moved: 'Will rebase', conflict: 'Needs resolution' } as const;
+const stateTone = { clean: 'success', moved: 'warning', conflict: 'destructive' } as const;
+---
+<div class="suggestion-list">
+  {competing.length > 0 && (
+    <p class="suggestion-competing" role="status">
+      Competes with {competing.join(', ')} on the same wording block. An officer must record a precedence before both amendments can be applied.
+    </p>
+  )}
+  {suggestions.map((suggestion) => {
+    const state = stateFor(suggestion.suggestionId);
+    return (
+      <article class="suggestion">
+        <div class="suggestion__head">
+          <strong>{labelFor(suggestion)}</strong>
+          <Badge variant={stateTone[state]}>{stateLabel[state]}</Badge>
+        </div>
+        {suggestion.comment && <p class="suggestion__comment">{suggestion.comment}</p>}
+        <div class="suggestion__body">
+          {suggestion.mode === 'add' ? (
+            <p><span class="suggestion__verb">Add</span> <ins class="suggestion__add">{suggestion.proposed}</ins></p>
+          ) : suggestion.mode === 'remove' ? (
+            <p><span class="suggestion__verb">Remove</span> <del class="suggestion__remove">{suggestion.original}</del></p>
+          ) : (
+            <DiffText before={suggestion.original} after={suggestion.proposed} />
+          )}
+        </div>
+      </article>
+    );
+  })}
+</div>
+<style>
+  .suggestion-list { display: grid; gap: .75rem; margin: 1rem 0; }
+  .suggestion { border: 1px solid var(--horizon-line); border-radius: .75rem; padding: .85rem 1rem; background: var(--horizon-surface); }
+  .suggestion__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; align-items: center; }
+  .suggestion__comment { margin: .5rem 0 0; color: var(--horizon-muted); font-size: .9rem; }
+  .suggestion__body { margin-top: .5rem; font-size: .95rem; }
+  .suggestion__verb { font-weight: 600; margin-right: .35rem; }
+  .suggestion__add { background: var(--horizon-success-bg); color: var(--horizon-success-ink); text-decoration: none; }
+  .suggestion__remove { background: var(--horizon-danger-bg); color: var(--horizon-danger-ink); }
+  .suggestion-competing { margin: 0; padding: .65rem .85rem; border-left: 3px solid var(--horizon-warn-ink); background: var(--horizon-warn-bg); color: var(--horizon-warn-ink); font-size: .9rem; }
+</style>

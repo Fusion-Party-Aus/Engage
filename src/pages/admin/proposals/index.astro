@@ -795,7 +795,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                                   </form>
                                 </details>
                               )}
-                              {['proposed', 'ready'].includes(amendment.status) && item.stage === 'decide' && item.ballotRevisionId === amendment.baseRevisionId && canManageBallot(item) && (
+                              {amendment.status === 'ready' && item.stage === 'decide' && item.ballotRevisionId === amendment.baseRevisionId && canManageBallot(item) && (
                                 <form class="amendment-open-form grid gap-2" data-amendment-id={amendment.amendmentId}>
                                   <p class="admin-inline-note">Open an endorsement ballot against frozen proposal and amendment wording revisions.</p>
                                   <div class="admin-actions">

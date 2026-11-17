@@ -46,6 +46,8 @@ import { policyCanonicalPath } from '../../../lib/policy-registry.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
 import PortableText from '../../../components/PortableText.astro';
 import ActivityTimeline from '../../../components/blocks/timeline-3';
+import AmendmentSuggestions from '../../../components/proposal/AmendmentSuggestions.astro';
+import { competingTargets, wordingSnapshot } from '../../../lib/amendment-suggestions.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Input } from '../../../components/ui/input';
@@ -105,6 +107,18 @@ for (const amendment of amendmentRows) {
   amendment.revisionHistory = await db.collection('amendment_revisions').find({ amendmentId: amendment.amendmentId }).sort({ createdAt: 1 }).toArray();
   const current = amendment.revisionHistory.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
+}
+const latestWording = revisions[0]?.snapshot ? wordingSnapshot(revisions[0].snapshot) : null;
+const amendmentOrdinal = new Map(amendmentRows.map((row: any, index: number) => [row.amendmentId, index + 1]));
+for (const amendment of amendmentRows as any[]) {
+  amendment.competingWith = (amendmentRows as any[])
+    .filter(
+      (other: any) =>
+        other.amendmentId !== amendment.amendmentId &&
+        !['rejected', 'withdrawn'].includes(String(other.status)) &&
+        competingTargets(amendment.suggestions, other.suggestions).length > 0,
+    )
+    .map((other: any) => `Amendment #${amendmentOrdinal.get(other.amendmentId)}`);
 }
 const [ballotResult, ballotRow, rawPolicy, relatedProposals, branches, visibleOtherProposals, quorumRecord] = proposal
   ? await Promise.all([
@@ -1148,6 +1162,19 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         {amendment.conflicts?.length ? ` · overlapping fields: ${amendment.conflicts.join(', ')}` : ''}
                       </p>
 
+                      {Array.isArray(amendment.suggestions) && amendment.suggestions.length && latestWording && (
+                        <AmendmentSuggestions
+                          suggestions={amendment.suggestions}
+                          base={wordingSnapshot(
+                            amendment.revisionHistory.find((row: any) => row.revisionId === amendment.baseRevisionId)?.snapshot ??
+                            revisions[0]?.snapshot ??
+                            {},
+                          )}
+                          latest={latestWording}
+                          competing={amendment.competingWith ?? []}
+                        />
+                      )}
+
                       {['proposed', 'stale', 'conflict'].includes(amendment.status) && canManageProposal && (
                         <details class="admin-subform-disclosure">
                           <summary>Resolve or review amendment</summary>
@@ -1182,7 +1209,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </details>
                       )}
 
-                      {['proposed', 'ready'].includes(amendment.status) && proposal.stage === 'decide' && proposal.ballotRevisionId === amendment.baseRevisionId && canManageBallot && (
+                      {amendment.status === 'ready' && proposal.stage === 'decide' && proposal.ballotRevisionId === amendment.baseRevisionId && canManageBallot && (
                         <form class="amendment-open-form grid gap-2 pt-2" data-amendment-id={amendment.amendmentId}>
                           <div class="admin-actions">
                             <Button variant="outline" size="sm" type="submit">Open amendment endorsement ballot</Button>

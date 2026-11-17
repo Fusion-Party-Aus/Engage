@@ -1,0 +1,18 @@
+---
+import { diffWords } from '../../lib/amendment-suggestions';
+interface Props { before: string; after: string; }
+const { before, after } = Astro.props;
+const segments = diffWords(before, after);
+---
+<span class="word-diff">
+  {segments.map((segment) => segment.type === 'same'
+    ? <span>{segment.text}</span>
+    : segment.type === 'remove'
+      ? <del>{segment.text}</del>
+      : <ins>{segment.text}</ins>)}
+</span>
+<style>
+  .word-diff { white-space: pre-wrap; line-height: 1.6; }
+  .word-diff del { background: var(--horizon-danger-bg); color: var(--horizon-danger-ink); text-decoration: line-through; }
+  .word-diff ins { background: var(--horizon-success-bg); color: var(--horizon-success-ink); text-decoration: none; }
+</style>
