@@ -50,6 +50,12 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.5.0
         version: 1.5.0(@types/react@19.3.0)(react@19.3.1)
+      '@ui-sdk/core':
+        specifier: 0.1.0-beta.6
+        version: 0.1.0-beta.6
+      '@ui-sdk/react':
+        specifier: 0.1.0-beta.6
+        version: 0.1.0-beta.6(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       astro:
         specifier: 7.4.2
         version: 7.4.2(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)
@@ -1829,6 +1835,20 @@ packages:
 
   '@types/whatwg-url@11.0.5':
     resolution: {integrity: sha512-coYR071JRaHa+xoEvvYqvnIHaVqaYrLPbsufM9BF63HkwI5Lgmy2QR8Q5K/lYDYo5AK82wOvSOS0UsLTpTG7uQ==}
+
+  '@ui-sdk/core@0.1.0-beta.6':
+    resolution: {integrity: sha512-4JDArOSaTDRArUs+XXojXVNS1kf1D/aOMan6GIp8J9+cwAdijCypbClApS2jBc4SxgZbJCIDHsMlFOIPyEv8+g==}
+
+  '@ui-sdk/react@0.1.0-beta.6':
+    resolution: {integrity: sha512-cYV7tugyMsieKkhwyEojASuOpi2vBkznrENzsJJ/6NWNMdQNzmp+tjlvG4jOhqZ5vUFoX/UF5phPkuPYgDGRzw==}
+    peerDependencies:
+      '@types/react': '>=19.2.10'
+      '@ui-sdk/core': ^0.1.0-beta.6
+      react: '>=19'
+      react-dom: '>=19'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
 
   '@ungap/structured-clone@1.4.0':
     resolution: {integrity: sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ==}
@@ -4933,6 +4953,16 @@ snapshots:
   '@types/whatwg-url@11.0.5':
     dependencies:
       '@types/webidl-conversions': 7.0.3
+
+  '@ui-sdk/core@0.1.0-beta.6': {}
+
+  '@ui-sdk/react@0.1.0-beta.6(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.6)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+    dependencies:
+      '@ui-sdk/core': 0.1.0-beta.6
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
+    optionalDependencies:
+      '@types/react': 19.3.0
 
   '@ungap/structured-clone@1.4.0': {}
 
