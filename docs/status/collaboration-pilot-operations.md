@@ -10,6 +10,7 @@ The correction inbox, escalation path and monthly retention sweep are only real 
 | Backup | A different person with access and authority to act when the owner is unavailable | **Unassigned** |
 | Escalation | Handles disputed consent, suspected unauthorised publication and requests that miss the 5-day target | **Unassigned** |
 | Retention sweep operator | Runs `npm run collaboration:retention` monthly, applies it, and records the output | **Unassigned** |
+| Horizon feed check | Runs `npm run horizon:smoke` before launch and whenever the feed contract changes | **Unassigned** |
 | Legal/privacy contact | Owns review and approval of privacy policy 1.4 and the safeguards | **Unassigned** |
 
 ## What the owner does

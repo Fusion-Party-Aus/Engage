@@ -263,6 +263,8 @@ This endpoint is **not** part of the public API. It requires `Authorization: Bea
 
 Scope follows the public gallery: approved, published by a reviewer, website consent, story profile, material intact, not hidden. Written consultation responses never appear. The payload includes answers, chosen credit, caption, media URLs, channels and consent flags, and excludes reply addresses, internal notes, member identifiers and management tokens. `If-None-Match` returns 304, and `nextSince` supports incremental polling.
 
+A simulated consumer lives in `scripts/horizon-consumer-smoke.ts` and runs as `npm run horizon:smoke`. It checks the 401, the authorised envelope, the contract, one image download, an entity-tag revalidation and an incremental poll. Set `HORIZON_BASE_URL` and `HORIZON_FEED_TOKEN`, then run it in staging or production before Horizon goes live.
+
 ```json
 {
   "generatedAt": "2026-11-17T05:23:59.000Z",
