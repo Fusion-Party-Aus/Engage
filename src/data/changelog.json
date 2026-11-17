@@ -1,5 +1,32 @@
 [
   {
+    "hash": "a851144",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record the management link, retention dates and pilot owners",
+    "details": "Fix the outdated guardian exception, point the empty gallery at the separate publication step, add management screenshots, and add an operations page that names the four unassigned responsibilities: inbox owner, backup, escalation and retention sweep operator. Refs #143"
+  },
+  {
+    "hash": "370a811",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Let contributors correct or withdraw with a private link",
+    "details": "Each contribution receives a management token derived from its request reference and a deployment secret, so a retry returns the same link. Only a hash is stored and the raw token lives in the URL fragment, never in a request URL, log or referrer. The link shows the contribution and status, allows a correction that returns it to review and off the gallery, removes a published story from the gallery, or withdraws everything at once. The action is audited as the contributor's and the link stops working afterwards. Retention corrections from review: reply-address expiry runs from a stable approval date, and each sweep clear is conditional on the record still being in the expected state, with the media delete in the same transaction. The show action now requires a prior publication. Interest ratios say they are event ratios, not visitor rates. Refs #143"
+  },
+  {
+    "hash": "86e94fd",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record explicit gallery publication and interest counts",
+    "details": "Refs #143"
+  },
+  {
     "hash": "36c07d8",
     "date": "2026-11-17",
     "type": "docs",
@@ -683,29 +710,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record Sense Box destination picker"
-  },
-  {
-    "hash": "5549e0c",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Offer accessible geographic destination picker"
-  },
-  {
-    "hash": "63e0a28",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record branch identity repair"
-  },
-  {
-    "hash": "2a7452a",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Reuse existing identities and accept national concerns"
   }
 ]
