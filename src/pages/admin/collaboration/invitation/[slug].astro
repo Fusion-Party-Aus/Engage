@@ -1,0 +1,118 @@
+---
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { Button } from '../../../../components/ui/button';
+import Card from '../../../../components/admin/Card.astro';
+import CardContent from '../../../../components/admin/CardContent.astro';
+import CardDescription from '../../../../components/admin/CardDescription.astro';
+import CardHeader from '../../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../../components/admin/CardTitle.astro';
+import InitiativeEditor from '../../../../components/collaboration/InitiativeEditor';
+import { getSessionUser } from '../../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../../lib/db.ts';
+import { getInitiative } from '../../../../lib/collaboration.ts';
+import { readCollaborationOwners } from '../../../../lib/collaboration-operations.ts';
+import { readFunnelSummary } from '../../../../lib/collaboration-funnel.ts';
+import { isPublicInitiativeStatus } from '../../../../lib/collaboration-options.ts';
+import { hasPermission } from '../../../../lib/rbac.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/');
+if (!hasPermission(user, 'collaboration.manage')) return Astro.rewrite('/403/');
+
+const db = await getDatabase(env);
+const initiative = await getInitiative(db, String(Astro.params.slug ?? ''));
+const funnel = initiative ? await readFunnelSummary(db, initiative.slug) : null;
+const owners = await readCollaborationOwners(db);
+if (!initiative) Astro.response.status = 404;
+---
+
+<AdminLayout
+  title={initiative ? initiative.title : 'Invitation'}
+  description="Edit the public invitation, its questions and whether it is accepting contributions."
+  section="stories"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  <div class="admin-stack">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="m-0 text-sm text-muted-foreground">/collaborate/{initiative?.slug ?? ''}/</p>
+      <div class="flex flex-wrap gap-2">
+        <Button href="/admin/collaboration/invitation/" size="sm" variant="outline">All invitations</Button>
+        {initiative && isPublicInitiativeStatus(initiative.status) && (
+          <Button href={`/collaborate/${initiative.slug}/`} size="sm" variant="outline">View public page</Button>
+        )}
+      </div>
+    </div>
+
+    {initiative && funnel ? (
+      <Card class="gap-0">
+        <CardHeader>
+          <CardTitle class="text-base">Interest, last {funnel.windowDays} days</CardTitle>
+          <CardDescription>
+            Counts only. No visitor identities, addresses or typed content are recorded. Ratios are events divided by
+            events, not unique visitors, so they can exceed 100%.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt class="text-sm text-muted-foreground">Arrivals</dt>
+              <dd class="m-0 text-2xl font-semibold">{funnel.stages.view}</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">Started the form</dt>
+              <dd class="m-0 text-2xl font-semibold">{funnel.stages.start}</dd>
+              <dd class="m-0 text-sm text-muted-foreground">{funnel.rates.startedOfViewed}% of arrivals</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">Sent</dt>
+              <dd class="m-0 text-2xl font-semibold">{funnel.stages.submitted}</dd>
+              <dd class="m-0 text-sm text-muted-foreground">{funnel.rates.submittedOfStarted}% of starts</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">Opened account creation</dt>
+              <dd class="m-0 text-2xl font-semibold">{funnel.stages.account_intent}</dd>
+              <dd class="m-0 text-sm text-muted-foreground">{funnel.rates.accountIntentOfSubmitted}% of sends</dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+    ) : null}
+
+    {initiative ? (
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-base">Invitation</CardTitle>
+          <CardDescription>
+            Changes apply to the public page straight away. Existing contributions keep the questions they answered.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <InitiativeEditor
+            client:load
+            slug={initiative.slug}
+            title={initiative.title}
+            summary={initiative.summary}
+            purpose={initiative.purpose}
+            status={initiative.status}
+            correctionEmail={initiative.correctionEmail}
+            defaultCorrectionEmail={owners.correctionEmail}
+            questions={initiative.questions}
+            profile={initiative.profile}
+          />
+        </CardContent>
+      </Card>
+    ) : (
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-base">No invitation found</CardTitle>
+          <CardDescription>No invitation exists with that address.</CardDescription>
+        </CardHeader>
+      </Card>
+    )}
+  </div>
+</AdminLayout>

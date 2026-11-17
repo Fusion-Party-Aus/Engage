@@ -151,11 +151,13 @@ Effective permissions are the union of these sources. National grants satisfy br
 
 A **matter** is the generic governance item. In the data model it is a `proposals` document. `ProposalRecord` is the storage type; "matter" is the extensible domain concept.
 
+A collaboration matter is the exception: an invitation for public stories and photographs, stored in `collaboration_initiatives`, which never appears in `proposals` and supports no governance capability. See [public collaboration matters](../product/collaboration-matters.md).
+
 A matter has:
 
 - identity: `proposalId` (`PROP-*` for seeded/generated proposals, `GOV-*` for governance resolutions), `slug`;
 - content: `title`, `summary`, `outcomes`, `details`, attachment, provenance;
-- type: `kind` — `policy` or `resolution`;
+- type: `kind` — `policy`, `resolution`, or the non-governance `collaboration`; see below for the storage difference;
 - stage: `propose`, `deliberate`, `decide`, `implement`, `archived`;
 - governance coordinates: `originatingBranchId`, `governanceAuthorityBranchId`, `jurisdictionBranchId`, `scope`, `publicationScope`;
 - ballot binding: `ballotRevisionId`, `ballotClosesAt`;
@@ -167,16 +169,16 @@ A matter has:
 
 The matter registry (`src/lib/matters.ts`) declares what a type can do:
 
-| Capability | Policy | Resolution |
-|---|---|---|
-| Deliberation | Yes | Yes |
-| Amendments | Yes | Yes |
-| Ballots | Yes | Yes |
-| Ratification | Yes | **No** |
-| Policy publication | Yes | **No** |
-| Supersession | Yes | Yes |
+| Capability | Policy | Resolution | Collaboration |
+|---|---|---|---|
+| Deliberation | Yes | Yes | **No** |
+| Amendments | Yes | Yes | **No** |
+| Ballots | Yes | Yes | **No** |
+| Ratification | Yes | **No** | **No** |
+| Policy publication | Yes | **No** | **No** |
+| Supersession | Yes | Yes | **No** |
 
-Both types share the five stages and the standard transition table. A resolution can be deliberated, amended, voted and implemented, but it can never enter the Policy Registry. This is the core distinction between **policy proposals** and **governance resolutions**.
+Both governance types share the five stages and the standard transition table. A collaboration matter has no lifecycle stages at all: it is an invitation with an open, paused or closed state, reviewed privately. A resolution can be deliberated, amended, voted and implemented, but it can never enter the Policy Registry. This is the core distinction between **policy proposals** and **governance resolutions**.
 
 Legacy data is normalised at trust boundaries: missing or `proposal` type falls back to `resolution` for `GOV-*` IDs, otherwise `policy`; the alias `governance` maps to `resolution`; unknown non-empty types are rejected.
 

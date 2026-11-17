@@ -17,6 +17,8 @@ Documentation is not a substitute for the code. Where this set and the implement
 |---|---|
 | Understand the product, users and scope | [product/overview.md](product/overview.md) |
 | Understand how Engage relates to Fusion's other systems | [product/ecosystem.md](product/ecosystem.md) |
+| Understand public story and photograph contributions | [product/collaboration-matters.md](product/collaboration-matters.md) |
+| Apply the story contribution safeguards | [guides/story-contribution-safeguards.md](guides/story-contribution-safeguards.md) |
 | Learn the vocabulary and core records | [domain/domain-model.md](domain/domain-model.md) |
 | Understand eligibility, authority and branch scope | [domain/governance-model.md](domain/governance-model.md) |
 | Trace an idea from submission to published policy | [domain/governance-lifecycle.md](domain/governance-lifecycle.md) |
@@ -46,7 +48,8 @@ docs/
 ├── README.md                         # This index and maintenance rules
 ├── product/
 │   ├── overview.md                   # Purpose, users, journeys, scope
-│   └── ecosystem.md                  # Fusion, Horizon, CRM, Core/Auth, Signal, CMS
+│   ├── ecosystem.md                  # Fusion, Horizon, CRM, Core/Auth, Signal, CMS
+│   └── collaboration-matters.md      # Public story and photograph contributions
 ├── domain/
 │   ├── domain-model.md               # Concepts, records, relationships
 │   ├── governance-model.md           # Five authorities, branches, eligibility
@@ -60,7 +63,8 @@ docs/
 ├── guides/
 │   ├── contributing.md               # Change protocol and quality gates
 │   ├── agent-guide.md                # Orientation, invariants, traps, recipes
-│   └── branch-policy-import.md       # Import a branch's adopted policy registry
+│   ├── branch-policy-import.md       # Import a branch's adopted policy registry
+│   └── story-contribution-safeguards.md # Credit, subjects, minors, retention
 ├── governance/
 │   ├── ballot-quorum.md              # Two-tier platform and ballot quorum
 │   └── decision-register.md          # Maintainer-approved governance rules

@@ -23,6 +23,7 @@ export function SearchPicker({
   onChange,
   emptyHint = 'Type at least 2 letters to search.',
   branchId,
+  endpoint = '/api/admin/branches/search',
 }: {
   label: string;
   placeholder?: string;
@@ -31,6 +32,8 @@ export function SearchPicker({
   onChange: (value: PickerResult | null) => void;
   emptyHint?: string;
   branchId?: string;
+  /** Search route returning `{ results: PickerResult[] }`. */
+  endpoint?: string;
 }) {
   const id = useId();
   const [query, setQuery] = useState('');
@@ -55,7 +58,7 @@ export function SearchPicker({
       try {
         const params = new URLSearchParams({ type, q: query.trim() });
       if (branchId) params.set('branchId', branchId);
-      const res = await fetch(`/api/admin/branches/search?${params.toString()}`, { credentials: 'same-origin' });
+      const res = await fetch(`${endpoint}?${params.toString()}`, { credentials: 'same-origin' });
         const data = await res.json().catch(() => ({}));
         if (mine !== seq.current) return;
         if (!res.ok) throw new Error(data.error || 'Search failed.');
@@ -69,7 +72,7 @@ export function SearchPicker({
       }
     }, 250);
     return () => clearTimeout(timer.current);
-  }, [query, type, branchId]);
+  }, [query, type, branchId, endpoint]);
 
   const choose = (item: PickerResult) => {
     onChange(item);

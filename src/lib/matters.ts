@@ -244,12 +244,32 @@ export const RESOLUTION_MATTER_DEFINITION: MatterTypeDefinition = {
   transitions: STANDARD_LIFECYCLE_TRANSITIONS,
 };
 
+export const COLLABORATION_MATTER_DEFINITION: MatterTypeDefinition = {
+  type: "collaboration",
+  label: "Collaboration matter",
+  pluralLabel: "Collaboration matters",
+  description:
+    "A public invitation to contribute stories, photographs or consultation responses. Supports no deliberation, amendments, ballots, ratification or policy publication: contributions are reviewed privately and never become a formal decision.",
+  capabilities: {
+    supportsDeliberation: false,
+    supportsAmendments: false,
+    supportsBallots: false,
+    supportsRatification: false,
+    supportsPolicyPublication: false,
+    supportsSupersession: false,
+    allowedStages: [],
+    compatibleSupersessionTargets: [],
+  },
+  transitions: [],
+};
+
 export function createMatterRegistry(
   extraDefinitions: MatterTypeDefinition[] = [],
 ): MatterRegistry {
   const registry = new MatterRegistry()
     .register(POLICY_MATTER_DEFINITION)
-    .register(RESOLUTION_MATTER_DEFINITION);
+    .register(RESOLUTION_MATTER_DEFINITION)
+    .register(COLLABORATION_MATTER_DEFINITION);
   for (const def of extraDefinitions) {
     registry.register(def);
   }

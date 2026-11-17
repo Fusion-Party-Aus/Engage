@@ -12,6 +12,7 @@ import {
   Home,
   LayoutDashboard,
   LifeBuoy,
+  Camera,
   ListChecks,
   LogOut,
   Mail,
@@ -39,6 +40,7 @@ export type AdminSection =
   | 'roles'
   | 'branches'
   | 'sense-box'
+  | 'stories'
   | 'reports'
   | 'engagement'
   | 'settings'
@@ -57,6 +59,7 @@ const { title, description, section = 'policies', isAdmin = false, isBranchAdmin
 const user = await getSessionUser(Astro.request, runtimeEnv(Astro.locals));
 const canAccessAdmin = isAdmin || isBranchAdmin;
 const canViewMembers = hasPermission(user, 'members.view');
+const canReviewStories = hasPermission(user, 'collaboration.review');
 const canManageRoles = hasPermission(user, 'roles.manage');
 
 const canViewResponsibilities = canAccessAdmin || viewerHasResponsibility(user);
@@ -74,6 +77,7 @@ const peopleItems = [
   { key: 'roles', href: '/admin/roles/', label: 'Roles & permissions', icon: ShieldCheck, show: isAdmin || canManageRoles },
   { key: 'branches', href: '/admin/branches/', label: 'Branches', icon: GitBranch, show: canAccessAdmin },
   { key: 'sense-box', href: '/admin/sense-box/', label: 'Sense Box', icon: LifeBuoy, show: canAccessAdmin },
+  { key: 'stories', href: '/admin/collaboration/', label: 'Collaboration', icon: Camera, show: canReviewStories },
 ].filter((item) => item.show);
 
 const operationsItems = [

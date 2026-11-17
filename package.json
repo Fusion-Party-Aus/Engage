@@ -29,7 +29,9 @@
     "branches:migrate": "node --experimental-strip-types scripts/seed-branches.ts",
     "policies:import-branch": "node --experimental-strip-types scripts/import-branch-policies.ts",
     "branches:participation-migrate": "node --experimental-strip-types scripts/migrate-branch-participation.ts",
-    "membership:verify": "node --experimental-strip-types scripts/membership-verification.ts"
+    "membership:verify": "node --experimental-strip-types scripts/membership-verification.ts",
+    "collaboration:seed": "node --experimental-strip-types scripts/seed-collaboration-pilot.ts",
+    "collaboration:retention": "node --experimental-strip-types scripts/collaboration-retention.ts"
   },
   "dependencies": {
     "@astrojs/node": "11.1.9",

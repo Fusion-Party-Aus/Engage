@@ -365,14 +365,15 @@ export function createMemoryDb(): Db {
         !(cond instanceof RegExp)
       ) {
         if ("$in" in cond && Array.isArray(cond.$in)) {
-          if (
-            !cond.$in.some((item: any) =>
-              item instanceof RegExp
-                ? item.test(String(val ?? ""))
-                : String(item) === String(val),
-            )
-          )
-            return false;
+          const matches = (item: any, candidate: any) =>
+            item instanceof RegExp
+              ? item.test(String(candidate ?? ""))
+              : String(item) === String(candidate);
+          // A document field may itself be an array (for example `channels`).
+          const found = Array.isArray(val)
+            ? val.some((entry) => cond.$in.some((item: any) => matches(item, entry)))
+            : cond.$in.some((item: any) => matches(item, val));
+          if (!found) return false;
           continue;
         }
         if ("$exists" in cond) {
@@ -380,7 +381,12 @@ export function createMemoryDb(): Db {
           continue;
         }
         if ("$nin" in cond) {
-          if (cond.$nin.includes(val)) return false;
+          if (
+            Array.isArray(val)
+              ? val.some((entry) => cond.$nin.includes(entry))
+              : cond.$nin.includes(val)
+          )
+            return false;
           continue;
         }
         if ("$ne" in cond) {

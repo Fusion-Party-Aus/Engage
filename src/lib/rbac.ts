@@ -21,6 +21,8 @@ export type PermissionKey =
   | "branches.verify_members"
   | "branches.refer_proposals"
   | "sense_box.review"
+  | "collaboration.review"
+  | "collaboration.manage"
   | "reports.export"
   | "engagement.manage"
   | "settings.manage"
@@ -35,6 +37,7 @@ export interface PermissionDefinition {
     | "Amendments & Ballots"
     | "Policy Registry"
     | "Members & Branches"
+    | "Collaboration"
     | "Reporting & Platform";
   label: string;
   description: string;
@@ -205,6 +208,25 @@ export const PERMISSION_CATALOGUE: PermissionDefinition[] = [
     allowedScopes: ["national", "branch"],
     sensitive: true,
     sensitivityNote: "Contains private member community input.",
+  },
+  {
+    key: "collaboration.review",
+    group: "Collaboration",
+    label: "Review story contributions",
+    description:
+      "Read public story and photograph contributions, decide what may be published, and record where approved material was used.",
+    allowedScopes: ["national"],
+    sensitive: true,
+    sensitivityNote:
+      "Contains unpublished personal material, contact details and photographs of identifiable people.",
+  },
+  {
+    key: "collaboration.manage",
+    group: "Collaboration",
+    label: "Manage collaboration invitations",
+    description:
+      "Open, pause or close a public invitation and edit the questions it asks.",
+    allowedScopes: ["national"],
   },
   {
     key: "reports.export",
