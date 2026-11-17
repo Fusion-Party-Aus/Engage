@@ -238,7 +238,6 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 - the privacy policy now describes this purpose, account linking and the aggregate counts (version 1.6) but remains owner-authorised with legal review outstanding;
 - the correction inbox, escalation path and monthly retention sweep have no named owner or backup; see [collaboration pilot operations](collaboration-pilot-operations.md);
 - the credit format is not decided, and a single caption may not describe several individual photographs well enough;
-- a linked contribution does not appear on the member's public profile; the link is stored for a later feature, not shown anywhere;
 - there is no derivative-approval step for an AI-edited photograph, and the production-image policy for edited photographs is undecided;
 
 - invitation interest counts are aggregate events, not people, and an account step is not a registration; there is no per-channel or per-source attribution;

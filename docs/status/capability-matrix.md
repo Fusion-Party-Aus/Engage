@@ -20,7 +20,7 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Read a published policy | Implemented when a record is published | `/policies/[slug]/` |
 | Branch directory | Implemented | `/branches/` |
 | Public concern submission (Sense Box) | Implemented | `/sense-box/`, rate-limited |
-| Public story and photograph contribution | Implemented | Admin-managed invitations at `/admin/collaboration/invitation/`, guest intake at `/collaborate/<slug>/`, private review, approved gallery at `/collaborate/<slug>/stories/`, private contributor management link, optional account linking, authenticated Horizon feed, aggregate interest counts, [model](../product/collaboration-matters.md) |
+| Public story and photograph contribution | Implemented | Admin-managed invitations at `/admin/collaboration/invitation/`, guest intake at `/collaborate/<slug>/`, private review, approved gallery at `/collaborate/<slug>/stories/`, private contributor management link, optional account linking shown on the public profile, authenticated Horizon feed, aggregate interest counts, [model](../product/collaboration-matters.md) |
 | How-it-works and changelog | Implemented | `/how-it-works/`, `/changelog/` |
 | Terms and privacy pages | Implemented but inactive as a gate | Documents are owner-authorised; acceptance gate off |
 | Branded 403/404/500 | Implemented | `src/pages/403.astro`, `404.astro`, `500.astro` |
