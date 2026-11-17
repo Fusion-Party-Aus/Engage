@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { loadBallotCryptoConfigForRead } from "./ballot-crypto.ts";
 import { bindBallotToRevision } from "./ballot-binding.ts";
 import { recordFormalDecision } from "./ballots.ts";
+import type { BallotAct } from "./ballot-authority.ts";
 import type { PermissionKey } from "./rbac.ts";
 import type { PlatformEnv } from "./types.ts";
 
@@ -68,6 +69,12 @@ export interface GovernanceCommand<TInput, TSubject> {
   /** The single permission this act requires. Declared per route too. */
   readonly requiredPermission: PermissionKey;
   /**
+   * The ballot-authority act this command performs. The route policy resolves
+   * it through `ballotActs`; commands without a ballot act fall back to the
+   * branch-scope permission check.
+   */
+  readonly ballotAct?: BallotAct;
+  /**
    * What must be true before the command executes. Documented for readers;
    * enforced by the domain function each command delegates to, not by this
    * layer.
@@ -109,6 +116,7 @@ const ballotBind: GovernanceCommand<BindBallotInput, BindBallotSubject> = {
   id: "ballot.bind",
   summary: "Bind a proposal ballot to one exact immutable wording revision.",
   requiredPermission: "ballots.bind",
+  ballotAct: "bindMatterBallot",
   preconditions: [
     "The proposal exists in the Decide stage.",
     "The selected revision belongs to that proposal.",
@@ -194,6 +202,7 @@ const ballotRecordResult: GovernanceCommand<
   id: "ballot.record_result",
   summary: "Record the certified outcome of a revision-bound formal ballot.",
   requiredPermission: "ballots.record_result",
+  ballotAct: "recordMatterResult",
   preconditions: [
     "The proposal is in the Decide stage with a bound ballot revision.",
     "The ballot is closed.",

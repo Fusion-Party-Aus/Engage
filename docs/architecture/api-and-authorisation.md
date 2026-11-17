@@ -135,7 +135,7 @@ Session resolution:
 | `branchesWithPermission(user, key)` | Enumerates national or branch scope |
 | `canAdministerBranch(user, branchId)` | Branch membership administration |
 | `canManageBranchProposal(user, proposal)` | Proposal/amendment workflow at origin |
-| `canManageBranchBallot(user, proposal)` | Requires matching authority **and** jurisdiction |
+| `ballotActs(viewer, subject)` | Which ballot and amendment acts the viewer may perform on one matter; each act names its own permission and branch scope |
 | `canViewIdentifiableBallots(user)` | National admin or `ballots.view_identifiable` |
 | `canGrantPermissionSet(user, keys, branchId)` | Anti-escalation when creating roles |
 
@@ -177,7 +177,9 @@ The actor is always the resolved session member (`actor.memberId`), never a clie
 `authoriseGovernanceCommand(user, commandId, scope?)` performs both authorisation stages:
 
 1. **Role gate** (no `scope`): national administrator, branch administrator or permission holder. Ordinary moderators fail here.
-2. **Scope gate** (resolved `scope`): `hasPermission(user, permission, branchScope)` plus `canManageBranchBallot` over the ballot's governance authority and jurisdiction. A branch grant never exceeds its branch. A national permission holder satisfies the permission check; the ballot rule still requires a national grant or a matching branch.
+2. **Scope gate** (resolved `scope`): the command's ballot act through `ballotActs`. A branch grant never exceeds its branch; for a branch ballot its governance authority and jurisdiction must also match.
+
+`src/lib/ballot-authority.ts` is the single source for ballot and amendment acts (`bindMatterBallot`, `recordMatterResult`, `resolveAmendment`, `openAmendmentBallot`, `closeAmendmentBallot`, `acceptAmendment`, `applyAmendment`). Routes map a denial to its status and message; administrator pages render the acts a viewer can perform. Act applicability — stage, binding, ballot closure, amendment status — stays with the caller, so a missing control never means “not yet” when it really means “not permitted”.
 
 Each route applies the coarse role gate (`authoriseGovernanceRouteRole`) before reading the body, so an unauthorised caller receives 403 rather than a 400 for malformed input. `runGovernanceRoute(route, { env, user, getDb }, body)` validates input, resolves the governing record and scope, applies the scope gate, then executes. It repeats the coarse gate deliberately so a caller that skips the route-level check still cannot reach a command. `governanceRouteError(route, error)` maps only the route's original domain error class to its status and message; anything else stays a 400. Routes resolve the database lazily after validation so an invalid body still reports 400.
 

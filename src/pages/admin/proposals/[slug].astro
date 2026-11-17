@@ -21,6 +21,7 @@ import {
   User,
 } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
+import { ballotActs, hasAnyBallotAct } from '../../../lib/ballot-authority.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
 import {
@@ -64,25 +65,35 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
 const env = runtimeEnv(Astro.locals);
 const user = await getSessionUser(Astro.request, env);
 if (!user) return Astro.redirect('/member/', 302);
-if (!user.isStaff && !user.isBranchAdmin) Astro.response.status = 403;
+const mayOpenWorkspace =
+  user.isStaff || user.isBranchAdmin || hasAnyBallotAct(user);
+if (!mayOpenWorkspace) Astro.response.status = 403;
 
 const db = await getDatabase(env);
 const slug = Astro.params.slug ?? '';
-let detail = user.isStaff || user.isBranchAdmin
+let detail = mayOpenWorkspace
   ? await getProposalDetail(db, slug, user, { tolerateUnreadableVotes: true })
   : null;
 let forbidden = false;
-if (detail && !user.isStaff && !user.isAdmin) {
-  const allowed = Boolean(
-    detail.proposal.originatingBranchId &&
-      (user.branchAdminIds ?? []).includes(detail.proposal.originatingBranchId),
-  );
-  if (!allowed) {
-    forbidden = true;
-    detail = null;
+let authority: ReturnType<typeof ballotActs> = ballotActs(user, {});
+if (detail) {
+  authority = ballotActs(user, {
+    governanceAuthorityBranchId: detail.proposal.governanceAuthorityBranchId,
+    jurisdictionBranchId: detail.proposal.jurisdictionBranchId,
+    originatingBranchId: detail.proposal.originatingBranchId,
+  });
+  if (!user.isStaff && !user.isAdmin) {
+    const branchAdminForMatter = Boolean(
+      detail.proposal.originatingBranchId &&
+        (user.branchAdminIds ?? []).includes(detail.proposal.originatingBranchId),
+    );
+    if (!branchAdminForMatter && authority.allowed.size === 0) {
+      forbidden = true;
+      detail = null;
+    }
   }
 }
-if (!detail) Astro.response.status = forbidden ? 403 : 404;
+if (!detail) Astro.response.status = !mayOpenWorkspace || forbidden ? 403 : 404;
 
 const proposal = detail?.proposal;
 const comments = detail?.comments ?? [];
@@ -158,13 +169,6 @@ const canManageProposal = Boolean(
     user.isAdmin ||
     (proposal?.originatingBranchId && (user.branchAdminIds ?? []).includes(proposal.originatingBranchId)),
 );
-const canManageBallot = Boolean(
-  user.isAdmin ||
-    (user.isBranchAdmin &&
-      proposal?.governanceAuthorityBranchId &&
-      proposal.governanceAuthorityBranchId === proposal.jurisdictionBranchId &&
-      (user.branchAdminIds ?? []).includes(proposal.governanceAuthorityBranchId)),
-);
 
 const ballotState = proposal?.stage === 'decide'
   ? ballotResult
@@ -178,7 +182,7 @@ const ballotState = proposal?.stage === 'decide'
 // abstention denominator undefined, so abstentions are shown but never change
 // this comparison. D37/D38 add the separate two-tier quorum gate. The tally is
 // read from the same bound set that certification enforces.
-const boundTally = canManageBallot && proposal?.ballotRevisionId
+const boundTally = authority.can("recordMatterResult") && proposal?.ballotRevisionId
   ? (await readBoundBallotTallies(db, {
       ballots: [{ matterId: proposal.proposalId, revisionId: proposal.ballotRevisionId }],
       cryptoConfig: loadBallotTallyCryptoConfig(env),
@@ -296,10 +300,10 @@ const nextAction = (() => {
     return {
       variant: 'warning' as const,
       title: 'Next step: Bind reviewed ballot wording',
-      description: canManageBallot
+      description: authority.can('bindMatterBallot')
         ? 'Member votes are open, but no wording snapshot is bound yet. Bind the reviewed revision before recording an outcome.'
-        : 'This ballot needs a national administrator or matching branch authority to bind the reviewed wording revision.',
-      href: canManageBallot ? '#bind-ballot' : undefined,
+        : 'Binding the reviewed wording needs the ballot-binding permission; a branch ballot also needs matching authority and jurisdiction.',
+      href: authority.can('bindMatterBallot') ? '#bind-ballot' : undefined,
       cta: 'Bind wording',
     };
   }
@@ -312,7 +316,7 @@ const nextAction = (() => {
         : isResolution
           ? 'Once voting closes, record the formal ballot outcome below.'
           : 'Once voting closes, record the formal ballot outcome below. A successful policy vote still requires separate ratification.',
-      href: canManageBallot ? '#record-outcome' : undefined,
+      href: authority.can('recordMatterResult') ? '#record-outcome' : undefined,
       cta: 'Record outcome',
     };
   }
@@ -533,8 +537,15 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
       <ShieldCheck />
       <AlertTitle>Proposal not found</AlertTitle>
       <AlertDescription>
-        <p class="m-0">The record could not be found or is outside your delegated branch scope.</p>
-        <Button className="mt-3" href="/admin/proposals/" variant="outline" size="sm">Back to proposals</Button>
+        <p class="m-0">The record could not be found, or your role cannot manage it.</p>
+        <Button
+          className="mt-3"
+          href={user.isStaff || user.isBranchAdmin ? '/admin/proposals/' : '/member/'}
+          variant="outline"
+          size="sm"
+        >
+          {user.isStaff || user.isBranchAdmin ? 'Back to proposals' : 'Back to My Engage'}
+        </Button>
       </AlertDescription>
     </Alert>
   ) : (
@@ -897,7 +908,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
               </dl>
 
               <!-- Inline Ballot Wording Binding Form -->
-              {canManageBallot && proposal.stage === 'decide' && !proposal.ballotRevisionId && (
+              {authority.can('bindMatterBallot') && proposal.stage === 'decide' && !proposal.ballotRevisionId && (
                 <div id="bind-ballot" class="admin-action-box">
                   <div class="admin-action-box__head">
                     <Lock className="size-4" aria-hidden="true" />
@@ -938,7 +949,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
               )}
 
               <!-- Inline Ballot Outcome -->
-              {canManageBallot && proposal.stage === 'decide' && (
+              {authority.can('recordMatterResult') && proposal.stage === 'decide' && (
                 proposal.ballotRevisionId ? (
                   recordedOutcome ? (
                     <div id="record-outcome" class="admin-action-box">
@@ -1045,9 +1056,9 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                 )
               )}
 
-              {!canManageBallot && (
+              {!authority.can('bindMatterBallot') && !authority.can('recordMatterResult') && (
                 <p class="admin-inline-note">
-                  Ballot binding and outcome controls require national administrator access, or delegated branch authority where governance authority and jurisdiction match your branch.
+                  Binding and recording a ballot result require the matching ballot permission. A branch ballot also requires matching authority and jurisdiction.
                 </p>
               )}
 
@@ -1148,7 +1159,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         {amendment.conflicts?.length ? ` · overlapping fields: ${amendment.conflicts.join(', ')}` : ''}
                       </p>
 
-                      {['proposed', 'stale', 'conflict'].includes(amendment.status) && canManageProposal && (
+                      {['proposed', 'stale', 'conflict'].includes(amendment.status) && authority.can('resolveAmendment') && (
                         <details class="admin-subform-disclosure">
                           <summary>Resolve or review amendment</summary>
                           <form class="amendment-resolve-form mt-3 grid gap-3" data-amendment-id={amendment.amendmentId} data-conflict={String(amendment.status === 'conflict')}>
@@ -1182,7 +1193,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </details>
                       )}
 
-                      {['proposed', 'ready'].includes(amendment.status) && proposal.stage === 'decide' && proposal.ballotRevisionId === amendment.baseRevisionId && canManageBallot && (
+                      {['proposed', 'ready'].includes(amendment.status) && proposal.stage === 'decide' && proposal.ballotRevisionId === amendment.baseRevisionId && authority.can('openAmendmentBallot') && (
                         <form class="amendment-open-form grid gap-2 pt-2" data-amendment-id={amendment.amendmentId}>
                           <div class="admin-actions">
                             <Button variant="outline" size="sm" type="submit">Open amendment endorsement ballot</Button>
@@ -1191,7 +1202,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </form>
                       )}
 
-                      {amendment.status === 'voting' && canManageBallot && (
+                      {amendment.status === 'voting' && authority.can('closeAmendmentBallot') && (
                         <form class="amendment-close-form grid gap-3 pt-2" data-amendment-id={amendment.amendmentId}>
                           <div class="admin-form-grid">
                             <Field label="Endorsement result" htmlFor={`amendment-result-${amendment.amendmentId}`}>
@@ -1213,7 +1224,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </form>
                       )}
 
-                      {amendment.status === 'endorsed' && canManageBallot && (
+                      {amendment.status === 'endorsed' && authority.can('acceptAmendment') && (
                         <form class="amendment-approve-form grid gap-3 pt-2" data-amendment-id={amendment.amendmentId}>
                           <Field label="Formal approval event reference" htmlFor={`amendment-approve-${amendment.amendmentId}`}>
                             <Input id={`amendment-approve-${amendment.amendmentId}`} name="decisionEventId" required maxLength={200} />
@@ -1225,7 +1236,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </form>
                       )}
 
-                      {amendment.status === 'accepted' && canManageBallot && (
+                      {amendment.status === 'accepted' && authority.can('applyAmendment') && (
                         <form class="amendment-apply-form grid gap-2 pt-2" data-amendment-id={amendment.amendmentId}>
                           <div class="admin-actions">
                             <Button variant="outline" size="sm" type="submit">Apply amendment as new proposal revision</Button>

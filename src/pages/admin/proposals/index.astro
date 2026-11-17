@@ -5,6 +5,7 @@ import { NativeSelect } from '../../../components/ui/native-select';
 import { Textarea } from '../../../components/ui/textarea';
 import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, ShieldAlert } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
+import { ballotActs, type BallotAct } from '../../../lib/ballot-authority.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { isProposalLocked } from '../../../lib/store.ts';
 import {
@@ -221,7 +222,13 @@ const stageOptions: Array<[ProposalStage, string]> = [
 ];
 const stageTone = (stage: string) => stage === 'decide' ? 'warning' : stage === 'implement' ? 'success' : stage === 'deliberate' ? 'info' : stage === 'archived' ? 'outline' : 'muted';
 const stageLabel = (stage: string) => stage === 'decide' ? 'Open vote' : stage === 'deliberate' ? 'In discussion' : stage === 'implement' ? 'Implement' : stage === 'archived' ? 'Archived' : 'New idea';
-const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && item.governanceAuthorityBranchId === item.jurisdictionBranchId && branchAdminIds.includes(item.governanceAuthorityBranchId ?? ''));
+const authorityFor = (item: any) => ballotActs(user, {
+  governanceAuthorityBranchId: item.governanceAuthorityBranchId,
+  jurisdictionBranchId: item.jurisdictionBranchId,
+  originatingBranchId: item.originatingBranchId,
+});
+const canManageBallot = (item: any, act: BallotAct) => authorityFor(item).can(act);
+const canReviewAmendments = (item: any) => authorityFor(item).allowed.size > 0;
 ---
 
 
@@ -668,7 +675,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                       </Field>
                     </div>
 
-                    {canManageBallot(item) && item.stage === 'decide' && !item.ballotRevisionId && (
+                    {canManageBallot(item, 'bindMatterBallot') && item.stage === 'decide' && !item.ballotRevisionId && (
                       <details class="admin-disclosure admin-disclosure--muted">
                         <summary><Lock className="size-4" aria-hidden="true" />Review and bind ballot wording</summary>
                         <div class="admin-disclosure__body">
@@ -698,7 +705,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                       </details>
                     )}
 
-                    {canManageBallot(item) && item.stage === 'decide' && item.ballotRevisionId && ballot.state === 'closed' && (
+                    {canManageBallot(item, 'recordMatterResult') && item.stage === 'decide' && item.ballotRevisionId && ballot.state === 'closed' && (
                       <details
                         class="admin-disclosure admin-disclosure--muted inline-outcome-disclosure"
                         data-proposal-id={item.proposalId}
@@ -746,7 +753,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                       </details>
                     )}
 
-                    {(user.isAdmin || user.isBranchAdmin) && (amendmentsByProposal.get(item.proposalId)?.length ?? 0) > 0 && (
+                    {canReviewAmendments(item) && (amendmentsByProposal.get(item.proposalId)?.length ?? 0) > 0 && (
                       <details class="admin-disclosure admin-disclosure--muted">
                         <summary><ListChecks className="size-4" aria-hidden="true" />Review {amendmentsByProposal.get(item.proposalId)!.length} amendment{amendmentsByProposal.get(item.proposalId)!.length === 1 ? '' : 's'}</summary>
                         <div class="admin-disclosure__body">
@@ -762,7 +769,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                                   <ol class="mt-2 grid gap-1 text-xs text-muted-foreground">{amendment.revisionHistory.map((row: any) => <li><code>{String(row.revisionId).slice(0, 8)}</code> · {new Date(row.createdAt).toLocaleString()}</li>)}</ol>
                                 </details>
                               )}
-                              {['proposed', 'stale', 'conflict'].includes(amendment.status) && (
+                              {['proposed', 'stale', 'conflict'].includes(amendment.status) && canManageBallot(item, 'resolveAmendment') && (
                                 <details class="rounded-md border bg-background p-3">
                                   <summary class="cursor-pointer text-sm font-medium">Resolve amendment</summary>
                                   <form class="amendment-resolve-form mt-3 grid gap-3" data-amendment-id={amendment.amendmentId} data-conflict={String(amendment.status === 'conflict')}>
@@ -795,7 +802,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                                   </form>
                                 </details>
                               )}
-                              {['proposed', 'ready'].includes(amendment.status) && item.stage === 'decide' && item.ballotRevisionId === amendment.baseRevisionId && canManageBallot(item) && (
+                              {['proposed', 'ready'].includes(amendment.status) && item.stage === 'decide' && item.ballotRevisionId === amendment.baseRevisionId && canManageBallot(item, 'openAmendmentBallot') && (
                                 <form class="amendment-open-form grid gap-2" data-amendment-id={amendment.amendmentId}>
                                   <p class="admin-inline-note">Open an endorsement ballot against frozen proposal and amendment wording revisions.</p>
                                   <div class="admin-actions">
@@ -804,7 +811,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                                   </div>
                                 </form>
                               )}
-                              {amendment.status === 'voting' && canManageBallot(item) && (
+                              {amendment.status === 'voting' && canManageBallot(item, 'closeAmendmentBallot') && (
                                 <form class="amendment-close-form grid gap-3" data-amendment-id={amendment.amendmentId}>
                                   <div class="admin-form-grid">
                                     <Field label="Endorsement result" htmlFor={`amendment-result-${amendment.amendmentId}`}>
@@ -825,7 +832,7 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
                                   </div>
                                 </form>
                               )}
-                              {amendment.status === 'endorsed' && canManageBallot(item) && (
+                              {amendment.status === 'endorsed' && canManageBallot(item, 'acceptAmendment') && (
                                 <form class="amendment-approve-form grid gap-3" data-amendment-id={amendment.amendmentId}>
                                   <Field label="Formal approval event reference" htmlFor={`amendment-approve-${amendment.amendmentId}`}>
                                     <Input id={`amendment-approve-${amendment.amendmentId}`} name="decisionEventId" required maxLength={200} />

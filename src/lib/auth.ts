@@ -264,33 +264,6 @@ export function canManageBranchProposal(
   );
 }
 
-export function canManageBranchBallot(
-  user: SessionUser,
-  proposal: {
-    governanceAuthorityBranchId?: string;
-    jurisdictionBranchId?: string;
-  },
-): boolean {
-  if (
-    user.isAdmin ||
-    hasPermission(user, "ballots.bind") ||
-    hasPermission(user, "ballots.record_result") ||
-    hasPermission(user, "amendments.manage_ballot")
-  ) {
-    return true;
-  }
-  const branchId = proposal.governanceAuthorityBranchId;
-  if (!branchId || branchId !== proposal.jurisdictionBranchId) {
-    return false;
-  }
-  return Boolean(
-    user.branchAdminIds?.includes(branchId) ||
-    hasPermission(user, "ballots.bind", branchId) ||
-    hasPermission(user, "ballots.record_result", branchId) ||
-    hasPermission(user, "amendments.manage_ballot", branchId),
-  );
-}
-
 /**
  * Identifiable ballot records are restricted to the explicitly authorised
  * role or national permission. Moderators and branch roles must not inherit
