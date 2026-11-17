@@ -3,13 +3,8 @@ import assert from "node:assert/strict";
 import { MongoClient } from "mongodb";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import {
-  castVote,
-  deleteProposal,
-  getProposalDetail,
-  listUserActivity,
-  saveProposal,
-} from "./store.ts";
+import { castVote, listUserActivity } from "./voting-store.ts";
+import { deleteProposal, getProposalDetail, saveProposal } from "./proposals-store.ts";
 import type { SessionUser } from "./types.ts";
 import {
   ensureVoteStorage,

@@ -42,6 +42,10 @@ export interface AmendmentSuggestion {
   proposed: string;
   comment?: string;
   mode: SuggestionMode;
+  /** Exact block before an addition, captured from the base revision. */
+  anchorBefore?: string;
+  /** Exact block after an addition, captured from the base revision. */
+  anchorAfter?: string;
 }
 
 export interface SuggestionClassification {
@@ -71,6 +75,66 @@ export function wordingSnapshot(value: Record<string, any>): WordingSnapshot {
 export function paragraphs(value: string): string[] {
   const trimmed = value.replace(/\r\n/g, '\n').trim();
   return trimmed ? trimmed.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean) : [];
+}
+
+function fieldBlocks(snapshot: WordingSnapshot, field: WordingField): string[] {
+  if (field === 'title') return [snapshot.title];
+  if (field === 'outcomes') return snapshot.outcomes;
+  return paragraphs(snapshot[field]);
+}
+
+/**
+ * Capture the block either side of an addition. On rebase, these anchors decide
+ * where the new block belongs; the numeric index alone is not stable when an
+ * earlier revision inserts or removes blocks.
+ */
+export function anchorSuggestions(
+  snapshot: WordingSnapshot,
+  suggestions: AmendmentSuggestion[],
+): AmendmentSuggestion[] {
+  return suggestions.map((suggestion) => {
+    if (suggestion.mode !== 'add' || suggestion.field === 'title') return suggestion;
+    const blocks = fieldBlocks(snapshot, suggestion.field);
+    if (suggestion.index > blocks.length)
+      throw new Error('Choose a valid position for the new wording.');
+    return {
+      ...suggestion,
+      ...(suggestion.index > 0 ? { anchorBefore: blocks[suggestion.index - 1] } : {}),
+      ...(suggestion.index < blocks.length ? { anchorAfter: blocks[suggestion.index] } : {}),
+    };
+  });
+}
+
+function resolveAdditionIndex(
+  latest: WordingSnapshot,
+  suggestion: AmendmentSuggestion,
+): { index?: number; state: 'clean' | 'moved' | 'conflict' } {
+  const blocks = fieldBlocks(latest, suggestion.field);
+  const before = suggestion.anchorBefore
+    ? blocks.flatMap((value, index) => (value === suggestion.anchorBefore ? [index] : []))
+    : [];
+  const after = suggestion.anchorAfter
+    ? blocks.flatMap((value, index) => (value === suggestion.anchorAfter ? [index] : []))
+    : [];
+  if (suggestion.anchorBefore && before.length !== 1) return { state: 'conflict' };
+  if (suggestion.anchorAfter && after.length !== 1) return { state: 'conflict' };
+  if (before.length && after.length) {
+    const beforeIndex = before[0]!;
+    const afterIndex = after[0]!;
+    if (afterIndex !== beforeIndex + 1) return { state: 'conflict' };
+    return { index: afterIndex, state: afterIndex === suggestion.index ? 'clean' : 'moved' };
+  }
+  if (before.length) {
+    const index = before[0]! + 1;
+    return { index, state: index === suggestion.index ? 'clean' : 'moved' };
+  }
+  if (after.length) {
+    const index = after[0]!;
+    return { index, state: index === suggestion.index ? 'clean' : 'moved' };
+  }
+  // An addition created before anchors existed cannot be placed safely once
+  // the surrounding wording changes.
+  return { state: 'conflict' };
 }
 
 export function wordingBlocks(snapshot: WordingSnapshot): WordingBlock[] {
@@ -207,6 +271,10 @@ export function applySuggestions(
     let changed = false;
     for (const suggestion of suggestions.filter((item) => item.field === field)) {
       if (suggestion.mode === 'add') {
+        if (suggestion.index > baseBlocks.length) {
+          if (!unresolved.includes(field)) unresolved.push(field);
+          continue;
+        }
         const list = additions.get(suggestion.index) ?? [];
         list.push(suggestion.proposed);
         additions.set(suggestion.index, list);
@@ -294,15 +362,11 @@ export function classifySuggestions(
 ): SuggestionClassification[] {
   return suggestions.map((suggestion) => {
     if (suggestion.mode === 'add') {
-      const length = suggestion.field === 'outcomes'
-        ? latest.outcomes.length
-        : suggestion.field === 'title'
-          ? 1
-          : paragraphs(latest[suggestion.field]).length;
+      const resolved = resolveAdditionIndex(latest, suggestion);
       return {
         suggestionId: suggestion.suggestionId,
-        state: suggestion.index <= length ? 'clean' : 'conflict',
-        index: Math.min(suggestion.index, length),
+        state: resolved.state,
+        ...(resolved.index !== undefined ? { index: resolved.index } : {}),
       };
     }
     const latestMatches = locateOriginal(latest, suggestion);
@@ -333,14 +397,19 @@ export function rebaseSuggestions(
   const classifications: SuggestionClassification[] = [];
   for (const suggestion of suggestions) {
     if (suggestion.mode === 'add') {
-      const length = suggestion.field === 'outcomes'
-        ? latest.outcomes.length
-        : suggestion.field === 'title'
-          ? 1
-          : paragraphs(latest[suggestion.field]).length;
-      const index = Math.min(suggestion.index, length);
+      const resolved = resolveAdditionIndex(latest, suggestion);
+      if (resolved.index === undefined) {
+        unresolved.push(suggestion.field);
+        classifications.push({ suggestionId: suggestion.suggestionId, state: 'conflict' });
+        continue;
+      }
+      const index = resolved.index;
       rebased.push({ ...suggestion, index });
-      classifications.push({ suggestionId: suggestion.suggestionId, state: 'clean', index });
+      classifications.push({
+        suggestionId: suggestion.suggestionId,
+        state: resolved.state,
+        index,
+      });
       continue;
     }
     const matches = locateOriginal(latest, suggestion);

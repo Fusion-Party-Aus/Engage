@@ -22,7 +22,8 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { getProposalDetail, isGovernanceResolution, listProposals } from '../../../lib/store.ts';
+import { getProposalDetail, listProposals } from '../../../lib/proposals-store.ts';
+import { isGovernanceResolution } from '../../../lib/proposal-helpers.ts';
 import {
   ballotOutcomeLabel,
   loadBallotTallyCryptoConfig,
@@ -148,7 +149,7 @@ const branchNameFor = (branchId?: string) =>
   branchId ? String(branches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
 
 const unresolvedAmendments = amendmentRows.filter((amendment: any) =>
-  ['proposed', 'conflict', 'stale', 'ready', 'endorsed', 'voting'].includes(String(amendment.status)),
+  ['proposed', 'conflict', 'stale', 'ready', 'endorsed', 'voting', 'applying'].includes(String(amendment.status)),
 ).length;
 const unrespondedComments = comments.filter((comment) => !comment.feedback).length;
 
@@ -1252,10 +1253,14 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </form>
                       )}
 
-                      {amendment.status === 'accepted' && canManageBallot && (
+                      {['accepted', 'applying'].includes(amendment.status) && canManageBallot && (
                         <form class="amendment-apply-form grid gap-2 pt-2" data-amendment-id={amendment.amendmentId}>
                           <div class="admin-actions">
-                            <Button variant="outline" size="sm" type="submit">Apply amendment as new proposal revision</Button>
+                            <Button variant="outline" size="sm" type="submit">
+                              {amendment.status === 'applying'
+                                ? 'Retry incomplete application'
+                                : 'Apply amendment as new proposal revision'}
+                            </Button>
                             <span class="admin-status" role="status" aria-live="polite"></span>
                           </div>
                         </form>

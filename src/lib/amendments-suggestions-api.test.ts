@@ -173,6 +173,128 @@ it("refuses to apply a competing amendment after another amendment already appli
   assert.match(((await response.json()) as { error: string }).error, /precedence/);
 });
 
+it("serialises concurrent apply requests and leaves one consistent applied revision", async () => {
+  const db = await getDatabase(env);
+  const proposal = await saveProposal(db, admin, {
+    title: `Atomic apply ${crypto.randomUUID()}`,
+    space: "Governance",
+    summary: "A proposal used to test concurrent amendment application.",
+    outcomes: ["First outcome", "Second outcome"],
+    details: "Rationale.",
+    stage: "deliberate",
+  });
+  const base = await latestRevision(db, proposal.proposalId);
+  const amendmentId = crypto.randomUUID();
+  await db.collection("amendments").insertOne({
+    amendmentId,
+    proposalId: proposal.proposalId,
+    baseRevisionId: base.revisionId,
+    currentRevisionId: crypto.randomUUID(),
+    authorId: "dev-member-01",
+    changes: { outcomes: ["Applied once", "Second outcome"] },
+    fields: ["outcomes"],
+    status: "accepted",
+    conflicts: [],
+    createdAt: new Date(),
+  });
+  const results = await Promise.all([
+    applyAmendment({
+      request: request("/api/admin/amendments/apply", adminCookie, { amendmentId }),
+      locals,
+    } as never),
+    applyAmendment({
+      request: request("/api/admin/amendments/apply", adminCookie, { amendmentId }),
+      locals,
+    } as never),
+  ]);
+  const statuses = results.map((result) => result.status);
+  assert.equal(statuses.filter((status) => status === 200).length, 1);
+  assert.ok(statuses.some((status) => status === 409 || status === 404));
+  const stored = await db.collection("amendments").findOne({ amendmentId });
+  assert.equal(stored?.status, "applied");
+  const revisions = await db.collection("proposal_revisions").find({ proposalId: proposal.proposalId }).toArray();
+  assert.equal(revisions.length, 2, "exactly one proposal revision is appended");
+});
+
+it("releases a claimed amendment when the proposal write fails", async () => {
+  const db = await getDatabase(env);
+  const proposal = await saveProposal(db, admin, {
+    title: `Release claim ${crypto.randomUUID()}`,
+    space: "Governance",
+    summary: "A proposal used to test a failed amendment application.",
+    outcomes: ["First outcome"],
+    details: "Rationale.",
+    stage: "deliberate",
+  });
+  const base = await latestRevision(db, proposal.proposalId);
+  await db.collection("proposal_votes").insertOne({
+    ballotId: `proposal:${proposal.proposalId}`,
+    proposalId: proposal.proposalId,
+    revisionId: base.revisionId,
+    memberId: "dev-member-01",
+    choice: "approve",
+    updatedAt: new Date(),
+  });
+  const amendmentId = crypto.randomUUID();
+  await db.collection("amendments").insertOne({
+    amendmentId,
+    proposalId: proposal.proposalId,
+    baseRevisionId: base.revisionId,
+    currentRevisionId: crypto.randomUUID(),
+    authorId: "dev-member-01",
+    changes: { outcomes: ["Blocked change"] },
+    fields: ["outcomes"],
+    status: "accepted",
+    conflicts: [],
+    createdAt: new Date(),
+  });
+  const response = await applyAmendment({
+    request: request("/api/admin/amendments/apply", adminCookie, { amendmentId }),
+    locals,
+  } as never);
+  assert.equal(response.status, 400);
+  const stored = await db.collection("amendments").findOne({ amendmentId });
+  assert.equal(stored?.status, "accepted");
+  assert.equal(stored?.applyingToken, undefined);
+});
+
+it("recovers an incomplete applying state after the recovery window", async () => {
+  const db = await getDatabase(env);
+  const proposal = await saveProposal(db, admin, {
+    title: `Recover apply ${crypto.randomUUID()}`,
+    space: "Governance",
+    summary: "A proposal used to test amendment application recovery.",
+    outcomes: ["First outcome"],
+    details: "Rationale.",
+    stage: "deliberate",
+  });
+  const base = await latestRevision(db, proposal.proposalId);
+  const amendmentId = crypto.randomUUID();
+  await db.collection("amendments").insertOne({
+    amendmentId,
+    proposalId: proposal.proposalId,
+    baseRevisionId: base.revisionId,
+    currentRevisionId: crypto.randomUUID(),
+    authorId: "dev-member-01",
+    changes: { outcomes: ["Recovered change"] },
+    fields: ["outcomes"],
+    status: "applying",
+    applyingToken: "recovery-token",
+    applyingStartedAt: new Date(Date.now() - 120_000),
+    applyingBy: "dev-admin-01",
+    conflicts: [],
+    createdAt: new Date(),
+  });
+  const response = await applyAmendment({
+    request: request("/api/admin/amendments/apply", adminCookie, { amendmentId }),
+    locals,
+  } as never);
+  assert.equal(response.status, 200);
+  const stored = await db.collection("amendments").findOne({ amendmentId });
+  assert.equal(stored?.status, "applied");
+  assert.equal(stored?.applyingToken, undefined);
+});
+
 it("refuses an anchor that disappeared and accepts explicit replacement wording", async () => {
   const db = await getDatabase(env);
   const proposal = await saveProposal(db, admin, {

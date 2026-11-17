@@ -13,7 +13,8 @@ import {
   normalizeProposalScopeKey,
   storedProposalScopeKey,
 } from "./proposal-scope.ts";
-import { castVote, saveProposal } from "./store.ts";
+import { castVote } from "./voting-store.ts";
+import { saveProposal } from "./proposals-store.ts";
 import type { SessionUser } from "./types.ts";
 
 const root = new URL("../../", import.meta.url);

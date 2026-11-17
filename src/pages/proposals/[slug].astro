@@ -27,7 +27,17 @@ import AmendmentSuggestions from '../../components/proposal/AmendmentSuggestions
 import { competingTargets, wordingSnapshot } from '../../lib/amendment-suggestions.ts';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { canRespondToContribution, canViewProposal, getProposalDetail, isGovernanceResolution, listOutstandingDecisions, normalizeProposalDoc, resolveContributionEvidenceMap } from '../../lib/store.ts';
+import {
+  canRespondToContribution,
+  resolveContributionEvidenceMap,
+} from '../../lib/contribution-feedback.ts';
+import {
+  canViewProposal,
+  isGovernanceResolution,
+  normalizeProposalDoc,
+} from '../../lib/proposal-helpers.ts';
+import { getProposalDetail } from '../../lib/proposals-store.ts';
+import { listOutstandingDecisions } from '../../lib/voting-store.ts';
 import { getProposalEligibility } from '../../lib/branch-participation.ts';
 import { hasPermission } from '../../lib/rbac.ts';
 import { commentUpvotePercent, compareComments } from '../../lib/comment-thread.ts';

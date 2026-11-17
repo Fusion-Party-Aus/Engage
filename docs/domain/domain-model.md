@@ -271,7 +271,7 @@ Key rules:
 
 - An amendment may be created only while the matter is in Propose or Deliberate.
 - It must name a base revision of that matter.
-- A member may submit whole-field replacements or block-anchored suggestions. A suggestion quotes the exact title, summary paragraph, commitment or rationale paragraph it changes; the server reconstructs the whole-field `changes` used by resolution, the ballot and apply. Block anchors improve reconciliation and inline display but never change the ballot binding or adoption rules.
+- A member may submit whole-field replacements or block-anchored suggestions. A suggestion quotes the exact title, summary paragraph, commitment or rationale paragraph it changes; the server reconstructs the whole-field `changes` used by resolution, the ballot and apply. An addition also captures the blocks either side of its insertion point, so a later revision cannot silently move it. Block anchors improve reconciliation and inline display but never change the ballot binding or adoption rules.
 - `stale` means the base is no longer latest; `conflict` means an edited field has since changed.
 - Resolution rebases onto the latest revision and records a new amendment revision.
 - An amendment ballot can be opened only while the matter ballot is in Decide and the amendment's base equals the matter's ballot revision.

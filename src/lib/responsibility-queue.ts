@@ -171,6 +171,7 @@ const ACTIONABLE_AMENDMENT_STATUSES = [
   "voting",
   "endorsed",
   "accepted",
+  "applying",
 ] as const;
 
 const AMENDMENT_STATUS_ORDER: Record<string, number> = {
@@ -181,6 +182,7 @@ const AMENDMENT_STATUS_ORDER: Record<string, number> = {
   voting: 4,
   endorsed: 5,
   accepted: 6,
+  applying: 7,
 };
 
 const SEVEN_DAYS_MS = 7 * 86_400_000;
@@ -808,6 +810,16 @@ async function loadAmendmentGroup(
         "Record approval",
         "Endorsed; formal approval is not recorded.",
         "amendments.manage_ballot",
+      );
+      continue;
+    }
+
+    if (status === "applying") {
+      if (!canApplyAmendment(viewer, matter)) continue;
+      push(
+        "Complete amendment application",
+        "A previous application did not finish. Retry to reconcile the proposal and amendment state.",
+        "amendments.apply",
       );
       continue;
     }

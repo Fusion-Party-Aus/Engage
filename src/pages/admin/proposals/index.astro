@@ -6,7 +6,7 @@ import { Textarea } from '../../../components/ui/textarea';
 import { FileText, Gavel, GitBranch, ListChecks, Lock, PlusCircle, Search, ShieldAlert } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { isProposalLocked } from '../../../lib/store.ts';
+import { isProposalLocked } from '../../../lib/proposal-helpers.ts';
 import {
   EMPTY_PROPOSAL_REGISTER,
   listProposalRegister,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MongoClient, type Db } from "mongodb";
-import { initializeDatabase } from "./db.ts";
+import { ensureDatabaseIndexes } from "./db-indexes.ts";
 import {
   BallotDomainError,
   recordFormalDecision,
@@ -10,12 +10,8 @@ import {
 import { BALLOT_RESULTS_BALLOT_INDEX } from "./ballot-results-index-migration.ts";
 import { GOVERNANCE_EVENTS_COLLECTION } from "./governance-relationships.ts";
 import { resolveLegacyPermissions } from "./rbac.ts";
-import {
-  ProposalDeletionConflictError,
-  castVote,
-  deleteProposal,
-  saveProposal,
-} from "./store.ts";
+import { ProposalDeletionConflictError, deleteProposal, saveProposal } from "./proposals-store.ts";
+import { castVote } from "./voting-store.ts";
 import type { SessionUser } from "./types.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 
@@ -81,7 +77,7 @@ async function withDatabase(run: (db: Db) => Promise<void>): Promise<void> {
     `engage_gov_mongo_test_${crypto.randomUUID().replaceAll("-", "")}`,
   );
   try {
-    await initializeDatabase(db);
+    await ensureDatabaseIndexes(db);
     await run(db);
   } finally {
     try {

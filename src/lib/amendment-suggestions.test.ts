@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   amendmentsCompete,
+  anchorSuggestions,
   applySuggestions,
   classifySuggestions,
   competingTargets,
@@ -147,9 +148,9 @@ test('word diff keeps unchanged words and marks edits', () => {
 test('multiple additions in one field are applied in the order written', () => {
   const applied = applySuggestions(base, [
     suggestion({ field: 'outcomes', index: 2, original: '', proposed: 'Third commitment', mode: 'add' }),
-    suggestion({ field: 'outcomes', index: 3, original: '', proposed: 'Fourth commitment', mode: 'add' }),
+    suggestion({ field: 'outcomes', index: 2, original: '', proposed: 'Fourth commitment', mode: 'add' }),
     suggestion({ field: 'details', index: 2, original: '', proposed: 'Third rationale paragraph.', mode: 'add' }),
-    suggestion({ field: 'details', index: 3, original: '', proposed: 'Fourth rationale paragraph.', mode: 'add' }),
+    suggestion({ field: 'details', index: 2, original: '', proposed: 'Fourth rationale paragraph.', mode: 'add' }),
   ]);
   assert.deepEqual(applied.unresolved, []);
   assert.deepEqual(applied.changes.outcomes, [
@@ -222,6 +223,34 @@ test('competition detection falls back to fields for legacy amendments', () => {
     ),
     false,
   );
+});
+
+test('rebase moves an insertion when an earlier block is added', () => {
+  const anchored = anchorSuggestions(base, [
+    suggestion({ field: 'outcomes', index: 1, original: '', proposed: 'Inserted commitment', mode: 'add' }),
+  ]);
+  const latest = wordingSnapshot({
+    ...base,
+    outcomes: ['A new leading commitment', 'Run more services', 'Improve connections'],
+  });
+  const rebased = rebaseSuggestions(anchored, latest);
+  assert.deepEqual(rebased.unresolved, []);
+  assert.equal(rebased.suggestions[0]?.index, 2);
+  assert.deepEqual(rebased.changes.outcomes, [
+    'A new leading commitment',
+    'Run more services',
+    'Inserted commitment',
+    'Improve connections',
+  ]);
+});
+
+test('rebase refuses an insertion whose surrounding anchors are ambiguous', () => {
+  const repeated = wordingSnapshot({ ...base, outcomes: ['A', 'A', 'B'] });
+  const anchored = anchorSuggestions(repeated, [
+    suggestion({ field: 'outcomes', index: 1, original: '', proposed: 'Between', mode: 'add' }),
+  ]);
+  const rebased = rebaseSuggestions(anchored, { ...repeated, outcomes: ['X', 'A', 'A', 'B'] });
+  assert.deepEqual(rebased.unresolved, ['outcomes']);
 });
 
 test('paragraph splitting ignores empty prose', () => {

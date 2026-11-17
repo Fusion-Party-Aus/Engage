@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { MongoClient } from "mongodb";
-import { initializeDatabase } from "./db.ts";
+import { ensureDatabaseIndexes } from "./db-indexes.ts";
 import {
   CRM_OPERATIONAL_SETTINGS_ID,
   DEFAULT_CRM_SETTINGS,
@@ -34,7 +34,7 @@ async function withDatabase(run: (db: import("mongodb").Db) => Promise<void>): P
   const dbName = `engage_ops_settings_${crypto.randomUUID().replaceAll("-", "")}`;
   const db = client.db(dbName);
   try {
-    await initializeDatabase(db);
+    await ensureDatabaseIndexes(db);
     await run(db);
   } finally {
     await db.dropDatabase();
@@ -71,7 +71,7 @@ describe("operational settings persistence", { skip: !uri }, () => {
     const first = await new MongoClient(uri!).connect();
     const firstDb = first.db(name);
     try {
-      await initializeDatabase(firstDb);
+      await ensureDatabaseIndexes(firstDb);
       const result = await saveOperationalSettings(firstDb, actor, {
         ...DEFAULT_OPERATIONAL_THRESHOLDS,
         schedulerStaleHours: 30,
@@ -136,7 +136,7 @@ describe("operational settings persistence", { skip: !uri }, () => {
     const first = await new MongoClient(uri!).connect();
     const firstDb = first.db(name);
     try {
-      await initializeDatabase(firstDb);
+      await ensureDatabaseIndexes(firstDb);
       const crm = await saveCrmSettings(firstDb, actor, {
         ...DEFAULT_CRM_SETTINGS,
         crmVerificationEnabled: true,

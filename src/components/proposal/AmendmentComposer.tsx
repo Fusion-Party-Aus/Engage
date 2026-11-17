@@ -62,13 +62,12 @@ export default function AmendmentComposer({ proposalId, baseRevisionId, snapshot
   const startReplace = (field: WordingField, index: number, value: string) =>
     setDraft({ mode: 'replace', field, index, original: value, proposed: value, comment: '' });
   const startAdd = (field: WordingField) => {
-    const additions = suggestions.filter((suggestion) => suggestion.field === field && suggestion.mode === 'add').length;
     const length = field === 'outcomes'
       ? snapshot.outcomes.length
       : field === 'title'
         ? 1
         : paragraphs(snapshot[field]).length;
-    setDraft({ mode: 'add', field, index: length + additions, original: '', proposed: '', comment: '' });
+    setDraft({ mode: 'add', field, index: length, original: '', proposed: '', comment: '' });
   };
   const startRemove = (field: WordingField, index: number, value: string) =>
     setDraft({ mode: 'remove', field, index, original: value, proposed: '', comment: '' });
@@ -85,7 +84,9 @@ export default function AmendmentComposer({ proposalId, baseRevisionId, snapshot
       return;
     }
     const comment = draft.comment.trim();
-    const existing = suggestions.find((suggestion) => suggestion.field === draft.field && suggestion.index === draft.index);
+    const existing = draft.mode === 'add'
+      ? undefined
+      : suggestions.find((suggestion) => suggestion.field === draft.field && suggestion.index === draft.index);
     const next: AmendmentSuggestion = {
       suggestionId: existing?.suggestionId ?? `local-${draft.field}-${draft.index}-${Date.now()}`,
       field: draft.field,
@@ -96,7 +97,9 @@ export default function AmendmentComposer({ proposalId, baseRevisionId, snapshot
       mode: draft.mode,
     };
     setSuggestions((current) => [
-      ...current.filter((suggestion) => !(suggestion.field === draft.field && suggestion.index === draft.index)),
+      ...current.filter((suggestion) =>
+        draft.mode === 'add' || !(suggestion.field === draft.field && suggestion.index === draft.index),
+      ),
       next,
     ].sort((a, b) => a.field.localeCompare(b.field) || a.index - b.index));
     setDraft(null);
@@ -250,7 +253,7 @@ export default function AmendmentComposer({ proposalId, baseRevisionId, snapshot
         <div className="space-y-3">
           <h3 className="m-0 text-base">Preview</h3>
           {suggestions.map((suggestion) => (
-            <div key={`${suggestion.field}:${suggestion.index}`} data-suggestion-preview={`${suggestion.field}:${suggestion.index}`} className="rounded-lg border p-3">
+            <div key={suggestion.suggestionId} data-suggestion-preview={`${suggestion.field}:${suggestion.index}`} className="rounded-lg border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <strong className="text-sm">{blockLabel(suggestion.field, suggestion.index)}</strong>
                 <Badge variant="muted">{suggestion.mode === 'add' ? 'Addition' : suggestion.mode === 'remove' ? 'Removal' : 'Replacement'}</Badge>

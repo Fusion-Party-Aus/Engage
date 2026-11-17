@@ -6,7 +6,7 @@ import { POST as castVoteRoute } from "../pages/api/votes.ts";
 import { createDevSessionCookie } from "./auth.ts";
 import { closeDatabase, getDatabase } from "./db.ts";
 import { resolveLegacyPermissions } from "./rbac.ts";
-import { saveProposal } from "./store.ts";
+import { saveProposal } from "./proposals-store.ts";
 import { setTurnstileTransportForTests } from "./turnstile.ts";
 import {
   enforceAbuseProtection,

@@ -13,7 +13,8 @@ import {
 } from "./ballots.ts";
 import { GOVERNANCE_EVENTS_COLLECTION } from "./governance-relationships.ts";
 import { closeDatabase, getDatabase } from "./db.ts";
-import { castVote, getProposalDetail, listProposals } from "./store.ts";
+import { castVote } from "./voting-store.ts";
+import { getProposalDetail, listProposals } from "./proposals-store.ts";
 import type { PlatformEnv, SessionUser, VoteChoice } from "./types.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 import { POST as recordResultRoute } from "../pages/api/admin/ballots/result.ts";

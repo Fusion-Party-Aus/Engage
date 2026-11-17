@@ -10,6 +10,7 @@ import { getDatabase, runtimeEnv } from "../../lib/db.ts";
 import { requireLegalAcceptance } from "../../lib/legal-acceptance.ts";
 import { createAmendmentRevision } from "../../lib/amendments.ts";
 import {
+  anchorSuggestions,
   applySuggestions,
   classifySuggestions,
   normalizeSuggestions,
@@ -21,7 +22,7 @@ import {
   canReviewArchivedProposal,
   canViewProposal,
   normalizeProposalDoc,
-} from "../../lib/store.ts";
+} from "../../lib/proposal-helpers.ts";
 export const prerender = false;
 export const GET: APIRoute = async ({ url, locals, request }) => {
   const env = runtimeEnv(locals);
@@ -140,6 +141,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (hasSuggestions) {
       try {
         suggestions = normalizeSuggestions(body.suggestions);
+        suggestions = anchorSuggestions(wordingSnapshot(base.snapshot), suggestions);
       } catch (error) {
         return Response.json(
           { error: error instanceof Error ? error.message : "Check the suggested changes." },

@@ -23,7 +23,7 @@ import { GET as openApi } from "../pages/api/v1/openapi.json.ts";
 import { GET as listPublicBranches } from "../pages/api/v1/branches/index.ts";
 import { GET as getProposalDetailApi } from "../pages/api/proposals/[proposalId].ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
-import { castVote } from "./store.ts";
+import { castVote } from "./voting-store.ts";
 import type { SessionUser } from "./types.ts";
 
 it("public Policy API hides unpublished records and publication retries reuse one outbox event", async () => {

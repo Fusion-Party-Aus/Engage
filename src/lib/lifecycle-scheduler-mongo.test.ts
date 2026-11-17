@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MongoClient, type Db } from "mongodb";
-import { initializeDatabase } from "./db.ts";
+import { ensureDatabaseIndexes } from "./db-indexes.ts";
 import { advanceDueDeliberations, closeDueBallots } from "./governance-scheduler.ts";
 import { GOVERNANCE_EVENTS_COLLECTION } from "./governance-relationships.ts";
 import {
   LIFECYCLE_SYSTEM_ACTOR,
   scheduledBallotClosesAtFrom,
 } from "./lifecycle-schedule.ts";
-import { secondProposal } from "./store.ts";
+import { secondProposal } from "./proposals-store.ts";
 import type { SessionUser } from "./types.ts";
 import { proposalBallotId } from "./vote-storage.ts";
 
@@ -42,7 +42,7 @@ async function withDatabase(run: (db: Db) => Promise<void>): Promise<void> {
     `engage_lifecycle_test_${crypto.randomUUID().replaceAll("-", "")}`,
   );
   try {
-    await initializeDatabase(db);
+    await ensureDatabaseIndexes(db);
     await run(db);
   } finally {
     await db.dropDatabase();

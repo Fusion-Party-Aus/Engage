@@ -141,11 +141,12 @@ Only the four snapshot fields are hashed. Attachment, kind, space and provenance
   index,                     // paragraph or commitment position in the base revision
   original,                  // exact quoted block
   proposed,                  // replacement text; empty means remove
-  comment?, mode: "replace" | "remove" | "add"
+  comment?, mode: "replace" | "remove" | "add",
+  anchorBefore?, anchorAfter? // exact surrounding blocks captured for an addition
 }
 ```
 
-Suggestions are stored on the amendment and on each `amendment_revisions` row as evidence. The authoritative ballot/apply value remains the whole-field `changes` map, reconstructed by the server from the base snapshot.
+Suggestions are stored on the amendment and on each `amendment_revisions` row as evidence. The authoritative ballot/apply value remains the whole-field `changes` map, reconstructed by the server from the base snapshot. A rebase places an addition between its captured anchors; if those anchors are missing, duplicated or no longer adjacent, the addition requires officer resolution rather than a guessed index.
 
 ### Vote
 

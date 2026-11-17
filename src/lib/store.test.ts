@@ -1,24 +1,22 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryDb, getDatabase } from "./db.ts";
+import { addComment, deleteComment, toggleUpvoteComment } from "./comments-store.ts";
 import {
-  addComment,
   castVote,
-  deleteComment,
-  deleteProposal,
-  getDefaultProvenanceLabel,
-  getProposalDetail,
-  listMembers,
   listOutstandingDecisions,
-  listProposals,
   listUserActivity,
-  normalizeKind,
   promotePendingVotePreferences,
-  saveMember,
   savePendingVotePreference,
+} from "./voting-store.ts";
+import {
+  deleteProposal,
+  getProposalDetail,
+  listProposals,
   saveProposal,
-  toggleUpvoteComment,
-} from "./store.ts";
+} from "./proposals-store.ts";
+import { getDefaultProvenanceLabel, normalizeKind } from "./proposal-helpers.ts";
+import { listMembers, saveMember } from "./members-store.ts";
 import type { SessionUser } from "./types.ts";
 import { PATCH } from "../pages/api/proposals/[proposalId].ts";
 import { PROPOSAL_VOTES } from "./vote-storage.ts";

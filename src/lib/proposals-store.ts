@@ -38,11 +38,27 @@ function normalisedSourceText(value: unknown): string {
  */
 function reproducesPrivateSource(
   source: Record<string, any>,
-  proposal: { title: string; summary: string; details: string },
+  proposal: {
+    title: string;
+    summary: string;
+    details: string;
+    outcomes?: string[];
+    targetSection?: string;
+    proposedWording?: string;
+    attachmentDescription?: string;
+  },
 ): boolean {
   const title = normalisedSourceText(source.title);
   if (proposal.title.trim().toLowerCase() === title) return true;
-  const text = normalisedSourceText(`${proposal.title}\n${proposal.summary}\n${proposal.details}`);
+  const text = normalisedSourceText([
+    proposal.title,
+    proposal.summary,
+    proposal.details,
+    ...(proposal.outcomes ?? []),
+    proposal.targetSection,
+    proposal.proposedWording,
+    proposal.attachmentDescription,
+  ].join("\n"));
   if (title.length >= 20 && text.includes(title)) return true;
   const detail = normalisedSourceText(source.detail);
   if (detail.length >= 60 && text.includes(detail)) return true;
@@ -1688,7 +1704,15 @@ export async function saveProposal(
         throw new Error(
           "This Sense Box priority has not been published. Confirm that the proposal is independently written before submitting.",
         );
-      if (reproducesPrivateSource(senseSource, { title, summary: rawSummary, details }))
+      if (reproducesPrivateSource(senseSource, {
+        title,
+        summary: rawSummary,
+        details,
+        outcomes,
+        targetSection,
+        proposedWording,
+        attachmentDescription,
+      }))
         throw new Error(
           "This proposal reproduces text from a priority that has not been published. Write the proposal independently, or publish the priority first.",
         );

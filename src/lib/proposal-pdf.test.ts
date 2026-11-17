@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getDatabase } from "./db.ts";
-import { saveProposal } from "./store.ts";
+import { saveProposal } from "./proposals-store.ts";
 import { buildProposalPdfReport } from "./proposal-pdf.ts";
 import { GET as getProposalPdf } from "../pages/api/admin/reports/proposal-pdf.ts";
 import type { CommentRecord, ProposalSummaryView, SessionUser } from "./types.ts";

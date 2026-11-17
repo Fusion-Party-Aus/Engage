@@ -282,6 +282,20 @@ test('a private priority cannot be copied into a public proposal without an inde
     'copied source text is refused even with the acknowledgement',
   );
 
+  await assert.rejects(
+    saveProposal(db, organiser, {
+      title: 'A different transport proposal',
+      space: 'Transport',
+      summary: 'An independently written proposal about transport.',
+      details: 'Independent rationale.',
+      outcomes: ['More frequent trains would help our community.'],
+      sourceSenseSubmissionId: submissionId,
+      privateSourceAcknowledgement: true,
+    }),
+    /reproduces text/,
+    'copied source text in a commitment is refused',
+  );
+
   const independent = await saveProposal(db, organiser, {
     title: 'A different transport proposal',
     space: 'Transport',

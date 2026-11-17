@@ -1,12 +1,15 @@
 import type { APIRoute } from "astro";
+import { randomUUID } from "node:crypto";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
-import { saveProposal } from "../../../../lib/store.ts";
+import { saveProposal } from "../../../../lib/proposals-store.ts";
 import { hasPermission, hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 import {
   amendmentsCompete,
   validateWordingChanges,
 } from "../../../../lib/amendment-suggestions.ts";
+
+const APPLY_RECOVERY_MS = 60_000;
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -24,19 +27,41 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const db = await getDatabase(env);
     const amendment = await db
       .collection("amendments")
-      .findOne({ amendmentId, status: "accepted" });
+      .findOne({ amendmentId, status: { $in: ["accepted", "applying"] } });
     if (!amendment)
       return Response.json(
         { error: "Accepted amendment not found." },
         { status: 404 },
       );
+    const recovering = amendment.status === "applying";
+    if (recovering) {
+      if (!amendment.applyingToken)
+        return Response.json(
+          {
+            error:
+              "This amendment is in an incomplete application state without a recovery token. Review the proposal history before continuing.",
+          },
+          { status: 409 },
+        );
+      const startedAt = amendment.applyingStartedAt
+        ? new Date(amendment.applyingStartedAt).getTime()
+        : 0;
+      if (Date.now() - startedAt < APPLY_RECOVERY_MS)
+        return Response.json(
+          {
+            error:
+              "This amendment is already being applied. Wait a moment and retry if it did not finish.",
+          },
+          { status: 409 },
+        );
+    }
     const latestRows = await db
       .collection("proposal_revisions")
       .find({ proposalId: amendment.proposalId })
       .sort({ createdAt: -1 })
       .limit(1)
       .toArray();
-    if (latestRows[0]?.revisionId !== amendment.baseRevisionId)
+    if (!recovering && latestRows[0]?.revisionId !== amendment.baseRevisionId)
       return Response.json(
         {
           error:
@@ -86,15 +111,69 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { status: 409 },
       );
 
-    const updated = await saveProposal(
-      db,
-      user,
-      {
-        proposalId: amendment.proposalId,
-        ...changes,
-      },
-      { allowAmendmentApply: true },
-    );
+    const applyingToken = recovering ? String(amendment.applyingToken ?? "") : randomUUID();
+    if (!recovering) {
+      const claim = await db.collection("amendments").updateOne(
+        { amendmentId, status: "accepted", baseRevisionId: amendment.baseRevisionId },
+        {
+          $set: {
+            status: "applying",
+            applyingToken,
+            applyingStartedAt: new Date(),
+            applyingBy: user.memberId,
+          },
+        },
+      );
+      if (claim.modifiedCount !== 1)
+        return Response.json(
+          {
+            error:
+              "The amendment changed before it could be applied. Reload the proposal and review its current state.",
+          },
+          { status: 409 },
+        );
+    } else {
+      // Refresh the recovery lease so two late retries cannot run together.
+      const refresh = await db.collection("amendments").updateOne(
+        { amendmentId, status: "applying", applyingToken },
+        { $set: { applyingStartedAt: new Date(), applyingBy: user.memberId } },
+      );
+      if (refresh.modifiedCount !== 1)
+        return Response.json(
+          {
+            error:
+              "The amendment application state changed. Reload the proposal and review its current state.",
+          },
+          { status: 409 },
+        );
+    }
+
+    let updated;
+    try {
+      updated = await saveProposal(
+        db,
+        user,
+        {
+          proposalId: amendment.proposalId,
+          ...changes,
+        },
+        { allowAmendmentApply: true },
+      );
+    } catch (error) {
+      // A failed proposal write can release a fresh claim. A recovery attempt
+      // stays `applying` so the same operation can be retried safely.
+      if (!recovering) {
+        await db.collection("amendments").updateOne(
+          { amendmentId, status: "applying", applyingToken },
+          {
+            $set: { status: "accepted" },
+            $unset: { applyingToken: "", applyingStartedAt: "", applyingBy: "" },
+          },
+        );
+      }
+      throw error;
+    }
+
     const latest = await db
       .collection("proposal_revisions")
       .find({ proposalId: amendment.proposalId })
@@ -106,8 +185,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       .updateOne(
         {
           amendmentId,
-          status: "accepted",
-          baseRevisionId: amendment.baseRevisionId,
+          status: "applying",
+          applyingToken,
         },
         {
           $set: {
@@ -116,13 +195,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
             appliedBy: user.memberId,
             appliedAt: new Date(),
           },
+          $unset: { applyingToken: "", applyingStartedAt: "", applyingBy: "" },
         },
       );
     if (!result.modifiedCount)
       return Response.json(
         {
           error:
-            "Amendment state changed while applying; review proposal history.",
+            "The proposal changed but the amendment status could not be finalised. Retry apply; the operation is idempotent.",
         },
         { status: 409 },
       );
