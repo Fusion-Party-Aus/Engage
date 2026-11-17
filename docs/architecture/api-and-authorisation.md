@@ -14,9 +14,10 @@ All routes are `prerender = false`. `src/middleware.ts` is a perimeter layer onl
 | Proposals | `GET/POST /api/proposals`, `GET/PATCH/DELETE /api/proposals/:id`, `GET /api/proposals/:id/revisions` | Matter CRUD and revision history |
 | Policies (alias) | `GET/POST /api/policies`, `…/:id` | Compatibility aliases over the proposal handlers |
 | Deliberation | `GET/POST/PATCH/PUT/DELETE /api/comments` | Comments, threaded replies (`parentCommentId`), upvotes/downvotes (`action`), contribution feedback. `PATCH` returns aggregate score/percentage and the caller's own vote only; vote identities are never serialised. `DELETE` tombstones a comment that still has replies. |
-| Amendments | `POST /api/amendments` | Submit an amendment |
+| Amendments | `GET/POST /api/amendments` | Read amendments and submit whole-field or block-anchored suggestions |
 | Votes | `GET/POST /api/votes` | Read and cast formal votes or save pending preferences |
-| Sense Box | `POST /api/sense-box` | Public concern submission |
+| Sense Box | `GET/POST/PATCH /api/sense-box` | Public submission; anonymous `GET` returns published priorities only; reviewers use `PATCH` for status, publication and proposal linking |
+| Sense Box discussion | `POST/DELETE /api/sense-box/comments` | Signed-in public discussion and reviewer-only organiser notes |
 | Legal | `POST /api/legal/acceptance` | Record terms/privacy acceptance |
 | Public v1 | `/api/v1/policies`, `/versions`, `/branches`, `/policy-categories`, `/openapi.json` | Read-only published catalogue |
 | Member | `GET/POST /api/member/branches`, `GET/POST /api/member/profile` | Following, branch membership self-service, and the owner's public biography and visibility |

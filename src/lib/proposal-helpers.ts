@@ -298,6 +298,9 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     deliberationEndsAt: raw.deliberationEndsAt
       ? new Date(raw.deliberationEndsAt)
       : undefined,
+    ...(raw.sourceSenseSubmissionId
+      ? { sourceSenseSubmissionId: String(raw.sourceSenseSubmissionId) }
+      : {}),
     implementationNote: raw.implementationNote
       ? String(raw.implementationNote)
       : undefined,

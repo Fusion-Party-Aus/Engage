@@ -119,7 +119,7 @@ A member commenting "I support this" has not voted. A proposal with 90% supporti
 - **Be the membership system of record.** UndergroundCRM is authoritative for person records, party membership and electorate facts. Engage stores the verification outcome and its own participation facts.
 - **Be the party's identity provider.** Authentication is local Better Auth. Fusion Core / Fusion Auth is a future proposal, not a dependency.
 - **Be a general-purpose forum, social network or messaging product.** Deliberation exists to improve governance matters.
-- **Be a survey or sentiment tool.** The Sense Box collects public concerns, but it is not a ballot and creates no decision.
+- **Be a survey or sentiment tool.** The Sense Box collects public concerns, but it is not a ballot and creates no decision. Organisers review every submission; only an explicit publication action makes a priority and its discussion publicly readable.
 - **Replace Signal, Horizon CMS or public websites.** Engage may eventually supply published policy to them; it does not publish campaigns or manage web content.
 - **Implement parliamentary procedure it has not been given.** The two-tier quorum is an explicitly recorded adaptation of Fusion's constitutional principles (D37–D39). Notice periods, tie-breaking beyond D9, the abstention denominator and ratifying authority by jurisdiction are not invented in code.
 - **Guarantee ballot secrecy against a determined administrator in every configuration.** Encryption is available and must be configured; the default deployment stores votes in plaintext. The threat model is documented in [security-audit-and-ballot-encryption.md](../security-audit-and-ballot-encryption.md).

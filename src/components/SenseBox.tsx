@@ -52,9 +52,12 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
     return (
       <div role="status" className="space-y-4">
         <h2>Thank you for sharing</h2>
-        <p>Your priority has been sent to the selected branch’s Sense Box. Organisers can consider it alongside other contributions.</p>
-        <p>We don’t collect contact details here, so you won’t receive a personal reply.</p>
-        <Button href="/proposals/">Explore Engage proposals</Button>
+        <p>Your priority has been sent to the selected branch’s Sense Box. An organiser will review it.</p>
+        <p>If it is published, it will appear with other community priorities and members can discuss it. You won’t receive a personal reply because we don’t collect contact details here.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button href="/sense-box/#priorities">Read published priorities</Button>
+          <Button href="/proposals/" variant="outline">Explore proposals</Button>
+        </div>
       </div>
     );
   }
@@ -120,7 +123,7 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
         <label className="flex items-start gap-3">
           <Checkbox name="consent" required className="mt-1 size-5 shrink-0" />
           <span className="text-sm">
-            I agree to Fusion using my input to understand community priorities and develop ideas. It will be visible to authorised organisers for my branch and national administrators. Summaries may inform public proposals. <a href="/privacy/">Privacy policy</a>
+            I agree to Fusion reviewing my input and, if it is published, showing my priority and its discussion publicly. My name and contact details are not collected. <a href="/privacy/">Privacy policy</a>
           </span>
         </label>
 

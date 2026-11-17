@@ -70,7 +70,7 @@ Legal drafts advance to version 1.2, still **owner-authorised/publication pendin
 
 ## Remaining issues outside the editorial changes
 
-- Public Sense Box after review: #101. Current form/consent/API remain private; do not falsely describe a shipped public listing or expose historical private entries.
+- Public Sense Box after review: implemented in `feat/sense-box-collaboration-inline-amendments` (#101, #147). The form, consent, success state, public listing and privacy policy now describe review-then-publication. Legacy submissions remain private; no retrospective publication was performed.
 - Private/branch-scoped/archived proposal gates and unpublished policy records still restrict reads; D36 describes direction, not shipped access behaviour. Historical #2’s member-only deliberation requirement conflicts with the new direction.
 - Automatic ratification and competing-amendment rules remain incomplete (#27/#34); main `78c07c0` adds durable ballot-open/closing-soon notification delivery (#33/#102). Other event categories remain separate capabilities; do not infer full fan-out.
 - Existing raw permission-key UI/native prompts remain #41/#59. No account/authority redesign here.

@@ -1,22 +1,160 @@
 ---
-import {getSessionUser} from '../../lib/auth.ts';
+import { getSessionUser } from '../../lib/auth.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { STANDARD_BRANCHES } from '../../lib/migrations.ts';
 import SenseBox from '../../components/SenseBox';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Field } from '../../components/ui/field';
+import { NativeSelect } from '../../components/ui/native-select';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { senseDestinations } from '../../lib/sense-box.ts';
+import { listPublicSense, senseDestinations, SenseError } from '../../lib/sense-box.ts';
+import { SENSE_TOPICS } from '../../lib/sense-box-options.ts';
 import { turnstileEnforced } from '../../lib/turnstile.ts';
-export const prerender=false;
-const env=runtimeEnv(Astro.locals);
-const [db,user]=await Promise.all([getDatabase(env),getSessionUser(Astro.request,env)]);
-Astro.response.headers.set('Cache-Control','private, no-store');
-const branches=await senseDestinations(db);
-const requested=Astro.url.searchParams.get('branch') || `branch-${(Astro.url.searchParams.get('state') || '').toLowerCase()}`;
-const initialBranch=branches.find(b=>b.branchId===requested)?.branchId || branches.find(b=>b.name===STANDARD_BRANCHES.find(s=>s.branchId===requested)?.name)?.branchId || branches.find(b=>b.code!=='branch-nat' && user?.verifiedBranchIds?.includes(b.branchId))?.branchId || '';
+export const prerender = false;
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+const branches = await senseDestinations(db);
+const requested = Astro.url.searchParams.get('branch') || `branch-${(Astro.url.searchParams.get('state') || '').toLowerCase()}`;
+const initialBranch = branches.find(b => b.branchId === requested)?.branchId || branches.find(b => b.name === STANDARD_BRANCHES.find(s => s.branchId === requested)?.name)?.branchId || branches.find(b => b.code !== 'branch-nat' && user?.verifiedBranchIds?.includes(b.branchId))?.branchId || '';
+
+const branchId = Astro.url.searchParams.get('branch') ?? '';
+const topic = Astro.url.searchParams.get('topic') ?? '';
+let priorities: Awaited<ReturnType<typeof listPublicSense>> = { items: [], total: 0, page: 1, topics: {} };
+let filterError = '';
+try {
+  priorities = await listPublicSense(db, { page: Astro.url.searchParams.get('page') ?? '1', branchId, topic });
+} catch (error) {
+  filterError = error instanceof SenseError ? error.message : 'Couldn’t load published priorities.';
+}
+const branchName = (id: string) => branches.find(b => b.branchId === id)?.name ?? 'Fusion';
+const pageHref = (page: number) => {
+  const params = new URLSearchParams();
+  if (branchId) params.set('branch', branchId);
+  if (topic) params.set('topic', topic);
+  if (page > 1) params.set('page', String(page));
+  const qs = params.toString();
+  return `/sense-box/${qs ? `?${qs}` : ''}#priorities`;
+};
 ---
-<SiteLayout title="Sense Box · Engage" description="Tell Fusion what matters to your community. Share a concern, suggestion or local priority in your state or territory." canonical="/sense-box/">
-<div class="page-wrap section-space sense-page">
-<header class="page-intro"><p class="text-sm font-semibold uppercase tracking-widest">Sense Box</p><h1>What matters where you live?</h1><p>Share a concern, suggestion or idea with Fusion. You can contribute without being a member or writing a formal proposal.</p></header>
-<div class="sense-layout"><section aria-label="Share your priority">{branches.length?<SenseBox client:load branches={branches} initialBranch={initialBranch} turnstileSiteKey={turnstileEnforced(env) ? (env.PUBLIC_TURNSTILE_SITE_KEY ?? '') : ''}/>:<p role="status">Sense Box is not accepting submissions right now. Please check back soon.</p>}<noscript>Please enable JavaScript to share your priority.</noscript></section><aside><h2>What happens next</h2><p>Your branch’s organisers can review local priorities, understand what matters to your community and identify shared concerns. Some ideas may also inform Engage proposals.</p><p>Submissions are private. Sharing an idea does not make it Fusion policy or guarantee action.</p><p>This form does not ask for your name or contact details.</p><a href="/proposals/">Explore current proposals →</a></aside></div>
-</div></SiteLayout>
-<style>.sense-page{max-width:68rem}.sense-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:4rem;margin-top:2rem}.sense-layout aside{border-top:3px solid var(--horizon-accent);padding-top:1.5rem}.sense-layout aside h2{font-size:1.7rem}.sense-layout aside p{margin:1rem 0;color:var(--horizon-muted)}@media(max-width:767px){.sense-layout{grid-template-columns:1fr;gap:2.5rem}}</style>
+<SiteLayout title="Sense Box · Engage" description="Share a concern, suggestion or local priority with Fusion. Read and discuss priorities published by your branch." canonical="/sense-box/">
+  <div class="page-wrap section-space sense-page">
+    <header class="page-intro">
+      <p class="text-sm font-semibold uppercase tracking-widest">Sense Box</p>
+      <h1>What matters where you live?</h1>
+      <p>Share a concern, suggestion or idea with Fusion. You can contribute without being a member. Organisers review every submission before deciding whether to publish it.</p>
+    </header>
+    <div class="sense-layout">
+      <section aria-label="Share your priority">
+        {branches.length
+          ? <SenseBox client:load branches={branches} initialBranch={initialBranch} turnstileSiteKey={turnstileEnforced(env) ? (env.PUBLIC_TURNSTILE_SITE_KEY ?? '') : ''} />
+          : <p role="status">Sense Box is not accepting submissions right now. Please check back soon.</p>}
+        <noscript>Please enable JavaScript to share your priority.</noscript>
+      </section>
+      <aside>
+        <h2>What happens next</h2>
+        <p>Your branch’s organisers review local priorities and identify shared concerns. Some priorities may become Engage proposals.</p>
+        <p>If an organiser publishes your priority, its title and details appear below and members can discuss it. Publication is always a separate review decision; submitting never publishes it automatically.</p>
+        <p>Submissions are informal community input, not proposals, ballots or Fusion policy. This form does not ask for your name or contact details.</p>
+        <a href="#priorities">Read published priorities →</a>
+      </aside>
+    </div>
+
+    <section id="priorities" class="sense-priorities" aria-labelledby="priorities-heading">
+      <div class="sense-priorities__head">
+        <div>
+          <h2 id="priorities-heading">Published priorities</h2>
+          <p>Reviewed community priorities that organisers have made public. Discussion is open to signed-in members.</p>
+        </div>
+        <Badge variant="muted">{`${priorities.total} ${priorities.total === 1 ? 'priority' : 'priorities'}`}</Badge>
+      </div>
+
+      <form method="get" action="/sense-box/" class="sense-filters" aria-label="Filter published priorities">
+        <Field label="Branch" htmlFor="sense-public-branch">
+          <NativeSelect id="sense-public-branch" name="branch" defaultValue={branchId}>
+            <option value="">All branches</option>
+            {branches.map((branch) => (
+              <option value={branch.branchId} selected={branchId === branch.branchId}>{branch.name}</option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Field label="Topic" htmlFor="sense-public-topic">
+          <NativeSelect id="sense-public-topic" name="topic" defaultValue={topic}>
+            <option value="">All topics</option>
+            {Object.entries(SENSE_TOPICS).map(([key, label]) => (
+              <option value={key} selected={topic === key}>{label} ({priorities.topics[key] ?? 0})</option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <div class="sense-filters__actions">
+          <Button type="submit" size="sm">Filter</Button>
+          {(branchId || topic) && <Button href="/sense-box/#priorities" variant="ghost" size="sm">Clear</Button>}
+        </div>
+      </form>
+
+      {filterError ? (
+        <p role="alert" class="sense-empty">{filterError}</p>
+      ) : priorities.items.length ? (
+        <ul class="sense-priority-list">
+          {priorities.items.map((item) => (
+            <li class="sense-priority">
+              <div class="sense-priority__meta">
+                <span>{branchName(item.branchId)}</span>
+                {item.locality && <span>{item.locality}</span>}
+                <time datetime={item.publishedAt}>{new Date(item.publishedAt).toLocaleDateString('en-AU')}</time>
+                <Badge variant="outline">{SENSE_TOPICS[item.topic]}</Badge>
+              </div>
+              <h3><a href={`/sense-box/${item.submissionId}/`}>{item.title}</a></h3>
+              <p>{item.detail.length > 280 ? `${item.detail.slice(0, 277).trimEnd()}…` : item.detail}</p>
+              <div class="sense-priority__foot">
+                <span>{`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}</span>
+                {item.linkedProposal && (
+                  <a href={`/proposals/${item.linkedProposal.slug}/`}>Linked proposal: {item.linkedProposal.title}</a>
+                )}
+                <a href={`/sense-box/${item.submissionId}/`}>Read and discuss →</a>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div class="sense-empty">
+          <p>No priorities have been published for this filter yet.</p>
+          <p>Share yours above and an organiser will review it.</p>
+        </div>
+      )}
+
+      {(priorities.page > 1 || priorities.page * 12 < priorities.total) && (
+        <nav class="sense-pagination" aria-label="Published priority pages">
+          {priorities.page > 1 && <Button href={pageHref(priorities.page - 1)} variant="outline" size="sm">Previous</Button>}
+          {priorities.page * 12 < priorities.total && <Button href={pageHref(priorities.page + 1)} variant="outline" size="sm">Next</Button>}
+        </nav>
+      )}
+    </section>
+  </div>
+</SiteLayout>
+<style>
+  .sense-page{max-width:68rem}
+  .sense-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:4rem;margin-top:2rem}
+  .sense-layout aside{border-top:3px solid var(--horizon-accent);padding-top:1.5rem}
+  .sense-layout aside h2{font-size:1.7rem}
+  .sense-layout aside p{margin:1rem 0;color:var(--horizon-muted)}
+  .sense-priorities{margin-top:5rem;border-top:1px solid var(--horizon-line);padding-top:2.5rem;scroll-margin-top:7rem}
+  .sense-priorities__head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem;align-items:start}
+  .sense-priorities__head h2{margin:0;font-size:2rem}
+  .sense-priorities__head p{margin:.5rem 0 0;color:var(--horizon-muted);max-width:48rem}
+  .sense-filters{display:flex;flex-wrap:wrap;gap:1rem;align-items:end;margin:1.5rem 0}
+  .sense-filters__actions{display:flex;gap:.5rem}
+  .sense-priority-list{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
+  .sense-priority{border:1px solid var(--horizon-line);border-radius:1rem;padding:1.25rem;background:var(--horizon-surface)}
+  .sense-priority__meta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;color:var(--horizon-muted);font-size:.85rem}
+  .sense-priority h3{margin:.6rem 0 .4rem;font-size:1.35rem}
+  .sense-priority h3 a{color:var(--horizon-ink);text-decoration:none}
+  .sense-priority h3 a:hover{text-decoration:underline}
+  .sense-priority p{margin:0;color:var(--horizon-muted);white-space:pre-wrap}
+  .sense-priority__foot{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;margin-top:.9rem;font-size:.9rem}
+  .sense-empty{border:1px dashed var(--horizon-line-strong);border-radius:1rem;padding:1.5rem;color:var(--horizon-muted)}
+  .sense-empty p{margin:.25rem 0}
+  .sense-pagination{display:flex;gap:.75rem;margin-top:1.5rem}
+  @media(max-width:767px){.sense-layout{grid-template-columns:1fr;gap:2.5rem}}
+</style>

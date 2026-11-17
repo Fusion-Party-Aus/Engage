@@ -20,7 +20,9 @@ import PolicyChangeTypeSelector from '../../../components/proposal/PolicyChangeT
 import { ImagePlus, Link as LinkIcon } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { canViewProposal, normalizeProposalDoc } from '../../../lib/store.ts';
+import { canViewProposal, normalizeProposalDoc } from '../../../lib/proposal-helpers.ts';
+import { getSenseSubmission, SenseError } from '../../../lib/sense-box.ts';
+import { SENSE_TOPICS } from '../../../lib/sense-box-options.ts';
 import {
   defaultProposalScopeKey,
   listProposalSubmissionScopes,
@@ -68,12 +70,36 @@ const changeTypeOptions = POLICY_CHANGE_TYPES.map((type) => ({
   description: POLICY_CHANGE_GUIDANCE[type].description,
 }));
 const guidance = POLICY_CHANGE_GUIDANCE[changeType];
+
+// A reviewer may develop a proposal from a Sense Box priority. The source is
+// only a drafting aid: it grants no governance authority and does not publish
+// the original submission.
+const requestedSenseId = (Astro.url.searchParams.get('sense') ?? '').trim();
+let senseSource: Awaited<ReturnType<typeof getSenseSubmission>> = null;
+let senseError = '';
+if (requestedSenseId && user) {
+  try {
+    senseSource = await getSenseSubmission(db, user, requestedSenseId);
+    if (!senseSource) senseError = 'That Sense Box priority was not found.';
+  } catch (error) {
+    senseError = error instanceof SenseError ? error.message : 'Couldn’t load that Sense Box priority.';
+  }
+}
+const sensePrefill = senseSource
+  ? {
+      title: senseSource.title,
+      summary: senseSource.detail,
+      details: `This proposal was developed from a Sense Box priority raised in ${senseSource.locality || 'the community'}.\n\n${senseSource.detail}`,
+      space: SENSE_TOPICS[senseSource.topic],
+    }
+  : null;
+
 const defaultTitle = targetPolicy
   ? defaultPolicyChangeTitle(changeType, String(targetPolicy.title ?? ''))
-  : '';
+  : sensePrefill?.title ?? '';
 const inheritedSpace = targetPolicy
   ? String(targetPolicy.category ?? '').trim() || 'General'
-  : '';
+  : sensePrefill?.space ?? '';
 const targetJurisdictionBranchId = targetPolicy?.jurisdictionBranchId
   ? String(targetPolicy.jurisdictionBranchId)
   : '';
@@ -144,6 +170,28 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
       </section>
     )}
 
+    {senseError && (
+      <Alert className="callout" variant="warning">
+        <AlertDescription><p>{senseError}</p></AlertDescription>
+      </Alert>
+    )}
+
+    {sensePrefill && (
+      <Card className="policy-change-existing">
+        <CardHeader>
+          <CardTitle>Developing a proposal from a Sense Box priority</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p class="mt-0"><strong>{sensePrefill.title}</strong></p>
+          <p>{sensePrefill.summary}</p>
+          <p class="text-sm text-muted-foreground">
+            The draft below is prefilled from the priority. Edit it into a proposal in your own words.
+            This does not publish the original submission or link it automatically.
+          </p>
+        </CardContent>
+      </Card>
+    )}
+
     {isPolicyChange && openPolicyChangeProposals.length > 0 && (
       <Card className="policy-change-existing">
         <CardHeader>
@@ -192,6 +240,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
         data-policy-change={isPolicyChange ? 'true' : undefined}
         data-policy-title={isPolicyChange ? String(targetPolicy!.title) : undefined}
       >
+        {senseSource && <input type="hidden" name="sourceSenseSubmissionId" value={senseSource.submissionId} />}
         {isPolicyChange ? (
           <>
             <input type="hidden" name="targetPolicyId" value={targetPolicy!.policyId} />
@@ -215,6 +264,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
                 rows={5}
                 placeholder={guidance.summaryPlaceholder}
                 aria-describedby="policy-summary-hint"
+                defaultValue={sensePrefill?.summary}
               />
               <p class="field-hint" id="policy-summary-hint">{guidance.summaryHint}</p>
             </Field>
@@ -269,7 +319,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
 
             <div class="topic-field-block">
               <Field label="Topic" htmlFor="proposal-topic">
-                <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} placeholder="Choose a topic below or type your own (e.g. Housing, Climate)" />
+                <Input id="proposal-topic" name="space" required minLength={2} maxLength={100} defaultValue={sensePrefill?.space} placeholder="Choose a topic below or type your own (e.g. Housing, Climate)" />
               </Field>
               <div class="topic-chips" role="group" aria-label="Suggested topics">
                 {quickTopics.map((topic) => (
@@ -296,7 +346,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
             )}
 
             <Field label="What would change?" htmlFor="proposal-summary">
-              <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} placeholder="Describe what should change and why. Other members will refine the wording during discussion." />
+              <Textarea id="proposal-summary" name="summary" required minLength={10} maxLength={2000} rows={4} defaultValue={sensePrefill?.summary} placeholder="Describe what should change and why. Other members will refine the wording during discussion." />
             </Field>
           </>
         )}
@@ -341,6 +391,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
                 id="proposal-details"
                 name="details"
                 rows={7}
+                defaultValue={sensePrefill?.details}
                 placeholder="Explain the problem, share evidence and link to useful references."
               />
               <p class="field-hint">
@@ -506,6 +557,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     const changeType = String(data.get('changeType') ?? '').trim();
     const targetSection = String(data.get('targetSection') ?? '').trim();
     const proposedWording = String(data.get('proposedWording') ?? '').trim();
+    const sourceSenseSubmissionId = String(data.get('sourceSenseSubmissionId') ?? '').trim();
     const declaresPolicyChange = Boolean(targetPolicyId && changeType);
     const outcomes = String(data.get('outcomes') ?? '')
       .split('\n')
@@ -527,6 +579,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
       ...(changeType !== 'repeal' ? { outcomes } : {}),
       ...(attachmentUrl ? { attachmentUrl } : {}),
       ...(attachmentDescription ? { attachmentDescription } : {}),
+      ...(sourceSenseSubmissionId ? { sourceSenseSubmissionId } : {}),
       stage: 'propose',
       ...(scopeKey ? { scope: scopeKey } : {}),
     };

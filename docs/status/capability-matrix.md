@@ -20,6 +20,10 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Read a published policy | Implemented when a record is published | `/policies/[slug]/` |
 | Branch directory | Implemented | `/branches/` |
 | Public concern submission (Sense Box) | Implemented | `/sense-box/`, rate-limited |
+| Review-then-publish Sense Box priorities | Implemented | Explicit publication action; legacy rows stay private |
+| Public Sense Box discussion | Implemented | `/sense-box/[submissionId]/`; signed-in members comment, anyone reads |
+| Link or develop a proposal from Sense Box | Implemented | Admin workspace; composer prefill records the source |
+| Block-anchored amendments | Implemented | Title, summary, commitments and rationale with inline diffs |
 | How-it-works and changelog | Implemented | `/how-it-works/`, `/changelog/` |
 | Terms and privacy pages | Implemented but inactive as a gate | Documents are owner-authorised; acceptance gate off |
 | Branded 403/404/500 | Implemented | `src/pages/403.astro`, `404.astro`, `500.astro` |

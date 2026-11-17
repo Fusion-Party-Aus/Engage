@@ -25,6 +25,7 @@ import {
 } from "./proposal-helpers.ts";
 import { geographicScopeForBranch, parseProposalScopeInput } from "./proposal-scope.ts";
 import { hasPermission } from "./rbac.ts";
+import { canReviewSense } from "./sense-box.ts";
 import type {
   CommentRecord,
   PendingVotePreferenceRecord,
@@ -1636,6 +1637,26 @@ export async function saveProposal(
   const proposalId =
     existingId ||
     `PROP-${String(count + 1).padStart(3, "0")}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+
+  // A proposal may be drafted from a Sense Box priority by a reviewer. The
+  // source is provenance only: it never publishes the submission, changes a
+  // ballot, or grants the proposal any authority.
+  const requestedSenseSource =
+    typeof body.sourceSenseSubmissionId === "string"
+      ? body.sourceSenseSubmissionId.trim()
+      : "";
+  if (existing && requestedSenseSource)
+    throw new Error("A proposal's Sense Box source is fixed when it is created.");
+  let senseSource: Record<string, any> | null = null;
+  if (!existing && requestedSenseSource) {
+    senseSource = await db.collection("sense_submissions").findOne({ submissionId: requestedSenseSource });
+    if (!senseSource) throw new Error("That Sense Box priority was not found.");
+    if (!canReviewSense(user, String(senseSource.branchId)))
+      throw new Error("You are not authorised to develop that Sense Box priority.");
+    if (senseSource.linkedProposalId)
+      throw new Error("That Sense Box priority is already linked to a proposal.");
+  }
+
   const baseSlug = slugify(title) || proposalId.toLowerCase();
   const slugConflict = await col.findOne({ slug: baseSlug });
   const slug = slugConflict
@@ -1678,6 +1699,7 @@ export async function saveProposal(
           changeType: policyChange.changeType,
         }
       : {}),
+    ...(requestedSenseSource ? { sourceSenseSubmissionId: requestedSenseSource } : {}),
     provenance,
     authorId: user.memberId,
     authorName: user.name || "Verified Member",
@@ -1711,6 +1733,20 @@ export async function saveProposal(
     await db
       .collection("proposal_revisions")
       .insertOne(revision, sessionOpts);
+    if (senseSource) {
+      await db.collection("sense_submissions").updateOne(
+        { submissionId: requestedSenseSource, linkedProposalId: { $exists: false } },
+        {
+          $set: {
+            linkedProposalId: proposalId,
+            linkedProposalAt: now,
+            linkedProposalBy: user.memberId,
+            ...(senseSource.status !== "archived" ? { status: "developing" } : {}),
+          },
+        },
+        sessionOpts,
+      );
+    }
     if (stage === "decide") {
       await recordGovernanceEvent(
         db,

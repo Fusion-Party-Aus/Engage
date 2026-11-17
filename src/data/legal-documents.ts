@@ -79,7 +79,7 @@ export const privacyPolicy: LegalDocument = {
   shortTitle: "Privacy Policy",
   description:
     "How Fusion Party Australia collects, uses, shares and retains personal information in Engage.",
-  version: "1.2 (workflow and access wording; publication pending)",
+  version: "1.3 (Sense Box publication and discussion)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -89,7 +89,7 @@ export const privacyPolicy: LegalDocument = {
   registeredPartyAbbreviation: "votefusion.org",
   address: "254 McLeod Lane, Mansfield VIC 3722",
   contact: "contact@fusionparty.org.au",
-  lastUpdated: "15 November 2026",
+  lastUpdated: "17 November 2026",
   sections: [
     {
       id: "about",
@@ -170,7 +170,8 @@ export const privacyPolicy: LegalDocument = {
           items: [
             `proposals: title, summary, outcomes, details, supporting links or attachments, topic, stage, originating branch, governance authority, jurisdiction, publication scope, your display name and member identifier, timestamps, and each saved wording revision;`,
             `contributions: your display name, stance, text, timestamp and endorsements. An endorsement is stored as a member identifier; the public page shows only the number of endorsements;`,
-            `formal amendments: the proposed wording, the revision it is based on, your member identifier, timestamps, status, revision history, any conflict flag and any administrative reason;`,
+            `formal amendments: the proposed wording, the revision it is based on, the exact block quoted by each suggestion, your member identifier, timestamps, status, revision history, any conflict flag and any administrative reason;`,
+            `Sense Box priorities: the priority title, details, optional suburb or town, topic, selected branch, submission time and consent version. The form does not ask for your name, email address or account identifier. A priority is private to authorised reviewers until one of them explicitly publishes it. A published priority and its public discussion can be read by anyone, including people who are not signed in. Reviewer notes are never public. Priorities collected under an earlier private-review promise remain private.`,
             `votes: the ballot and proposal, the exact wording revision, your choice, an optional reason of up to 500 characters, your display name, your member identifier and the time you voted or last changed your vote;`,
             `ballot administration: recorded outcomes, decision event references, binding events, ratification records and publication events.`,
           ],

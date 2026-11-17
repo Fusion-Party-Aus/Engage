@@ -204,6 +204,11 @@ export async function initializeDatabase(db: Db): Promise<void> {
   await ensureJobRunIndexes(db);
   await Promise.all([
     db.collection("sense_submissions").createIndex({branchId:1,createdAt:-1}),
+    db.collection("sense_submissions").createIndex({submissionId:1},{unique:true}),
+    db.collection("sense_submissions").createIndex({visibility:1,publishedAt:-1}),
+    db.collection("sense_submissions").createIndex({linkedProposalId:1}),
+    db.collection("sense_comments").createIndex({submissionId:1,visibility:1,createdAt:1}),
+    db.collection("sense_comments").createIndex({commentId:1},{unique:true}),
     db.collection("rate_limits").createIndex({expiresAt:1},{expireAfterSeconds:0,name:"rate_limit_expiry"}),
   ]);
   await Promise.all([
