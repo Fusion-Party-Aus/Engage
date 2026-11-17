@@ -1,12 +1,156 @@
 [
   {
-    "hash": "0237117",
+    "hash": "2755ce0",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record contribution withdrawal, retention and safeguards",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "b2a45d3",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "db",
+    "summary": "Allow a local MongoDB selection timeout override",
+    "details": "A slow local Docker MongoDB took longer than 400 ms to answer its first selection, so development silently fell back to the in-memory preview and pages looked empty. The override applies locally; production keeps its 3 s default. Refs #143"
+  },
+  {
+    "hash": "b245754",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Add pre-launch safeguards and privacy text",
+    "details": "Write the operating rules for photographer credit, other identifiable people, minors, AI-assisted edits, publishing and mistaken publication, and mark what still needs an owner decision. Extend the privacy policy (version 1.3) for the contribution purpose, its reviewer access and its retention schedule, while it remains owner-authorised with legal review outstanding. Refs #143"
+  },
+  {
+    "hash": "f882ed8",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover withdrawal clearing and retention windows",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "e2c0586",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Delete material on withdrawal and by retention sweep",
+    "details": "Withdrawing a story now removes its text, name, reply address and photographs immediately, keeping only the review record and its date. Add a monthly sweep for declined material after 90 days, legacy withdrawals and approved reply addresses after 12 months. The sweep is dry-run by default and records what it would clear. Tell contributors the photo and third-party rules at intake, and warn reviewers that withdrawal is irreversible for the material. Refs #143"
+  },
+  {
+    "hash": "4c35e88",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the collaboration documentation note",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "c9a692b",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Separate accounts, membership and contributing",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "49e9bae",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the contribution form clarification",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "e12368c",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Make optional story answers explicit",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "a4107bf",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record public collaboration matters",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "5a087b0",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "agents",
+    "summary": "Require new features to be configurable by default",
+    "details": "Add a standing rule: editor-facing wording, questions and options belong in stored configuration, while permissions, consent vocabulary and security bounds stay in reviewed code. Refs #143"
+  },
+  {
+    "hash": "8ca0dbc",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record the matter model and launch obligations",
+    "details": "Describe the collaboration Matter, its consent and data handling, what editors can change without code, and the legal and image-policy gaps that must close before the invitation is promoted publicly. Refs #143"
+  },
+  {
+    "hash": "869f76e",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover guest intake, consent and private media",
+    "details": "Prove the guest path needs no account, consent cannot be widened from the client, private-only contributions cannot be approved, an anonymous name is never stored, concurrency cannot overwrite a decision, and image bytes stay private and metadata-free. Real-MongoDB cases cover unique references, version writes and the BSON media round trip. Refs #143"
+  },
+  {
+    "hash": "8cb56f8",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add the story review queue and invitation editor",
+    "details": "Reviewers see each contribution with its answers, private photographs and consent summary, then record a decision, a note and where an approved item was used. Editors own the invitation wording, questions and open state without a deployment; question keys stay stable so earlier answers remain attached. Refs #143"
+  },
+  {
+    "hash": "c86bcd2",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish the story invitation and contribution form",
+    "details": "Add /collaborate/ and /collaborate/<slug>/ where anyone can read the invitation and send story answers, photographs, or both without an account or party membership. The form asks for publication channels, credit, edit and AI-edit permission and an optional reply address before sending, keeps every answer when a submission fails, and never claims publication has happened. Refs #143"
+  },
+  {
+    "hash": "a11c60d",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Model public story matters and guest intake",
+    "details": "Register a collaboration Matter type with no governance capability and no lifecycle stage, so a public invitation can never be deliberated, balloted, amended, ratified or published as policy. Add guest submission with a versioned consent scope, private media storage, metadata stripping for JPEG and PNG, reviewer-only permissions, and a durable rate limit plus Turnstile action for the public form. Refs #143"
+  },
+  {
+    "hash": "90bc0c1",
     "date": "2026-11-17",
     "type": "feat",
     "category": "feature",
     "scope": "settings",
-    "summary": "Make public site settings stored and audited only (#128)",
-    "details": "Remove the environment fallbacks for search indexing, the header action, sharing image, social channels, branch directory, repository link and the public pulse poll. Stored values under Platform settings win; absent values use the documented code defaults. APP_MODE still supplies the production indexing default. The repository link is now editable in the Operations section instead of read-only, with URL validation, the operations audit section and no raw keys. Invalid saved values fall back to defaults and the settings page names the saved settings that could not be used. Align the stored-value sanitiser with the API validators so an invalid saved value cannot partly apply. Tests cover every removed variable having no effect, stored values winning, defaults, invalid fallback, API validation and audit."
+    "summary": "Make public site settings stored and audited only (#128) (#144)",
+    "details": "* feat(settings): make public site settings stored and audited only (#128) Remove the environment fallbacks for search indexing, the header action, sharing image, social channels, branch directory, repository link and the public pulse poll. Stored values under Platform settings win; absent values use the documented code defaults. APP_MODE still supplies the production indexing default. The repository link is now editable in the Operations section instead of read-only, with URL validation, the operations audit section and no raw keys. Invalid saved values fall back to defaults and the settings page names the saved settings that could not be used. Align the stored-value sanitiser with the API validators so an invalid saved value cannot partly apply. Tests cover every removed variable having no effect, stored values winning, defaults, invalid fallback, API validation and audit. * chore(changelog): record public site settings migration (#128)"
   },
   {
     "hash": "831e950",
@@ -551,137 +695,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record proposal experience changes"
-  },
-  {
-    "hash": "1c13678",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Simplify discovery and expose ballot progression"
-  },
-  {
-    "hash": "50a7710",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "agents.md",
-    "summary": "Enhance AGENTS.md with more bounded structure for Coding agents working on the repository"
-  },
-  {
-    "hash": "d619b8f",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record audited platform settings"
-  },
-  {
-    "hash": "5bb7e82",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add audited platform settings and branch hierarchy validation",
-    "details": "Replace the raw JSON platform settings form with a task-based settings workspace. Administrators can manage visibility, public features, social channels and the branch website directory, with server-side URL validation, read-only infrastructure notes and a recorded change history that supports restoring earlier values. Enforce branch parent kinds on the server so states and territories sit under National and local branches sit under a state or territory. Add coverage for the settings API, audit history, restore behaviour and branch hierarchy rules."
-  },
-  {
-    "hash": "b808f0b",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record durable migrations and branch seed"
-  },
-  {
-    "hash": "e2137a5",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add durable database migrations and standard branch seed",
-    "details": "Add Admin -> Migrations for national administrators. The page previews each additive migration, shows the last recorded run and any error, and applies Standard branches or Branch participation individually or in order. Every run is recorded in data_migrations with run count, timestamps, actor and result. Standard branches is an idempotent seed for Fusion National, VIC, NSW, QLD, WA, SA, TAS, ACT and NT with National as parent; existing branches are never renamed, re-parented or un-recognised. Branch participation remains blocked until the National branch exists. The command-line seed now uses the same service, and the participation migration remains available for deployment automation."
-  },
-  {
-    "hash": "b980369",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record branch participation and verification"
-  },
-  {
-    "hash": "a727732",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Separate branch following from verified membership",
-    "details": "Members choose the branches they follow during onboarding and in My Engage. Authorised administrators verify followers as members in a focused Branch governance workspace. Branch subscriptions are now Engage-owned preferences, while verified organisational membership stays in branch_memberships with source, verification and audit metadata. National governance is included for every verified account and never removed by branch preferences. Existing members without branch connections receive national scope silently and a one-time state branch invitation. Eligibility is decided in one service used by proposal pages, ballot submission, pending-vote promotion and digests. Followers can discover branch activity but cannot vote. Revocation requires a reason and preserves historical votes and the person's following preference. The migration backfills legacy membership metadata, adds subscriptions without duplicating them, assigns open proposals without branch context to national governance, and leaves branch-owned and archived records untouched. The Underground CRM boundary is implemented through applyExternalMembership: external membership facts can update organisational membership but never branch subscriptions, and local administrators cannot silently override CRM-sourced records. Tests cover national defaults, follow/unfollow idempotency, source integrity, permissions, migration, parent/child eligibility and new proposal defaults."
-  },
-  {
-    "hash": "ba482d0",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the member engagement admin repair"
-  },
-  {
-    "hash": "34166c8",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Repair proxy test sends and clarify admin delivery reporting",
-    "details": "Use JSON and the configured public origin to prevent the reverse proxy from rejecting admin test email before provider submission. Separate explicit provider rejection from uncertain sends, expose safe self-only receipts, and keep test bounces isolated from member preferences. Replace raw engagement reporting with responsive cards, period controls, a read-only audience preview and expandable diagnostics. Historical ballot opportunity coverage remains explicitly unavailable. Validation: 144 tests passed, 15 optional tests skipped; Astro check and build passed; mocked-provider HTTP and DOM interaction checks passed. Browser screenshots and authenticated production delivery remain blocked and are documented."
-  },
-  {
-    "hash": "69ca17a",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record passing lifecycle checks and campaign review materials"
-  },
-  {
-    "hash": "8d457fc",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "email",
-    "summary": "Keep verification notices within narrow mobile screens"
-  },
-  {
-    "hash": "300966c",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Let administrators inspect the proposed re-engagement audience"
-  },
-  {
-    "hash": "9e72e64",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "member",
-    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
-  },
-  {
-    "hash": "71a61de",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ci",
-    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
-  },
-  {
-    "hash": "cb39b60",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record lifecycle audit, consent assessment and rollout checks"
   }
 ]
