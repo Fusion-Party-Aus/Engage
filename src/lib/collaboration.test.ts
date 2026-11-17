@@ -890,7 +890,6 @@ test("the public gallery contains only approved website stories, credited as cho
 
   // Approval alone never publishes.
   assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 0);
-  const publishedAt = new Date().toISOString();
   for (const id of [named.contributionId, anonymous.contributionId]) {
     await setGalleryPublication(db, reviewer, { contributionId: id, state: "publish", version: 1 });
   }

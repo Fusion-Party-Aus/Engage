@@ -1477,7 +1477,7 @@ export interface PublishedContribution {
  * chose the website channel, whose material still exists, and which a reviewer
  * has not hidden. Written responses are never published individually.
  */
-const PUBLISHED_FILTER = {
+export const PUBLISHED_CONTRIBUTION_FILTER = {
   status: "approved",
   profile: "story",
   channels: { $in: ["website"] },
@@ -1493,7 +1493,7 @@ export async function listPublishedContributions(
 ): Promise<PublishedContribution[]> {
   const rows = await db
     .collection(CONTRIBUTIONS)
-    .find({ ...PUBLISHED_FILTER, initiativeSlug })
+    .find({ ...PUBLISHED_CONTRIBUTION_FILTER, initiativeSlug })
     .sort({ galleryPublishedAt: -1, _id: -1 })
     .limit(60)
     .toArray();
@@ -1525,7 +1525,7 @@ export async function countPublishedContributions(
   db: Db,
   initiativeSlug: string,
 ): Promise<number> {
-  return db.collection(CONTRIBUTIONS).countDocuments({ ...PUBLISHED_FILTER, initiativeSlug });
+  return db.collection(CONTRIBUTIONS).countDocuments({ ...PUBLISHED_CONTRIBUTION_FILTER, initiativeSlug });
 }
 
 /** Public media for a currently published story. Everything else is a 404. */
@@ -1540,7 +1540,7 @@ export async function readPublishedMedia(
   if (!media) throw new CollaborationError("That photo is not available.", 404);
   const published = await db
     .collection(CONTRIBUTIONS)
-    .findOne({ ...PUBLISHED_FILTER, contributionId: media.contributionId });
+    .findOne({ ...PUBLISHED_CONTRIBUTION_FILTER, contributionId: media.contributionId });
   if (!published) throw new CollaborationError("That photo is not available.", 404);
   const stored = media.bytes;
   const bytes = Buffer.isBuffer(stored)
