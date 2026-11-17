@@ -8,4 +8,5 @@ export const TURNSTILE_ACTIONS = {
   signIn: "signin",
   signUp: "signup",
   senseBox: "sense-box",
+  collaborate: "collaborate",
 } as const;

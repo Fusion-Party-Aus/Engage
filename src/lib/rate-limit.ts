@@ -29,6 +29,7 @@ export const RATE_LIMIT_COLLECTION = "rate_limits";
  */
 export const RATE_LIMITS = {
   "sense-box-submit": { limit: 10, windowMs: 10 * 60_000 },
+  "collaboration-submit": { limit: 5, windowMs: 10 * 60_000 },
   "auth-magic-link": { limit: 10, windowMs: 10 * 60_000 },
   "auth-sign-up": { limit: 5, windowMs: 60 * 60_000 },
 } as const satisfies Record<string, { limit: number; windowMs: number }>;

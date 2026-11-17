@@ -231,6 +231,16 @@ export async function initializeDatabase(db: Db): Promise<void> {
     db.collection("membership_verification_reviews").createIndex({status:1,createdAt:1}),
     db.collection("membership_verification_events").createIndex({eventId:1},{unique:true}),
     db.collection("membership_verification_events").createIndex({memberId:1,createdAt:-1}),
+    // Public collaboration matters (#143). Contributions are private until an
+    // explicit approval; media bytes live in their own collection so a list read
+    // can never select them by accident.
+    db.collection("collaboration_initiatives").createIndex({slug:1},{unique:true,name:"collaboration_slug_unique"}),
+    db.collection("collaboration_contributions").createIndex({contributionId:1},{unique:true,name:"collaboration_contribution_unique"}),
+    db.collection("collaboration_contributions").createIndex({status:1,createdAt:-1},{name:"collaboration_status"}),
+    db.collection("collaboration_media").createIndex({mediaId:1},{unique:true,name:"collaboration_media_unique"}),
+    db.collection("collaboration_media").createIndex({contributionId:1},{name:"collaboration_media_contribution"}),
+    db.collection("collaboration_events").createIndex({eventId:1},{unique:true,name:"collaboration_event_unique"}),
+    db.collection("collaboration_events").createIndex({contributionId:1,at:-1},{name:"collaboration_event_contribution"}),
   ]);
   try {
     await ensureVoteStorage(db);

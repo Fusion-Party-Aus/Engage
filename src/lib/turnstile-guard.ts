@@ -54,6 +54,8 @@ export function turnstileActionFor(action: RateLimitAction): string {
   switch (action) {
     case "sense-box-submit":
       return TURNSTILE_ACTIONS.senseBox;
+    case "collaboration-submit":
+      return TURNSTILE_ACTIONS.collaborate;
     case "auth-sign-up":
       return TURNSTILE_ACTIONS.signUp;
     default:
