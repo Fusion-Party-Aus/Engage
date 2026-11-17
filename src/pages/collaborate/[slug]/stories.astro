@@ -29,7 +29,7 @@ if (!initiative) Astro.response.status = 404;
       {stories.length ? (
         <ul class="gallery-list">
           {stories.map((story) => (
-            <li>
+            <li id={story.contributionId}>
               <article>
                 {story.media.length > 0 && (
                   <div class="gallery-photos">
@@ -85,7 +85,7 @@ if (!initiative) Astro.response.status = 404;
 <style>
   .gallery-page { max-width: 58rem; }
   .gallery-list { list-style: none; margin: 2.5rem 0 0; padding: 0; display: grid; gap: 3rem; }
-  .gallery-list li { border-top: 3px solid var(--horizon-accent); padding-top: 1.75rem; }
+  .gallery-list li { border-top: 3px solid var(--horizon-accent); padding-top: 1.75rem; scroll-margin-top: 5rem; }
   .gallery-photos { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
   .gallery-photos img { max-height: 26rem; max-width: 100%; border-radius: 0.5rem; object-fit: cover; }
   .gallery-answer + .gallery-answer { margin-top: 1.25rem; }

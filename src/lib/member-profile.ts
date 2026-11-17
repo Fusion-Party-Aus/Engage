@@ -1,4 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
+import { PUBLISHED_CONTRIBUTION_FILTER } from "./collaboration.ts";
 import { CRM_APPLICATION, CRM_IDENTITY_LINKS } from "./underground-crm.ts";
 import {
   canReviewArchivedProposal,
@@ -103,8 +104,20 @@ export type MemberContribution =
   | MemberProposalContribution
   | MemberAmendmentContribution;
 
+export interface MemberStoryContribution {
+  id: string;
+  href: string;
+  initiativeSlug: string;
+  initiativeTitle: string;
+  excerpt: string;
+  mediaCount: number;
+  publishedAt: Date;
+}
+
 export interface MemberProfilePage {
   profile: MemberProfileView;
+  /** Published stories the member chose to link to this account. */
+  publishedStories: MemberStoryContribution[];
   tab: MemberProfileTab;
   items: MemberContribution[];
   pagination: {
@@ -775,6 +788,47 @@ async function loadProfileContributions(
  * Returns null when the identifier has no account and no historic contribution
  * to establish an author, or when the account is disabled.
  */
+/**
+ * Only stories that are already public: approved, published to the gallery,
+ * website consent, material intact and not hidden. Unpublished material never
+ * appears on a profile, even when the contributor linked it.
+ */
+async function loadPublishedStories(
+  db: Db,
+  memberId: string,
+): Promise<MemberStoryContribution[]> {
+  const rows = await db
+    .collection("collaboration_contributions")
+    .find({ ...PUBLISHED_CONTRIBUTION_FILTER, claimedByMemberId: memberId })
+    .project({
+      contributionId: 1,
+      initiativeSlug: 1,
+      initiativeTitle: 1,
+      answers: 1,
+      media: 1,
+      galleryPublishedAt: 1,
+    })
+    .sort({ galleryPublishedAt: -1, _id: -1 })
+    .limit(6)
+    .toArray();
+  return rows.map((row) => {
+    const answers = Object.values((row.answers ?? {}) as Record<string, string>)
+      .map((value) => String(value).trim())
+      .filter(Boolean);
+    const raw = (answers[0] ?? "").replace(/\s+/g, " ");
+    const excerpt = raw.length > 220 ? `${raw.slice(0, 220).replace(/\s+\S*$/, "")}…` : raw;
+    return {
+      id: String(row.contributionId),
+      href: `/collaborate/${encodeURIComponent(String(row.initiativeSlug))}/stories/#${encodeURIComponent(String(row.contributionId))}`,
+      initiativeSlug: String(row.initiativeSlug),
+      initiativeTitle: String(row.initiativeTitle ?? row.initiativeSlug),
+      excerpt,
+      mediaCount: Array.isArray(row.media) ? row.media.length : 0,
+      publishedAt: new Date(row.galleryPublishedAt),
+    };
+  });
+}
+
 export async function getMemberProfilePage(
   db: Db,
   rawMemberId: string,
@@ -794,8 +848,11 @@ export async function getMemberProfilePage(
       ? Math.min(50, Math.max(1, Math.trunc(Number(options.pageSize))))
       : MEMBER_PROFILE_PAGE_SIZE;
 
-  const { visibleProposals, visibleAuthored, visibleAmendments } =
-    await loadProfileContributions(db, memberId, viewer);
+  const [publishedStories, { visibleProposals, visibleAuthored, visibleAmendments }] =
+    await Promise.all([
+      loadPublishedStories(db, memberId),
+      loadProfileContributions(db, memberId, viewer),
+    ]);
 
   const visibleCommentProposalIds = [...visibleProposals.keys()];
   const commentFilter: Record<string, unknown> | null =
@@ -954,6 +1011,7 @@ export async function getMemberProfilePage(
       visible: identity.visible,
       stats,
     },
+    publishedStories,
     tab,
     items,
     pagination: {
