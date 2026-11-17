@@ -1,12 +1,37 @@
 [
   {
-    "hash": "0237117",
+    "hash": "a6b4168",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "settings",
+    "summary": "Tie-break site settings events by insertion order"
+  },
+  {
+    "hash": "3453e65",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record database initialisation change (#136)"
+  },
+  {
+    "hash": "602ec11",
+    "date": "2026-11-17",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "db",
+    "summary": "Cut fresh database initialisation cost (#136)",
+    "details": "A fresh test database spent ~1.25 s in `initializeDatabase`, called 18 times per suite (~22 s). Index creation dominated: 92 `createIndex` calls, each a journal commit on a newly created collection. - Group the index catalogue by collection and send one `createIndexes` command per collection (46 commands). Keys, names, uniqueness, partial filters, TTL and `expireAfterSeconds` are unchanged; a failed grouped command falls back to per-index creation so one legacy conflict cannot block the rest, as before. - Bulk-write the 78 baseline policies instead of one upsert per record. - Split startup into `ensureDatabaseIndexes` (new `src/lib/db-indexes.ts`) and `seedBaselineContent`. `initializeDatabase` still runs both, so production startup and `getDatabase` are unchanged. Mongo tests that seed their own content use the schema half; notification-outbox keeps the full path and asserts the seeded register and indexes. - The in-memory preview implements `createIndexes` and `bulkWrite`. Verified on the local replica set: index phase 1.44 s -> 0.76 s and total 1.27 s -> 0.95 s over six interleaved pairs (shared host, so absolute wall time varied). A fresh database has the same 47 collections and 139 indexes, and the same 78 proposals and revisions, before and after. Full suite (833 tests) passed twice; each run left only `admin`, `config`, `engage` and `local`."
+  },
+  {
+    "hash": "90bc0c1",
     "date": "2026-11-17",
     "type": "feat",
     "category": "feature",
     "scope": "settings",
-    "summary": "Make public site settings stored and audited only (#128)",
-    "details": "Remove the environment fallbacks for search indexing, the header action, sharing image, social channels, branch directory, repository link and the public pulse poll. Stored values under Platform settings win; absent values use the documented code defaults. APP_MODE still supplies the production indexing default. The repository link is now editable in the Operations section instead of read-only, with URL validation, the operations audit section and no raw keys. Invalid saved values fall back to defaults and the settings page names the saved settings that could not be used. Align the stored-value sanitiser with the API validators so an invalid saved value cannot partly apply. Tests cover every removed variable having no effect, stored values winning, defaults, invalid fallback, API validation and audit."
+    "summary": "Make public site settings stored and audited only (#128) (#144)",
+    "details": "* feat(settings): make public site settings stored and audited only (#128) Remove the environment fallbacks for search indexing, the header action, sharing image, social channels, branch directory, repository link and the public pulse poll. Stored values under Platform settings win; absent values use the documented code defaults. APP_MODE still supplies the production indexing default. The repository link is now editable in the Operations section instead of read-only, with URL validation, the operations audit section and no raw keys. Invalid saved values fall back to defaults and the settings page names the saved settings that could not be used. Align the stored-value sanitiser with the API validators so an invalid saved value cannot partly apply. Tests cover every removed variable having no effect, stored values winning, defaults, invalid fallback, API validation and audit. * chore(changelog): record public site settings migration (#128)"
   },
   {
     "hash": "831e950",
@@ -659,29 +684,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Let administrators inspect the proposed re-engagement audience"
-  },
-  {
-    "hash": "9e72e64",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "member",
-    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
-  },
-  {
-    "hash": "71a61de",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ci",
-    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
-  },
-  {
-    "hash": "cb39b60",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record lifecycle audit, consent assessment and rollout checks"
   }
 ]
