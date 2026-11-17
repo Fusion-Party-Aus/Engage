@@ -11,6 +11,7 @@ import {
 } from "./notification-outbox.ts";
 import { NOTIFICATION_DELIVERIES_COLLECTION } from "./notifications.ts";
 import { scheduledBallotClosesAtFrom } from "./lifecycle-schedule.ts";
+import baselineItems from "../data/policies.json" with { type: "json" };
 import type { PlatformEnv } from "./types.ts";
 
 /**
@@ -33,6 +34,9 @@ async function withDatabase(run: (db: Db) => Promise<void>): Promise<void> {
   const client = await new MongoClient(uri!).connect();
   const db = client.db(`engage_outbox_test_${crypto.randomUUID().replaceAll("-", "")}`);
   try {
+    // Full production initialisation: schema then baseline content. The other
+    // Mongo suites use `ensureDatabaseIndexes` because they seed their own
+    // content, so this file is the suite's coverage of the startup path.
     await initializeDatabase(db);
     await run(db);
   } finally {
@@ -40,6 +44,33 @@ async function withDatabase(run: (db: Db) => Promise<void>): Promise<void> {
     await client.close();
   }
 }
+
+test(
+  "real MongoDB: production initialisation seeds the baseline register and its indexes",
+  { skip: !uri },
+  async () => {
+    await withDatabase(async (db) => {
+      assert.equal(
+        await db.collection("proposals").countDocuments({}),
+        baselineItems.length,
+      );
+      assert.equal(
+        await db.collection("proposal_revisions").countDocuments({}),
+        baselineItems.length,
+      );
+      const proposalIndexes = await db.collection("proposals").indexes();
+      const uniqueProposalId = proposalIndexes.find(
+        (index) => index.key.proposalId === 1,
+      );
+      assert.equal(uniqueProposalId?.unique, true);
+      const rateLimitIndexes = await db.collection("rate_limits").indexes();
+      const expiry = rateLimitIndexes.find(
+        (index) => index.name === "rate_limit_expiry",
+      );
+      assert.equal(expiry?.expireAfterSeconds, 0);
+    });
+  },
+);
 
 async function seedMember(db: Db, memberId: string, branchId = "branch-nat"): Promise<void> {
   await db.collection("user").insertOne({

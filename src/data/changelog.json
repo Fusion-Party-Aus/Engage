@@ -1,12 +1,12 @@
 [
   {
-    "hash": "0237117",
+    "hash": "90bc0c1",
     "date": "2026-11-17",
     "type": "feat",
     "category": "feature",
     "scope": "settings",
-    "summary": "Make public site settings stored and audited only (#128)",
-    "details": "Remove the environment fallbacks for search indexing, the header action, sharing image, social channels, branch directory, repository link and the public pulse poll. Stored values under Platform settings win; absent values use the documented code defaults. APP_MODE still supplies the production indexing default. The repository link is now editable in the Operations section instead of read-only, with URL validation, the operations audit section and no raw keys. Invalid saved values fall back to defaults and the settings page names the saved settings that could not be used. Align the stored-value sanitiser with the API validators so an invalid saved value cannot partly apply. Tests cover every removed variable having no effect, stored values winning, defaults, invalid fallback, API validation and audit."
+    "summary": "Make public site settings stored and audited only (#128) (#144)",
+    "details": "* feat(settings): make public site settings stored and audited only (#128) Remove the environment fallbacks for search indexing, the header action, sharing image, social channels, branch directory, repository link and the public pulse poll. Stored values under Platform settings win; absent values use the documented code defaults. APP_MODE still supplies the production indexing default. The repository link is now editable in the Operations section instead of read-only, with URL validation, the operations audit section and no raw keys. Invalid saved values fall back to defaults and the settings page names the saved settings that could not be used. Align the stored-value sanitiser with the API validators so an invalid saved value cannot partly apply. Tests cover every removed variable having no effect, stored values winning, defaults, invalid fallback, API validation and audit. * chore(changelog): record public site settings migration (#128)"
   },
   {
     "hash": "831e950",

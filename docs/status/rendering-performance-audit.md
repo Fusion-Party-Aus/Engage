@@ -452,6 +452,16 @@ against the votes every round.
   measures the read path, and the browser check below seeds fresh, stale and
   certified rows explicitly.
 
+## Test database initialisation (17 November 2026)
+
+The Mongo suites initialise a fresh database per case through `initializeDatabase`, which is also the production startup path. Before this change it took **~1.25 s per fresh database**, called 18 times per suite (#136).
+
+- Index creation dominated: 92 `createIndex` calls, each a journal commit on a new collection, for 1.0–1.4 s of a 1.25–1.7 s total. Baseline policy seeding (78 writes) and the legacy revision backfill were ~50–110 ms each.
+- Initialisation now sends one `createIndexes` command per collection (46 commands), bulk-writes the baseline policies, and is split into `ensureDatabaseIndexes` and `seedBaselineContent`. Production still runs both; Mongo tests that seed their own content use the schema half. `notification-outbox-mongo.test.ts` keeps the full path and asserts the seeded register.
+- Six interleaved before/after pairs on the same replica set measured a median of 1.27 s → 0.95 s (25% lower) and 1.97 s → 1.25 s (35% lower) in a second pass; the index phase fell 45–50%. A second session was using the same replica set, so absolute wall time moved between runs; the relative split was stable.
+- Equivalence: a fresh database has the same 47 collections and 139 indexes with identical keys, names, uniqueness, partial filters and TTL options before and after, and the same 78 proposals, 78 revisions and reminder cohort.
+- Full suite (833 tests) passed twice after the change, 96 s and 128 s, versus 109 s and 156 s before on the shared host. Each run left 4 databases (`admin`, `config`, `engage`, `local`).
+
 ## Deliberately left alone
 
 - **Per-vote decryption on the proposal detail page.** `/proposals/[slug]/` still computes the live bound tally from the votes, because it is the surface that shows the ballot and its exact wording to a member. The public lists no longer do this; they read `ballot_tallies` and `ballot_results` instead (see the 16 November section).
