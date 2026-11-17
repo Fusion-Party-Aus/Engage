@@ -1,5 +1,32 @@
 [
   {
+    "hash": "317ae3b",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Restore the product model and correct readiness claims",
+    "details": "The product page had been overwritten with the operations runbook. Restore the model, consent, publication, claiming and retention material, then add the current ownership, address inheritance and readiness details. Correct the runbook's claim that a partial roster can be saved. Refs #143"
+  },
+  {
+    "hash": "d14d53b",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Fail closed on signing secrets and tighten identity checks",
+    "details": "Production refuses to derive management tokens without a configured signing secret, instead of silently using the shared development value. A regression test covers production with and without a secret. The submission fingerprint now includes the invitation, so reusing a reference for another invitation is refused rather than returning the original record. The gallery publication API explicitly rejects written consultation responses. Refs #143"
+  },
+  {
+    "hash": "a9c172b",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record operational readiness and address inheritance",
+    "details": "Refs #143"
+  },
+  {
     "hash": "81d4c98",
     "date": "2026-11-17",
     "type": "docs",
@@ -687,32 +714,5 @@
     "scope": "proposals",
     "summary": "Member-facing decision record (#54) (#105)",
     "details": "* feat(proposals): add member-facing decision record Compose one matter's immutable voted wording, revision history, amendment outcomes, certified ballot result and publication state in a permission-aware read model. Derive adopted wording under D15 (zero applied amendments) and D16 (one applied amendment), with explicit review states for two or more applied amendments (D17-D18), approved-but-unapplied amendments and mismatched result wording. No individual votes, voter or author identifiers cross the read-model boundary. Add /proposals/[slug]/record/ and link it from the proposal page. * docs(governance): record the decision-record read model Document the member-facing decision record, the D15/D16 derivation, the explicit D17-D18 collision-review seam and the outstanding administrator queue. Mark S2/#54 partial and note the reporting limit on inter-amendment gaps. * chore(changelog): refresh the snapshot for the decision record"
-  },
-  {
-    "hash": "9478783",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ci",
-    "summary": "Run the perimeter browser harness on every pull request (#38) (#104)",
-    "details": "* fix(security): bound the perimeter browser harness and always clean up The harness now has a hard 180-second deadline (ENGAGE_PERIMETER_TIMEOUT_MS) that stops the run and fails instead of hanging, signals the preview server before any await, escalates to SIGKILL, bounds Chromium shutdown, and kills the child from a process exit handler as a last resort. A page error, failed request or CSP violation that appears after a page's own check also fails the run. Adds 'perimeter:browser' for local use; a build and ENGAGE_PLAYWRIGHT_MODULE are still required. * feat(ci): run the perimeter browser harness on every pull request Runs scripts/security-perimeter-browser.mjs after the build and after the existing Playwright 1.57.0 install, reusing the same ENGAGE_PLAYWRIGHT_MODULE path rather than installing a second copy. Extends src/lib/ci-workflow.test.ts to compare step positions, so it fails if the step disappears, moves before the build or the Playwright install, installs its own Playwright, or if 'perimeter:browser' and the harness file drift apart. * docs(security): record that the perimeter harness runs in CI States what the CI step proves, how it is made safe to run unattended, and the remaining gap: the production build against the in-memory seed, not Cloudflare/Coolify, a real MongoDB or the real providers. * chore(changelog): refresh the snapshot for the perimeter CI step"
-  },
-  {
-    "hash": "78c07c0",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Durable outbox for ballot opened and closing soon (#33) (#102)",
-    "details": "* fix(notifications): write the delivery dedupe key the unique index requires The notification_deliveries unique index is on dedupeKey, but in-app and push delivery documents only set a composite _id. Every insert after the first therefore collided on a missing dedupeKey and was swallowed as a duplicate, so production could create at most one inbox item in total. Write the composite value to dedupeKey (and a push equivalent), keeping the existing _id dedupe contract and index shape unchanged. * feat(notifications): wire ballot opened and closing soon through a durable outbox Add notification_outbox, written immediately after a committed lifecycle transition and drained by npm run notifications:drain (dry-run by default, --apply to send). Two events are wired: a ballot opened by the lifecycle scheduler (new_ballots) and an open ballot inside the approved seven-day window (closing_deadlines). The audience is the voting electorate. Candidates are confirmed with getProposalEligibility and canViewProposal, the same predicate and visibility gate used when casting a vote, and eligibility is checked again at drain time so a revoked membership is suppressed rather than notified. Rows carry one unique dedupeKey per member, ballot and event; the drain claims with a conditional lease, retries at 1/2/4/8 minutes and stops at five attempts. Terminal rows carry a two-year retention TTL. Enqueue and delivery can never fail, block or alter a governance transition, and the scheduler report is unchanged. governance_outcomes and contribution_responses stay unwired: the result route is being refactored and the comment-outcome event needs a product decision. * chore(changelog): refresh snapshot for the notification outbox"
-  },
-  {
-    "hash": "0aea7b5",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "security",
-    "summary": "Response headers, hash-based CSP and cross-origin enforcement (#38) (#100)",
-    "details": "* feat(security): add perimeter headers, CSP and cross-site request rule Every response now carries nosniff, a strict referrer policy, frame denial, a minimal Permissions-Policy and a Content Security Policy. HSTS is sent only in production when HTTPS is provable. The policy keeps Astro's build-time script and style hashes and allows only the external hosts the app uses: Cloudflare Turnstile (script, frame, connect) and the first-party Plausible host (script, connect). Inline style attributes are allowed through style-src-attr only, because tally and progress bars use them; script-src has no unsafe-inline and no directive permits unsafe-eval. The service-worker registration was is:inline, which Astro does not hash, so it is now a processed script. Astro's form-post origin check is kept, and allowedDomains trusts the production host over HTTPS so its comparison uses the public origin behind the proxy. The middleware adds what Astro's check deliberately exempts: every state-changing method, JSON bodies, a cross-site Sec-Fetch-Site, an Origin that differs from the trusted public origin, and an absent Origin when a session or dev cookie is present. Bearer cron calls and webhooks carry no cookie and stay allowed. Refs #38 * test(security): verify the CSP and origin rule in a real browser The production build is served with a disposable in-memory database. Chromium checks the home, proposal, sign-in and Sense Box pages for CSP violations, console errors and failed requests; proves the Turnstile script and frame and the Plausible script and event endpoint reach the network layer; asserts the document and JSON header sets; and shows same-origin fetches and native form posts succeed while browser, JSON and cookie-without-Origin state-changing requests are refused. Cloudflare and Plausible are intercepted and answered locally; the script never contacts production. Refs #38 * docs(security): record the perimeter header set, CSP and origin rule Adds docs/security/perimeter.md as the operating contract for headers, CSP sources and the cross-site rule, with the exact values, every external host and its reason, the scoped style-src-attr allowance, verification commands and residual risk. Corrects the pages that said there is no middleware and that a CSP, HSTS, frame or content-type headers are absent, updates the Turnstile and API/authorisation contracts, and records the #38 and I10 state in the programme tracker and known gaps. Remaining work is explicit: proxy headers for static assets and Astro's early 403, a reporting endpoint, CSRF tokens, and production header observation. Refs #38 * chore(changelog): refresh snapshot for the perimeter security slice Refs #38 * docs(security): clarify origin-check exemptions and deployment requirements States the form-like and safe-method exemptions precisely, scopes includeSubDomains to the sending host rather than fusionparty.org.au, and records that production must configure PUBLIC_ORIGIN or BETTER_AUTH_URL or browser writes are refused against the proxy's localhost origin. Refs #38"
   }
 ]
