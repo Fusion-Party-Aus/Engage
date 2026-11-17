@@ -5,16 +5,23 @@ import { Field } from '../ui/field';
 import { Input } from '../ui/input';
 import { NativeSelect } from '../ui/native-select';
 import { Textarea } from '../ui/textarea';
-import { MAX_INITIATIVE_QUESTIONS, type ContributionQuestion } from '../../lib/collaboration-options';
+import {
+  CONTRIBUTION_PROFILES,
+  INITIATIVE_STATUSES,
+  MAX_INITIATIVE_QUESTIONS,
+  type ContributionQuestion,
+  type InitiativeStatus,
+} from '../../lib/collaboration-options';
 
 interface Props {
   slug: string;
   title: string;
   summary: string;
   purpose: string;
-  status: 'open' | 'paused' | 'closed';
+  status: InitiativeStatus;
   correctionEmail: string;
   questions: readonly ContributionQuestion[];
+  profile: 'story' | 'consultation';
 }
 
 /**
@@ -71,6 +78,10 @@ export default function InitiativeEditor(props: Props) {
 
   return (
     <div className="grid gap-5">
+      <p className="m-0 text-sm text-muted-foreground">
+        Collects: {CONTRIBUTION_PROFILES[props.profile]}. This is fixed when the invitation is created so
+        contributors always answer the same kind of request.
+      </p>
       <Field label="Title" htmlFor="invitation-title">
         <Input id="invitation-title" value={title} maxLength={120} onChange={(event) => setTitle(event.currentTarget.value)} />
       </Field>
@@ -81,11 +92,15 @@ export default function InitiativeEditor(props: Props) {
         <Textarea id="invitation-purpose" rows={4} value={purpose} maxLength={1200} onChange={(event) => setPurpose(event.currentTarget.value)} />
       </Field>
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Accepting contributions" htmlFor="invitation-status">
-          <NativeSelect id="invitation-status" value={status} onChange={(event) => setStatus(event.currentTarget.value as Props['status'])}>
-            <option value="open">Open</option>
-            <option value="paused">Paused</option>
-            <option value="closed">Closed</option>
+        <Field
+          label="State"
+          htmlFor="invitation-status"
+          hint="Draft and archived are private. Open accepts contributions. Paused and closed show the page with a closing notice."
+        >
+          <NativeSelect id="invitation-status" value={status} onChange={(event) => setStatus(event.currentTarget.value as InitiativeStatus)}>
+            {Object.entries(INITIATIVE_STATUSES).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
           </NativeSelect>
         </Field>
         <Field label="Corrections and removals" htmlFor="invitation-email" hint="Where contributors write to correct or remove their contribution.">
@@ -139,6 +154,11 @@ export default function InitiativeEditor(props: Props) {
         </div>
       </div>
 
+      {status === 'archived' && (
+        <p className="m-0 text-sm text-muted-foreground">
+          Archiving hides the page from the public and stops contributions. Existing contributions and their decisions are kept.
+        </p>
+      )}
       {feedback && <p role="status" className="m-0 text-sm text-muted-foreground">{feedback}</p>}
       {error && (
         <Alert variant="destructive" role="alert">
@@ -147,7 +167,9 @@ export default function InitiativeEditor(props: Props) {
       )}
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save invitation'}</Button>
-        <Button href={`/collaborate/${props.slug}/`} variant="outline">View public page</Button>
+        {status !== 'draft' && status !== 'archived' && (
+          <Button href={`/collaborate/${props.slug}/`} variant="outline">View public page</Button>
+        )}
       </div>
     </div>
   );

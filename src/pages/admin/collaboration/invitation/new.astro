@@ -1,0 +1,41 @@
+---
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import Card from '../../../../components/admin/Card.astro';
+import CardContent from '../../../../components/admin/CardContent.astro';
+import CardDescription from '../../../../components/admin/CardDescription.astro';
+import CardHeader from '../../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../../components/admin/CardTitle.astro';
+import InitiativeCreate from '../../../../components/collaboration/InitiativeCreate';
+import { getSessionUser } from '../../../../lib/auth.ts';
+import { runtimeEnv } from '../../../../lib/db.ts';
+import { PILOT_INITIATIVE } from '../../../../lib/collaboration-options.ts';
+import { hasPermission } from '../../../../lib/rbac.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/');
+if (!hasPermission(user, 'collaboration.manage')) return Astro.rewrite('/403/');
+---
+
+<AdminLayout
+  title="New invitation"
+  description="Create a public invitation for stories or photographs."
+  section="stories"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  <Card>
+    <CardHeader>
+      <CardTitle class="text-base">Invitation</CardTitle>
+      <CardDescription>
+        It is created as a draft. Add questions, then open it when the wording is ready.
+      </CardDescription>
+    </CardHeader>
+    <CardContent>
+      <InitiativeCreate client:load defaultCorrectionEmail={PILOT_INITIATIVE.correctionEmail} />
+    </CardContent>
+  </Card>
+</AdminLayout>

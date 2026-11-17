@@ -36,7 +36,7 @@ export type PublicationChannel = keyof typeof PUBLICATION_CHANNELS;
 
 export const ATTRIBUTION_OPTIONS = {
   named: "Use my name",
-  anonymous: "Keep me anonymous",
+  anonymous: "Don't credit me by name",
 } as const;
 
 export type Attribution = keyof typeof ATTRIBUTION_OPTIONS;
@@ -69,6 +69,44 @@ export const PILOT_QUESTIONS: readonly ContributionQuestion[] = [
   },
 ];
 
+/**
+ * Invitation lifecycle. Draft and archived invitations are not reachable from
+ * the public site; paused and closed keep the page and its explanation, but stop
+ * accepting contributions.
+ */
+export const INITIATIVE_STATUSES = {
+  draft: "Draft",
+  open: "Open",
+  paused: "Paused",
+  closed: "Closed",
+  archived: "Archived",
+} as const;
+
+export type InitiativeStatus = keyof typeof INITIATIVE_STATUSES;
+
+/** Statuses that have a public page at all. */
+export const PUBLIC_INITIATIVE_STATUSES: readonly InitiativeStatus[] = [
+  "open",
+  "paused",
+  "closed",
+];
+
+export function isPublicInitiativeStatus(value: unknown): value is InitiativeStatus {
+  return typeof value === "string" && PUBLIC_INITIATIVE_STATUSES.includes(value as InitiativeStatus);
+}
+
+/**
+ * What an invitation collects. Two reviewed profiles, not a form builder:
+ * a story profile accepts photographs and credit; a consultation profile
+ * accepts written responses only and never records a name or edit permission.
+ */
+export const CONTRIBUTION_PROFILES = {
+  story: "Story with photographs",
+  consultation: "Written responses",
+} as const;
+
+export type ContributionProfile = keyof typeof CONTRIBUTION_PROFILES;
+
 export interface CollaborationInitiative {
   slug: string;
   title: string;
@@ -76,7 +114,10 @@ export interface CollaborationInitiative {
   /** Why the material is wanted and how it will be used. */
   purpose: string;
   questions: readonly ContributionQuestion[];
-  status: "open" | "paused" | "closed";
+  profile: ContributionProfile;
+  status: InitiativeStatus;
+  /** Set when an editor archives the invitation, cleared on restore. */
+  archivedAt?: Date | null;
   /** Where a contributor asks for a correction or removal. Editorial, not code. */
   correctionEmail: string;
   createdAt: Date;
@@ -94,6 +135,7 @@ export const PILOT_INITIATIVE = {
   purpose:
     "Fusion's website is moving towards real people and real stories. We need honest material, not polished testimonials. Share as much or as little as you like, and choose how it can be used.",
   questions: PILOT_QUESTIONS,
+  profile: "story" as const,
   status: "open" as const,
   correctionEmail: "engage@fusionparty.org.au",
 } satisfies Omit<CollaborationInitiative, "createdAt" | "updatedAt">;
@@ -107,6 +149,17 @@ export const CONTRIBUTION_LIMITS = {
 
 /** Invitation questions are data, not code: editors may add or remove them. */
 export const MAX_INITIATIVE_QUESTIONS = 6;
+/** A readable, URL-safe identifier derived from the title. */
+export function slugifyTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72)
+    .replace(/-+$/g, "");
+}
+
 /** New questions get an opaque, stable key so existing answers stay attached. */
 export function nextQuestionKey(existing: readonly { key: string }[]): string {
   let index = existing.length + 1;

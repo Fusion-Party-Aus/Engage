@@ -77,7 +77,7 @@ const peopleItems = [
   { key: 'roles', href: '/admin/roles/', label: 'Roles & permissions', icon: ShieldCheck, show: isAdmin || canManageRoles },
   { key: 'branches', href: '/admin/branches/', label: 'Branches', icon: GitBranch, show: canAccessAdmin },
   { key: 'sense-box', href: '/admin/sense-box/', label: 'Sense Box', icon: LifeBuoy, show: canAccessAdmin },
-  { key: 'stories', href: '/admin/collaboration/', label: 'Stories', icon: Camera, show: canReviewStories },
+  { key: 'stories', href: '/admin/collaboration/', label: 'Collaboration', icon: Camera, show: canReviewStories },
 ].filter((item) => item.show);
 
 const operationsItems = [

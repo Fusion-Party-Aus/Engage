@@ -1,21 +1,28 @@
 import { createHash } from "node:crypto";
-import { Binary, ObjectId, type Db } from "mongodb";
+import { Binary, ObjectId, type ClientSession, type Db } from "mongodb";
+import { runInTransaction } from "./db.ts";
 import { hasPermission } from "./rbac.ts";
 import type { SessionUser } from "./types.ts";
 import {
   COLLABORATION_CONSENT_VERSION,
   COLLABORATION_STATUSES,
   CONTRIBUTION_LIMITS,
+  CONTRIBUTION_PROFILES,
+  INITIATIVE_STATUSES,
   MAX_INITIATIVE_QUESTIONS,
   MEDIA_LIMITS,
   PUBLICATION_CHANNELS,
   PILOT_INITIATIVE,
   PILOT_SLUG,
+  isPublicInitiativeStatus,
   nextQuestionKey,
+  slugifyTitle,
   type Attribution,
   type CollaborationInitiative,
   type CollaborationStatus,
+  type ContributionProfile,
   type ContributionQuestion,
+  type InitiativeStatus,
   type PublicationChannel,
 } from "./collaboration-options.ts";
 import { prepareImage, safeFilename } from "./collaboration-media.ts";
@@ -92,6 +99,11 @@ export interface ContributionRecordView {
   version: number;
   consentVersion: string;
   contentClearedAt: string | null;
+  /** The invitation as it read when this contribution was sent. */
+  questions: Array<{ key: string; label: string }>;
+  initiativeTitle: string;
+  initiativePurpose: string;
+  inputAcceptedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -171,6 +183,38 @@ export async function getInitiative(
   return row ? toInitiative(row) : null;
 }
 
+/** A draft or archived invitation has no public page. */
+export async function getPublicInitiative(
+  db: Db,
+  slug: string,
+): Promise<CollaborationInitiative | null> {
+  const initiative = await getInitiative(db, slug);
+  return initiative && isPublicInitiativeStatus(initiative.status) ? initiative : null;
+}
+
+export interface InitiativeSummary {
+  initiative: CollaborationInitiative;
+  contributions: number;
+  awaitingReview: number;
+}
+
+/** Every invitation, newest first, with the counts an editor needs. */
+export async function listInitiatives(db: Db): Promise<InitiativeSummary[]> {
+  const rows = await db.collection(INITIATIVES).find({}).sort({ createdAt: -1 }).toArray();
+  return Promise.all(
+    rows.map(async (row) => {
+      const initiative = toInitiative(row);
+      const [contributions, awaitingReview] = await Promise.all([
+        db.collection(CONTRIBUTIONS).countDocuments({ initiativeSlug: initiative.slug }),
+        db
+          .collection(CONTRIBUTIONS)
+          .countDocuments({ initiativeSlug: initiative.slug, status: { $in: ["new", "needs_follow_up"] } }),
+      ]);
+      return { initiative, contributions, awaitingReview };
+    }),
+  );
+}
+
 function toInitiative(row: Record<string, any>): CollaborationInitiative {
   const questions = Array.isArray(row.questions) ? row.questions : [];
   return {
@@ -178,12 +222,14 @@ function toInitiative(row: Record<string, any>): CollaborationInitiative {
     title: String(row.title),
     summary: String(row.summary ?? ""),
     purpose: String(row.purpose ?? ""),
+    profile: Object.hasOwn(CONTRIBUTION_PROFILES, row.profile) ? (row.profile as ContributionProfile) : "story",
     questions: questions.map((question: any) => ({
       key: String(question.key),
       label: String(question.label),
       ...(question.hint ? { hint: String(question.hint) } : {}),
     })) satisfies ContributionQuestion[],
-    status: row.status === "paused" || row.status === "closed" ? row.status : "open",
+    status: Object.hasOwn(INITIATIVE_STATUSES, row.status) ? (row.status as InitiativeStatus) : "draft",
+    archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
     correctionEmail: String(row.correctionEmail ?? PILOT_INITIATIVE.correctionEmail),
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
@@ -210,6 +256,7 @@ export async function seedPilotInitiative(
         summary: definition.summary,
         purpose: definition.purpose,
         questions: definition.questions,
+        profile: definition.profile,
         status: definition.status,
         createdAt: now,
         updatedAt: now,
@@ -220,6 +267,76 @@ export async function seedPilotInitiative(
   const saved = await getInitiative(db, definition.slug);
   if (!saved) throw new CollaborationError("Could not create the initiative.", 500);
   return saved;
+}
+
+export interface InitiativeCreateInput {
+  title: unknown;
+  summary: unknown;
+  purpose: unknown;
+  question: unknown;
+  hint?: unknown;
+  correctionEmail: unknown;
+  profile?: unknown;
+}
+
+/**
+ * Create an invitation as a draft. It has no public page until an editor opens
+ * it, which keeps creation and publication as separate decisions.
+ */
+export async function createInitiative(
+  db: Db,
+  user: SessionUser | null | undefined,
+  input: InitiativeCreateInput,
+): Promise<CollaborationInitiative> {
+  if (!user) throw new CollaborationError("Sign in required.", 401);
+  if (!hasPermission(user, "collaboration.manage")) {
+    throw new CollaborationError("You do not have permission to create an invitation.", 403);
+  }
+  const title = clampText(input.title, "Title", 3, 120);
+  const summary = clampText(input.summary, "Summary", 10, 600);
+  const purpose = clampText(input.purpose, "Purpose", 10, 1_200);
+  const label = clampText(input.question, "First question", 3, 160);
+  const hint = clampText(input.hint, "Question hint", 0, 200);
+  const correctionEmail = clampText(input.correctionEmail, "Correction email", 5, 254);
+  if (!emailLooksValid(correctionEmail)) {
+    throw new CollaborationError("Enter a valid email address for corrections and removals.");
+  }
+  const profile =
+    input.profile === undefined || input.profile === ""
+      ? "story"
+      : input.profile;
+  if (typeof profile !== "string" || !Object.hasOwn(CONTRIBUTION_PROFILES, profile)) {
+    throw new CollaborationError("Choose what this invitation collects.");
+  }
+  const base = slugifyTitle(title) || "invitation";
+  const now = new Date();
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    const slug = attempt === 1 ? base : `${base}-${attempt}`;
+    // The unique index is the backstop; this check also keeps the in-memory
+    // preview honest, where indexes are not enforced.
+    if (await db.collection(INITIATIVES).countDocuments({ slug })) continue;
+    try {
+      await db.collection(INITIATIVES).insertOne({
+        slug,
+        title,
+        summary,
+        purpose,
+        questions: [{ key: nextQuestionKey([]), label, ...(hint ? { hint } : {}) }],
+        profile,
+        status: "draft",
+        correctionEmail,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: user.memberId,
+      });
+      const saved = await getInitiative(db, slug);
+      if (!saved) throw new CollaborationError("Could not create the invitation.", 500);
+      return saved;
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000) throw error;
+    }
+  }
+  throw new CollaborationError("Could not find a free address for this invitation. Try a different title.", 409);
 }
 
 export interface InitiativeUpdateInput {
@@ -251,8 +368,8 @@ export async function updateInitiative(
   const current = await getInitiative(db, slug);
   if (!current) throw new CollaborationError("That invitation no longer exists.", 404);
   const status = input.status;
-  if (status !== "open" && status !== "paused" && status !== "closed") {
-    throw new CollaborationError("Choose whether the invitation is open, paused or closed.");
+  if (typeof status !== "string" || !Object.hasOwn(INITIATIVE_STATUSES, status)) {
+    throw new CollaborationError("Choose the invitation's state.");
   }
   if (!Array.isArray(input.questions) || input.questions.length < 1) {
     throw new CollaborationError("Ask at least one question.");
@@ -291,7 +408,9 @@ export async function updateInitiative(
         correctionEmail: correctionEmail,
         updatedAt: new Date(),
         updatedBy: user.memberId,
+        ...(status === "archived" ? { archivedAt: new Date() } : {}),
       },
+      ...(status === "archived" ? {} : { $unset: { archivedAt: "" } }),
     },
   );
   const saved = await getInitiative(db, slug);
@@ -339,6 +458,18 @@ export async function submitContribution(
     throw new CollaborationError("This invitation is not accepting contributions right now.", 409);
   }
 
+  const knownKeys = new Set(initiative.questions.map((question) => question.key));
+  for (const [key, value] of Object.entries(input.answers ?? {})) {
+    if (!knownKeys.has(key) && typeof value === "string" && value.trim()) {
+      throw new CollaborationError(
+        "This invitation changed while you were writing. Your words are still here. Reload to see the current questions.",
+        409,
+      );
+    }
+  }
+  if (initiative.profile === "consultation" && files.length > 0) {
+    throw new CollaborationError("This invitation asks for written responses only.");
+  }
   const answers: Record<string, string> = {};
   for (const question of initiative.questions) {
     const value = clampText(
@@ -349,11 +480,15 @@ export async function submitContribution(
     );
     if (value) answers[question.key] = value;
   }
-  const caption = clampText(input.caption, "Photo caption", 0, CONTRIBUTION_LIMITS.caption);
-  const attribution = attributionFrom(input.attribution);
+  const caption =
+    initiative.profile === "consultation"
+      ? ""
+      : clampText(input.caption, "Photo caption", 0, CONTRIBUTION_LIMITS.caption);
+  const attribution: Attribution =
+    initiative.profile === "consultation" ? "anonymous" : attributionFrom(input.attribution);
   const channels = channelsFrom(input.channels);
-  const allowEdits = input.allowEdits === true;
-  const allowAiEdits = input.allowAiEdits === true;
+  const allowEdits = initiative.profile === "story" && input.allowEdits === true;
+  const allowAiEdits = initiative.profile === "story" && input.allowAiEdits === true;
   if (allowAiEdits && !allowEdits) {
     throw new CollaborationError(
       "Choose whether ordinary edits are allowed before optional AI-assisted edits.",
@@ -365,6 +500,11 @@ export async function submitContribution(
     : "";
   if (email && !emailLooksValid(email)) {
     throw new CollaborationError("Enter an email address we can reply to, or leave it blank.");
+  }
+  if (allowAiEdits && !contactAllowed) {
+    throw new CollaborationError(
+      "Add a reply address so we can show you an AI-assisted edit before it is used, or leave it off.",
+    );
   }
   const displayName =
     attribution === "named"
@@ -441,6 +581,11 @@ export async function submitContribution(
       _id,
       contributionId,
       initiativeSlug: initiative.slug,
+      // Snapshot what the contributor actually read and answered.
+      initiativeTitle: initiative.title,
+      initiativePurpose: initiative.purpose,
+      questions: initiative.questions.map((question) => ({ key: question.key, label: question.label })),
+      profile: initiative.profile,
       answers,
       caption,
       displayName,
@@ -504,9 +649,9 @@ async function clearContributionContent(
   db: Db,
   contributionId: string,
   reason: "withdrawn" | "declined" | "retention",
-  options: { keepContact?: boolean } = {},
+  options: { keepContact?: boolean; session?: ClientSession; touch?: boolean } = {},
 ): Promise<void> {
-  await db.collection(MEDIA).deleteMany({ contributionId });
+  await db.collection(MEDIA).deleteMany({ contributionId }, { session: options.session });
   await db.collection(CONTRIBUTIONS).updateOne(
     { contributionId },
     {
@@ -521,9 +666,10 @@ async function clearContributionContent(
         ...(options.keepContact ? {} : { email: "", contactAllowed: false }),
         contentClearedAt: new Date(),
         contentClearedReason: reason,
-        updatedAt: new Date(),
+        ...(options.touch === false ? {} : { updatedAt: new Date() }),
       },
     },
+    { session: options.session },
   );
 }
 
@@ -587,7 +733,7 @@ export async function purgeExpiredContent(
 export async function listContributions(
   db: Db,
   user: SessionUser | null | undefined,
-  filters: { status?: unknown; page?: unknown } = {},
+  filters: { status?: unknown; page?: unknown; q?: unknown } = {},
 ): Promise<ContributionInbox> {
   assertReviewer(user);
   const status =
@@ -598,7 +744,12 @@ export async function listContributions(
   if (!Number.isSafeInteger(page) || page < 1 || page > 10_000) {
     throw new CollaborationError("Choose a valid page.");
   }
-  const filter = status ? { status } : {};
+  const reference =
+    typeof filters.q === "string" ? filters.q.trim().replace(/[^a-z0-9]/gi, "").slice(0, 36) : "";
+  const filter: Record<string, unknown> = status ? { status } : {};
+  if (reference.length >= 3) {
+    filter.contributionId = new RegExp(`^${reference}`, "i");
+  }
   const [total, rows, statusCounts, withMedia] = await Promise.all([
     db.collection(CONTRIBUTIONS).countDocuments(filter),
     db
@@ -657,6 +808,13 @@ function toContributionView(row: Record<string, any>): ContributionRecordView {
     version: Number(row.version ?? 0),
     consentVersion: String(row.consentVersion ?? ""),
     contentClearedAt: row.contentClearedAt ? new Date(row.contentClearedAt).toISOString() : null,
+    questions: (Array.isArray(row.questions) ? row.questions : []).map((question: any) => ({
+      key: String(question.key),
+      label: String(question.label),
+    })),
+    initiativeTitle: String(row.initiativeTitle ?? row.initiativeSlug ?? ""),
+    initiativePurpose: String(row.initiativePurpose ?? ""),
+    inputAcceptedAt: row.inputAcceptedAt ? new Date(row.inputAcceptedAt).toISOString() : null,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
   };
@@ -673,12 +831,16 @@ async function appendEvent(
     note?: string;
     channel?: PublicationChannel;
   },
+  session?: ClientSession,
 ): Promise<void> {
-  await db.collection(EVENTS).insertOne({
-    eventId: new ObjectId().toHexString(),
-    ...input,
-    at: new Date(),
-  });
+  await db.collection(EVENTS).insertOne(
+    {
+      eventId: new ObjectId().toHexString(),
+      ...input,
+      at: new Date(),
+    },
+    { session },
+  );
 }
 
 export type ReviewAction = "set_status" | "record_use";
@@ -702,7 +864,7 @@ export async function reviewContribution(
   db: Db,
   user: SessionUser | null | undefined,
   input: ReviewInput,
-): Promise<{ status: CollaborationStatus; version: number }> {
+): Promise<{ status: CollaborationStatus; version: number; acceptedAt: string | null }> {
   const reviewer = assertReviewer(user);
   const contributionId = clampText(input.contributionId, "Contribution", 36, 36);
   const current = await db.collection(CONTRIBUTIONS).findOne({ contributionId });
@@ -717,9 +879,47 @@ export async function reviewContribution(
     );
   }
   const fromStatus = current.status as CollaborationStatus;
+  const acceptedAt = current.inputAcceptedAt
+    ? new Date(current.inputAcceptedAt).toISOString()
+    : null;
+  // Withdrawal and retention clearing are terminal for the material. A record
+  // with no story, name or photographs cannot be published later.
+  const materialGone = fromStatus === "withdrawn" || Boolean(current.contentClearedAt);
+
+  if (input.action === "accept_input") {
+    if (materialGone) {
+      throw new CollaborationError(
+        "This contribution was withdrawn or its material has been cleared, so it cannot be accepted.",
+        409,
+      );
+    }
+    const now = new Date();
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version },
+        {
+          $set: { inputAcceptedAt: now, inputAcceptedBy: reviewer.memberId, updatedAt: now },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError(
+          "This contribution changed while you were reviewing it. Refresh and try again.",
+          409,
+        );
+      }
+      await appendEvent(
+        db,
+        { contributionId, action: "accept_input", actorId: reviewer.memberId },
+        session,
+      );
+    });
+    return { status: fromStatus, version: Number(current.version) + 1, acceptedAt: now.toISOString() };
+  }
 
   if (input.action === "record_use") {
-    if (fromStatus !== "approved") {
+    if (fromStatus !== "approved" || materialGone) {
       throw new CollaborationError("Approve this contribution before recording where it was used.");
     }
     const channel = input.channel;
@@ -734,31 +934,41 @@ export async function reviewContribution(
     const reference = clampText(input.reference, "Where it was used", 2, 200);
     const usedChannels = Array.isArray(current.usedChannels) ? [...current.usedChannels] : [];
     if (!usedChannels.includes(channel)) usedChannels.push(channel);
-    const written = await db.collection(CONTRIBUTIONS).updateOne(
-      { contributionId, version: current.version },
-      {
-        $set: {
-          usedChannels,
-          publicationHistory: [
-            ...(Array.isArray(current.publicationHistory) ? current.publicationHistory : []),
-            { channel, reference, recordedBy: reviewer.memberId, recordedAt: new Date() },
-          ],
-          updatedAt: new Date(),
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version },
+        {
+          $set: {
+            usedChannels,
+            publicationHistory: [
+              ...(Array.isArray(current.publicationHistory) ? current.publicationHistory : []),
+              { channel, reference, recordedBy: reviewer.memberId, recordedAt: new Date() },
+            ],
+            updatedAt: new Date(),
+          },
+          $inc: { version: 1 },
         },
-        $inc: { version: 1 },
-      },
-    );
-    if (!written.matchedCount) {
-      throw new CollaborationError("This contribution changed while you were reviewing it. Refresh and try again.", 409);
-    }
-    await appendEvent(db, {
-      contributionId,
-      action: "record_use",
-      actorId: reviewer.memberId,
-      channel: channel as PublicationChannel,
-      note: reference,
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError(
+          "This contribution changed while you were reviewing it. Refresh and try again.",
+          409,
+        );
+      }
+      await appendEvent(
+        db,
+        {
+          contributionId,
+          action: "record_use",
+          actorId: reviewer.memberId,
+          channel: channel as PublicationChannel,
+          note: reference,
+        },
+        session,
+      );
     });
-    return { status: fromStatus, version: Number(current.version) + 1 };
+    return { status: fromStatus, version: Number(current.version) + 1, acceptedAt };
   }
 
   if (input.action !== "set_status") throw new CollaborationError("Choose what to do.");
@@ -767,46 +977,65 @@ export async function reviewContribution(
     throw new CollaborationError("Choose a valid status.");
   }
   const nextStatus = status as CollaborationStatus;
+  if (materialGone) {
+    throw new CollaborationError(
+      "This contribution was withdrawn or its material has been cleared and cannot be reopened.",
+      409,
+    );
+  }
   if (nextStatus === "approved") {
     if (!Array.isArray(current.channels) || current.channels.length === 0) {
       throw new CollaborationError(
-        "The contributor allowed private use only, so this cannot be published.",
+        "The contributor allowed private use only, so this cannot be published. Accept it as consultation input instead.",
       );
     }
     if (current.attribution === "named" && !String(current.displayName ?? "").trim()) {
       throw new CollaborationError("A named contribution needs a name before approval.");
     }
   }
-  const contributorMessage = clampText(
-    input.contributorMessage,
-    "Message for the contributor",
-    0,
-    1_000,
-  );
-  const internalNotes = clampText(input.internalNotes, "Internal notes", 0, 2_000);
-  const written = await db.collection(CONTRIBUTIONS).updateOne(
-    { contributionId, version: current.version },
-    {
-      $set: { status: nextStatus, contributorMessage, internalNotes, updatedAt: new Date() },
-      $inc: { version: 1 },
-    },
-  );
-  if (!written.matchedCount) {
-    throw new CollaborationError("This contribution changed while you were reviewing it. Refresh and try again.", 409);
-  }
-  await appendEvent(db, {
-    contributionId,
-    action: "set_status",
-    actorId: reviewer.memberId,
-    fromStatus,
-    toStatus: nextStatus,
+  // An omitted field means "leave it alone"; an explicit string, including "",
+  // is an intentional edit. This stops a status change erasing review notes.
+  const contributorMessage =
+    input.contributorMessage === undefined
+      ? String(current.contributorMessage ?? "")
+      : clampText(input.contributorMessage, "Message for the contributor", 0, 1_000);
+  const internalNotes =
+    input.internalNotes === undefined
+      ? String(current.internalNotes ?? "")
+      : clampText(input.internalNotes, "Internal notes", 0, 2_000);
+  await runInTransaction(db, async (session) => {
+    const written = await db.collection(CONTRIBUTIONS).updateOne(
+      { contributionId, version: current.version },
+      {
+        $set: { status: nextStatus, contributorMessage, internalNotes, updatedAt: new Date() },
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    if (!written.matchedCount) {
+      throw new CollaborationError(
+        "This contribution changed while you were reviewing it. Refresh and try again.",
+        409,
+      );
+    }
+    await appendEvent(
+      db,
+      {
+        contributionId,
+        action: "set_status",
+        actorId: reviewer.memberId,
+        fromStatus,
+        toStatus: nextStatus,
+      },
+      session,
+    );
+    // A withdrawal removes the material at once, in the same transaction as the
+    // decision and its audit event. Only the review record remains.
+    if (nextStatus === "withdrawn") {
+      await clearContributionContent(db, contributionId, "withdrawn", { session, touch: false });
+    }
   });
-  // A withdrawal removes the material at once. The status and audit event are
-  // the only record that remains.
-  if (nextStatus === "withdrawn" && fromStatus !== "withdrawn") {
-    await clearContributionContent(db, contributionId, "withdrawn");
-  }
-  return { status: nextStatus, version: Number(current.version) + 1 };
+  return { status: nextStatus, version: Number(current.version) + 1, acceptedAt };
 }
 
 /** Private media is readable only by a reviewer, never by a public route. */

@@ -3,6 +3,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { NativeSelect } from '../../../components/ui/native-select';
+import { Input } from '../../../components/ui/input';
 import Card from '../../../components/admin/Card.astro';
 import CardContent from '../../../components/admin/CardContent.astro';
 import CardDescription from '../../../components/admin/CardDescription.astro';
@@ -12,7 +13,7 @@ import Field from '../../../components/admin/Field.astro';
 import ContributionReviewer from '../../../components/collaboration/ContributionReviewer';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { getInitiative, listContributions } from '../../../lib/collaboration.ts';
+import { listContributions } from '../../../lib/collaboration.ts';
 import {
   COLLABORATION_STATUSES,
   PUBLICATION_CHANNELS,
@@ -32,16 +33,9 @@ if (!hasPermission(user, 'collaboration.review')) return Astro.rewrite('/403/');
 const db = await getDatabase(env);
 const inbox = await listContributions(db, user, {
   status: Astro.url.searchParams.get('status') ?? undefined,
+  q: Astro.url.searchParams.get('q') ?? undefined,
   page: Astro.url.searchParams.get('page') ?? undefined,
 });
-
-/** Question labels belong to the invitation, not to the answer key. */
-const slugs = [...new Set(inbox.items.map((item) => item.initiativeSlug))];
-const initiatives = await Promise.all(slugs.map((slug) => getInitiative(db, slug)));
-const labels = new Map<string, string>();
-for (const initiative of initiatives) {
-  for (const question of initiative?.questions ?? []) labels.set(question.key, question.label);
-}
 
 const statusTone = (status: CollaborationStatus) =>
   status === 'approved' ? 'success'
@@ -59,8 +53,8 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
 ---
 
 <AdminLayout
-  title="Stories"
-  description="Review stories and photographs contributed to Fusion's public storytelling."
+  title="Contributions"
+  description="Review what people sent to Fusion's public invitations."
   section="stories"
   isAdmin={user.isAdmin}
   isBranchAdmin={Boolean(user.isBranchAdmin)}
@@ -72,7 +66,7 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
         </p>
         <div class="flex flex-wrap gap-2">
           {hasPermission(user, 'collaboration.manage') && (
-            <Button href="/admin/collaboration/invitation/" size="sm" variant="outline">Edit invitation</Button>
+            <Button href="/admin/collaboration/invitation/" size="sm" variant="outline">Invitations</Button>
           )}
           <Button href="/api/admin/collaboration/export" size="sm" variant="outline">Export approved</Button>
         </div>
@@ -85,6 +79,9 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
       </CardHeader>
       <CardContent>
         <form class="flex flex-wrap items-end gap-4" method="get">
+          <Field label="Reference" htmlFor="story-reference" class="min-w-52">
+            <Input id="story-reference" name="q" placeholder="First few characters" defaultValue={Astro.url.searchParams.get('q') ?? ''} />
+          </Field>
           <Field label="Status" htmlFor="story-status" class="min-w-52">
             <NativeSelect id="story-status" name="status" defaultValue={Astro.url.searchParams.get('status') ?? ''}>
               <option value="">All statuses</option>
@@ -103,12 +100,15 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
     {inbox.items.length ? (
       <ul class="m-0 grid list-none gap-4 p-0">
         {inbox.items.map((item) => (
-          <li>
+          <li data-contribution={item.contributionId}>
             <Card class="gap-4">
               <CardHeader class="gap-2">
                 <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <Badge variant={statusTone(item.status)}>{COLLABORATION_STATUSES[item.status]}</Badge>
-                  <span>{item.attribution === 'named' ? item.displayName : 'Anonymous'}</span>
+                  {item.inputAcceptedAt && <Badge variant="info">Input accepted</Badge>}
+                  <span>{item.attribution === 'named' ? item.displayName : 'No name'}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{item.initiativeTitle}</span>
                   <span aria-hidden="true">·</span>
                   <time datetime={item.createdAt}>{new Date(item.createdAt).toLocaleDateString('en-AU')}</time>
                   {item.media.length > 0 && (
@@ -128,7 +128,9 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
                 <dl class="m-0 grid gap-3">
                   {Object.entries(item.answers).map(([key, answer]) => (
                     <div>
-                      <dt class="text-sm font-semibold">{labels.get(key) ?? key}</dt>
+                      <dt class="text-sm font-semibold">
+                      {item.questions.find((question) => question.key === key)?.label ?? key}
+                    </dt>
                       <dd class="m-0 whitespace-pre-wrap break-words">{answer}</dd>
                     </div>
                   ))}
@@ -184,6 +186,12 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
                     </p>
                   )}
                   {item.internalNotes && <p class="m-0">Notes: {item.internalNotes}</p>}
+                  {item.initiativePurpose && (
+                    <details>
+                      <summary>What the contributor was told</summary>
+                      <p class="m-0">{item.initiativePurpose}</p>
+                    </details>
+                  )}
                 </div>
 
                 <ContributionReviewer
@@ -192,7 +200,10 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
                   version={item.version}
                   status={item.status}
                   channels={item.channels}
-                  usedChannels={item.usedChannels}
+                  history={item.publicationHistory}
+                  initialNotes={item.internalNotes}
+                  initialMessage={item.contributorMessage}
+                  acceptedAt={item.inputAcceptedAt}
                 />
               </CardContent>
             </Card>
