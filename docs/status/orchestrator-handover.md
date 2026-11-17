@@ -136,7 +136,7 @@ implementation, then update the decision register or open a decision.
 | Notifications (#33) | `dispatchMemberNotification` still has no production caller. Scheduled transitions notify nobody. |
 | Security perimeter (#38) | Turnstile and rate limiting only. CSP, HSTS, frame/content-type headers, full CSRF/Origin coverage remain. |
 | Observability (#39) | No metrics, traces or alerting. Scheduler and Turnstile failures are visible only in logs. |
-| Command layer (#53) | No typed governance commands or central route policy. The former `store.ts` god module is now split into domain modules (#115); the remaining work is the command layer itself. |
+| Command layer (#53) | No typed governance commands or central route policy. The former `store.ts` god module is now split into domain modules (#115), and the compatibility barrel has been deleted (#119); the remaining work is the command layer itself. |
 | Decision record (#54) | No complete member-facing lineage view or administrator responsibility queue. |
 | Rendering performance (#52) | Per-vote decryption and full vote scans remain on list reads; React remains on member settings, admin timelines and the proposal ballot islands, but no longer on the signed-in header. |
 | Membership (#32) | No unique `(branchId, memberId)` index or duplicate-resolving migration. |
