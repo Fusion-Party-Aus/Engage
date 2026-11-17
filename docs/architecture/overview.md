@@ -54,7 +54,7 @@ All pages are server-rendered on request. No route sets `prerender = true`; 79 r
 | Astro components | `src/components/**/*.astro` |
 | shadcn primitives | `src/components/ui/**` |
 | Admin Astro wrappers | `src/components/admin/**`, `admin-kit.tsx` |
-| Domain services | `src/lib/store.ts`, `ballots.ts`, `branch-participation.ts`, `membership-verification.ts`, `notifications.ts`, `engagement-email.ts` |
+| Domain services | `src/lib/proposals-store.ts`, `proposal-helpers.ts`, `comments-store.ts`, `contribution-feedback.ts`, `voting-store.ts`, `members-store.ts`, `ballots.ts`, `branch-participation.ts`, `membership-verification.ts`, `notifications.ts`, `engagement-email.ts` |
 | Governance model | `src/lib/matters.ts`, `proposal-revision.ts`, `ballot-binding.ts`, `governance-relationships.ts` |
 | Authorisation | `src/lib/auth.ts`, `rbac.ts`, `roles-store.ts` |
 | Persistence | `src/lib/db.ts`, `vote-storage.ts`, `read-models.ts`, `proposal-register.ts`, `migrations.ts` |
@@ -65,7 +65,7 @@ All pages are server-rendered on request. No route sets `prerender = true`; 79 r
 | Tests | Co-located `src/lib/*.test.ts` |
 | Deployment | `Dockerfile`, `docker-compose*.yml`, `docker/`, `deploy/`, `.github/workflows/` |
 
-`store.ts` is the largest module (about 2,900 lines) and the de facto domain service for proposals, comments, votes and members. Treat it as the primary business-logic file, not as a storage utility.
+`store.ts` is a deprecated compatibility barrel only; domain logic lives in `proposals-store.ts`, `proposal-helpers.ts`, `comments-store.ts`, `contribution-feedback.ts`, `voting-store.ts`, and `members-store.ts`.
 
 ## Layering
 
@@ -98,9 +98,9 @@ types ────────── shared records
 These are real and should be considered before adding code:
 
 1. **Pages query MongoDB directly.** About 31 page/API files call `db.collection(...)`. This couples views to document shape and bypasses DTO allowlists. Examples include `src/pages/index.astro`, `src/pages/proposals/[slug].astro`, `src/pages/admin/reports/index.astro` and several admin policy endpoints.
-2. **`store.ts` is a god module.** It spans proposals, deliberation, ballots, members and RBAC checks, and is imported by email, PDF, reporting and membership-verification services. A change to proposal internals can affect unrelated send paths.
-3. **Service-to-infrastructure inversion.** `engagement-email.ts` imports `store.ts` for `listMembers` / `listProposals`. Digest sending is therefore sensitive to any store change.
-4. **Auth cycle break by dynamic import.** `branch-participation.ts` imports `canAdministerBranch` from `auth.ts`; `auth.ts` lazily imports branch participation. `store.ts` also lazily imports eligibility. There is no static cycle today, but it depends on these dynamic imports remaining lazy.
+2. **Legacy `store.ts` barrel.** The former `store.ts` god module has been split into `proposals-store.ts`, `proposal-helpers.ts`, `comments-store.ts`, `contribution-feedback.ts`, `voting-store.ts`, and `members-store.ts` (#115); `store.ts` remains temporarily as a thin re-export barrel for unmigrated page/test callers.
+3. **Service-to-service coupling.** `engagement-email.ts` imports `listMembers` (`members-store.ts`), `listProposals` (`proposals-store.ts`), and `canViewProposal` (`proposal-helpers.ts`) directly rather than through a dedicated read-model boundary.
+4. **Auth cycle break by dynamic import.** `branch-participation.ts` imports `canAdministerBranch` from `auth.ts`; `auth.ts` lazily imports branch participation. `voting-store.ts` also lazily imports eligibility, and `members-store.ts` lazily imports `membership-verification.ts` and `resilience.ts`. There is no static cycle today, but it depends on these dynamic imports remaining lazy.
 5. **No route guard layer.** `src/middleware.ts` is a perimeter layer, not a guard: it sets headers and refuses cross-origin state-changing requests, but every route still authenticates and authorises itself. Some routes use `requireApiPermission`; many hand-roll `isAdmin` / `isStaff` checks. A new endpoint inherits nothing by default except the perimeter rule.
 6. **In-memory database fidelity.** The development fallback implements a subset of the driver. `project()` and `createIndex()` are no-ops and there are no transactions. Tests that depend on projections, unique indexes or transactions are meaningful only against real MongoDB.
 

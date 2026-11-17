@@ -1,4 +1,4 @@
-import { isGovernanceResolution } from "./store.ts";
+import { isGovernanceResolution } from "./proposal-helpers.ts";
 import type { CommentRecord, ProposalSummaryView } from "./types.ts";
 
 export interface ProposalPdfReportInput {

@@ -22,7 +22,7 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 **Resolved on `feat/rfc0001-sprint1-integration`:** a zero-vote return clears the binding and emits `ballot.unbound`; re-entry binds the current revision; edits are refused once votes exist.
 
-**Evidence:** `saveProposal` binds only when `ballotRevisionId` is unset (`src/lib/store.ts`). The field is never cleared.
+**Evidence:** `saveProposal` binds only when `ballotRevisionId` is unset (`src/lib/proposals-store.ts`). The field is never cleared.
 
 **Direction:** On re-entry to Decide with zero votes, either rebind explicitly and record an event, or refuse the transition until an officer chooses. Never rebind silently when votes exist. This needs a governance decision about re-opening.
 

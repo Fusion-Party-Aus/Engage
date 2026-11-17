@@ -124,7 +124,7 @@ The server island's own commands still run, just after the document response. Th
 
 ## Store/query-shape changes for the architecture workstream
 
-These are narrow changes to `src/lib/store.ts` and `src/lib/member-activity.ts`. Rebase the command-layer/read-model work against them:
+These are narrow changes to `src/lib/proposals-store.ts`, `src/lib/voting-store.ts` and `src/lib/member-activity.ts`. Rebase the command-layer/read-model work against them:
 
 1. `listProposals(..., { includeDetails?: boolean })` — defaults to including `details`; always excludes `detailHtml` from list reads.
 2. `listOutstandingDecisions(..., availableProposals?, memberVotes?)` — `memberVotes` accepts a value or an in-flight promise; when no proposals are supplied it reads only `stage: "decide"` with a projection and applies `canViewProposal`.

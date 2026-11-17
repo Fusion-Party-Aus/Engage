@@ -7,7 +7,8 @@ import {
   readBallotTallyProjections,
 } from "./ballot-tallies.ts";
 import { emailOrigin } from "./engagement-email.ts";
-import { canViewProposal, listProposals } from "./store.ts";
+import { canViewProposal } from "./proposal-helpers.ts";
+import { listProposals } from "./proposals-store.ts";
 import { proposalBallotId } from "./vote-storage.ts";
 import { validateDiscordWebhook } from "./discord-webhook.ts";
 import {

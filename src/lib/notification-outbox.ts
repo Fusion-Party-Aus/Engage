@@ -10,7 +10,7 @@ import {
 } from "./notifications.ts";
 import { normalisePlatformRoles, primaryPlatformRole } from "./rbac.ts";
 import { logOperationalEvent } from "./resilience.ts";
-import { canViewProposal } from "./store.ts";
+import { canViewProposal } from "./proposal-helpers.ts";
 import type { PlatformEnv, ProposalRecord, SessionUser, UserRole } from "./types.ts";
 import { proposalBallotId } from "./vote-storage.ts";
 import type { PushSender } from "./web-push.ts";

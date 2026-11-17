@@ -7,7 +7,9 @@ import {
   escapeEmailHtml,
   renderDigestEmail,
 } from "./email-templates.ts";
-import { listMembers, listProposals, canViewProposal } from "./store.ts";
+import { listMembers } from "./members-store.ts";
+import { canViewProposal } from "./proposal-helpers.ts";
+import { listProposals } from "./proposals-store.ts";
 import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
 import { findMemberVotes, proposalBallotId } from "./vote-storage.ts";
 

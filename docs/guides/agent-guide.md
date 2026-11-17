@@ -18,11 +18,11 @@ Then open the files you intend to change. Do not plan from documentation alone.
 
 | If the task concerns… | Start here |
 |---|---|
-| Proposal CRUD, stages, revisions | `src/lib/store.ts`, `src/lib/matters.ts`, `src/lib/proposal-revision.ts` |
-| Comments, stances, feedback | `src/lib/store.ts` (`addComment`, `setCommentFeedback`) |
+| Proposal CRUD, stages, revisions | `src/lib/proposals-store.ts`, `src/lib/proposal-helpers.ts`, `src/lib/matters.ts`, `src/lib/proposal-revision.ts` |
+| Comments, stances, feedback | `src/lib/comments-store.ts` (`addComment`), `src/lib/contribution-feedback.ts` (`setCommentFeedback`) |
 | Amendments | `src/pages/api/amendments.ts`, `src/pages/api/admin/amendments/*`, `src/lib/amendments.ts` |
 | Ballot binding/results | `src/lib/ballot-binding.ts`, `src/lib/ballots.ts`, `src/pages/api/admin/ballots/*` |
-| Votes | `src/lib/store.ts` (`castVote`), `src/lib/vote-storage.ts`, `src/lib/ballot-crypto.ts` |
+| Votes | `src/lib/voting-store.ts` (`castVote`), `src/lib/vote-storage.ts`, `src/lib/ballot-crypto.ts` |
 | Eligibility | `src/lib/branch-participation.ts` (`getProposalEligibility`) |
 | Branches/following | `src/lib/branch-participation.ts`, `src/pages/api/member/branches.ts` |
 | Verification/CRM | `src/lib/membership-verification.ts`, `src/lib/underground-crm.ts` |

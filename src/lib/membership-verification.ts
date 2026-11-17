@@ -9,7 +9,8 @@ import {
   type CrmOperationalSettingsValues,
 } from "./operational-settings.ts";
 import { logOperationalEvent } from "./resilience.ts";
-import { listMembers, promotePendingVotePreferences } from "./store.ts";
+import { listMembers } from "./members-store.ts";
+import { promotePendingVotePreferences } from "./voting-store.ts";
 import { sendVerificationNotice } from "./verification-email.ts";
 import {
   CRM_APPLICATION,
