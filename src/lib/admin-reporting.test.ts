@@ -8,7 +8,7 @@ import {
 import { GET as exportProposalsCsv } from "../pages/api/admin/reports/proposals.csv.ts";
 import { createDevSessionCookie } from "./auth.ts";
 import { getDatabase } from "./db.ts";
-import { saveProposal } from "./store.ts";
+import { saveProposal } from "./proposals-store.ts";
 import type { ProposalSummaryView, SessionUser } from "./types.ts";
 
 function makeProposal(

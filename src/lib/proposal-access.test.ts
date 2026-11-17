@@ -1,13 +1,10 @@
 import { it } from "node:test";
 import assert from "node:assert/strict";
 import { getDatabase } from "./db.ts";
-import {
-  addComment,
-  canViewProposal,
-  castVote,
-  listProposalRevisions,
-  listProposals,
-} from "./store.ts";
+import { addComment } from "./comments-store.ts";
+import { canViewProposal } from "./proposal-helpers.ts";
+import { castVote } from "./voting-store.ts";
+import { listProposalRevisions, listProposals } from "./proposals-store.ts";
 import { ballotRecordsForViewer } from "./ballot-privacy.ts";
 import { canViewIdentifiableBallots } from "./auth.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";

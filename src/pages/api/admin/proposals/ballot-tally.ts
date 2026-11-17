@@ -15,7 +15,7 @@ import {
   readBallotQuorumRecord,
 } from "../../../../lib/quorum.ts";
 import { hasPermission } from "../../../../lib/rbac.ts";
-import { normalizeProposalDoc } from "../../../../lib/store.ts";
+import { normalizeProposalDoc } from "../../../../lib/proposal-helpers.ts";
 import { proposalBallotId } from "../../../../lib/vote-storage.ts";
 
 export const prerender = false;

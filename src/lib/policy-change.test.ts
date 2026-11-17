@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createDevSessionCookie } from "./auth.ts";
 import { getDatabase } from "./db.ts";
 import { applyBranchPolicyImport, planBranchPolicyImport } from "./policy-import.ts";
-import { canViewProposal, saveProposal } from "./store.ts";
+import { canViewProposal } from "./proposal-helpers.ts";
+import { saveProposal } from "./proposals-store.ts";
 import {
   POLICY_CHANGE_GUIDANCE,
   defaultPolicyChangeTitle,

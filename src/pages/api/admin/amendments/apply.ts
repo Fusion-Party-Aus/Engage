@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
-import { saveProposal } from "../../../../lib/store.ts";
+import { saveProposal } from "../../../../lib/proposals-store.ts";
 import { hasPermission, hasPermissionAnywhere } from "../../../../lib/rbac.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {

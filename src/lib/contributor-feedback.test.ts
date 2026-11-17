@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { getDatabase } from "./db.ts";
-import { addComment, getProposalDetail, listProposals, resolveContributionEvidenceMap, saveProposal, setCommentFeedback } from "./store.ts";
+import { addComment } from "./comments-store.ts";
+import { getProposalDetail, listProposals, saveProposal } from "./proposals-store.ts";
+import { resolveContributionEvidenceMap, setCommentFeedback } from "./contribution-feedback.ts";
 import { buildMemberCatchUp, listMemberActivityStream } from "./member-activity.ts";
 import type { SessionUser } from "./types.ts";
 

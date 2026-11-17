@@ -12,7 +12,8 @@ import {
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { ballotDeadlineShortLabel } from '../../../lib/ballot-deadline.ts';
-import { isGovernanceResolution, listProposals } from '../../../lib/store.ts';
+import { isGovernanceResolution } from '../../../lib/proposal-helpers.ts';
+import { listProposals } from '../../../lib/proposals-store.ts';
 import { ballotOutcomeLabel } from '../../../lib/ballots.ts';
 import { proposalBallotId } from '../../../lib/vote-storage.ts';
 import { buildBallotProgressRows, canIncludeProposalInAdminReport } from '../../../lib/admin-reporting.ts';

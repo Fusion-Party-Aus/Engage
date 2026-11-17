@@ -7,7 +7,7 @@ import {
   recordGovernanceEvent,
 } from "../../../../lib/governance-relationships.ts";
 import { hasPermission } from "../../../../lib/rbac.ts";
-import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
+import { isPolicyRegistryRecordForResolution } from "../../../../lib/proposal-helpers.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);

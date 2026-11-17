@@ -12,7 +12,13 @@ import { ballotExpired, CURRENT_BALLOT_CLOSES_AT, closesWithinSevenDays } from "
 import { rankProposals } from "./proposal-metrics.ts";
 import { digestBallots, renderDigest, runBallotDigests, unsubscribeToken, readUnsubscribeToken, verifyResendWebhook, recordEmailEvent, sendAdminTestEmail } from "./engagement-email.ts";
 import { JOBS_OPERATIONAL_SETTINGS_ID, OPERATIONAL_SETTINGS_COLLECTION } from "./operational-settings.ts";
-import { castVote, listOutstandingDecisions, promotePendingVotePreferences, savePendingVotePreference, PENDING_VOTE_PREFERENCES } from "./store.ts";
+import {
+  castVote,
+  listOutstandingDecisions,
+  promotePendingVotePreferences,
+  savePendingVotePreference,
+} from "./voting-store.ts";
+import { PENDING_VOTE_PREFERENCES } from "./proposal-helpers.ts";
 import type { PlatformEnv, ProposalSummaryView, SessionUser } from "./types.ts";
 import { PROPOSAL_VOTES } from "./vote-storage.ts";
 const now = new Date("2027-01-10T00:00:00Z");

@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { publicPolicy } from "../../../../lib/public-policy.ts";
 import { publicJson } from "../../../../lib/public-api.ts";
-import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
+import { isPolicyRegistryRecordForResolution } from "../../../../lib/proposal-helpers.ts";
 export const prerender = false;
 export const GET: APIRoute = async ({ params, locals, request }) => {
   const env = runtimeEnv(locals);

@@ -3,7 +3,7 @@ import { getSessionUser } from "../../../../lib/auth.ts";
 import { privateJson, toPublicationEventDto } from "../../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { requireApiPermission } from "../../../../lib/rbac.ts";
-import { isPolicyRegistryRecordForResolution } from "../../../../lib/store.ts";
+import { isPolicyRegistryRecordForResolution } from "../../../../lib/proposal-helpers.ts";
 import {
   applyRatifiedPolicyChange,
   isPolicyChangeType,

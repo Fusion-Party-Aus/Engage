@@ -9,7 +9,7 @@ import {
 import { createMemoryDb } from "./db.ts";
 import { verifyMemberFromCrm } from "./membership-verification.ts";
 import { ALL_NATIONAL_PERMISSIONS } from "./rbac.ts";
-import { saveMember } from "./store.ts";
+import { saveMember } from "./members-store.ts";
 import type { SessionUser } from "./types.ts";
 
 const memberUser: SessionUser = {

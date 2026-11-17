@@ -51,7 +51,8 @@ import { turnstileEnforced } from '../../lib/turnstile.ts';
 import { ballotExpired, ballotDeadlineLabel, closesWithinSevenDays } from '../../lib/ballot-deadline.ts';
 import { digestEnabled, ensureDigestCohort } from '../../lib/digest-preferences.ts';
 import { outstandingBallots, type DigestBallot } from '../../lib/engagement-email.ts';
-import { listProposals, listUserActivity } from '../../lib/store.ts';
+import { listProposals } from '../../lib/proposals-store.ts';
+import { listUserActivity } from '../../lib/voting-store.ts';
 import { getMemberProfileSettings, memberProfileHref } from '../../lib/member-profile.ts';
 import {
   ensureNationalBranchAssignment,

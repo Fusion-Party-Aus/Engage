@@ -15,7 +15,7 @@ import {
   deleteProposal,
   getProposalDetail,
   saveProposal,
-} from "../../../lib/store.ts";
+} from "../../../lib/proposals-store.ts";
 
 export const prerender = false;
 

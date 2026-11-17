@@ -35,6 +35,8 @@ Then open the files you intend to change. Do not plan from documentation alone.
 | UI primitives | `src/components/ui/*`, `src/components/admin/*`, `DESIGN.md` |
 | Deployment | `Dockerfile`, `docker-compose*.yml`, `.github/workflows/*`, `deploy/` |
 
+There is no `src/lib/store.ts` barrel. Import proposal, comment, vote, member and contribution-feedback behaviour from the domain modules listed above; `src/lib/store-architecture.test.ts` enforces the boundary.
+
 ## Task routing
 
 | Task | Approach |

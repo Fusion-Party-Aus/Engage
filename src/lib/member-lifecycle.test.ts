@@ -7,7 +7,7 @@ import { recordEmailEvent } from './engagement-email.ts';
 import { recordLifecycle, recordParticipation, lifecycleConversion, memberNextAction } from './member-lifecycle.ts';
 import { previewMemberReengagement } from './member-reengagement.ts';
 import { safeMemberReturn } from './return-destination.ts';
-import { listOutstandingDecisions } from './store.ts';
+import { listOutstandingDecisions } from './voting-store.ts';
 const env={APP_MODE:'preview',RESEND_API_KEY:'synthetic',AUTH_EMAIL_FROM:'test@example.test',BETTER_AUTH_URL:'https://example.test'};
 const now=new Date('2026-11-09T00:00:00Z');
 async function fixture(db=createMemoryDb()) {
