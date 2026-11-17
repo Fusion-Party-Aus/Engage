@@ -236,7 +236,8 @@ export async function saveCollaborationOwners(
     (key) => key !== "configId" && before[key] !== after[key],
   );
   const now = new Date();
-  await runInTransaction(db, async (session) => {
+  try {
+    await runInTransaction(db, async (session) => {
     const written = await db.collection(SETTINGS).updateOne(
       { configId: "global", version: Number(expectedVersion) },
       {
@@ -281,5 +282,16 @@ export async function saveCollaborationOwners(
       { session },
     );
   });
+  } catch (error) {
+    // A racing first save loses the unique-key race. That is a version
+    // conflict, not a service failure.
+    if ((error as { code?: number }).code === 11000) {
+      throw new OperationSettingsError(
+        "These owners changed while you were editing. Reload and try again.",
+        409,
+      );
+    }
+    throw error;
+  }
   return readCollaborationOwners(db);
 }
