@@ -130,6 +130,17 @@ const SERVICE_INDEXES: IndexDefinition[] = [
     { unique: true, name: "collaboration_event_unique" },
   ],
   ["collaboration_events", { contributionId: 1, at: -1 }],
+  // Aggregate funnel counts (#143). One row per invitation, day and stage.
+  [
+    "collaboration_funnel",
+    { initiativeSlug: 1, day: 1, stage: 1 },
+    { unique: true, name: "collaboration_funnel_bucket" },
+  ],
+  [
+    "collaboration_funnel",
+    { expiresAt: 1 },
+    { expireAfterSeconds: 0, name: "collaboration_funnel_retention" },
+  ],
 ];
 
 // Matter, discussion, governance, branch and membership indexes.

@@ -51,6 +51,7 @@ const base = {
   displayName: "Sam Rivera",
   channels: ["website" as const],
   consent: true,
+  adultAttested: true,
 };
 
 test(

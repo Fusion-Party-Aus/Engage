@@ -4,7 +4,7 @@ import { getDatabase, runtimeEnv } from "../../../../../lib/db.ts";
 import {
   CollaborationError,
   reviewContribution,
-  setGalleryVisibility,
+  setGalleryPublication,
 } from "../../../../../lib/collaboration.ts";
 
 export const prerender = false;
@@ -18,10 +18,10 @@ export const PATCH: APIRoute = async ({ request, locals, params }) => {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const db = await getDatabase(env);
-    if (body.action === "set_gallery_visibility") {
-      const result = await setGalleryVisibility(db, user, {
+    if (body.action === "set_gallery_publication") {
+      const result = await setGalleryPublication(db, user, {
         contributionId: params.contributionId,
-        hidden: body.hidden,
+        state: body.state,
         version: body.version,
       });
       return Response.json({ saved: true, ...result }, { headers });

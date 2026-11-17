@@ -33,11 +33,13 @@ if (!initiative) Astro.response.status = 404;
               <article>
                 {story.media.length > 0 && (
                   <div class="gallery-photos">
-                    {story.media.map((media) => (
+                    {story.media.map((media, index) => (
                       <a href={`/api/collaboration/media/${media.mediaId}`} target="_blank" rel="noreferrer">
                         <img
                           src={`/api/collaboration/media/${media.mediaId}`}
-                          alt={story.caption || (story.name ? `Photograph shared by ${story.name}` : 'Photograph shared anonymously')}
+                          alt={`Photograph ${index + 1} of ${story.media.length} shared by ${
+                            story.attribution === 'named' && story.name ? story.name : 'an anonymous contributor'
+                          }${story.caption ? `: ${story.caption}` : ''}`}
                           loading="lazy"
                         />
                       </a>

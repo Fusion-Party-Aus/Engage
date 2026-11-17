@@ -28,6 +28,7 @@ interface Props {
   initialNotes: string;
   initialMessage: string;
   acceptedAt: string | null;
+  galleryPublishedAt: string | null;
   galleryHiddenAt: string | null;
   initiativeSlug: string;
 }
@@ -46,6 +47,7 @@ export default function ContributionReviewer({
   initialNotes,
   initialMessage,
   acceptedAt,
+  galleryPublishedAt,
   galleryHiddenAt,
   initiativeSlug,
 }: Props) {
@@ -59,6 +61,7 @@ export default function ContributionReviewer({
   const [notes, setNotes] = useState(initialNotes);
   const [message, setMessage] = useState(initialMessage);
   const [accepted, setAccepted] = useState(acceptedAt);
+  const [galleryPublished, setGalleryPublished] = useState(Boolean(galleryPublishedAt));
   const [galleryHidden, setGalleryHidden] = useState(Boolean(galleryHiddenAt));
   const [uses, setUses] = useState<HistoryEntry[]>(history);
   const [channel, setChannel] = useState<PublicationChannel | ''>(channels[0] ?? '');
@@ -107,13 +110,19 @@ export default function ContributionReviewer({
     }
   }
 
-  async function toggleGallery() {
-    const next = !galleryHidden;
+  async function setGallery(state: 'publish' | 'hide' | 'show') {
     const result = await send(
-      { action: 'set_gallery_visibility', hidden: next },
-      next ? 'Removed from the public gallery.' : 'Returned to the public gallery.',
+      { action: 'set_gallery_publication', state },
+      state === 'publish'
+        ? 'Published to the public gallery.'
+        : state === 'hide'
+          ? 'Removed from the public gallery. Approval is unchanged.'
+          : 'Returned to the public gallery.',
     );
-    if (result) setGalleryHidden(next);
+    if (result) {
+      setGalleryPublished(true);
+      setGalleryHidden(state === 'hide');
+    }
   }
 
   async function acceptInput() {
@@ -195,12 +204,33 @@ export default function ContributionReviewer({
       )}
 
       {savedStatus === 'approved' && channels.includes('website') && (
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={toggleGallery}>
-            {galleryHidden ? 'Show in gallery' : 'Hide from gallery'}
-          </Button>
-          <a href={`/collaborate/${initiativeSlug}/stories/`}>View the public gallery</a>
-          {galleryHidden && <span className="text-muted-foreground">Hidden from the public gallery.</span>}
+        <div className="grid gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            {!galleryPublished ? (
+              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setGallery('publish')}>
+                Publish to gallery
+              </Button>
+            ) : galleryHidden ? (
+              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setGallery('show')}>
+                Show in gallery
+              </Button>
+            ) : (
+              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setGallery('hide')}>
+                Hide from gallery
+              </Button>
+            )}
+            {galleryPublished && !galleryHidden && (
+              <a href={`/collaborate/${initiativeSlug}/stories/`}>View the public gallery</a>
+            )}
+          </div>
+          {!galleryPublished && (
+            <p className="m-0 text-muted-foreground">
+              Approved, not published. Publishing makes the story and its photographs public.
+            </p>
+          )}
+          {galleryPublished && galleryHidden && (
+            <p className="m-0 text-muted-foreground">Hidden from the public gallery. Approval is unchanged.</p>
+          )}
         </div>
       )}
 

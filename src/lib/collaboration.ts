@@ -26,6 +26,7 @@ import {
   type PublicationChannel,
 } from "./collaboration-options.ts";
 import { prepareImage, safeFilename } from "./collaboration-media.ts";
+import { recordFunnelEvent } from "./collaboration-funnel.ts";
 
 /**
  * Public collaboration matters (#143).
@@ -99,6 +100,7 @@ export interface ContributionRecordView {
   version: number;
   consentVersion: string;
   contentClearedAt: string | null;
+  galleryPublishedAt: string | null;
   galleryHiddenAt: string | null;
   /** The invitation as it read when this contribution was sent. */
   questions: Array<{ key: string; label: string }>;
@@ -432,6 +434,7 @@ export interface SubmissionInput {
   allowAiEdits?: unknown;
   contactAllowed?: unknown;
   consent?: unknown;
+  adultAttested?: unknown;
   website?: unknown;
 }
 
@@ -449,6 +452,9 @@ export async function submitContribution(
   if (input.website) throw new CollaborationError("Could not accept this submission.");
   if (input.consent !== true) {
     throw new CollaborationError("Confirm this is your own story and photos before sending.");
+  }
+  if (input.adultAttested !== true) {
+    throw new CollaborationError("Confirm you are 18 or over before sending.");
   }
   if (!UUID_PATTERN.test(String(input.requestId ?? ""))) {
     throw new CollaborationError("Please reload the page and try again.");
@@ -587,6 +593,7 @@ export async function submitContribution(
       initiativePurpose: initiative.purpose,
       questions: initiative.questions.map((question) => ({ key: question.key, label: question.label })),
       profile: initiative.profile,
+      adultAttestedAt: now,
       answers,
       caption,
       displayName,
@@ -639,6 +646,11 @@ export async function submitContribution(
     }
   }
 
+  // One count per accepted contribution. An idempotent retry returns above and
+  // does not increment again. A counting failure must not fail the submission.
+  if (inserted) {
+    await recordFunnelEvent(db, initiative.slug, "submitted").catch(() => {});
+  }
   return { contributionId, shareable: channels.length > 0 };
 }
 
@@ -809,6 +821,7 @@ function toContributionView(row: Record<string, any>): ContributionRecordView {
     version: Number(row.version ?? 0),
     consentVersion: String(row.consentVersion ?? ""),
     contentClearedAt: row.contentClearedAt ? new Date(row.contentClearedAt).toISOString() : null,
+    galleryPublishedAt: row.galleryPublishedAt ? new Date(row.galleryPublishedAt).toISOString() : null,
     galleryHiddenAt: row.galleryHiddenAt ? new Date(row.galleryHiddenAt).toISOString() : null,
     questions: (Array.isArray(row.questions) ? row.questions : []).map((question: any) => ({
       key: String(question.key),
@@ -1060,6 +1073,8 @@ const PUBLISHED_FILTER = {
   profile: "story",
   channels: { $in: ["website"] },
   contentClearedAt: { $exists: false },
+  // Approval alone never publishes. A reviewer publishes deliberately.
+  galleryPublishedAt: { $exists: true },
   galleryHiddenAt: { $exists: false },
 } as const;
 
@@ -1070,7 +1085,7 @@ export async function listPublishedContributions(
   const rows = await db
     .collection(CONTRIBUTIONS)
     .find({ ...PUBLISHED_FILTER, initiativeSlug })
-    .sort({ updatedAt: -1 })
+    .sort({ galleryPublishedAt: -1, _id: -1 })
     .limit(60)
     .toArray();
   return rows.map((row) => {
@@ -1092,7 +1107,7 @@ export async function listPublishedContributions(
         mediaId: String(entry.mediaId),
         mimeType: String(entry.mimeType),
       })),
-      publishedAt: new Date(row.updatedAt).toISOString(),
+      publishedAt: new Date(row.galleryPublishedAt).toISOString(),
     };
   });
 }
@@ -1128,12 +1143,21 @@ export async function readPublishedMedia(
   return { bytes, mimeType: String(media.mimeType) };
 }
 
-/** A reviewer can remove a story from the public gallery without withdrawing it. */
-export async function setGalleryVisibility(
+/**
+ * Gallery publication is a second, explicit decision after approval.
+ *
+ * - `publish`: first public appearance, only for an approved story with website
+ *   consent. The publication time is recorded once and is not reset by a later
+ *   hide or show.
+ * - `hide`: remove from public view immediately, keeping approval and the
+ *   publication record.
+ * - `show`: return previously published material to public view.
+ */
+export async function setGalleryPublication(
   db: Db,
   user: SessionUser | null | undefined,
-  input: { contributionId: unknown; hidden: unknown; version: unknown },
-): Promise<{ hidden: boolean; version: number }> {
+  input: { contributionId: unknown; state: unknown; version: unknown },
+): Promise<{ state: "published" | "hidden"; version: number; publishedAt: string | null }> {
   const reviewer = assertReviewer(user);
   const contributionId = clampText(input.contributionId, "Contribution", 36, 36);
   const current = await db.collection(CONTRIBUTIONS).findOne({ contributionId });
@@ -1144,16 +1168,33 @@ export async function setGalleryVisibility(
   if (Number(input.version) !== Number(current.version)) {
     throw new CollaborationError("This contribution changed since you opened it. Refresh and try again.", 409);
   }
-  const hidden = input.hidden === true;
+  const state = input.state;
+  if (state !== "publish" && state !== "hide" && state !== "show") {
+    throw new CollaborationError("Choose whether to publish, hide or show this story.");
+  }
+  if ((state === "publish" || state === "show") && (!Array.isArray(current.channels) || !current.channels.includes("website"))) {
+    throw new CollaborationError("The contributor did not allow website publication.");
+  }
+  if (state === "hide" && !current.galleryPublishedAt) {
+    throw new CollaborationError("This story has not been published to the gallery.");
+  }
+  if (state === "publish" && current.galleryPublishedAt && !current.galleryHiddenAt) {
+    throw new CollaborationError("This story is already in the public gallery.");
+  }
+
+  const publishedAt = current.galleryPublishedAt ? new Date(current.galleryPublishedAt) : new Date();
   await runInTransaction(db, async (session) => {
     const written = await db.collection(CONTRIBUTIONS).updateOne(
       { contributionId, version: current.version },
       {
         $set: {
-          ...(hidden ? { galleryHiddenAt: new Date() } : {}),
+          ...(state === "hide" ? { galleryHiddenAt: new Date() } : {}),
+          ...(state === "publish" && !current.galleryPublishedAt
+            ? { galleryPublishedAt: publishedAt }
+            : {}),
           updatedAt: new Date(),
         },
-        ...(hidden ? {} : { $unset: { galleryHiddenAt: "" } }),
+        ...(state === "hide" ? {} : { $unset: { galleryHiddenAt: "" } }),
         $inc: { version: 1 },
       },
       { session },
@@ -1165,13 +1206,18 @@ export async function setGalleryVisibility(
       db,
       {
         contributionId,
-        action: hidden ? "hide_from_gallery" : "show_in_gallery",
+        action:
+          state === "publish" ? "publish_to_gallery" : state === "hide" ? "hide_from_gallery" : "show_in_gallery",
         actorId: reviewer.memberId,
       },
       session,
     );
   });
-  return { hidden, version: Number(current.version) + 1 };
+  return {
+    state: state === "hide" ? "hidden" : "published",
+    version: Number(current.version) + 1,
+    publishedAt: publishedAt.toISOString(),
+  };
 }
 
 /** Private media is readable only by a reviewer, never by a public route. */

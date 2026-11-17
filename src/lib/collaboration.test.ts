@@ -11,7 +11,7 @@ import {
   listInitiatives,
   listPublishedContributions,
   readPublishedMedia,
-  setGalleryVisibility,
+  setGalleryPublication,
   purgeExpiredContent,
   readContributionMedia,
   reviewContribution,
@@ -52,6 +52,7 @@ function submission(overrides: Partial<SubmissionInput> = {}): SubmissionInput {
     displayName: "Sam Rivera",
     channels: ["website"],
     consent: true,
+    adultAttested: true,
     ...overrides,
   };
 }
@@ -82,6 +83,7 @@ test("a guest can contribute without an account, and the record creates no gover
   const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
   assert.equal(row?.status, "new");
   assert.equal(row?.consentVersion, COLLABORATION_CONSENT_VERSION);
+  assert.ok(row?.adultAttestedAt instanceof Date);
   assert.equal(row?.memberId, undefined);
   assert.equal(await db.collection("proposals").countDocuments(), 0);
   assert.equal(await db.collection("ballots").countDocuments(), 0);
@@ -99,6 +101,7 @@ test("submission validation refuses missing consent, thin content, unknown optio
   const db = await setup();
   const cases: Array<Partial<SubmissionInput>> = [
     { consent: false },
+    { adultAttested: false },
     { answers: {} },
     { answers: { meaning: "too short" } },
     { channels: ["billboard"] },
@@ -878,6 +881,12 @@ test("the public gallery contains only approved website stories, credited as cho
     });
   }
 
+  // Approval alone never publishes.
+  assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 0);
+  const publishedAt = new Date().toISOString();
+  for (const id of [named.contributionId, anonymous.contributionId]) {
+    await setGalleryPublication(db, reviewer, { contributionId: id, state: "publish", version: 1 });
+  }
   const gallery = await listPublishedContributions(db, PILOT_SLUG);
   assert.deepEqual(
     gallery.map((entry) => entry.contributionId).sort(),
@@ -904,20 +913,27 @@ test("published photographs are served only while their story is published", asy
     status: "approved",
     version: 0,
   });
+  // Approved but not yet published: still private.
+  await assert.rejects(readPublishedMedia(db, mediaId), /not available/);
+  await setGalleryPublication(db, reviewer, {
+    contributionId: result.contributionId,
+    state: "publish",
+    version: 1,
+  });
   const published = await readPublishedMedia(db, mediaId);
   assert.equal(published.mimeType, "image/jpeg");
   assert.ok(published.bytes.length > 0);
 
-  await setGalleryVisibility(db, reviewer, {
+  await setGalleryPublication(db, reviewer, {
     contributionId: result.contributionId,
-    hidden: true,
-    version: 1,
+    state: "hide",
+    version: 2,
   });
   await assert.rejects(readPublishedMedia(db, mediaId), /not available/);
-  await setGalleryVisibility(db, reviewer, {
+  await setGalleryPublication(db, reviewer, {
     contributionId: result.contributionId,
-    hidden: false,
-    version: 2,
+    state: "show",
+    version: 3,
   });
   assert.ok((await readPublishedMedia(db, mediaId)).bytes.length > 0);
 
@@ -925,21 +941,21 @@ test("published photographs are served only while their story is published", asy
     contributionId: result.contributionId,
     action: "set_status",
     status: "withdrawn",
-    version: 3,
+    version: 4,
   });
   await assert.rejects(readPublishedMedia(db, mediaId), /not available/);
   assert.equal(await db.collection("collaboration_media").countDocuments(), 0);
 });
 
-test("gallery visibility is a reviewer action, needs approval, and is audited", async () => {
+test("gallery publication is a separate, authorised, audited decision", async () => {
   const db = await setup();
   const result = await submitContribution(db, submission({ channels: ["website"] }));
   await assert.rejects(
-    setGalleryVisibility(db, outsider, { contributionId: result.contributionId, hidden: true, version: 0 }),
+    setGalleryPublication(db, outsider, { contributionId: result.contributionId, state: "publish", version: 0 }),
     /permission/,
   );
   await assert.rejects(
-    setGalleryVisibility(db, reviewer, { contributionId: result.contributionId, hidden: true, version: 0 }),
+    setGalleryPublication(db, reviewer, { contributionId: result.contributionId, state: "publish", version: 0 }),
     /approved/,
   );
   await reviewContribution(db, reviewer, {
@@ -948,17 +964,44 @@ test("gallery visibility is a reviewer action, needs approval, and is audited", 
     status: "approved",
     version: 0,
   });
+  assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 0);
   await assert.rejects(
-    setGalleryVisibility(db, reviewer, { contributionId: result.contributionId, hidden: true, version: 0 }),
+    setGalleryPublication(db, reviewer, { contributionId: result.contributionId, state: "publish", version: 0 }),
     /changed since/,
   );
-  await setGalleryVisibility(db, reviewer, { contributionId: result.contributionId, hidden: true, version: 1 });
+  const published = await setGalleryPublication(db, reviewer, {
+    contributionId: result.contributionId,
+    state: "publish",
+    version: 1,
+  });
+  assert.equal(published.state, "published");
+  await assert.rejects(
+    setGalleryPublication(db, reviewer, { contributionId: result.contributionId, state: "publish", version: 2 }),
+    /already in the public gallery/,
+  );
+
+  const hidden = await setGalleryPublication(db, reviewer, {
+    contributionId: result.contributionId,
+    state: "hide",
+    version: 2,
+  });
+  assert.equal(hidden.state, "hidden");
+  assert.equal(hidden.publishedAt, published.publishedAt);
+  assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 0);
+  const shown = await setGalleryPublication(db, reviewer, {
+    contributionId: result.contributionId,
+    state: "show",
+    version: 3,
+  });
+  assert.equal(shown.publishedAt, published.publishedAt);
+  assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 1);
+
   const inbox = await listContributions(db, reviewer);
-  assert.ok(inbox.items[0]?.galleryHiddenAt);
+  assert.equal(inbox.items[0]?.galleryPublishedAt, published.publishedAt);
   const actions = (await db.collection("collaboration_events").find({ contributionId: result.contributionId }).toArray()).map(
     (event) => event.action,
   );
-  assert.deepEqual(actions, ["set_status", "hide_from_gallery"]);
+  assert.deepEqual(actions, ["set_status", "publish_to_gallery", "hide_from_gallery", "show_in_gallery"]);
 });
 
 test("a written consultation is never published individually, even with website consent", async () => {

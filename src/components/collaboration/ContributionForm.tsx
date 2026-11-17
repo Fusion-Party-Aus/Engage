@@ -43,6 +43,23 @@ export default function ContributionForm({
   const [aiEdits, setAiEdits] = useState(false);
   const [previews, setPreviews] = useState<Array<{ name: string; url: string }>>([]);
   const requestId = useRef('');
+  const started = useRef(false);
+
+  /** Aggregate only: no identity, no content, no cookie. */
+  function report(stage: 'start' | 'account_intent') {
+    fetch('/api/collaboration/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ initiativeSlug, stage }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  function noteStart() {
+    if (started.current) return;
+    started.current = true;
+    report('start');
+  }
 
   // Object URLs are revoked when the selection changes or the form unmounts.
   useEffect(() => () => previews.forEach((preview) => URL.revokeObjectURL(preview.url)), [previews]);
@@ -102,14 +119,16 @@ export default function ContributionForm({
         </div>
         <div className="flex flex-wrap gap-3">
           <Button href="/proposals/">Explore Engage</Button>
-          <Button href="/member/" variant="outline">Create an account</Button>
+          <Button href="/member/" variant="outline" onClick={() => report('account_intent')}>
+            Create an account
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-8">
+    <form onSubmit={submit} className="grid gap-8" onFocusCapture={noteStart}>
       <FieldSet>
         <FieldLegend>{story ? 'Your story' : 'Your response'}</FieldLegend>
         <FieldDescription>
@@ -141,7 +160,7 @@ export default function ContributionForm({
               <>
                 Optional. Up to {MEDIA_LIMITS.files} JPEG or PNG photos, {MEDIA_LIMITS.fileBytes / (1024 * 1024)} MB each.
                 <span className="block">
-                  If other people are recognisable, ask them first. Please don’t send photos of children.
+                  If other people are recognisable, ask them first. Photographs must not show identifiable children.
                 </span>
               </>
             }
@@ -304,6 +323,10 @@ export default function ContributionForm({
           <label htmlFor="collaboration-website">Website</label>
           <Input id="collaboration-website" name="website" tabIndex={-1} autoComplete="off" />
         </div>
+        <label className="flex items-start gap-3 text-sm">
+          <Checkbox name="adultAttested" required className="mt-0.5 size-5" />
+          <span>I’m 18 or over.</span>
+        </label>
         <label className="flex items-start gap-3 text-sm">
           <Checkbox name="consent" required className="mt-0.5 size-5" />
           <span>

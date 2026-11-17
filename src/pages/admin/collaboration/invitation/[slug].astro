@@ -10,6 +10,7 @@ import InitiativeEditor from '../../../../components/collaboration/InitiativeEdi
 import { getSessionUser } from '../../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../../lib/db.ts';
 import { getInitiative } from '../../../../lib/collaboration.ts';
+import { readFunnelSummary } from '../../../../lib/collaboration-funnel.ts';
 import { isPublicInitiativeStatus } from '../../../../lib/collaboration-options.ts';
 import { hasPermission } from '../../../../lib/rbac.ts';
 
@@ -23,6 +24,7 @@ if (!hasPermission(user, 'collaboration.manage')) return Astro.rewrite('/403/');
 
 const db = await getDatabase(env);
 const initiative = await getInitiative(db, String(Astro.params.slug ?? ''));
+const funnel = initiative ? await readFunnelSummary(db, initiative.slug) : null;
 if (!initiative) Astro.response.status = 404;
 ---
 
@@ -43,6 +45,40 @@ if (!initiative) Astro.response.status = 404;
         )}
       </div>
     </div>
+
+    {initiative && funnel ? (
+      <Card class="gap-0">
+        <CardHeader>
+          <CardTitle class="text-base">Interest, last {funnel.windowDays} days</CardTitle>
+          <CardDescription>
+            Counts only. No visitor identities, addresses or typed content are recorded.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt class="text-sm text-muted-foreground">Arrivals</dt>
+              <dd class="m-0 text-2xl font-semibold">{funnel.stages.view}</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">Started the form</dt>
+              <dd class="m-0 text-2xl font-semibold">{funnel.stages.start}</dd>
+              <dd class="m-0 text-sm text-muted-foreground">{funnel.rates.startedOfViewed}% of arrivals</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">Sent</dt>
+              <dd class="m-0 text-2xl font-semibold">{funnel.stages.submitted}</dd>
+              <dd class="m-0 text-sm text-muted-foreground">{funnel.rates.submittedOfStarted}% of starts</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">Opened account creation</dt>
+              <dd class="m-0 text-2xl font-semibold">{funnel.stages.account_intent}</dd>
+              <dd class="m-0 text-sm text-muted-foreground">{funnel.rates.accountIntentOfSubmitted}% of sends</dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+    ) : null}
 
     {initiative ? (
       <Card>

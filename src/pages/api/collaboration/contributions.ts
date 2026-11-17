@@ -72,6 +72,7 @@ export const POST: APIRoute = async (context) => {
         allowAiEdits: form.get("allowAiEdits") === "on",
         contactAllowed: form.get("contactAllowed") === "on",
         consent: form.get("consent") === "on",
+        adultAttested: form.get("adultAttested") === "on",
         website: form.get("website"),
       },
       files,

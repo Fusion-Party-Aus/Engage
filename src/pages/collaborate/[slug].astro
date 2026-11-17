@@ -1,6 +1,7 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import ContributionForm from '../../components/collaboration/ContributionForm';
+import FunnelBeacon from '../../components/collaboration/FunnelBeacon';
 import { Button } from '../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { countPublishedContributions, getPublicInitiative } from '../../lib/collaboration.ts';
@@ -42,6 +43,7 @@ if (!initiative) Astro.response.status = 404;
                   </Button>
                 </p>
               )}
+              <FunnelBeacon client:load initiativeSlug={initiative.slug} />
               <ContributionForm
                 client:load
                 initiativeSlug={initiative.slug}
