@@ -1,5 +1,41 @@
 [
   {
+    "hash": "d0da24d",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Document the approved gallery and its limits",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "dd7f08b",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover gallery consent, hiding and withdrawal",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "6ca7177",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish an approved story gallery",
+    "details": "Show an approved story on /collaborate/<slug>/stories/ only while it is approved, the contributor allowed website use, it is a story-profile contribution, its material is intact and a reviewer has not hidden it. Credit follows the contributor's choice and no name is stored for an anonymous story. Photographs are served from a public route that re-checks publication on every request, so hiding or withdrawing removes access immediately. Reviewers can hide a story from the gallery, or restore it, without changing its approval. The action is versioned and audited. In-memory array filters now honour $in, which the gallery query needs and the preview previously ignored. Refs #143"
+  },
+  {
+    "hash": "66ede29",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record collaboration invitations, profiles and fixes",
+    "details": "Refs #143"
+  },
+  {
     "hash": "ee6e657",
     "date": "2026-11-17",
     "type": "docs",
@@ -667,37 +703,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record Sense Box release"
-  },
-  {
-    "hash": "8ec0cf1",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Collect private branch community priorities"
-  },
-  {
-    "hash": "9ef66f5",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "proposals",
-    "summary": "Capture approved desktop and mobile journeys"
-  },
-  {
-    "hash": "b5207f2",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Implement approved reading and voting journey"
-  },
-  {
-    "hash": "41b4682",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "proposals",
-    "summary": "Record approved design reset and requirements audit"
   }
 ]
