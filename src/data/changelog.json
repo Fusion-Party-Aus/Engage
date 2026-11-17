@@ -1,5 +1,22 @@
 [
   {
+    "hash": "846eb0c",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "amendments",
+    "summary": "Record anchored insertions and apply recovery",
+    "details": "Document insertion anchors, the applying/finalise recovery state, and the one-to-many Sense Box cardinality question for separate confirmation."
+  },
+  {
+    "hash": "9cc68e5",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "changelog",
+    "summary": "Refresh snapshot after main merge"
+  },
+  {
     "hash": "d380594",
     "date": "2026-11-17",
     "type": "test",
@@ -673,22 +690,5 @@
     "scope": "admin",
     "summary": "Add audited platform settings and branch hierarchy validation",
     "details": "Replace the raw JSON platform settings form with a task-based settings workspace. Administrators can manage visibility, public features, social channels and the branch website directory, with server-side URL validation, read-only infrastructure notes and a recorded change history that supports restoring earlier values. Enforce branch parent kinds on the server so states and territories sit under National and local branches sit under a state or territory. Add coverage for the settings API, audit history, restore behaviour and branch hierarchy rules."
-  },
-  {
-    "hash": "b808f0b",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record durable migrations and branch seed"
-  },
-  {
-    "hash": "e2137a5",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add durable database migrations and standard branch seed",
-    "details": "Add Admin -> Migrations for national administrators. The page previews each additive migration, shows the last recorded run and any error, and applies Standard branches or Branch participation individually or in order. Every run is recorded in data_migrations with run count, timestamps, actor and result. Standard branches is an idempotent seed for Fusion National, VIC, NSW, QLD, WA, SA, TAS, ACT and NT with National as parent; existing branches are never renamed, re-parented or un-recognised. Branch participation remains blocked until the National branch exists. The command-line seed now uses the same service, and the participation migration remains available for deployment automation."
   }
 ]
