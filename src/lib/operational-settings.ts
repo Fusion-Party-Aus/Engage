@@ -414,18 +414,6 @@ export interface OperationalSettingsEvent {
   createdAt: Date;
 }
 
-export function getDefaultOperationalSettings(): OperationalSettings {
-  return { ...DEFAULT_OPERATIONAL_THRESHOLDS };
-}
-
-export function getDefaultCrmSettings(): CrmOperationalSettingsValues {
-  return { ...DEFAULT_CRM_SETTINGS };
-}
-
-export function getDefaultJobsSettings(): JobsOperationalSettingsValues {
-  return { ...DEFAULT_JOBS_SETTINGS };
-}
-
 function parseWholeNumber(raw: unknown): number | null {
   if (typeof raw === "number") {
     return Number.isInteger(raw) ? raw : null;
@@ -696,19 +684,6 @@ export async function getOperationalSettingsState(
   };
 }
 
-/** Saved threshold values merged over the defaults. */
-export async function getOperationalSettings(
-  db: Db,
-): Promise<OperationalSettings> {
-  const state = await getOperationalSettingsState(db);
-  return {
-    ...state.values,
-    ...(state.updatedAt ? { updatedAt: state.updatedAt } : {}),
-    ...(state.updatedBy ? { updatedBy: state.updatedBy } : {}),
-    ...(state.updatedByName ? { updatedByName: state.updatedByName } : {}),
-  };
-}
-
 /**
  * Read the saved CRM verification settings.
  *
@@ -768,12 +743,6 @@ export async function getCrmSettingsState(db: Db): Promise<CrmSettingsState> {
   };
 }
 
-export async function getCrmSettings(
-  db: Db,
-): Promise<CrmOperationalSettingsValues> {
-  return (await getCrmSettingsState(db)).values;
-}
-
 /** Read the saved scheduled-job gates. Missing means disabled. */
 export async function getJobsSettingsState(db: Db): Promise<JobsSettingsState> {
   const { stored, readFailed } = await readStoredSetting(
@@ -812,12 +781,6 @@ export async function getJobsSettingsState(db: Db): Promise<JobsSettingsState> {
     ...(stored.updatedBy ? { updatedBy: stored.updatedBy } : {}),
     ...(stored.updatedByName ? { updatedByName: stored.updatedByName } : {}),
   };
-}
-
-export async function getJobsSettings(
-  db: Db,
-): Promise<JobsOperationalSettingsValues> {
-  return (await getJobsSettingsState(db)).values;
 }
 
 function pickChanged(
