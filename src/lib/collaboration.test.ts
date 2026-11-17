@@ -8,8 +8,11 @@ import {
   getInitiative,
   getPublicInitiative,
   listContributions,
+  clearExpiredContribution,
   listInitiatives,
   listPublishedContributions,
+  manageContribution,
+  viewManagedContribution,
   readPublishedMedia,
   setGalleryPublication,
   purgeExpiredContent,
@@ -347,6 +350,10 @@ test("an approved reply address is cleared after a year while the story stays", 
   await db.collection("collaboration_contributions").updateOne(
     { contributionId: result.contributionId },
     { $set: { updatedAt: new Date(Date.now() - 400 * 86_400_000) } },
+  );
+  await db.collection("collaboration_contributions").updateOne(
+    { contributionId: result.contributionId },
+    { $set: { approvedAt: new Date(Date.now() - 400 * 86_400_000) } },
   );
   const applied = await purgeExpiredContent(db, { apply: true });
   assert.equal(applied.contactAddresses, 1);
@@ -752,7 +759,7 @@ test("withdrawal and retention clearing are terminal for publication", async () 
       contributionId: cleared.contributionId,
       action: "set_status",
       status: "approved",
-      version: 1,
+      version: 2,
     }),
     /cannot be reopened/,
   );
@@ -1029,4 +1036,179 @@ test("a written consultation is never published individually, even with website 
     version: 0,
   });
   assert.equal((await listPublishedContributions(db, created.slug)).length, 0);
+});
+
+test("contact retention runs from the approval date, not from later reviewer activity", async () => {
+  const db = await setup();
+  const result = await submitContribution(
+    db,
+    submission({ contactAllowed: true, email: "sam@example.com" }),
+  );
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  const approved = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.ok(approved?.approvedAt instanceof Date);
+
+  await db.collection("collaboration_contributions").updateOne(
+    { contributionId: result.contributionId },
+    {
+      $set: {
+        approvedAt: new Date(Date.now() - 400 * 86_400_000),
+        // Later reviewer activity, such as recording a use, must not extend it.
+        updatedAt: new Date(),
+      },
+    },
+  );
+  await purgeExpiredContent(db, { apply: true });
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(row?.email, "");
+  assert.ok(Object.keys(row?.answers ?? {}).length > 0);
+});
+
+test("a retention clear refuses a record that changed after selection", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission());
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "declined",
+    version: 0,
+  });
+  // A reviewer reopens it before the sweep clears it.
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "needs_follow_up",
+    version: 1,
+  });
+  assert.equal(await clearExpiredContribution(db, result.contributionId, "declined"), false);
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.ok(Object.keys(row?.answers ?? {}).length > 0);
+  assert.equal(row?.contentClearedAt, undefined);
+});
+
+test("a management token is stable, hashed at rest and opens only its own contribution", async () => {
+  const db = await setup();
+  const first = await submitContribution(db, submission(), [], { tokenSecret: "test-secret" });
+  const retry = await submitContribution(db, submission(), [], { tokenSecret: "test-secret" });
+  const second = await submitContribution(
+    db,
+    submission({ requestId: REQUEST_ID_2 }),
+    [],
+    { tokenSecret: "test-secret" },
+  );
+  assert.equal(first.manageToken, retry.manageToken);
+  assert.match(first.manageToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(first.manageToken, second.manageToken);
+
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: first.contributionId });
+  assert.equal(row?.manageTokenHash?.length, 64);
+  assert.equal(JSON.stringify(row).includes(first.manageToken), false);
+
+  const view = await viewManagedContribution(db, first.manageToken);
+  assert.equal(view.contributionId, first.contributionId);
+  assert.equal(view.answers[0]?.label, "What does Fusion mean to you?");
+  assert.equal(view.status, "new");
+  await assert.rejects(viewManagedContribution(db, first.manageToken.slice(0, -1) + "A"), /not valid/);
+});
+
+test("the contributor can correct their words, which returns the story to review and off the gallery", async () => {
+  const db = await setup();
+  const result = await submitContribution(
+    db,
+    submission({ channels: ["website"], contactAllowed: true, email: "sam@example.com" }),
+  );
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  await setGalleryPublication(db, reviewer, {
+    contributionId: result.contributionId,
+    state: "publish",
+    version: 1,
+  });
+  assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 1);
+
+  const view = await viewManagedContribution(db, result.manageToken);
+  await manageContribution(db, {
+    token: result.manageToken,
+    action: "correct",
+    answers: { meaning: "A corrected story that says what I actually meant to say." },
+    caption: "A corrected caption",
+  });
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(row?.answers.meaning, "A corrected story that says what I actually meant to say.");
+  assert.equal(row?.caption, "A corrected caption");
+  assert.equal(row?.status, "needs_follow_up");
+  assert.ok(row?.galleryHiddenAt);
+  assert.ok(row?.correctedAt);
+  assert.equal(view.emailMasked, "s**@example.com");
+  assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 0);
+  const events = await db.collection("collaboration_events").find({ contributionId: result.contributionId }).toArray();
+  assert.equal(events.some((event) => event.action === "correct_by_contributor" && event.actorId === "contributor"), true);
+});
+
+test("the contributor can hide from the gallery, then withdraw everything without an account", async () => {
+  const db = await setup();
+  const result = await submitContribution(
+    db,
+    submission({ channels: ["website"], contactAllowed: true, email: "sam@example.com" }),
+    [photo()],
+  );
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  await setGalleryPublication(db, reviewer, {
+    contributionId: result.contributionId,
+    state: "publish",
+    version: 1,
+  });
+
+  await manageContribution(db, { token: result.manageToken, action: "hide" });
+  assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 0);
+  const approved = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(approved?.status, "approved");
+
+  const withdrawn = await manageContribution(db, { token: result.manageToken, action: "withdraw" });
+  assert.equal(withdrawn.withdrawn, true);
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(row?.status, "withdrawn");
+  assert.equal(row?.email, "");
+  assert.deepEqual(row?.answers, {});
+  assert.deepEqual(row?.media, []);
+  assert.equal(row?.manageTokenHash, undefined);
+  assert.equal(await db.collection("collaboration_media").countDocuments(), 0);
+  await assert.rejects(viewManagedContribution(db, result.manageToken), /not valid/);
+  await assert.rejects(
+    manageContribution(db, { token: result.manageToken, action: "withdraw" }),
+    /not valid/,
+  );
+});
+
+test("show cannot resurrect a story that was never published", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission({ channels: ["website"] }));
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  await assert.rejects(
+    setGalleryPublication(db, reviewer, {
+      contributionId: result.contributionId,
+      state: "show",
+      version: 1,
+    }),
+    /not been published/,
+  );
 });

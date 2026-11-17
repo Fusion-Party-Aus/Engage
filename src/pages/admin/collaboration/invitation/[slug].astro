@@ -51,7 +51,8 @@ if (!initiative) Astro.response.status = 404;
         <CardHeader>
           <CardTitle class="text-base">Interest, last {funnel.windowDays} days</CardTitle>
           <CardDescription>
-            Counts only. No visitor identities, addresses or typed content are recorded.
+            Counts only. No visitor identities, addresses or typed content are recorded. Ratios are events divided by
+            events, not unique visitors, so they can exceed 100%.
           </CardDescription>
         </CardHeader>
         <CardContent>

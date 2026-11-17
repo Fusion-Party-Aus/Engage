@@ -5,6 +5,7 @@ import { submitContribution, CollaborationError } from "../../../lib/collaborati
 import { assertUploadSize, MediaError } from "../../../lib/collaboration-media.ts";
 import { enforceAbuseProtection } from "../../../lib/turnstile-guard.ts";
 import { tokenFromBody } from "../../../lib/turnstile.ts";
+import { rateLimitSecret } from "../../../lib/rate-limit.ts";
 
 export const prerender = false;
 
@@ -76,9 +77,15 @@ export const POST: APIRoute = async (context) => {
         website: form.get("website"),
       },
       files,
+      { tokenSecret: rateLimitSecret(env) },
     );
     return Response.json(
-      { saved: true, shareable: result.shareable, reference: result.contributionId },
+      {
+        saved: true,
+        shareable: result.shareable,
+        reference: result.contributionId,
+        manageToken: result.manageToken,
+      },
       { status: 201, headers },
     );
   } catch (error) {

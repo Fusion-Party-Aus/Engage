@@ -63,7 +63,7 @@ if (!initiative) Astro.response.status = 404;
       ) : (
         <div class="gallery-empty">
           <h2>No stories published yet</h2>
-          <p>Approved stories appear here once the person has allowed website use.</p>
+          <p>Stories appear here after a reviewer publishes them, and only when the person allowed website use. Approval on its own does not publish.</p>
           <Button href={`/collaborate/${initiative.slug}/`}>Take part</Button>
         </div>
       )}

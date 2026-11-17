@@ -37,7 +37,7 @@ export default function ContributionForm({
   const story = profile === 'story';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [saved, setSaved] = useState<null | { shareable: boolean; reference: string }>(null);
+  const [saved, setSaved] = useState<null | { shareable: boolean; reference: string; manageToken: string }>(null);
   const [attribution, setAttribution] = useState<Attribution>('named');
   const [contact, setContact] = useState(false);
   const [aiEdits, setAiEdits] = useState(false);
@@ -82,7 +82,11 @@ export default function ContributionForm({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Couldn’t send your contribution. Try again.');
-      setSaved({ shareable: result.shareable === true, reference: String(result.reference ?? '') });
+      setSaved({
+        shareable: result.shareable === true,
+        reference: String(result.reference ?? ''),
+        manageToken: String(result.manageToken ?? ''),
+      });
     } catch (caught) {
       // A failed POST may have spent the single-use Turnstile token.
       window.dispatchEvent(new Event('engage:turnstile-reset'));
@@ -110,6 +114,20 @@ export default function ContributionForm({
           You don’t need an account. If you ask us to correct or remove this, quote reference{' '}
           <strong className="font-mono text-foreground">{saved.reference.slice(0, 8)}</strong>.
         </p>
+        {saved.manageToken && (
+          <div className="grid gap-2 rounded-md border p-4">
+            <p className="m-0 font-semibold">Keep this private link</p>
+            <p className="m-0 text-sm text-muted-foreground">
+              It is the only way to correct or remove your contribution without emailing us. Anyone with the link
+              can manage it, so don’t share it.
+            </p>
+            <div>
+              <Button href={`/collaborate/manage/#${saved.manageToken}`} variant="outline">
+                Manage or withdraw
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="grid gap-2">
           <p className="m-0 font-semibold">You’ve already contributed. Want to see what else you can shape?</p>
           <p className="m-0 text-sm text-muted-foreground">

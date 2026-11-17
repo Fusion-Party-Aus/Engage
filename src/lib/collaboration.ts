@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { Binary, ObjectId, type ClientSession, type Db } from "mongodb";
 import { runInTransaction } from "./db.ts";
 import { hasPermission } from "./rbac.ts";
@@ -27,6 +27,7 @@ import {
 } from "./collaboration-options.ts";
 import { prepareImage, safeFilename } from "./collaboration-media.ts";
 import { recordFunnelEvent } from "./collaboration-funnel.ts";
+import { rateLimitSecret } from "./rate-limit.ts";
 
 /**
  * Public collaboration matters (#143).
@@ -442,12 +443,230 @@ export interface SubmissionResult {
   contributionId: string;
   /** True when at least one publication channel was permitted. */
   shareable: boolean;
+  /**
+   * The contributor's management token. Shown once, kept in a URL fragment so it
+   * never reaches the server in a URL. Only its hash is stored.
+   */
+  manageToken: string;
+}
+
+/**
+ * A stable management token for one submission. Derived from the client's
+ * request reference and a deployment secret, so an idempotent retry can return
+ * the same token without storing the raw value.
+ */
+export function contributionManageToken(
+  requestId: string,
+  secret: string,
+): string {
+  return createHmac("sha256", secret).update(`collaboration-manage:${requestId}`).digest("base64url");
+}
+
+function manageTokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+const MANAGE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+export interface ManagedContribution {
+  contributionId: string;
+  initiativeSlug: string;
+  initiativeTitle: string;
+  questions: Array<{ key: string; label: string }>;
+  answers: Array<{ key: string; label: string; text: string }>;
+  caption: string;
+  profile: "story" | "consultation";
+  status: CollaborationStatus;
+  published: boolean;
+  hiddenFromGallery: boolean;
+  contactAllowed: boolean;
+  emailMasked: string;
+  createdAt: string;
+}
+
+function maskEmail(value: string): string {
+  const [local, domain] = value.split("@");
+  if (!local || !domain) return "";
+  const visible = local.slice(0, 1);
+  return `${visible}${"*".repeat(Math.max(local.length - 1, 2))}@${domain}`;
+}
+
+async function findManagedContribution(db: Db, token: string) {
+  if (!MANAGE_TOKEN_PATTERN.test(token)) return null;
+  return db.collection(CONTRIBUTIONS).findOne({ manageTokenHash: manageTokenHash(token) });
+}
+
+/** What the contributor sees when they open their private link. */
+export async function viewManagedContribution(
+  db: Db,
+  token: string,
+): Promise<ManagedContribution> {
+  const row = await findManagedContribution(db, token);
+  if (!row) throw new CollaborationError("That link is not valid. Check it and try again.", 404);
+  const questions = Array.isArray(row.questions) ? row.questions : [];
+  const storedAnswers = (row.answers ?? {}) as Record<string, string>;
+  return {
+    contributionId: String(row.contributionId),
+    initiativeSlug: String(row.initiativeSlug),
+    initiativeTitle: String(row.initiativeTitle ?? row.initiativeSlug),
+    questions: questions.map((question: any) => ({
+      key: String(question.key),
+      label: String(question.label),
+    })),
+    answers: Object.entries(storedAnswers)
+      .filter(([, text]) => String(text).trim())
+      .map(([key, text]) => ({
+        key,
+        label: String(questions.find((question: any) => question.key === key)?.label ?? ""),
+        text: String(text),
+      }))
+      .filter((answer) => answer.label),
+    caption: String(row.caption ?? ""),
+    profile: row.profile === "consultation" ? "consultation" : "story",
+    status: (Object.hasOwn(COLLABORATION_STATUSES, row.status) ? row.status : "new") as CollaborationStatus,
+    published: Boolean(row.galleryPublishedAt) && !row.galleryHiddenAt,
+    hiddenFromGallery: Boolean(row.galleryHiddenAt),
+    contactAllowed: row.contactAllowed === true,
+    emailMasked: maskEmail(String(row.email ?? "")),
+    createdAt: new Date(row.createdAt).toISOString(),
+  };
+}
+
+export type ManageAction = "view" | "correct" | "hide" | "withdraw";
+
+export interface ManageInput {
+  token: unknown;
+  action: unknown;
+  answers?: unknown;
+  caption?: unknown;
+}
+
+/**
+ * Self-service correction, gallery removal and withdrawal. The token is the only
+ * authority: no account is required and no other contribution can be reached.
+ * Corrections return the story to review and remove it from the gallery.
+ */
+export async function manageContribution(
+  db: Db,
+  input: ManageInput,
+): Promise<{ view?: ManagedContribution; corrected?: boolean; withdrawn?: boolean; hidden?: boolean }> {
+  const token = String(input.token ?? "");
+  const current = await findManagedContribution(db, token);
+  if (!current) throw new CollaborationError("That link is not valid. Check it and try again.", 404);
+  const action = input.action;
+  if (action === "view") {
+    return { view: await viewManagedContribution(db, token) };
+  }
+  const contributionId = String(current.contributionId);
+  if (current.contentClearedAt || current.status === "withdrawn") {
+    throw new CollaborationError("This contribution has already been withdrawn.", 409);
+  }
+
+  if (action === "withdraw") {
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version },
+        {
+          $set: { status: "withdrawn", updatedAt: new Date() },
+          $unset: { manageTokenHash: "" },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+      }
+      await appendEvent(
+        db,
+        { contributionId, action: "withdraw_by_contributor", actorId: "contributor" },
+        session,
+      );
+      await clearContributionContent(db, contributionId, "withdrawn", { session, touch: false });
+    });
+    return { withdrawn: true };
+  }
+
+  if (action === "hide") {
+    if (!current.galleryPublishedAt || current.galleryHiddenAt) {
+      return { hidden: true };
+    }
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version },
+        {
+          $set: { galleryHiddenAt: new Date(), updatedAt: new Date() },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+      }
+      await appendEvent(
+        db,
+        { contributionId, action: "hide_by_contributor", actorId: "contributor" },
+        session,
+      );
+    });
+    return { hidden: true };
+  }
+
+  if (action !== "correct") throw new CollaborationError("Choose what to do.");
+
+  const questions = Array.isArray(current.questions) ? current.questions : [];
+  const knownKeys = new Set(questions.map((question: any) => String(question.key)));
+  const answers: Record<string, string> = {};
+  const supplied = input.answers;
+  if (supplied !== undefined && (typeof supplied !== "object" || supplied === null || Array.isArray(supplied))) {
+    throw new CollaborationError("Could not read the answers.");
+  }
+  for (const [key, value] of Object.entries((supplied ?? {}) as Record<string, unknown>)) {
+    if (!knownKeys.has(key)) continue;
+    const text = clampText(value, "Your answer", 0, CONTRIBUTION_LIMITS.answer);
+    if (text) answers[key] = text;
+  }
+  const caption =
+    current.profile === "consultation"
+      ? ""
+      : clampText(input.caption, "Photo caption", 0, CONTRIBUTION_LIMITS.caption);
+  const longest = Object.values(answers).reduce((length, text) => Math.max(length, text.length), 0);
+  if (longest < 20 && !caption) {
+    throw new CollaborationError("Keep a few words, at least 20 characters, before saving.");
+  }
+  await runInTransaction(db, async (session) => {
+    const written = await db.collection(CONTRIBUTIONS).updateOne(
+      { contributionId, version: current.version },
+      {
+        $set: {
+          answers,
+          caption,
+          updatedAt: new Date(),
+          correctedAt: new Date(),
+          // A correction is re-reviewed before it can be public again.
+          ...(current.status === "approved" ? { status: "needs_follow_up" } : {}),
+          ...(current.galleryPublishedAt ? { galleryHiddenAt: new Date() } : {}),
+        },
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    if (!written.matchedCount) {
+      throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+    }
+    await appendEvent(
+      db,
+      { contributionId, action: "correct_by_contributor", actorId: "contributor" },
+      session,
+    );
+  });
+  return { corrected: true };
 }
 
 export async function submitContribution(
   db: Db,
   input: SubmissionInput,
   files: readonly File[] = [],
+  options: { tokenSecret?: string } = {},
 ): Promise<SubmissionResult> {
   if (input.website) throw new CollaborationError("Could not accept this submission.");
   if (input.consent !== true) {
@@ -559,6 +778,10 @@ export async function submitContribution(
       }),
     )
     .digest("hex");
+  const manageToken = contributionManageToken(
+    input.requestId,
+    options.tokenSecret || rateLimitSecret(),
+  );
   const _id = new ObjectId(
     createHash("sha256").update(input.requestId).digest("hex").slice(0, 24),
   );
@@ -570,7 +793,11 @@ export async function submitContribution(
         409,
       );
     }
-    return { contributionId: String(existing.contributionId), shareable: channels.length > 0 };
+    return {
+      contributionId: String(existing.contributionId),
+      shareable: channels.length > 0,
+      manageToken,
+    };
   }
 
   const now = new Date();
@@ -610,6 +837,7 @@ export async function submitContribution(
       publicationHistory: [],
       media,
       hasMedia: media.length > 0,
+      manageTokenHash: manageTokenHash(manageToken),
       fingerprint,
       version: 0,
       consentVersion: COLLABORATION_CONSENT_VERSION,
@@ -651,7 +879,7 @@ export async function submitContribution(
   if (inserted) {
     await recordFunnelEvent(db, initiative.slug, "submitted").catch(() => {});
   }
-  return { contributionId, shareable: channels.length > 0 };
+  return { contributionId, shareable: channels.length > 0, manageToken };
 }
 
 /**
@@ -686,6 +914,60 @@ async function clearContributionContent(
   );
 }
 
+class StaleRetentionError extends Error {}
+
+/**
+ * Clear one expired record only if it is still in the expected state and has not
+ * changed since it was selected. The conditional write and the media delete run
+ * together, so a status change between selection and clearing cannot destroy
+ * material that no longer qualifies.
+ */
+/** Exported for the retention tests; the sweep is the only production caller. */
+export async function clearExpiredContribution(
+  db: Db,
+  contributionId: string,
+  status: "declined" | "withdrawn",
+): Promise<boolean> {
+  const current = await db.collection(CONTRIBUTIONS).findOne({ contributionId });
+  if (!current || current.status !== status || current.contentClearedAt) return false;
+  try {
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        {
+          contributionId,
+          status,
+          version: current.version,
+          contentClearedAt: { $exists: false },
+        },
+        {
+          $set: {
+            answers: {},
+            caption: "",
+            displayName: "",
+            contributorMessage: "",
+            internalNotes: "",
+            media: [],
+            hasMedia: false,
+            email: "",
+            contactAllowed: false,
+            contentClearedAt: new Date(),
+            contentClearedReason: status,
+            updatedAt: new Date(),
+          },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) throw new StaleRetentionError();
+      await db.collection(MEDIA).deleteMany({ contributionId }, { session });
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof StaleRetentionError) return false;
+    throw error;
+  }
+}
+
 /**
  * Retention sweep, dry-run by default. Withdrawals clear immediately at the
  * moment of review; this catches declined material after the retention window,
@@ -715,30 +997,53 @@ export async function purgeExpiredContent(
     .toArray();
   const contacts = await db
     .collection(CONTRIBUTIONS)
-    .find({ status: "approved", email: { $ne: "" }, updatedAt: { $lt: before(RETENTION.approvedContactDays) } })
-    .project({ contributionId: 1 })
+    .find({
+      status: "approved",
+      email: { $ne: "" },
+      // Legacy approvals have no approvedAt. Fall back to updatedAt once, so an
+      // existing record is still swept rather than kept forever.
+      $or: [
+        { approvedAt: { $lt: before(RETENTION.approvedContactDays) } },
+        { approvedAt: { $exists: false }, updatedAt: { $lt: before(RETENTION.approvedContactDays) } },
+      ],
+    })
+    .project({ contributionId: 1, version: 1 })
     .toArray();
 
+  let declinedCleared = declined.length;
+  let withdrawnCleared = withdrawn.length;
+  let contactsCleared = contacts.length;
   if (options.apply) {
+    declinedCleared = 0;
     for (const row of declined) {
-      await clearContributionContent(db, String(row.contributionId), "declined");
+      if (await clearExpiredContribution(db, String(row.contributionId), "declined")) {
+        declinedCleared += 1;
+      }
     }
+    withdrawnCleared = 0;
     for (const row of withdrawn) {
-      await clearContributionContent(db, String(row.contributionId), "withdrawn");
+      if (await clearExpiredContribution(db, String(row.contributionId), "withdrawn")) {
+        withdrawnCleared += 1;
+      }
     }
+    contactsCleared = 0;
     for (const row of contacts) {
-      await db
-        .collection(CONTRIBUTIONS)
-        .updateOne(
-          { contributionId: row.contributionId },
-          { $set: { email: "", contactAllowed: false, updatedAt: new Date() } },
-        );
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        {
+          contributionId: row.contributionId,
+          status: "approved",
+          version: row.version,
+          email: { $ne: "" },
+        },
+        { $set: { email: "", contactAllowed: false, updatedAt: new Date() }, $inc: { version: 1 } },
+      );
+      if (written.matchedCount) contactsCleared += 1;
     }
   }
   return {
-    declined: declined.length,
-    withdrawn: withdrawn.length,
-    contactAddresses: contacts.length,
+    declined: declinedCleared,
+    withdrawn: withdrawnCleared,
+    contactAddresses: contactsCleared,
     applied: options.apply === true,
   };
 }
@@ -1022,7 +1327,15 @@ export async function reviewContribution(
     const written = await db.collection(CONTRIBUTIONS).updateOne(
       { contributionId, version: current.version },
       {
-        $set: { status: nextStatus, contributorMessage, internalNotes, updatedAt: new Date() },
+        $set: {
+          status: nextStatus,
+          contributorMessage,
+          internalNotes,
+          updatedAt: new Date(),
+          // Retention of a reply address runs from this date, not from later
+          // reviewer activity.
+          ...(nextStatus === "approved" ? { approvedAt: new Date() } : {}),
+        },
         $inc: { version: 1 },
       },
       { session },
@@ -1175,7 +1488,7 @@ export async function setGalleryPublication(
   if ((state === "publish" || state === "show") && (!Array.isArray(current.channels) || !current.channels.includes("website"))) {
     throw new CollaborationError("The contributor did not allow website publication.");
   }
-  if (state === "hide" && !current.galleryPublishedAt) {
+  if ((state === "hide" || state === "show") && !current.galleryPublishedAt) {
     throw new CollaborationError("This story has not been published to the gallery.");
   }
   if (state === "publish" && current.galleryPublishedAt && !current.galleryHiddenAt) {

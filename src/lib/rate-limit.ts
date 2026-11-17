@@ -33,6 +33,8 @@ export const RATE_LIMITS = {
   // Aggregate funnel counts. Generous enough for a few events per visit, not a
   // way to inflate a public statistic.
   "collaboration-event": { limit: 30, windowMs: 60_000 },
+  // A contributor's own link: view, correction, hide or withdrawal.
+  "collaboration-manage": { limit: 12, windowMs: 10 * 60_000 },
   "auth-magic-link": { limit: 10, windowMs: 10 * 60_000 },
   "auth-sign-up": { limit: 5, windowMs: 60 * 60_000 },
 } as const satisfies Record<string, { limit: number; windowMs: number }>;
