@@ -69,6 +69,11 @@ const ownerAuthorisedApproval: LegalApproval = {
     "Confirm the governing-law clause with legal review. Victoria is stated from Constitution v1.8 and the Mansfield VIC correspondence address.",
     "Establish and publish the grounds, safeguards, member notice and escalation requirements for administrative ballot intervention.",
     "Confirm whether small ballots should suppress or further aggregate public tallies to avoid effectively revealing individual choices.",
+    "Review the story and photograph contribution purpose: publication channels, credit, editing and AI-assisted editing permissions, photographer and third-party rights, and guidance for photographs of minors.",
+    "Confirm the retention schedule for story contributions (withdrawal immediate; declined 90 days; approved reply address 12 months) and the review of approved material still in use.",
+    "Confirm whether a separate consent step or notice is needed when an existing member contributes a story while signed in.",
+    "Confirm that aggregate invitation counts (arrival, start, submission, account step), with no identifiers and 13-month retention, are consistent with the analytics disclosure.",
+    "Confirm that optional account linking of a contribution (member identifier, time and consent version, removable by the contributor) is adequately described.",
     "After publication approval, activate the legal acceptance gate by setting both documents to published status and enabling LEGAL_ACCEPTANCE_ENABLED.",
   ],
 };
@@ -79,7 +84,7 @@ export const privacyPolicy: LegalDocument = {
   shortTitle: "Privacy Policy",
   description:
     "How Fusion Party Australia collects, uses, shares and retains personal information in Engage.",
-  version: "1.3 (Sense Box publication and discussion)",
+  version: "1.7 (Sense Box publication and discussion; story contributions, management links, account linking and aggregate counts; publication pending)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -185,6 +190,16 @@ export const privacyPolicy: LegalDocument = {
           type: "paragraph",
           text: `Engage records some administrative actions, including role and membership changes, branch membership changes, branch creation and edits, ballot wording binding, ballot results, ratification and publication. These records include the actor's member identifier, the action, the time and, for some branch changes, before-and-after snapshots. Not every administrative action produces a complete immutable audit event. We also keep a record when a member accepts the current Terms of Use and acknowledges the current Privacy Policy, including the versions, content hashes and time of acceptance.`,
         },
+        { type: "subheading", text: "Story and photograph contributions" },
+        {
+          type: "paragraph",
+          text: `You can send a story, photographs, or both to a public invitation without an account and without being a party member. We collect what you write, the photographs and caption you attach, the name you ask us to use, any email address you give us so we can reply, and the permissions you choose for publication channels, credit, ordinary editing and AI-assisted editing. We ask you to confirm that you are 18 or over; we do not collect dates of birth or identity documents. We do not publish photographs that show identifiable children. After you send, we give you a private management link. Its code is stored only as a hash, and it lets you correct your words, remove your story from the gallery or withdraw it without an account. If you are signed in, you may optionally link the contribution to your account. We then record your member identifier, the time and the consent version. Linking does not change publication, approval or who may manage the contribution, and you can unlink it from the same page. We record the version of the consent you accepted and the time. If a reviewer approves the material, we also record the decision, the actor, the time, and where approved material is used. Photographs are stripped of location, device and other metadata before they are stored.`,
+        },
+        { type: "subheading", text: "Aggregate interest counts" },
+        {
+          type: "paragraph",
+          text: `For each public invitation we count four events: the page being opened, the first interaction with the form, a contribution being accepted, and the optional account step being opened. A record contains only the invitation, a UTC date, the event type and a count. We do not record a cookie, session, IP address, account identifier or anything typed, and the counts cannot be linked to a person. Counts are kept for about 13 months, then deleted. An editor sees the totals and conversion percentages for the last 30 days.`,
+        },
         { type: "subheading", text: "Technical and operational information" },
         {
           type: "paragraph",
@@ -244,6 +259,7 @@ export const privacyPolicy: LegalDocument = {
             `let you browse, discuss, propose, amend and vote in the ways your account permits;`,
             `administer ballots, record outcomes and maintain the integrity of the exact wording voted on;`,
             `maintain governance, ratification, publication and audit records;`,
+            `review story and photograph contributions and use approved material only within the permissions the contributor chose;`,
             `operate, troubleshoot, secure and improve the reliability of Engage;`,
             `respond to your requests, complaints and privacy enquiries;`,
             `comply with legal obligations and lawful requests.`,
@@ -280,10 +296,15 @@ export const privacyPolicy: LegalDocument = {
           type: "paragraph",
           text: `Moderators can review proposals and contributions and take moderation actions. National administrators can also manage member accounts, roles, branches, ballots, ratification and publication. National administrators can access identifiable ballot records. Moderators do not receive identifiable ballot records.`,
         },
+        { type: "subheading", text: "Story contribution reviewers" },
+        {
+          type: "paragraph",
+          text: `Unpublished stories, photographs, names and reply addresses are visible only to national administrators and people granted the national story-review permission. Branch administrators and moderators do not receive this access. Approved material appears publicly only in the channels the contributor chose, and the hand-off export given to the website team excludes reply addresses and internal notes.`,
+        },
         { type: "subheading", text: "What is not public" },
         {
           type: "paragraph",
-          text: `The following is not displayed publicly: email addresses; member identifiers; session, authentication and security records; individual votes and reasons; private or branch-restricted proposals; membership status; branch membership lists; and administrative or audit records.`,
+          text: `The following is not displayed publicly: email addresses; member identifiers; session, authentication and security records; individual votes and reasons; private or branch-restricted proposals; membership status; branch membership lists; unpublished story contributions and photographs; and administrative or audit records.`,
         },
       ],
     },
@@ -382,7 +403,7 @@ export const privacyPolicy: LegalDocument = {
       blocks: [
         {
           type: "paragraph",
-          text: `We keep personal information only as long as needed for the purposes in this policy, including to maintain governance records. Engage does not currently apply automatic deletion schedules to most records.`,
+          text: `We keep personal information only as long as needed for the purposes in this policy, including to maintain governance records. Engage does not currently apply automatic deletion schedules to most records. Story contributions have the specific schedule below.`,
         },
         {
           type: "definitions",
@@ -398,6 +419,10 @@ export const privacyPolicy: LegalDocument = {
             {
               term: "Contributions",
               description: `Kept until you or an authorised moderator deletes them, or until the proposal is deleted. Backups may retain copies for a limited period.`,
+            },
+            {
+              term: "Story contributions",
+              description: `A withdrawal deletes the story text, name, reply address and photographs when the withdrawal is recorded; only the review record and its date remain. Declined material is deleted 90 days after the decision. Approved material is kept while it may be in use, and its reply address is deleted 12 months after approval, measured from the approval date rather than later reviewer activity. An administrator runs the retention sweep; it is dry-run by default and records what it would remove.`,
             },
             {
               term: "Proposals and revisions",

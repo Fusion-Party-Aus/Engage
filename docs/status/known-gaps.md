@@ -1,6 +1,6 @@
 # Known gaps, defects and open decisions
 
-**Status:** Current · **Verified:** 16 November 2026
+**Status:** Current · **Verified:** 17 November 2026
 
 > **RFC 0001 programme status.** The Sprint 1 integrity, lifecycle, rendering
 > performance and Turnstile slices were merged to `main` as `3b36947` (PR #51) on
@@ -224,6 +224,28 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 **Direction:** Configure and monitor an external scheduler. Treat missing jobs as an operational incident.
 
 ## Priority 3 — product and documentation gaps
+
+### 29. Story contributions have legal and operational obligations before launch
+
+**Implemented (17 November 2026, #143):** a public collaboration matter (`/collaborate/<slug>/`) accepts stories and photographs from people with no account, with granular consent, private review, metadata-stripped media, a reviewer-only export and no automatic publication. See [public collaboration matters](../product/collaboration-matters.md).
+
+**Retention and safeguards (implemented same day):** withdrawal deletes story text, name, reply address and photographs immediately and keeps only the review record. Declined material is cleared after 90 days, approved reply addresses 12 months after approval, via `npm run collaboration:retention` (dry-run by default; `npm run collaboration:retention -- --apply` to act). Each clear is conditional on the record still being in the expected state. A contributor can also correct, hide or withdraw with a private link; a lost link is recovered by email. An operational draft covering photographer credit, other identifiable people, minors, AI edits and mistaken publication is in [story and photograph safeguards](../guides/story-contribution-safeguards.md).
+
+**Pilot rules adopted 17 November 2026:** adults only with a simple 18+ attestation; no publication of identifiable children, even with guardian permission; hide disputed material within 1 business day, resolve within 5 business days, and be explicit that copies distributed outside Engage cannot be recalled.
+
+**Still open before public launch:**
+
+- the privacy policy now describes this purpose, account linking and the aggregate counts (version 1.6) but remains owner-authorised with legal review outstanding;
+- the correction inbox, escalation path and monthly retention sweep can now be assigned at `/admin/collaboration/operations/`, but no people are assigned yet; see [collaboration pilot operations](collaboration-pilot-operations.md);
+- the credit format is not decided, and a single caption may not describe several individual photographs well enough;
+- there is no derivative-approval step for an AI-edited photograph, and the production-image policy for edited photographs is undecided;
+
+- invitation interest counts are aggregate events, not people, and an account step is not a registration; there is no per-channel or per-source attribution;
+- no contributor email is sent automatically;
+- the public gallery is a simple list with no moderation queue for reported content and no paging beyond 60 stories;
+- approved material reaches Horizon through a manual JSON export. Consumer-neutral external synchronisation, including corrections, hiding and withdrawal, is tracked in #157 and is not implemented.
+
+**Direction:** settle the legal and image-policy questions before promoting the invitation publicly. Do not describe a contribution as a verified membership testimonial.
 
 ### 22. The Policy Registry is empty on a fresh install
 

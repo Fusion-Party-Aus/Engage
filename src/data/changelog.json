@@ -1,55 +1,281 @@
 [
   {
-    "hash": "dd7d811",
-    "date": "2026-11-17",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Let one priority inform multiple proposals",
-    "details": "Replace the exclusive linkedProposalId claim with linkedProposalIds. Existing single links are read through a compatibility helper and folded into the array on the next write. The administrator workspace can add and remove multiple proposal links, and public pages list all visible linked proposals. Proposal creation no longer fails when a priority already informs another proposal. Extend the in-memory database with addToSet/pull/\"\" semantics and keep the central index catalogue in sync."
-  },
-  {
-    "hash": "85dc255",
+    "hash": "45e4692",
     "date": "2026-11-17",
     "type": "fix",
     "category": "fix",
-    "scope": "amendments",
-    "summary": "Fence recovery and reconcile committed revisions",
-    "details": "Record a durable application operation, expected revision hash and lease on the amendment. Recovery replaces the fencing token only when the old lease has expired, so concurrent retries cannot both proceed. If the proposal already contains the expected revision, finalise without writing again; if an unrelated revision intervened, refuse rather than overwrite. Add concurrent, crash-after-write, intervening-edit and release-on-failure coverage."
+    "scope": "collaboration",
+    "summary": "Never issue management authority to a lost insert race",
+    "details": "The duplicate-key recovery path returned the derived token even though that request did not create the contribution. It now returns no token, matching the sequential replay guarantee. Adds concurrent identical-submission regression tests on the in-memory preview and real MongoDB: one contribution, one token. Both fail if the recovery path returns the token. Refs #143"
   },
   {
-    "hash": "f5a4caf",
+    "hash": "4c9d101",
     "date": "2026-11-17",
-    "type": "docs",
-    "category": "docs",
+    "type": "chore",
+    "category": "ops",
     "scope": "changelog",
-    "summary": "Refresh snapshot for revision corrections"
+    "summary": "Record the management-token and owner-save fixes",
+    "details": "Refs #143"
   },
   {
-    "hash": "846eb0c",
+    "hash": "36eef7f",
     "date": "2026-11-17",
     "type": "docs",
     "category": "docs",
-    "scope": "amendments",
-    "summary": "Record anchored insertions and apply recovery",
-    "details": "Document insertion anchors, the applying/finalise recovery state, and the one-to-many Sense Box cardinality question for separate confirmation."
+    "scope": "collaboration",
+    "summary": "Correct retention command and override monitoring",
+    "details": "Refs #143"
   },
   {
-    "hash": "9cc68e5",
+    "hash": "87bd5bb",
     "date": "2026-11-17",
-    "type": "docs",
-    "category": "docs",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Treat a racing first owner save as a conflict",
+    "details": "Two simultaneous first saves hit the unique settings key. Resolve the duplicate key to a 409 version conflict instead of a 503, with real-MongoDB coverage for the race and for a stale save after success. Refs #143"
+  },
+  {
+    "hash": "8fb8b36",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Separate public story identity from management authority",
+    "details": "Public gallery and profile links now use a random storyId. The submission reference is never exposed publicly, so a visitor cannot replay a published story into a management token. A response is issued only when the request creates the contribution. Replaying an existing submission returns no token even with identical content; matching content is not proof of ownership. The original token still corrects and withdraws, and idempotent retries still avoid duplicates. Adds a unique partial index for storyId and a regression test that uses only information available from the public gallery. Refs #143"
+  },
+  {
+    "hash": "5bd7462",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
     "scope": "changelog",
-    "summary": "Refresh snapshot after main merge"
+    "summary": "Record secret, fingerprint and documentation fixes",
+    "details": "Refs #143"
   },
   {
-    "hash": "d380594",
+    "hash": "317ae3b",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Restore the product model and correct readiness claims",
+    "details": "The product page had been overwritten with the operations runbook. Restore the model, consent, publication, claiming and retention material, then add the current ownership, address inheritance and readiness details. Correct the runbook's claim that a partial roster can be saved. Refs #143"
+  },
+  {
+    "hash": "d14d53b",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Fail closed on signing secrets and tighten identity checks",
+    "details": "Production refuses to derive management tokens without a configured signing secret, instead of silently using the shared development value. A regression test covers production with and without a secret. The submission fingerprint now includes the invitation, so reusing a reference for another invitation is refused rather than returning the original record. The gallery publication API explicitly rejects written consultation responses. Refs #143"
+  },
+  {
+    "hash": "a9c172b",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record operational readiness and address inheritance",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "81d4c98",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record the address model and readiness checks",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "024fb13",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Make operational coverage and correction addresses real",
+    "details": "One address model: the operations setting is the default, an invitation may override it, and an empty invitation field inherits. Public pages resolve that address instead of reading only the invitation. Readiness is revalidated on every read. An owner is ready only when the account is active, the membership verified and the member holds collaboration.review. The screen now distinguishes assigned from ready and names each reason; assigning someone no longer implies they can act. The settings write is versioned and transactional with its audit event, with a unique index on the global record, so concurrent saves cannot overwrite each other or leave a decision without its history. Refs #143"
+  },
+  {
+    "hash": "7ce49bb",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record operational owner settings and feed removal",
+    "details": "Refs #143 #157"
+  },
+  {
+    "hash": "aabd816",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record in-app owners and remove Horizon feed claims",
+    "details": "Point the operations runbook at the admin setting, remove the Horizon feed documentation and evidence, correct the privacy-version drift to the current policy, and add the owner-setting screenshot. Refs #143 #157"
+  },
+  {
+    "hash": "732acb4",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Assign operational owners in the admin panel",
+    "details": "Primary owner, backup, retention sweep owner, correction address and escalation details are now one audited administrator setting at /admin/collaboration/operations/. Personnel changes need no deployment. Saves require collaboration.manage, reject unknown or disabled members and a backup that duplicates the primary, resolve names for display, and record before/after values in an audit event. Closes the documentation-only ownership gap for the pilot. The roster now reports itself as unassigned until all three people and a contact are set. Refs #143"
+  },
+  {
+    "hash": "5b12388",
+    "date": "2026-11-17",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "collaboration",
+    "summary": "Remove the Horizon-specific feed from the pilot",
+    "details": "The feed was a single-consumer prototype: a Horizon-named route, types and service, one deployment credential, no revocation, and no propagation of corrections, hiding or withdrawal to a consumer. That does not meet the external-sync design, so it moves to a focused follow-up (#157) with the manual export as the interchange in the meantime. Refs #143 #157"
+  },
+  {
+    "hash": "7deb10e",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the simulated Horizon consumer",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "3ccc300",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "horizon",
+    "summary": "Document the consumer smoke check and its evidence",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "383b387",
     "date": "2026-11-17",
     "type": "test",
     "category": "ops",
-    "scope": "sense-box",
-    "summary": "Cover mobile, keyboard and stylesheet regression",
-    "details": "Extend the browser journey to the mobile administrator workspace and add a stylesheet smoke check across the home, proposal list, Sense Box inbox and administrator proposal workspace, including visible keyboard focus."
+    "scope": "horizon",
+    "summary": "Add a simulated consumer and contract smoke poller",
+    "details": "The consumer contract checks the envelope, credit, website consent, media URLs and alt text, duplicate ids, dates and the absence of private keys. The smoke poller exercises 401, an authorised poll, one image download, entity-tag revalidation and an incremental read, and can run against staging or production. Refs #143"
+  },
+  {
+    "hash": "41d9b94",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record linked stories on the member profile",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "b50018e",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Note profile display and add profile evidence",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "fd34002",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "profile",
+    "summary": "Show linked published stories on the member profile",
+    "details": "A member who linked a contribution sees it in a Published stories section only while it is public in the gallery. The entry carries the initiative title, an excerpt of the first answer, the publication date, the photo count and a link to the story's gallery anchor. Unpublished, unapproved, hidden, withdrawn, cleared or consultation-linked material never appears, and the profile exposes no email, notes or management token. Hiding or withdrawing removes it from the profile at the same time. Refs #143"
+  },
+  {
+    "hash": "5f997f7",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the Horizon story feed",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "c209d66",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Document the Horizon feed and its credential",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "a258d8f",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Add an authenticated Horizon story feed",
+    "details": "GET /api/v1/horizon/stories serves published stories to Horizon with a bearer credential. It fails closed when unconfigured and rejects a missing or wrong token. Scope matches the public gallery: approved, explicitly published, website consent, story profile, material intact, not hidden. Consultation responses never appear. The payload carries answers, chosen credit, caption, media URLs with alt text, channels and consent flags, and excludes reply addresses, notes, member ids and tokens. Supports since/nextSince incremental polling and If-None-Match 304. Refs #143"
+  },
+  {
+    "hash": "6380f27",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record optional contribution account linking",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "ec5a374",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Describe optional account linking and its limits",
+    "details": "Record that linked contributions do not yet appear on the member profile, bump the privacy policy to 1.6, and add a screenshot of a linked contribution. Refs #143"
+  },
+  {
+    "hash": "91004c3",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Optionally link a contribution to a signed-in account",
+    "details": "A member who holds a contribution's private link can link it to their Engage account after ticking explicit consent. The record stores the member identifier, time and consent version, and an audit event marks both linking and unlinking. Claiming is optional, changes neither publication nor approval, creates no permission, and leaves the private link as the only way to correct or withdraw the contribution. A second account is refused. Refs #143"
+  },
+  {
+    "hash": "e77a554",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh after merging main"
+  },
+  {
+    "hash": "dc349b2",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record contributor management and retention corrections",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "a851144",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record the management link, retention dates and pilot owners",
+    "details": "Fix the outdated guardian exception, point the empty gallery at the separate publication step, add management screenshots, and add an operations page that names the four unassigned responsibilities: inbox owner, backup, escalation and retention sweep operator. Refs #143"
+  },
+  {
+    "hash": "370a811",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Let contributors correct or withdraw with a private link",
+    "details": "Each contribution receives a management token derived from its request reference and a deployment secret, so a retry returns the same link. Only a hash is stored and the raw token lives in the URL fragment, never in a request URL, log or referrer. The link shows the contribution and status, allows a correction that returns it to review and off the gallery, removes a published story from the gallery, or withdraws everything at once. The action is audited as the contributor's and the link stops working afterwards. Retention corrections from review: reply-address expiry runs from a stable approval date, and each sweep clear is conditional on the record still being in the expected state, with the media delete in the same transaction. The show action now requires a prior publication. Interest ratios say they are event ratios, not visitor rates. Refs #143"
   },
   {
     "hash": "017f71b",
@@ -61,21 +287,31 @@
     "details": "* refactor(store): import domain modules directly and delete the barrel (#119) Migrate every page, component and test importer from the deprecated src/lib/store.ts barrel to the owning domain module, then remove the barrel. The architecture test now fails if the barrel returns, if any source file imports it, or if a production lib module imports a page/component directory. * docs(architecture): document domain modules after barrel removal (#119) * chore(changelog): refresh snapshot for barrel removal (#119)"
   },
   {
-    "hash": "baccd1e",
+    "hash": "86e94fd",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record explicit gallery publication and interest counts",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "36c07d8",
     "date": "2026-11-17",
     "type": "docs",
     "category": "docs",
-    "scope": "changelog",
-    "summary": "Refresh snapshot for review fixes"
+    "scope": "collaboration",
+    "summary": "Record publication, minors, removal and funnel rules",
+    "details": "Correct the gallery claims about a missing public image route and about what withdrawal can erase. Add dated screenshots of the gallery states, the explicit publication control and the interest panel so the review can see them. Refs #143"
   },
   {
-    "hash": "4af6dd8",
+    "hash": "8bdea4a",
     "date": "2026-11-17",
-    "type": "fix",
-    "category": "fix",
-    "scope": "sense-box,amendments",
-    "summary": "Close review privacy and integrity gaps",
-    "details": "Legacy priorities collected under the private-review promise can no longer be published, and private source text is never prefilled into a proposal. A private lead requires an explicit independent-writing acknowledgement and is rejected if it reproduces the source. Submission now returns a capability status link so a contributor can follow the outcome without an account, and the verified-membership discussion rule is stated explicitly. Amendment suggestions now apply multiple additions and mixed edits without index drift, refuse ambiguous duplicate-text rebases, validate final title/summary lengths at the submission and resolution boundary, and block applying a competing amendment after one has already applied. Proposal creation claims a Sense Box source before insert and checks the atomic update, with concurrency coverage. Adds the Sense Box and amendment browser journey to CI, covering failed submission recovery, publication, public and internal discussion, stale administrator data, multiple additions, keyboard activation and mobile layouts."
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish explicitly and measure interest",
+    "details": "Separate approval from publication: an approved story appears in the gallery only after a reviewer presses Publish, and hiding or showing it later keeps the first publication date. Approval alone never makes material public. Adopt the adult-only pilot rule with a simple 18+ attestation, no date of birth, and no publication of identifiable children. Record the approved removal commitments in the safeguards. Add aggregate interest counts for arrivals, first interaction, accepted contributions and the optional account step. A row holds only invitation, UTC day, stage, count and expiry. There is no cookie, session, address, identifier or typed content; the public endpoint is rate limited and the rows expire. Refs #143"
   },
   {
     "hash": "6311c68",
@@ -87,6 +323,50 @@
     "details": "Remove buildAuthorizedMatterBriefing, which had no production caller: reporting, PDF and decision-record reads go through decision-record.ts, and the module's only consumer was its own test. Remove six exported settings getters that no production module called; the *State functions and DEFAULT_* constants remain the interface. No route, page, permission, DTO or settings behaviour changes. Update the architecture overview and hardening notes so they stop describing the deleted module. Refs #152"
   },
   {
+    "hash": "b7452cc",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh after merging main"
+  },
+  {
+    "hash": "b60a93d",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the approved story gallery",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "d0da24d",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Document the approved gallery and its limits",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "dd7f08b",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover gallery consent, hiding and withdrawal",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "6ca7177",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish an approved story gallery",
+    "details": "Show an approved story on /collaborate/<slug>/stories/ only while it is approved, the contributor allowed website use, it is a story-profile contribution, its material is intact and a reviewer has not hidden it. Credit follows the contributor's choice and no name is stored for an anonymous story. Photographs are served from a public route that re-checks publication on every request, so hiding or withdrawing removes access immediately. Reviewers can hide a story from the gallery, or restore it, without changing its approval. The action is versioned and audited. In-memory array filters now honour $in, which the gallery query needs and the preview previously ignored. Refs #143"
+  },
+  {
     "hash": "ad8deae",
     "date": "2026-11-17",
     "type": "perf",
@@ -96,40 +376,201 @@
     "details": "* perf(db): cut fresh database initialisation cost (#136) A fresh test database spent ~1.25 s in `initializeDatabase`, called 18 times per suite (~22 s). Index creation dominated: 92 `createIndex` calls, each a journal commit on a newly created collection. - Group the index catalogue by collection and send one `createIndexes` command per collection (46 commands). Keys, names, uniqueness, partial filters, TTL and `expireAfterSeconds` are unchanged; a failed grouped command falls back to per-index creation so one legacy conflict cannot block the rest, as before. - Bulk-write the 78 baseline policies instead of one upsert per record. - Split startup into `ensureDatabaseIndexes` (new `src/lib/db-indexes.ts`) and `seedBaselineContent`. `initializeDatabase` still runs both, so production startup and `getDatabase` are unchanged. Mongo tests that seed their own content use the schema half; notification-outbox keeps the full path and asserts the seeded register and indexes. - The in-memory preview implements `createIndexes` and `bulkWrite`. Verified on the local replica set: index phase 1.44 s -> 0.76 s and total 1.27 s -> 0.95 s over six interleaved pairs (shared host, so absolute wall time varied). A fresh database has the same 47 collections and 139 indexes, and the same 78 proposals and revisions, before and after. Full suite (833 tests) passed twice; each run left only `admin`, `config`, `engage` and `local`. * chore(changelog): record database initialisation change (#136) * fix(settings): tie-break site settings events by insertion order * chore(changelog): record the site event ordering fix"
   },
   {
-    "hash": "e43cad0",
-    "date": "2026-11-17",
-    "type": "docs",
-    "category": "docs",
-    "scope": "changelog",
-    "summary": "Refresh generated history for participation changes",
-    "details": "Regenerate the public changelog snapshot after the UI SDK, inline amendment and Sense Box collaboration commits."
-  },
-  {
-    "hash": "ae7ff0d",
-    "date": "2026-11-17",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Publish reviewed priorities with discussion and proposal handoff",
-    "details": "Organisers get a per-priority workspace, an explicit publish/withdraw action, private notes and public discussion. Published priorities are readable without signing in and minimally projected; legacy private submissions stay private. Reviewers can link a priority to an existing proposal or draft a proposal prefilled from it, recording the source and linking the priority atomically. Consent, privacy and product documentation now describe review-then-publication."
-  },
-  {
-    "hash": "067cea4",
-    "date": "2026-11-17",
-    "type": "feat",
-    "category": "feature",
-    "scope": "amendments",
-    "summary": "Add block-anchored inline suggestions",
-    "details": "Members can suggest exact changes to a title, summary paragraph, commitment or rationale paragraph, with an optional note. The server reconstructs whole-field changes from the quoted blocks, so ballot binding and apply semantics are unchanged. Member and administrator views show word-level diffs, moved anchors and competing amendments. Resolution rebases a moved suggestion and refuses one whose quoted wording disappeared. Also fixes the administrator ballot action to require ready, matching the route."
-  },
-  {
-    "hash": "72282c5",
+    "hash": "66ede29",
     "date": "2026-11-17",
     "type": "chore",
     "category": "ops",
-    "scope": "ui-sdk",
-    "summary": "Add ui-sdk runtime and usage guidance",
-    "details": "Install @ui-sdk/react and @ui-sdk/core for React 19 behaviours, import the default styles once through the Horizon stylesheet, and install the ui-sdk skill. Document the required reading before new components are built."
+    "scope": "changelog",
+    "summary": "Record collaboration invitations, profiles and fixes",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "ee6e657",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record invitation management, profiles and journey evidence",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "edde034",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover the reviewed journeys and remove a flaky event read",
+    "details": "Cover invitation lifecycle, profile isolation, notes preservation, terminal states, accepted private input, question snapshots, stale answers, repeated placements and reference search. Select the settings event by content rather than position, because several can share a millisecond. Refs #143"
+  },
+  {
+    "hash": "35a5c15",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Keep review history and finish the guest journey",
+    "details": "- Load existing notes and the contributor message, and only overwrite them when edited, so a status change cannot erase the record of a photographer's permission. Write the decision and its audit event in one transaction. - Make withdrawal and retention clearing terminal for the material, and offer 'Accepted as consultation input' as a separate outcome from publication. - Snapshot the invitation title, purpose and question labels with each contribution, and refuse an answer to a removed question rather than dropping it silently. - Allow several placements in the same channel and show the recorded history. - Keep the Save action available when 'withdrawn' is chosen, require a declared upload size, add photo previews, and allow blob: only for local previews. - Give contributors a reference, explain what 'no name' means for a photo, and require a reply address before AI-assisted edits. Offer an optional account next step after contributing. Refs #143"
+  },
+  {
+    "hash": "c7e4eff",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Manage multiple invitations and typed profiles",
+    "details": "Replace the single seeded invitation with an authorised invitation directory: create as a draft, open, pause, close, archive and restore, with contribution counts per invitation. Archiving and drafting have no public page. Each invitation is created with one reviewed contribution profile. A written responses invitation never asks for photographs, a name or edit permission, and the server rejects photos sent to it, so a consultation does not inherit the storytelling form. Refs #143"
+  },
+  {
+    "hash": "5155389",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh after merging main"
+  },
+  {
+    "hash": "2755ce0",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record contribution withdrawal, retention and safeguards",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "b2a45d3",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "db",
+    "summary": "Allow a local MongoDB selection timeout override",
+    "details": "A slow local Docker MongoDB took longer than 400 ms to answer its first selection, so development silently fell back to the in-memory preview and pages looked empty. The override applies locally; production keeps its 3 s default. Refs #143"
+  },
+  {
+    "hash": "b245754",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Add pre-launch safeguards and privacy text",
+    "details": "Write the operating rules for photographer credit, other identifiable people, minors, AI-assisted edits, publishing and mistaken publication, and mark what still needs an owner decision. Extend the privacy policy (version 1.3) for the contribution purpose, its reviewer access and its retention schedule, while it remains owner-authorised with legal review outstanding. Refs #143"
+  },
+  {
+    "hash": "f882ed8",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover withdrawal clearing and retention windows",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "e2c0586",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Delete material on withdrawal and by retention sweep",
+    "details": "Withdrawing a story now removes its text, name, reply address and photographs immediately, keeping only the review record and its date. Add a monthly sweep for declined material after 90 days, legacy withdrawals and approved reply addresses after 12 months. The sweep is dry-run by default and records what it would clear. Tell contributors the photo and third-party rules at intake, and warn reviewers that withdrawal is irreversible for the material. Refs #143"
+  },
+  {
+    "hash": "4c35e88",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the collaboration documentation note",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "c9a692b",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Separate accounts, membership and contributing",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "49e9bae",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the contribution form clarification",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "e12368c",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Make optional story answers explicit",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "a4107bf",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record public collaboration matters",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "5a087b0",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "agents",
+    "summary": "Require new features to be configurable by default",
+    "details": "Add a standing rule: editor-facing wording, questions and options belong in stored configuration, while permissions, consent vocabulary and security bounds stay in reviewed code. Refs #143"
+  },
+  {
+    "hash": "8ca0dbc",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record the matter model and launch obligations",
+    "details": "Describe the collaboration Matter, its consent and data handling, what editors can change without code, and the legal and image-policy gaps that must close before the invitation is promoted publicly. Refs #143"
+  },
+  {
+    "hash": "869f76e",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover guest intake, consent and private media",
+    "details": "Prove the guest path needs no account, consent cannot be widened from the client, private-only contributions cannot be approved, an anonymous name is never stored, concurrency cannot overwrite a decision, and image bytes stay private and metadata-free. Real-MongoDB cases cover unique references, version writes and the BSON media round trip. Refs #143"
+  },
+  {
+    "hash": "8cb56f8",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add the story review queue and invitation editor",
+    "details": "Reviewers see each contribution with its answers, private photographs and consent summary, then record a decision, a note and where an approved item was used. Editors own the invitation wording, questions and open state without a deployment; question keys stay stable so earlier answers remain attached. Refs #143"
+  },
+  {
+    "hash": "c86bcd2",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish the story invitation and contribution form",
+    "details": "Add /collaborate/ and /collaborate/<slug>/ where anyone can read the invitation and send story answers, photographs, or both without an account or party membership. The form asks for publication channels, credit, edit and AI-edit permission and an optional reply address before sending, keeps every answer when a submission fails, and never claims publication has happened. Refs #143"
+  },
+  {
+    "hash": "a11c60d",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Model public story matters and guest intake",
+    "details": "Register a collaboration Matter type with no governance capability and no lifecycle stage, so a public invitation can never be deliberated, balloted, amended, ratified or published as policy. Add guest submission with a versioned consent scope, private media storage, metadata stripping for JPEG and PNG, reviewer-only permissions, and a durable rate limit plus Turnstile action for the public form. Refs #143"
   },
   {
     "hash": "90bc0c1",
@@ -274,422 +715,5 @@
     "scope": "member,admin",
     "summary": "Keep unread updates and label votes correctly (#108, #56) (#109)",
     "details": "* fix(member): keep unread updates until the member dismisses them My Engage advanced engage_member_last_seen on every page load, so navigating away and back hid updates the member never opened. Reading the page now only resolves the window; the cursor advances only through POST /api/member/updates/dismiss. Adds a 'Mark updates as seen' action to the catch-up digest, a matching status message, a seven-day window for members who have never dismissed updates, and a pure helper so the window, list and counts share one rule. Refs #108 * fix(admin): classify votes as votes in the participation feed The panel built vote activities with kind 'vote' but only handled 'votes', so every vote rendered as a proposal submission with the wrong filter and count. Encrypted ballot records carry no member identity, which made the mismatch affect all recent votes. Votes, contributions and proposals now share one classifier and one seven-day window. Vote rows use the recorded timestamp and the existing canViewIdentifiableBallots gate; encrypted records render as 'A member' and choices, reasons, tallies and envelopes are never read. Replayed records collapse by ballot and voter, while separate ballots and voters remain separate rows. The summary strip and tabs are derived from the same rows, and the previously truncated feed now shows the whole window. Refs #56 * chore(changelog): regenerate snapshot for member updates and participation fixes * chore(changelog): record the member and participation fixes"
-  },
-  {
-    "hash": "d642bfc",
-    "date": "2026-11-15",
-    "type": "docs",
-    "category": "docs",
-    "scope": "status",
-    "summary": "Record the merged command layer and paginated register (#107)"
-  },
-  {
-    "hash": "b9286f4",
-    "date": "2026-11-15",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Rewrite Engage copy around political participation (#97) (#98)",
-    "details": "* fix(copy): clarify participation and public discussion (#97) * docs(copy): record delivered batch and resumable PR (#97) * fix(copy): invite participation across homepage queues and highlights (#97) * fix(copy): explain participation and current decision process (#97) * docs(copy): record guide delivery and preserve changelog history (#97) * fix(copy): make proposal discovery and submission clearer (#97) * docs(copy): checkpoint proposal form delivery (#97) * fix(copy): clarify ballot status, amendments and proposal history (#97) * docs(copy): checkpoint ballot review and validation (#97) * fix(copy): distinguish policy adoption records and community input (#97) * docs(copy): checkpoint policy and community review (#97) * fix(copy): explain sign-in and optional member participation (#97) * test(copy): align membership label assertion and checkpoint progress (#97) * fix(copy): explain member setup, branch following and notifications (#97) * docs(copy): checkpoint member setup and preferences (#97) * fix(copy): make participation emails and unsubscribe wording clearer (#97) * docs(copy): checkpoint participation email review (#97) * fix(copy): clarify officer tasks and member decision authority (#97) * docs(copy): checkpoint governance administration review (#97) * fix(copy): clarify administration settings and public visibility direction (#97) * docs(copy): checkpoint remaining administration review (#97) * fix(copy): reconcile final notices, errors and terminology (#97) * docs(copy): finalise editorial coverage and resumable handover (#97)"
-  },
-  {
-    "hash": "86f9de6",
-    "date": "2026-11-15",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "admin",
-    "summary": "Paginate the proposal register and stop reading ballots (#52) (#103)",
-    "details": "* perf(admin): paginate the proposal register and stop reading ballots The proposals register loaded every proposal, including its rationale, and decrypted every vote for the rows in Decide so it could show live tallies. It sent ~1 MB of HTML and did per-vote work on a list read. The register now reads a bounded page of 25 rows from MongoDB, ordered by proposal id, with search, stage and branch filters applied server-side and the viewer's branch scope preserved. Page links keep the active filters; changing a filter starts at page 1; invalid or out-of-range pages clamp. Pagination uses the existing Button primitive with previous/next, the current page and a status region announcing the visible range. `listProposalRegister` projects the register fields only (no `details` or `detailHtml`) and never touches `proposal_votes`, so no ballot is decrypted on a list read. For a certified ballot it shows the tally, computed result and rule basis stored on `ballot_results` at certification. An open ballot shows \"Open — view ballot\" instead of live counts, and a closed but uncertified ballot links to the workspace to record the outcome. The detail workspace keeps the live bound tally and the result form unchanged; recording from the list would require decrypting every vote. Editing, revising and creating still resolve their full record, including rationale, from any page, with the same scope and lock checks. Measured with `npm run perf:render` (78 synthetic proposals, 1200 votes, 3 runs, administrator): HTML 938,422 B → 283,915 B (−69.7%); document DB commands 19 → 16; document DB time 28.7 ms → 16.0 ms; TTFB 103.1 ms → 57.6 ms. A MongoDB profiler window shows the register request reads proposals, comments, ballot_results, ballots, amendments and revisions, and no `proposal_votes`. Refs #52. * fix(admin): keep legacy register records keyed by policyId and status Legacy proposal documents store the identifier, stage and topic space under `policyId`, `status` and `category`. The register's narrow projection only asked for the current field names, so the shared normaliser would have seen an empty identifier and defaulted the stage to Deliberate. Project the alias fields too (still excluding rationale and ballot data), and match the stage filter against a stored `status` when a document has no `stage`. Adds a regression case for a legacy-shaped record: it keeps its identifier, its normalised stage, its space, and remains searchable by rationale without returning it. Refs #52. * docs(status): record register pagination and the tally-free list read Adds the before/after harness snapshots for `/admin/proposals/` (base `78c07c0`, after `c1f72c0`) and records what the register now reads and shows: one 25-row projected page, no `proposal_votes` access, certified tallies from `ballot_results`, and links instead of live counts for uncertified ballots. Records the trade-offs honestly: inline outcome recording moved to the workspace, \"Open amendments\" counts the whole register rather than the filtered subset, and search moved into MongoDB while still matching rationale. Updates I12/#52 without claiming the member-facing vote scans are done, and notes the small in-memory database fidelity improvements from this slice. * chore(changelog): refresh snapshot for register pagination Regenerates the public changelog from this branch's history: the register pagination, the legacy-record fix and the audit/status updates appear as the newest entries. Side effect of the generator's fixed 80-commit window: the oldest entries fall out of the snapshot. That truncation is the pre-existing generator defect tracked in #96, not a decision in this slice. * chore(changelog): record the register pagination after merging main * chore(changelog): record the register pagination after merging main * chore(changelog): record the register pagination after merging main * feat(admin): add on-demand inline outcome recording and address register review findings"
-  },
-  {
-    "hash": "c94e3f9",
-    "date": "2026-11-15",
-    "type": "refactor",
-    "category": "improvement",
-    "scope": "governance",
-    "summary": "Typed ballot commands and central route policy (#53) (#94)",
-    "details": "* refactor(governance): add typed ballot commands and central route policy Extract ballot.bind and ballot.record_result into typed commands that call the existing domain functions, and declare both routes in one policy table. Routes now validate input, run the command and map errors; no permission literals or role checks remain in the route files. No governance behaviour changes. * test(governance): prove ballot command and route policy equivalence Cover policy-table drift, the authorisation matrix for both commands, route authentication, bind idempotency and record_result preconditions against a real MongoDB replica set. Existing route suites continue to exercise the same behaviour. * docs(governance): document the command contract and mark #53 partial Describe the typed command contract, the central route policy table and the two-stage authorisation rule. Record that the ballot lifecycle is extracted while proposals, amendments and membership remain route-local. * chore(changelog): refresh the snapshot for the ballot command layer * fix(governance): preserve bind route error mapping and harden route drift guard Map domain errors per route so a BallotDomainError escaping bind still returns the generic 400, while result keeps its 409. Discover governed routes recursively across .ts, .js and .mjs with all handler export forms. Rename the route-level helper to authoriseGovernanceRouteRole and document the deliberate coarse-gate repeat. Correct the precondition wording: the delegated domain function enforces it. * test(governance): cover bind conflict status, route scope denial and recursive discovery Prove the bind route still returns 400 with one binding event for a conflicting ballot revision, prove an out-of-branch result request is denied with no write, and prove each declared audit event is written. Add temporary-directory fixtures for nested, index, JavaScript and re-exported routes, plus a malformed-body ordering check. * docs(governance): correct command preconditions and route policy scope Preconditions and effects are documentation enforced by the delegated domain function, not re-checked by the command layer. Describe the coarse role gate, its defensive repetition, per-route error mapping and recursive route discovery. * chore(changelog): refresh the snapshot after the PR review fixes * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * chore(changelog): record the command layer after merging main * fix(governance): inspect multi-binding route exports and clarify command preconditions"
-  },
-  {
-    "hash": "b2fd65a",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Administrator responsibility queue (#54) (#106)",
-    "details": "* feat(admin): add the administrator responsibility queue (#54) Group ballot outcomes, closing ballots, unbound wording, overdue advancement, amendment decisions, member verification and publication into one queue. Every item names the authority that makes it actionable and is filtered server-side by permission and branch scope. A failed source degrades to one short message for its group. * docs(status): record the administrator responsibility queue (#54) The queue is built and tested; multi-amendment derivation, collision review and role legibility remain outstanding. Note that publication failures have no durable failed state to queue. * chore(changelog): refresh the snapshot for the responsibility queue * fix(admin): never imply a ballot close date that was not recorded A legacy closed ballot with no close time now says only that it closed, instead of presenting the current date as the close date. * chore(changelog): refresh the snapshot for the queue close-date fix"
-  },
-  {
-    "hash": "be5f523",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Member-facing decision record (#54) (#105)",
-    "details": "* feat(proposals): add member-facing decision record Compose one matter's immutable voted wording, revision history, amendment outcomes, certified ballot result and publication state in a permission-aware read model. Derive adopted wording under D15 (zero applied amendments) and D16 (one applied amendment), with explicit review states for two or more applied amendments (D17-D18), approved-but-unapplied amendments and mismatched result wording. No individual votes, voter or author identifiers cross the read-model boundary. Add /proposals/[slug]/record/ and link it from the proposal page. * docs(governance): record the decision-record read model Document the member-facing decision record, the D15/D16 derivation, the explicit D17-D18 collision-review seam and the outstanding administrator queue. Mark S2/#54 partial and note the reporting limit on inter-amendment gaps. * chore(changelog): refresh the snapshot for the decision record"
-  },
-  {
-    "hash": "9478783",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ci",
-    "summary": "Run the perimeter browser harness on every pull request (#38) (#104)",
-    "details": "* fix(security): bound the perimeter browser harness and always clean up The harness now has a hard 180-second deadline (ENGAGE_PERIMETER_TIMEOUT_MS) that stops the run and fails instead of hanging, signals the preview server before any await, escalates to SIGKILL, bounds Chromium shutdown, and kills the child from a process exit handler as a last resort. A page error, failed request or CSP violation that appears after a page's own check also fails the run. Adds 'perimeter:browser' for local use; a build and ENGAGE_PLAYWRIGHT_MODULE are still required. * feat(ci): run the perimeter browser harness on every pull request Runs scripts/security-perimeter-browser.mjs after the build and after the existing Playwright 1.57.0 install, reusing the same ENGAGE_PLAYWRIGHT_MODULE path rather than installing a second copy. Extends src/lib/ci-workflow.test.ts to compare step positions, so it fails if the step disappears, moves before the build or the Playwright install, installs its own Playwright, or if 'perimeter:browser' and the harness file drift apart. * docs(security): record that the perimeter harness runs in CI States what the CI step proves, how it is made safe to run unattended, and the remaining gap: the production build against the in-memory seed, not Cloudflare/Coolify, a real MongoDB or the real providers. * chore(changelog): refresh the snapshot for the perimeter CI step"
-  },
-  {
-    "hash": "78c07c0",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Durable outbox for ballot opened and closing soon (#33) (#102)",
-    "details": "* fix(notifications): write the delivery dedupe key the unique index requires The notification_deliveries unique index is on dedupeKey, but in-app and push delivery documents only set a composite _id. Every insert after the first therefore collided on a missing dedupeKey and was swallowed as a duplicate, so production could create at most one inbox item in total. Write the composite value to dedupeKey (and a push equivalent), keeping the existing _id dedupe contract and index shape unchanged. * feat(notifications): wire ballot opened and closing soon through a durable outbox Add notification_outbox, written immediately after a committed lifecycle transition and drained by npm run notifications:drain (dry-run by default, --apply to send). Two events are wired: a ballot opened by the lifecycle scheduler (new_ballots) and an open ballot inside the approved seven-day window (closing_deadlines). The audience is the voting electorate. Candidates are confirmed with getProposalEligibility and canViewProposal, the same predicate and visibility gate used when casting a vote, and eligibility is checked again at drain time so a revoked membership is suppressed rather than notified. Rows carry one unique dedupeKey per member, ballot and event; the drain claims with a conditional lease, retries at 1/2/4/8 minutes and stops at five attempts. Terminal rows carry a two-year retention TTL. Enqueue and delivery can never fail, block or alter a governance transition, and the scheduler report is unchanged. governance_outcomes and contribution_responses stay unwired: the result route is being refactored and the comment-outcome event needs a product decision. * chore(changelog): refresh snapshot for the notification outbox"
-  },
-  {
-    "hash": "0aea7b5",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "security",
-    "summary": "Response headers, hash-based CSP and cross-origin enforcement (#38) (#100)",
-    "details": "* feat(security): add perimeter headers, CSP and cross-site request rule Every response now carries nosniff, a strict referrer policy, frame denial, a minimal Permissions-Policy and a Content Security Policy. HSTS is sent only in production when HTTPS is provable. The policy keeps Astro's build-time script and style hashes and allows only the external hosts the app uses: Cloudflare Turnstile (script, frame, connect) and the first-party Plausible host (script, connect). Inline style attributes are allowed through style-src-attr only, because tally and progress bars use them; script-src has no unsafe-inline and no directive permits unsafe-eval. The service-worker registration was is:inline, which Astro does not hash, so it is now a processed script. Astro's form-post origin check is kept, and allowedDomains trusts the production host over HTTPS so its comparison uses the public origin behind the proxy. The middleware adds what Astro's check deliberately exempts: every state-changing method, JSON bodies, a cross-site Sec-Fetch-Site, an Origin that differs from the trusted public origin, and an absent Origin when a session or dev cookie is present. Bearer cron calls and webhooks carry no cookie and stay allowed. Refs #38 * test(security): verify the CSP and origin rule in a real browser The production build is served with a disposable in-memory database. Chromium checks the home, proposal, sign-in and Sense Box pages for CSP violations, console errors and failed requests; proves the Turnstile script and frame and the Plausible script and event endpoint reach the network layer; asserts the document and JSON header sets; and shows same-origin fetches and native form posts succeed while browser, JSON and cookie-without-Origin state-changing requests are refused. Cloudflare and Plausible are intercepted and answered locally; the script never contacts production. Refs #38 * docs(security): record the perimeter header set, CSP and origin rule Adds docs/security/perimeter.md as the operating contract for headers, CSP sources and the cross-site rule, with the exact values, every external host and its reason, the scoped style-src-attr allowance, verification commands and residual risk. Corrects the pages that said there is no middleware and that a CSP, HSTS, frame or content-type headers are absent, updates the Turnstile and API/authorisation contracts, and records the #38 and I10 state in the programme tracker and known gaps. Remaining work is explicit: proxy headers for static assets and Astro's early 403, a reporting endpoint, CSRF tokens, and production header observation. Refs #38 * chore(changelog): refresh snapshot for the perimeter security slice Refs #38 * docs(security): clarify origin-check exemptions and deployment requirements States the form-like and safe-method exemptions precisely, scopes includeSubDomains to the sending host rather than fusionparty.org.au, and records that production must configure PUBLIC_ORIGIN or BETTER_AUTH_URL or browser writes are refused against the proxy's localhost origin. Refs #38"
-  },
-  {
-    "hash": "23f88d8",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ops",
-    "summary": "Durable job records and operational health checks (#39) (#99)",
-    "details": "* feat(ops): record authorised scheduled runs in a durable job ledger Add a job_runs collection with a 90-day TTL on startedAt and a withJobRun helper that records success or failure after the job finishes. A failed ledger write or summariser is logged and never changes the job result or error, so observability cannot break the thing it observes. Wire the governance scheduler (apply and dry-run), the ballot digest endpoint and the membership verification endpoint. Only authorised runs are recorded: 401 and 409 responses are not scheduled runs. Status codes, bodies, secrets, scheduling and governance writes are unchanged. Refs #39 * feat(ops): add exit-coded operational health checks and ops:health Evaluate governance scheduler recency and errors, ballot deadlines that passed without closure, digest cadence and held deliveries, verification recency and due backlog, recent failed or held email, and Turnstile configuration. Every threshold is named in the report and settable by environment variable; checks are count-only and never expose secrets, provider responses, member identifiers or ballot choices. /api/health now publishes coarse governanceScheduler and jobs states. A database failure stays 503, while a degraded job stays 200 so a container restart loop cannot hide a missing external scheduler. npm run ops:health prints JSON (or --human) and exits 0 healthy, 2 degraded or unknown, 1 failing or unreachable, requiring MONGODB_URI. Refs #39 * docs(ops): record job cadence, health command and runbook Document the job_runs ledger, the documented cadence and stale thresholds for each scheduled job, the ops:health command and exit codes, what each degraded state means, the maintainer escalation placeholder and the runbook actions. Record explicitly that production cron wiring and production verification are not done, so #39 remains partial. Update the tracker I10/S8 rows and known gap 21. Refs #39 * chore(changelog): refresh snapshot for the operational observability slice Refs #39 * fix(ops): warn before a scheduled job reaches its fail threshold A 15-minute job judged healthy for 24 hours leaves a full day blind to a complete outage. Each time-based check now has two tiers: degraded past warn (governance scheduler 2h, digest 1h, verification 2h) and failing past fail (26h, 24h, 24h). Within warn stays ok; a missing run stays failing; a failed last run stays failing. Warn and fail are configurable with the existing fail variables plus GOVERNANCE_SCHEDULER_WARN_HOURS, DIGEST_WARN_HOURS and MEMBERSHIP_VERIFICATION_WARN_HOURS. A warn value that is not below fail reports unknown with the conflicting values instead of trusting either. The report's thresholds block names both values and their source. Check ids, report shape, the ledger and route behaviour are unchanged; ops:health still exits 2 degraded and 1 failing. Refs #39 * docs(ops): document two-tier warn and fail job thresholds Show cadence, warn and fail for each scheduled job, explain that warn is a small multiple of cadence (not one missed tick) and why a 24-hour-only alert hid 96 missed 15-minute ticks, and record the invalid-pair behaviour, per-state meanings and escalation timing. Refs #39 * chore(changelog): refresh snapshot for the two-tier thresholds Refs #39 * fix(ops): report a failing job as failing on the health probe * chore(changelog): refresh after rewriting the synthetic token fixture"
-  },
-  {
-    "hash": "20dfa90",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "policies",
-    "summary": "Resolve a branch's public slug for registry addresses (#93)",
-    "details": "Production's Victorian branch predates the standard identifiers and has a UUID, so a policy address derived from the branch ID would be unusable and the import could not target the existing branch without creating a duplicate. - branch records may carry an explicit public slug (vic, nat); - the registry resolves /policies/<slug>/ and import targets by that slug; - ratification writes the branch slug onto new policy records; - the standard branch migration backfills a missing slug without renaming, re-parenting or un-recognising an existing branch; - the import CLI accepts either the branch ID or its public slug."
-  },
-  {
-    "hash": "7e3d243",
-    "date": "2026-11-15",
-    "type": "docs",
-    "category": "docs",
-    "scope": "status",
-    "summary": "Record merged outcome validation and replica-set coverage (#92)",
-    "details": "* docs(status): record merged outcome validation and replica-set governance coverage * chore(changelog): refresh the snapshot after the phase 1 merges"
-  },
-  {
-    "hash": "10146b9",
-    "date": "2026-11-15",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Branch policy registry import, branch-scoped URLs and post-ratification policy changes (#90)",
-    "details": "* feat(policies): import adopted branch policy with explicit provenance (#89) A branch may already hold policy adopted outside Engage. The import treats that as a provenance operation, not a proposal flow: - reads a branch policy feed and validates every record before writing; - requires an explicit authority basis and fails closed without one; - writes a published, adopted registry record plus an immutable policy_revision holding the exact source document and content hash; - records the source, authority basis, timestamps and provenance lineage; - reports created, unchanged, changed, conflicting, invalid and missing records without overwriting anything; - never republishes a record that was withdrawn, superseded or repealed. Dry-run and re-run are safe: only 'create' entries write, every write is keyed, and a changed source is a review item for the change lifecycle rather than a silent rewrite. * feat(policies): branch-scoped registry and changes to adopted policy (#89, #37) The registry is now navigable by authority and topic, and adopted policy can change through a proposal instead of being frozen at publication. Registry: - policy addresses become /policies/<branch>/<slug>/; internal IDs stay stable and legacy /policies/<id>/ addresses redirect to the canonical path; - the registry collates by adopting branch, then by the branch's own topics, so 41 Victorian policies are browsable rather than one flat list; - each branch has its own registry page with adoption basis, source and current/past tabs; a search and branch filter remain available; - rows show title, two-line summary, topic, branch and adoption origin; - imported records show their authority, import date and source. Post-ratification lifecycle: - a proposal may declare targetPolicyId and amend/replace/repeal; the target is fixed at creation against the exact published revision; - the policy page shows the proposed changes separately and never implies a draft has changed adopted policy; - ratification of a repeal records the deciding proposal; an amendment or replacement supersedes the predecessor only when the successor is published, so the public registry never shows a gap; - imported and Engage-ratified lineage read together in the same history. * chore(changelog): refresh public changelog for policy registry work * fix(policies): clear search and branch filters together in the registry * chore(changelog): include registry filter fix in the snapshot * chore(changelog): refresh snapshot at merge head * fix(policies): use the ballot-scoped result filter in policy detail"
-  },
-  {
-    "hash": "dd57aa3",
-    "date": "2026-11-15",
-    "type": "test",
-    "category": "ops",
-    "scope": "governance",
-    "summary": "Cover governance writes on a MongoDB replica set (#91)",
-    "details": "* test(governance): cover governance writes on a MongoDB replica set Add replica-set cases for the deletion guard, stage-transition audit events, formal-decision idempotency and conditional-write concurrency. The in-memory database cannot prove transactions, unique indexes or race behaviour, so each case is skipped without VOTING_TEST_MONGODB_URI and drops its own database. Covers known gap 17 (docs/status/known-gaps.md) and RFC 0001 cross-slice risk 4. * test(governance): adapt replica-set coverage to closed-ballot certification #28 requires a closed ballot before a result can be recorded, and checks the recorded result against the votes bound to the ballot and revision. Close the fixtures as the scheduler does and record the zero-vote certifications as explicit overrides, so the atomicity, idempotency and concurrency cases keep testing what they claim. Adds a real-MongoDB case proving an open ballot cannot be certified, that the refusal writes no result, and that certification succeeds after closure with the computed tally stored."
-  },
-  {
-    "hash": "762f76c",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ballots",
-    "summary": "Validate recorded outcomes against the bound tally (#28) (#86)",
-    "details": "* feat(ballots): validate recorded outcomes against the bound tally Record a formal ballot outcome only after comparing the officer's result with the outcome computed from the votes bound to that ballot and immutable revision (#28). The comparison is deliberately limited to what the decision register settles: Yes greater than No approves and a tie does not (D9); abstentions are recorded and excluded rather than given a denominator (D10, O1); no quorum, turnout or minimum-participation threshold applies (D8). The basis is versioned as `simple-majority-d9-v1`. A contradicting result is refused unless the officer supplies a written reason, and is then stored as an explicit override. The result keeps the tally at certification, the rule basis and the computed result; the `decision.recorded` event records the actor, reason, computed result and recorded result alongside the existing atomic result and ballot certification. Identical retries remain idempotent, conflicting replacements are refused, and historical results are returned unchanged and never rewritten. Both admin result forms now show the computed outcome and its tally before submission and require the override reason when the chosen result contradicts it, using the shared Field, Textarea and Badge primitives. * test(ballots): cover computed outcomes, overrides and stored evidence Add rule-level cases for approval, rejection, a tie, zero votes and abstention-heavy ballots, plus the two admin form behaviours that reveal and require an override reason. Add real-MongoDB replica-set coverage for the parts that prove persistence and the ordered result write: the tally and rule basis stored on the result, rejection of a contradiction without a reason, an audited override, idempotent retries, refused replacement, encrypted-ballot certification through the decryption path, and a historical result that stays readable and unrewritten. The result API is exercised end to end with the dev session. Refs #28. * docs(governance): record computed ballot outcome validation Describe the computed Yes-versus-No check, its `simple-majority-d9-v1` basis, the stored tally and the audited override in the lifecycle, API and agent guides. Mark known gap 10 as partly resolved and keep #28/L1 Partial because the abstention denominator (O1), quorum and ranked choice remain undecided. * chore(changelog): regenerate the public changelog snapshot * feat(ballots): certify only a closed ballot from a consistent bound tally Refuse certification while a ballot can still accept votes. A result is accepted when the ballot has a closure marker, its close time has passed, or the system has already closed it; a live ballot returns BALLOT_NOT_CLOSED and a ballot with no recorded close is refused rather than assumed closed, because a later vote could contradict an early certification. Tally only votes bound to the ballot and exact revision, and treat the rest as a ballot defect instead of ignoring them: unbound or mismatched-revision votes now return BALLOT_TALLY_UNBOUND_VOTES, unreadable encrypted votes return BALLOT_TALLY_UNREADABLE, and missing or invalid decryption keys return BALLOT_DECRYPTION_UNAVAILABLE (503). The tally query reads only the fields the check needs. Reject an override reason longer than 1000 characters instead of truncating audit evidence, and treat a retry that changes the recorded override reason as a conflict rather than an idempotent success. The refusal message now names the computed outcome and says that any other result, including inconclusive, requires a written reason. Refs #28. * feat(admin): show the enforced tally and recorded outcomes Derive the admin outcome basis from the same bound tally that certification enforces, so a page can no longer show a tally the server will not count. A zero-vote ballot reads \"No votes yet — outcome not yet computable\" instead of \"Unsuccessful\", and an unbound or unreadable tally is named instead of guessed. An open ballot shows when voting closes instead of an unusable result form; once a result exists both admin surfaces render the recorded outcome, computed result, tally and override reason instead of a re-submittable form. Revealing the override field moves focus to it and announces the requirement to assistive technology. Show overridden outcomes in Ballots & decisions with the reason available, and add the computed result, rule basis and override to the proposal PDF report. Refs #28. * test(ballots): cover closure, the bound set and override integrity Close fixtures exactly as the scheduler does before certifying, and pin the override rule in the two pre-existing suites by asserting the refusal when the reason is removed rather than only supplying one. Add replica-set cases for a live ballot that cannot be certified and the changed closed tally that is then certified, a vote on another revision or with no revision, amendment-ballot votes excluded from the matter tally, an unreadable encrypted vote, missing decryption keys, an over-length override reason and a retry that rewrites the recorded reason. Cover the form focus/announcement behaviour and the PDF computed/override rows. Refs #28. * docs(legal): correct the terms to describe computed ballot outcomes Terms of Use §9 claimed Engage \"does not calculate or apply a passing threshold\", which is no longer true. Describe the versioned simple-majority-d9-v1 rule, the tie and zero-vote result, the treatment of abstentions, the absence of quorum or turnout, and the explicit, reasoned and audited override. The acceptance gate stays inactive: the document remains owner-authorised with no effective date. The incorrect sentence was in the Terms of Use, not the Privacy Policy, so the Privacy Policy and its version are unchanged. Roll the Terms to version 1.1 and record the correction and the #40 follow-up in the privacy review. Refs #28, #40. * docs(governance): record closed-ballot certification and the bound tally Document that certification requires a closed ballot, that unbound votes and unreadable votes are refused, that inconclusive is always an explicit override, and that amendment endorsement ballots remain officer-supplied because O2/D18 are undecided. Correct the failure table so a zero-vote unsuccessful result needs no override, refresh the tracker, known gaps and handover status, and point the agent guide at the corrected Terms section. Refs #28. * chore(changelog): regenerate the public changelog snapshot * test(ballots): warm the route database before asserting on it The result-API case resolved the application client only inside the route. A transient connect failure could make the development fallback serve the in-memory database, so the route could not see the fixture and the test failed with a confusing authorisation-style error. Resolve the application client in the test and assert the fixture is visible before exercising the route, so a real connectivity failure fails loudly instead of degrading silently. Refs #28. * chore(changelog): record the review fixes in the public snapshot * fix(ballots): judge each ballot's own close time and keep zero-vote outcomes computable Read the addressed ballot's row before the matter so a second, still-open ballot on a closed matter is refused instead of inheriting the matter's closure. The matter fields remain the fallback for legacy ballots with no ballot row. Return the computed outcome for every computable tally, including a zero-vote ballot (still \"unsuccessful\" under D9), so the UI can require an override instead of silently withholding the reason field. Separate a missing key ring from unreadable votes: the display summary now reports `decryption-unavailable` on its own, with unbound votes stated first because that is the cause an officer can act on. Add a tolerant key loader for read-only paths so a broken key ring no longer fails a page that renders no encrypted votes; signed-in list and detail reads use it, while casting and certification stay strict. The result route now reports a clean BALLOT_DECRYPTION_UNAVAILABLE (503) instead of leaking key-configuration detail. Refs #28. * fix(admin): keep the visible result status and render every tally state The hidden override announcement was the first `[role=\"status\"]` in the result form, so `querySelector('[role=\"status\"]')` returned it and every success or refusal was written to an invisible node. The announcement now uses `aria-live=\"polite\"` without `role=\"status\"`, and both submit handlers target the visible line through `formStatusRegion`, so feedback remains sighted-visible and still announced. Show the computed outcome for a zero-vote ballot instead of claiming it is not computable, which also restores the override field for `Successful` and `Inconclusive`. Add explicit states for unavailable decryption keys and separate unreadable votes, and withhold the form while the tally is defective rather than offering an action the server will refuse. Refs #28. * test(ballots): cover per-ballot closure, zero-vote overrides and the status line Prove an open second ballot on a closed matter is refused while its closed sibling certifies, and that a zero-vote ballot records successful only with a written reason. Pin the tally-state precedence (unbound before unreadable), distinguish missing keys from unreadable votes, and assert display key loading degrades to null instead of throwing. Guard the UI regression: the announcement is not a `[role=\"status\"]`, both pages use `formStatusRegion`, and that helper returns the visible line when the hidden node comes first in the form. Refs #28. * docs(governance): correct the legal pointer and merge wording The privacy review said the Privacy Policy describes the computed rule; the Privacy Policy is deliberately unchanged and the correction is in the Terms of Use. Correct that sentence, rename the lifecycle row so it describes the zero-vote case rather than implying every untallied result needs an override, qualify the display-versus-enforcement claim, and state per-ballot closure. Align the tracker and handover on \"integrated, branch only; not merged\". Refs #28, #40. * chore(changelog): record the second-pass review fixes * chore(changelog): include the final verification commits * fix(ballots): let display reads degrade instead of failing on unreadable votes Add an opt-in `tolerateUnreadableVotes` read mode to `listProposals` and `getProposalDetail`. Admin pages use it so a broken key ring renders an explicit \"decryption unavailable\" state instead of returning 500, and affected rows carry `unreadableVoteCount` so the missing votes are counted and shown rather than quietly dropped. Every other read keeps today's loud failure, and certification is untouched. Refs #28. * fix(ballots): key results by ballot, share closure state and reject stray override reasons Add `proposalBallotResultFilter` so the result attached to a matter's primary ballot is addressed by `ballotId` (legacy results without a ballotId still resolve). Apply it to the admin workspace, the proposal PDF, the public proposal and policy pages and the matter read model, so a result on one ballot no longer shadows another. Add `resolveBallotClosure` as the single closure rule used by the server gate and the pages: the addressed ballot's own status/close time first, the matter as the fallback. Add `ballotOutcomeLabel` for consistent title-case rendering and fix the quadratic vote grouping in `readBoundBallotTallies`. Refuse a written `overrideReason` when the result already matches the computed outcome (`RESULT_OVERRIDE_REASON_UNEXPECTED`, 400) instead of accepting it once and then failing an identical retry, so a reason is never silently discarded. Refs #28. * fix(admin): derive the result and closure state from the balloted record Use the shared closure rule on both canvassing surfaces and the oversight page so the form is offered exactly when certification would accept it, including the case where a sibling ballot's close time differs from the matter's. Look up recorded results by the primary ballot, show \"N unreadable\" when the display tally is partial, and render computed outcomes in title case alongside recorded results. Refs #28. * test(ballots): cover closure precedence, per-ballot results and stray reasons Add pure cases for closure precedence (ballot row before matter) and outcome labels, and replica-set cases proving an unnecessary override reason is refused rather than silently dropped, that display reads tolerate unreadable votes while strict reads still fail, and that primary and sibling results resolve to their own ballots. Refs #28. * docs(legal): scope the outcome rule to ordinary Yes/No ballots Say that the computed simple-majority rule applies to ordinary Yes/No ballots on a matter, and that amendment endorsement ballots follow a separate procedure recorded by an authorised officer. The publication status and the inactive acceptance gate are unchanged; this stays inside the existing unreleased Terms version 1.1. Refs #28, #40. * docs(governance): record stray-reason refusal and display degradation Document that a reason supplied for a matching result is refused rather than dropped, that a broken key ring degrades admin displays to an explicit unavailable state with unreadable votes counted while certification stays strict, and keep the Terms-of-Use pointer and per-ballot closure precedence accurate. Refs #28. * chore(changelog): record the merge and third-pass fixes"
-  },
-  {
-    "hash": "2a52ef4",
-    "date": "2026-11-15",
-    "type": "feat",
-    "category": "feature",
-    "scope": "docs",
-    "summary": "Check documentation links in CI (#44) (#85)",
-    "details": "* fix(docs): repair broken relative links Point the deployment verification record at the canonical known-gaps page instead of the removed mvp-roadmap, and drop the link to the uncommitted UI-refinement screenshot directory. * docs(guides): point agents at document status labels Replace the stale-page list with a reference to docs/README.md, which defines the document status labels and canonical replacements, and list the new link check among the verification commands. * feat(docs): check documentation links in CI Add a dependency-free script that resolves relative links in docs/, README.md and AGENTS.md, ignoring external, anchor-only, template and fenced-code links. Wire it into the existing application check job as docs:check-links."
-  },
-  {
-    "hash": "6fd5562",
-    "date": "2026-11-15",
-    "type": "docs",
-    "category": "docs",
-    "scope": "platform",
-    "summary": "Reconcile stale historical documentation with the canonical set (#44) (#84)",
-    "details": "* docs(operations): correct removed endpoints, scripts and ballot closure model - Mark the page Superseded and link the canonical build/deploy guide. - Replace the removed /api/ballots check with /api/health and the removed seed-preview, backup-preview and restore-preview instructions with the behaviour that exists (startup seeding, host backup procedure). - Replace the ADR 0003 vote-admission and finalizeBallot description with the implemented deadline check, unique vote indexes and scheduler closure. - Correct the membership audit claim: no memberships.auditHistory or auditVersion exists. - Fix the missing release-gates link and stale preview/cookie statements. * docs(adr): record ballot-admission divergence in ADR 0003 Label the technology decision Current and the admission protocol Design-only, then record the verified implementation: castVote checks the deadline in application code before the transaction, uniqueness comes from the partial vote indexes, and closure writes ballotClosedAt without a tally. Notes that a vote passing the pre-check can commit after the cutoff. * docs(deploy): mark the Coolify deployment record historical Replace the 2026-11-08 cutover banner with a dated historical scope, point to the canonical deployment page, and correct the claim that no CI exists. * docs(engagement): correct the ballot deadline and label the UX record Replace the superseded 24 December 2026 deadline with the approved 30-day ballot period and the 2027-01-14 one-off expiry migration, and describe what the migration actually writes. Mark the dated UX journey record Historical so its old test counts are not read as current. * docs(governance): correct identifiable-ballot boundary and authority fields Identifiable ballots are limited to a national administrator or a holder of the national ballots.view_identifiable permission, not isAdmin alone. Record the ballots.bind and ballots.record_result gates, the current admin navigation, and mark the older governance API page Superseded. * docs(legal): reconcile the 2026-11-08 privacy review with shipped work Label the review Historical and correct the statements overtaken since: Plausible analytics, CRM membership verification, seconding and scheduled ballot closure are implemented, and the legal-acceptance enforcement and ballot privacy notice are applied. Record the delegated identifiable-ballot boundary and define the Current/Historical/Superseded/Design-only vocabulary in the index."
-  },
-  {
-    "hash": "15f7ac5",
-    "date": "2026-11-15",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ballots",
-    "summary": "Make the ballot_results index migration preflighted and recoverable (#55) (#83)",
-    "details": "* feat(ballots): make the ballot_results index migration explicit and recoverable Startup no longer creates or drops the ballot_results indexes as a silent side effect. A legacy collection is reported and left untouched; a fresh one still receives the indexes; an already-migrated one is a no-op. `npm run ballots:results-index` adds preflight, dry-run, apply, verify and recovery commands. Apply backs up the index definitions and documents before change, proves the unique partial ballotId index before dropping the legacy unique proposalId index, verifies the final state, and records the actor and backup in data_migrations. Failures are recorded and re-raised instead of being swallowed. Duplicate results are reported for human reconciliation; nothing deletes or rewrites ballot results to make an index fit. Tests: eight replica-set cases cover a fresh install, legacy startup, duplicate blockers, dry run, full apply, partial apply, re-run, loud failure and recovery reporting. The Sprint 1 integrity test now asserts the explicit contract rather than the old startup upgrade. Also records PR #51 as merged to main and the resolved migration risk (#55). Closes #55 * chore(changelog): record the ballot-results index migration * docs(security): record Turnstile as merged to main"
-  },
-  {
-    "hash": "3b36947",
-    "date": "2026-11-15",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "RFC 0001: Sprint 1 integration, Phase 1 lifecycle, rendering performance and Turnstile (#51)",
-    "details": "* docs(rfc): propose platform evolution and integrity programme * fix(governance): enforce ballot deadlines, rebinding, atomic decisions, and deletion guards (#26, #50) * fix(membership): guard CRM-sourced memberships, exempt national row from conflict, and record manual provenance (#32) * fix(rbac): consolidate permission enforcement, ballot binding gate, and ratification authority checks (#27, #31) * fix(proposals): clear provenance without a conflicting stage update Staff editing a proposal through the admin form always submits provenance: null for the default 'clear provenance' option. saveProposal placed provenance in both $set and $unset, which MongoDB rejects with a path conflict, so every staff edit failed against a real database. Make the clear and set branches mutually exclusive and cover the case against the real MongoDB voting suite. * fix(ballots): keep the deadline banner hydration-stable The ballot deadline rendered a server date and a post-mount relative time in the same text nodes. React 19 reported a text hydration mismatch on every ballot with a deadline, forcing an unnecessary client re-render. Mark the two intentionally time-dependent nodes as hydration-stable and make the date helper's timezone explicit so server and client markup match before the viewer-local deadline replaces it. * test(rbac): reconcile Sprint 1 authority expectations after integration The governance branch made ballots.bind and a future closing date mandatory when entering Decide, and refuses deletion of matters with governance history. The RBAC branch assumed neither. Align the fixtures with real session permissions, supply a ballot deadline, and delete a draft with no history. Ignore branch grants for permissions the catalogue reserves to National scope, allow branch-scoped comment moderation, and prove that a branch proposals.delete grant does not confer destructive authority. * docs(rfc): integrate Sprint 1 and record maintainer decisions Add the canonical governance decision register, the RFC 0001 programme tracker and the Sprint 1 integration report. Update the documentation index and replace the open-question list with the decisions now supplied, while keeping genuinely unresolved questions explicit. Add a browser verification script for the deadline, voting and vote-change journeys and record its evidence. * chore(changelog): refresh snapshot for the Sprint 1 integration * docs(rfc): track active workstreams and new implementation issues Record the Phase 1, rendering-performance and Turnstile workstreams, link the new issues for performance (#52), the command layer (#53), the decision record and responsibility queue (#54), and ballot-results migration safety (#55). Clarify that #36 is deferred rather than blocked inside this programme. * docs(rfc): correct membership workstream status The CRM branch did not add the unique branch-membership index or the duplicate-resolving migration required by #32, so I3 remains partial. * feat(lifecycle): second proposals and schedule advancement and ballot closure Implements the approved lifecycle schedule from the decision register (D3-D7, RFC 0001 Phase 1, refs #26 and #30). - A verified member who is not the author may second a proposal while it is in Propose. The act records `secondedBy`, `secondedAt` and `deliberationEndsAt` (30 days) and writes `proposal.seconded`. It does not change the stage or grant ballot authority. - `src/lib/lifecycle-schedule.ts` is the single source of truth for the 30-day deliberation period, 30-day ballot period and 60-day ceiling. - A system actor (`system:lifecycle-scheduler`) advances due deliberations to Decide, binding the latest immutable revision and setting `ballotClosesAt = secondedAt + 60 days`. It requires no `ballots.bind`; the human early-advancement gate is unchanged. - Advancement fails closed on unresolved amendments (`rejected`, `withdrawn`, `applied`, `not-endorsed` and `inconclusive` are the only non-blocking statuses), on votes bound to other wording, on a missing seconding anchor, and on a ceiling already in the past. - Ballots close automatically at their deadline: `ballot.closed` is recorded once, the stage and result are untouched, and voting is refused after the boundary (D12 is not implemented). - Conditional filters, deterministic event IDs and transactional writes make both operations idempotent and safe under concurrent runs. - An officer opening a ballot without a date now receives the 30-day default; explicit dates remain authoritative. - Adds a read-only report for legacy ballots without deadlines and matters in Deliberate without a deliberation clock. * feat(ops): add governance scheduler and deadline migration report commands - `npm run governance:scheduler` runs the lifecycle scheduler as a dry run by default and writes only with `--apply`. It prints a JSON report with advanced, skipped, closed, blockers and errors, and exits non-zero on errors. - `npm run governance:migration-report` prints the read-only legacy report. - Both require MONGODB_URI and fail loudly without it; neither adds a daemon nor requires production credentials. * docs(lifecycle): document seconding, scheduled transitions and closure Records the implemented behaviour and the assumptions visible for review: - one seconder who is not the author; seconding records the clock but does not change the stage or gate Propose -> Deliberate; - automatic proposal advancement at the deliberation deadline by a system actor, without `ballots.bind`; - the conservative blocking-amendment set, reason codes and failure behaviour; - automatic closure at the ballot deadline without a stage change or result; - the 30-day default for officer-opened ballots; - new proposal fields (`secondedBy`, `secondedAt`, `deliberationEndsAt`, `ballotClosedAt`), deterministic event IDs and scheduler transaction rules; - the read-only migration report and its manual recovery options. * chore(changelog): refresh snapshot for the Phase 1 lifecycle work * docs(lifecycle): state that returning to Propose keeps the seconding clock * chore(changelog): include the lifecycle documentation commits * feat(security): verify Turnstile tokens for unauthenticated actions Add server-side Cloudflare Turnstile verification (D32) and a shared MongoDB fixed-window limiter for the abuse-prone unauthenticated routes. - protect Sense Box submission, magic-link sign-in/first registration, and email sign-up if it is enabled later - fail closed with 503 and an operational error when production requires Turnstile but the secret or site key is missing - report missing, invalid, expired, replayed and malformed tokens with plain-language errors; never log or return the secret or token - store only a keyed hash of the client address, with a TTL index, so limits are shared across instances - leave authenticated voting, deliberation and admin writes untouched - tests cover configuration states, verification outcomes, route refusal and acceptance, real-MongoDB concurrency and the voting exemption * feat(security): show the Turnstile widget on protected forms Render Cloudflare Turnstile on the Sense Box and magic-link sign-in forms using Horizon primitives. The widget renders nothing when no site key is configured, reports load and expiry failures inline with a retry action, and asks for a fresh token after a rejected submission because tokens are single-use. * docs(security): document Turnstile enforcement and rate limits Record the protected actions, configuration contract, fail-closed states, failure messages, privacy boundary, rate-limit defaults and remaining gaps (CSP and headers stay with #38). Add the new keys to the environment example. * chore(changelog): refresh snapshot for Turnstile abuse protection * docs(security): name the rate-limit collection plainly * perf(tooling): add rendering performance harness and DB command metrics Adds an opt-in MongoDB command monitor (disabled unless ENGAGE_DB_COMMAND_MONITOR=1 and APP_MODE is not production), a development-only diagnostics route, and a repeatable Playwright/Mongo measurement harness with baseline and comparison modes. No production behaviour changes. * perf(proposals): batch independent detail reads and defer ballot hydration Runs supersede, eligibility, related-branch and evidence reads with the rest of the proposal-detail batch instead of in sequence. The ballot hydrates on idle rather than blocking load; the stance selector does the same. * perf(auth): resolve a session once per request render Layouts and pages each asked for the same session. Cache the in-flight resolution against the Request object so one browser request performs one session lookup while role revocation remains request-scoped. Adds a regression test for reuse. * perf(lists): project list reads and reuse member vote queries Stops list queries returning detailHtml and, where no search depends on it, long rationale text. Home and the proposals list reuse one member-vote read for outstanding ballots; the member page loads shared activity inputs once instead of twice. Member-page islands in inactive views hydrate only when visible. Adds visibility and vote-reuse regression tests. * perf(admin): consolidate register reads and defer participation panel The proposals register now reads the proposal collection once and batches amendment and revision lookups instead of issuing one query per row. The overview's recent-participation panel moves to a server island with a stable fallback, so its session-dependent reads no longer block the dashboard. Admin timelines hydrate when visible; migrations hydrate on idle. * perf(client): defer notification hydration off the critical path The header notification bell and notification preferences hydrate when the browser is idle. The bell is secondary to page content but still loads its unread count; no API or preference behaviour changes. * docs(status): record the rendering performance audit and measurements Classifies initial, deferred and interaction-only data per audited page; records baseline and after medians, queries removed or deferred, bundle findings, limitations and the highest-value remaining work. Adds a pnpm/npm perf:render entry point. * chore(changelog): refresh snapshot for the rendering performance slice * fix(admin): render saved values in select controls Astro renders React component slot children as raw HTML, so React never sees the options inside NativeSelect and cannot apply defaultValue. Every select rendered its first option, which meant editing a proposal could silently reset its stage, clearing provenance, changing a member's status to pending, or applying the wrong filter or sort. Mark the stored option as selected at each affected call site. The admin proposal editor and register, member administration, Sense Box review, engagement period, policy filters and public proposal filters are covered. * feat(proposals): make seconding the act that opens deliberation D3 requires a seconder before Deliberate and D4 anchors the clock to seconding. The initial Phase 1 implementation recorded the seconding but left Propose -> Deliberate to an officer, which could stall a proposal indefinitely and run the clock in the wrong stage. Seconding now performs the transition and records both the seconding and the stage transition. Officer and API transitions into Deliberate are refused without a recorded seconder. A member-facing control appears on the proposal page for eligible, non-author members, with inline feedback and no raw controls. Update the unrelated stage-transition fixtures to record a seconder explicitly. Extend the browser verification to cover seconding, the 30-day default when no ballot date is given, a rejected past date, and the editor showing the proposal's real stage. * docs(lifecycle): record Phase 1 delivery and the remaining decisions Mark seconding, scheduled advancement and automatic closure as implemented, update the known-gap register, and add O9/O10 for the administrative direct-creation path and renewed seconding after material rewrites. * chore(changelog): refresh after the rendering performance merge * docs(rfc): record Phase 1, rendering performance and Turnstile integration Update I2, I6, I10, I12 and the workstream table with measured evidence and the remaining gaps. Mark the performance and Turnstile documents as merged into the integration branch. * docs(rfc): mark integrated workstreams and the next Phase 2 slices * docs(rfc): add the Phase 2 orchestrator handover brief Record the handover state, governance invariants, traps found during delivery, the recommended Phase 2 sequence, parallelisation rules, verification commands, open decisions and the first ten actions for the next orchestrator. * fix(security,proposals): address PR #51 review findings * chore(deploy): pass Turnstile and rate-limit env vars to app container * fix(governance,security,ui): address CodeRabbit review findings on PR #51 * test(rate-limit): align future window assertions in real MongoDB test"
-  },
-  {
-    "hash": "37aa2f0",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "agents",
-    "summary": "Require checking open issues before implementation (#48)"
-  },
-  {
-    "hash": "52ffaf6",
-    "date": "2026-11-14",
-    "type": "docs",
-    "category": "docs",
-    "scope": "platform",
-    "summary": "Canonical documentation set and known-gap tracking (#46)",
-    "details": "* docs(research): add cross-industry product and UX research Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence. * chore(changelog): record cross-industry research * fix(api): enforce minimal response DTOs, ballot privacy, and bounded pagination * feat(proposals): separate geographic scope from branch identity Add a canonical proposal scope model with stable keys (national, nsw, vic, ...) and consistent labels from the site's state configuration. Branch records remain the organisational identity; legacy records resolve to the canonical scope without being rewritten. Server validation now rejects display labels, non-string or conflicting scopes and ambiguous duplicate geography, and enforces branch administration independently of the rendered controls. * feat(proposals): use an accessible scope selector Replace the native proposal-scope dropdown with the existing ToggleGroup primitive, giving a single National option, consistently named states and territories, visible focus, keyboard navigation and responsive wrapping. Default to the member's authorised branch where one applies and submit the canonical scope key rather than a display label. * chore(changelog): refresh snapshot after proposal scope changes * fix(security): harden RBAC boundaries, CSRF origin checks, and markdown links * feat(ballots): add AES-256-GCM encrypted vote storage, blind indexing, and migration * refactor(auth): unify legacy administrative permission resolution * chore(changelog): record permission resolution consolidation * fix(security): handle rotated blind-index upserts and proxy-safe CSRF origins * feat(site): add branded 403, 404 and 500 error pages * chore(changelog): refresh snapshot after status pages * feat(auth): separate participation, voting and administration Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work. * chore(changelog): record authorisation consolidation * test(ci): update member lifecycle browser check for unified notification center * feat(site): open notifications in a header popover The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu. * chore(changelog): refresh snapshot after notification popover * fix(security): allow national RBAC grants in branch search and preserve scope on read * feat(auth): support multiple roles and a grouped scope select Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips. * chore(changelog): record multi-role and grouped scope select * feat(verification): verify members from Underground CRM * chore(changelog): record CRM membership verification * docs: establish canonical product, domain and architecture documentation * chore(changelog): record documentation sprint * docs(status): link known gaps to GitHub issues * chore(changelog): record known-gap tracking * chore(changelog): refresh snapshot before merge"
-  },
-  {
-    "hash": "db6d4b8",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ballots",
-    "summary": "Show single relative ballot deadline in viewer's local timezone (#47)"
-  },
-  {
-    "hash": "14ae304",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ballots",
-    "summary": "Look up encrypted votes by blind index in member queues and activity (#45)"
-  },
-  {
-    "hash": "32edbcc",
-    "date": "2026-11-13",
-    "type": "docs",
-    "category": "docs",
-    "scope": "research",
-    "summary": "Cross-industry product and UX research (#25)",
-    "details": "* docs(research): add cross-industry product and UX research Compares Discord, Linear, GitHub, GitLab, Zendesk, Airtable, Notion, Discourse, Stripe, Figma, MediaWiki and Google Docs with Engage. Includes an evidence register, cross-industry synthesis, prioritised backlog, five Horizon UX concepts and an implementation sequence. * chore(changelog): record cross-industry research * fix(api): enforce minimal response DTOs, ballot privacy, and bounded pagination * feat(proposals): separate geographic scope from branch identity Add a canonical proposal scope model with stable keys (national, nsw, vic, ...) and consistent labels from the site's state configuration. Branch records remain the organisational identity; legacy records resolve to the canonical scope without being rewritten. Server validation now rejects display labels, non-string or conflicting scopes and ambiguous duplicate geography, and enforces branch administration independently of the rendered controls. * feat(proposals): use an accessible scope selector Replace the native proposal-scope dropdown with the existing ToggleGroup primitive, giving a single National option, consistently named states and territories, visible focus, keyboard navigation and responsive wrapping. Default to the member's authorised branch where one applies and submit the canonical scope key rather than a display label. * chore(changelog): refresh snapshot after proposal scope changes * fix(security): harden RBAC boundaries, CSRF origin checks, and markdown links * feat(ballots): add AES-256-GCM encrypted vote storage, blind indexing, and migration * refactor(auth): unify legacy administrative permission resolution * chore(changelog): record permission resolution consolidation * fix(security): handle rotated blind-index upserts and proxy-safe CSRF origins * feat(site): add branded 403, 404 and 500 error pages * chore(changelog): refresh snapshot after status pages * feat(auth): separate participation, voting and administration Decouple proposal destinations from branch administration. Any verified member may submit to National, any state or territory, or any recognised local branch. Submission creates no membership, voting eligibility, or administrative authority; governance authority remains restricted. Replace the destination selector's administrative filtering with a canonical list of all recognised destinations. National and the eight states/territories stay primary; local branches are revealed behind a disclosure and the member's own branch is preselected. Align Member Management with the capability model: member directory, verification, and role changes use members.view, members.verify, and roles.manage. Canonical system role names are shared, delegated branch and custom roles are visible on each member, and anti-escalation blocks delegated managers from granting or altering national administrators. Document the target authorisation model and remaining migration work. * chore(changelog): record authorisation consolidation * test(ci): update member lifecycle browser check for unified notification center * feat(site): open notifications in a header popover The notification bell now shows recent updates in place, with unread count, mark all read, and a link to full notification settings. The bell stays visible on mobile instead of living inside the collapsible menu. * chore(changelog): refresh snapshot after notification popover * fix(security): allow national RBAC grants in branch search and preserve scope on read * feat(auth): support multiple roles and a grouped scope select Allow members to hold several platform system roles at once. Member Management now uses checkboxes for Member, Moderator, and National Administrator; roles are replaced as a set, effective permissions remain a union, and removing one role does not revoke another. Session and member DTOs expose the full role list while the legacy single role remains the highest-precedence value. Replace the nine-option destination radio group with a grouped, type-ahead Select built from the design-system primitive. National and the states/territories form the primary group; local branches are grouped separately. The control stays compact, keyboard accessible, and mobile friendly without exposing nine chips. * chore(changelog): record multi-role and grouped scope select"
-  },
-  {
-    "hash": "787160a",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branding",
-    "summary": "Remove internal Horizon label from public and verification emails (#24)",
-    "details": "* fix(branding): remove internal Horizon label from public and verification emails * chore(changelog): update changelog snapshot"
-  },
-  {
-    "hash": "baae42d",
-    "date": "2026-11-13",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Governance transparency, extensibility hardening, notifications, PWA & Web Push (#23)",
-    "details": "* docs(governance): specify historical access, reporting privacy, and AI briefing design * feat(governance): add evidence-backed contribution outcomes and historical safety checks * fix(reporting): enforce branch admin scope and add PDF confidentiality disclosures * chore(changelog): record governance transparency sprint * docs(rbac): document RBAC audit, permission matrix, and configurable roles spec * fix(security): enforce archived proposal review permission on GET /api/amendments * feat(rbac): add configurable scoped roles, permission evaluation, and admin UI * chore(changelog): record RBAC audit and configurable roles * fix(governance): exclude governance resolutions from policy ratification and publication workflows * docs(governance): document safe policy registry reconciliation for misclassified resolutions * chore(changelog): record governance resolution classification fix * feat(ballots): add 14 Jan 2027 open ballot expiry migration and prominent deadline display * feat(governance): add extensible matter registry and type-aware lifecycle validation * feat(governance): decouple ballot/decision records and add provenance relationship validation * fix(security): enforce scoped RBAC permissions across admin API endpoints * feat(architecture): add integration seams, authorised read models, resilience helpers, and indexes * chore(changelog): record extensibility sprint and ballot expiry migration * feat(email): add responsive Horizon email templates for all lifecycle notifications * feat(email): add explicit approval-gated batch re-engagement workflow * feat(pwa): add installable Engage manifest, Horizon icons, and safe service worker * fix(pwa): generate app icons from Horizon SVG logo * feat(notifications): add self-hosted VAPID Web Push, in-app inbox, and unified preferences * feat(member): add unified NotificationCenter UI for inbox, email, and push * test(notifications): add notification/PWA tests, preview script, and docs * chore(changelog): update changelog snapshot * fix(deploy): stop repeated Coolify deployments after health failures * chore(changelog): record Coolify deployment fix"
-  },
-  {
-    "hash": "b271a70",
-    "date": "2026-11-13",
-    "type": "update",
-    "category": "ops",
-    "scope": "platform",
-    "summary": "Feat/usability governance sprint (#22)",
-    "details": "* feat(admin): redesign navigation, overview, ballots and reporting IA * feat(admin): overhaul proposal workspace with progressive disclosure and feedback * feat(reports): add on-demand proposal PDF report generation * test(admin): add proposal PDF tests, CSV scope fix and changelog * docs(agents): enforce shadcn primitive usage * refactor(ui): migrate custom controls to shadcn primitives * chore(changelog): record shadcn primitive migration"
-  },
-  {
-    "hash": "94c0caa",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "platform",
-    "summary": "Usability, governance lifecycle, contributor feedback & admin reporting (#20)",
-    "details": "* feat(platform): redirect reclaim.fusionparty.org.au to Engage The Reclaim policy site is retired. A Worker bound to the reclaim custom domain now answers every request with a 301 to the same path on engage.fusionparty.org.au, preserving query strings so Engage's existing legacy redirects (pending-vote, all-policies, reclaim-our-*) still resolve. The previous reclaim Worker is left deployed for rollback. * chore(changelog): record Reclaim domain redirect * feat(platform): map Reclaim division paths to Engage proposals Old links to /reclaim-our-economy/<proposal>/ and /reclaim-our-future/<proposal>/ now land on /proposals/<proposal>/ instead of a 404 on Engage. Retired section index pages, whose names are not proposal slugs, resolve to the proposal list. Other paths and query strings are unchanged. * chore(changelog): record Reclaim path mapping * feat(discovery): surface Sense Box and next actions when caught up on ballots * feat(policies): link empty policy registry directly to fusionparty.org.au/policy * feat(governance): add contributor feedback, proposal supersession, and resolution lifecycle support * feat(admin): add ballot progress, branch summary, and privacy-preserving CSV export * chore(changelog): record usability, governance and reporting updates * fix(governance): address review findings and add Reddit-style comment composer * chore(changelog): record review fixes and comment composer update * feat(notifications): surface contribution responses and catch-up alerts in header and My Engage * chore(changelog): record in-app notifications update * fix(governance): address PR #20 CodeRabbit review comments * chore(changelog): record PR #20 review fixes * docs(research): compare participatory governance patterns with Engage * docs(research): record verification and refresh changelog * fix(governance): address PR #20 review findings * chore(changelog): update snapshot after main merge * docs(research): validate governance patterns with REA runtime evidence * chore(changelog): record REA governance research"
-  },
-  {
-    "hash": "b8af56b",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record GitHub protection defaults (#19)"
-  },
-  {
-    "hash": "041c469",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "repo",
-    "summary": "Add CODEOWNERS for default review routing (#18)",
-    "details": "Every path defaults to @finneh4249 so pull requests are routed to a single accountable reviewer. Ownership is advisory only: the main ruleset keeps a one-approval requirement for all contributors."
-  },
-  {
-    "hash": "430bec4",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box destination picker"
-  },
-  {
-    "hash": "5549e0c",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Offer accessible geographic destination picker"
-  },
-  {
-    "hash": "63e0a28",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record branch identity repair"
-  },
-  {
-    "hash": "2a7452a",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Reuse existing identities and accept national concerns"
-  },
-  {
-    "hash": "123606c",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record self-service branch membership"
-  },
-  {
-    "hash": "e839386",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Let verified members manage branch membership"
-  },
-  {
-    "hash": "e22aa5e",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box availability fix"
-  },
-  {
-    "hash": "7efcbbb",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "sense-box",
-    "summary": "Accept local concerns before branch setup"
-  },
-  {
-    "hash": "f2b384d",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box release"
-  },
-  {
-    "hash": "8ec0cf1",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Collect private branch community priorities"
-  },
-  {
-    "hash": "9ef66f5",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "proposals",
-    "summary": "Capture approved desktop and mobile journeys"
-  },
-  {
-    "hash": "b5207f2",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Implement approved reading and voting journey"
-  },
-  {
-    "hash": "41b4682",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "proposals",
-    "summary": "Record approved design reset and requirements audit"
-  },
-  {
-    "hash": "99a9ea0",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Include voting status safeguard"
-  },
-  {
-    "hash": "7560540",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "voting",
-    "summary": "Refresh proposal hero after saving a vote"
-  },
-  {
-    "hash": "a17770f",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record proposal participation redesign"
-  },
-  {
-    "hash": "fc8d130",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Connect policy reading with voting and simplify discovery"
-  },
-  {
-    "hash": "dede16c",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record proposal experience changes"
-  },
-  {
-    "hash": "1c13678",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Simplify discovery and expose ballot progression"
   }
 ]

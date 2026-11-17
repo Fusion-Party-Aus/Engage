@@ -1,0 +1,46 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import Card from '../../../components/admin/Card.astro';
+import CardContent from '../../../components/admin/CardContent.astro';
+import CardDescription from '../../../components/admin/CardDescription.astro';
+import CardHeader from '../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../components/admin/CardTitle.astro';
+import OperationalOwners from '../../../components/collaboration/OperationalOwners';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { readCollaborationOwners } from '../../../lib/collaboration-operations.ts';
+import { hasPermission } from '../../../lib/rbac.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/');
+if (!hasPermission(user, 'collaboration.manage')) return Astro.rewrite('/403/');
+
+const owners = await readCollaborationOwners(await getDatabase(env));
+---
+
+<AdminLayout
+  title="Operations"
+  description="Who is accountable for corrections, continuity and retention in the collaboration pilot."
+  section="stories"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  <div class="admin-stack">
+    <Card>
+      <CardHeader>
+        <CardTitle class="text-base">Operational owners</CardTitle>
+        <CardDescription>
+          These assignments are stored in Engage, not in deployment configuration. Changing them does not require a
+          deployment, and every change is audited.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <OperationalOwners client:load initial={owners} />
+      </CardContent>
+    </Card>
+  </div>
+</AdminLayout>

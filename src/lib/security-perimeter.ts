@@ -219,7 +219,9 @@ export const CSP_DIRECTIVES = [
   "form-action 'self'",
   // Proposal attachments may be an absolute HTTPS image; everything else is
   // served from this origin.
-  "img-src 'self' https:",
+  // blob: allows a preview of a file the visitor selected locally. The object URL
+  // never leaves the page and is revoked when the selection changes.
+  "img-src 'self' https: blob:",
   "font-src 'self'",
   `connect-src 'self' ${TURNSTILE_ORIGIN} ${ANALYTICS_ORIGIN}`,
   `frame-src ${TURNSTILE_ORIGIN}`,
