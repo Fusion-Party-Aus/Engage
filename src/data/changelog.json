@@ -1,5 +1,31 @@
 [
   {
+    "hash": "dd7d811",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "sense-box",
+    "summary": "Let one priority inform multiple proposals",
+    "details": "Replace the exclusive linkedProposalId claim with linkedProposalIds. Existing single links are read through a compatibility helper and folded into the array on the next write. The administrator workspace can add and remove multiple proposal links, and public pages list all visible linked proposals. Proposal creation no longer fails when a priority already informs another proposal. Extend the in-memory database with addToSet/pull/\"\" semantics and keep the central index catalogue in sync."
+  },
+  {
+    "hash": "85dc255",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "amendments",
+    "summary": "Fence recovery and reconcile committed revisions",
+    "details": "Record a durable application operation, expected revision hash and lease on the amendment. Recovery replaces the fencing token only when the old lease has expired, so concurrent retries cannot both proceed. If the proposal already contains the expected revision, finalise without writing again; if an unrelated revision intervened, refuse rather than overwrite. Add concurrent, crash-after-write, intervening-edit and release-on-failure coverage."
+  },
+  {
+    "hash": "f5a4caf",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "changelog",
+    "summary": "Refresh snapshot for revision corrections"
+  },
+  {
     "hash": "846eb0c",
     "date": "2026-11-17",
     "type": "docs",
@@ -665,30 +691,5 @@
     "category": "feature",
     "scope": "proposals",
     "summary": "Simplify discovery and expose ballot progression"
-  },
-  {
-    "hash": "50a7710",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "agents.md",
-    "summary": "Enhance AGENTS.md with more bounded structure for Coding agents working on the repository"
-  },
-  {
-    "hash": "d619b8f",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record audited platform settings"
-  },
-  {
-    "hash": "5bb7e82",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add audited platform settings and branch hierarchy validation",
-    "details": "Replace the raw JSON platform settings form with a task-based settings workspace. Administrators can manage visibility, public features, social channels and the branch website directory, with server-side URL validation, read-only infrastructure notes and a recorded change history that supports restoring earlier values. Enforce branch parent kinds on the server so states and territories sit under National and local branches sit under a state or territory. Add coverage for the settings API, audit history, restore behaviour and branch hierarchy rules."
   }
 ]
