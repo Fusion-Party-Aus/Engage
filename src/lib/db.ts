@@ -120,9 +120,21 @@ export async function getDatabase(
       clientUri = uri;
       dbInstanceCache.clear();
       const monitorCommands = dbCommandMonitoringEnabled(env);
+      // Local Docker MongoDB can take longer than 400 ms to answer the first
+      // selection; the override prevents a silent fall back to the in-memory
+      // preview during local verification. Production keeps its 3 s default.
+      const configuredTimeout = Number(
+        env.MONGODB_SERVER_SELECTION_TIMEOUT_MS ?? NaN,
+      );
+      const selectionTimeoutMs =
+        Number.isFinite(configuredTimeout) && configuredTimeout > 0
+          ? configuredTimeout
+          : env.APP_MODE === "production"
+            ? 3_000
+            : 400;
       const client = new MongoClient(uri, {
         maxPoolSize: 10,
-        serverSelectionTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
+        serverSelectionTimeoutMS: selectionTimeoutMs,
         connectTimeoutMS: env.APP_MODE === "production" ? 3_000 : 400,
         monitorCommands,
       });

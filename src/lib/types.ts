@@ -82,6 +82,8 @@ export interface PlatformEnv {
   APP_MODE?: string;
   MONGODB_URI?: string;
   MONGODB_DB_NAME?: string;
+  /** Local override for a slow Docker MongoDB first selection. Milliseconds. */
+  MONGODB_SERVER_SELECTION_TIMEOUT_MS?: string;
   SESSION_SECRET?: string;
   BETTER_AUTH_URL?: string;
   PUBLIC_ORIGIN?: string;
