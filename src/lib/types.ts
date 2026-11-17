@@ -260,6 +260,10 @@ export interface ProposalRecord {
    * proposal. Provenance only; it does not publish or adopt the submission.
    */
   sourceSenseSubmissionId?: string;
+  /** Recorded when a private priority was used as a lead, not copied. */
+  sourceSensePrivacyReviewedAt?: Date;
+  sourceSensePrivacyReviewedBy?: string;
+  sourceSensePrivacyBasis?: "published-source" | "independent-wording";
   supersededByProposalId?: string;
   supersededByNote?: string;
   /**

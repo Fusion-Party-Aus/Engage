@@ -301,6 +301,15 @@ export function normalizeProposalDoc(raw: any): ProposalRecord {
     ...(raw.sourceSenseSubmissionId
       ? { sourceSenseSubmissionId: String(raw.sourceSenseSubmissionId) }
       : {}),
+    ...(raw.sourceSensePrivacyReviewedAt
+      ? { sourceSensePrivacyReviewedAt: new Date(raw.sourceSensePrivacyReviewedAt) }
+      : {}),
+    ...(raw.sourceSensePrivacyReviewedBy
+      ? { sourceSensePrivacyReviewedBy: String(raw.sourceSensePrivacyReviewedBy) }
+      : {}),
+    ...(raw.sourceSensePrivacyBasis === "published-source" || raw.sourceSensePrivacyBasis === "independent-wording"
+      ? { sourceSensePrivacyBasis: raw.sourceSensePrivacyBasis }
+      : {}),
     implementationNote: raw.implementationNote
       ? String(raw.implementationNote)
       : undefined,

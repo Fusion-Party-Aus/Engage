@@ -26,6 +26,8 @@ export interface SenseItem {
   publishedAt?: string;
   linkedProposalId?: string;
   commentCount?: number;
+  /** True only when the contributor consented to review-then-publication. */
+  publicationConsent: boolean;
 }
 export interface SenseInbox {
   items: SenseItem[];
@@ -39,6 +41,8 @@ export interface SenseComment {
   body: string;
   visibility: 'public' | 'internal';
   createdAt: string;
+  /** Preformatted on the server so hydration is stable. */
+  createdAtLabel: string;
   deleted: boolean;
   isMine: boolean;
 }
@@ -62,4 +66,15 @@ export interface SenseSubmissionDetail extends SenseItem {
   publishedAt?: string;
   linkedProposal?: SenseLinkedProposal & { proposalId?: string };
   comments: SenseComment[];
+}
+export type SenseReceiptStage = 'received' | 'reviewing' | 'published' | 'closed';
+export interface SenseReceipt {
+  submissionId: string;
+  branchId: string;
+  title: string;
+  topic: SenseTopic;
+  createdAt: string;
+  stage: SenseReceiptStage;
+  publicationConsent: boolean;
+  publishedAt?: string;
 }

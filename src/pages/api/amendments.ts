@@ -13,6 +13,7 @@ import {
   applySuggestions,
   classifySuggestions,
   normalizeSuggestions,
+  validateWordingChanges,
   wordingSnapshot,
   type AmendmentSuggestion,
 } from "../../lib/amendment-suggestions.ts";
@@ -164,6 +165,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { error: "The suggested changes do not alter the wording." },
         { status: 400 },
       );
+    const wordingErrors = validateWordingChanges(changes);
+    if (wordingErrors.length)
+      return Response.json({ error: wordingErrors[0] }, { status: 400 });
 
     const latestRows = await db
       .collection("proposal_revisions")

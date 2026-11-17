@@ -26,6 +26,32 @@ import {
 import { geographicScopeForBranch, parseProposalScopeInput } from "./proposal-scope.ts";
 import { hasPermission } from "./rbac.ts";
 import { canReviewSense } from "./sense-box.ts";
+
+function normalisedSourceText(value: unknown): string {
+  return String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/**
+ * A private Sense Box priority may be used as an internal lead, but its text
+ * must not be reproduced in a public proposal. This catches the obvious copy
+ * paths without pretending to be a semantic plagiarism detector.
+ */
+function reproducesPrivateSource(
+  source: Record<string, any>,
+  proposal: { title: string; summary: string; details: string },
+): boolean {
+  const title = normalisedSourceText(source.title);
+  if (proposal.title.trim().toLowerCase() === title) return true;
+  const text = normalisedSourceText(`${proposal.title}\n${proposal.summary}\n${proposal.details}`);
+  if (title.length >= 20 && text.includes(title)) return true;
+  const detail = normalisedSourceText(source.detail);
+  if (detail.length >= 60 && text.includes(detail)) return true;
+  const fragments = String(source.detail ?? "")
+    .split(/(?<=[.!?])\s+|\n{2,}/)
+    .map(normalisedSourceText)
+    .filter((fragment) => fragment.length >= 40);
+  return fragments.some((fragment) => text.includes(fragment));
+}
 import type {
   CommentRecord,
   PendingVotePreferenceRecord,
@@ -1648,6 +1674,7 @@ export async function saveProposal(
   if (existing && requestedSenseSource)
     throw new Error("A proposal's Sense Box source is fixed when it is created.");
   let senseSource: Record<string, any> | null = null;
+  let senseSourcePublished = false;
   if (!existing && requestedSenseSource) {
     senseSource = await db.collection("sense_submissions").findOne({ submissionId: requestedSenseSource });
     if (!senseSource) throw new Error("That Sense Box priority was not found.");
@@ -1655,6 +1682,18 @@ export async function saveProposal(
       throw new Error("You are not authorised to develop that Sense Box priority.");
     if (senseSource.linkedProposalId)
       throw new Error("That Sense Box priority is already linked to a proposal.");
+    const sourceIsPublished = senseSource.visibility === "published" && Boolean(senseSource.publishedAt);
+    if (!sourceIsPublished) {
+      if (body.privateSourceAcknowledgement !== true)
+        throw new Error(
+          "This Sense Box priority has not been published. Confirm that the proposal is independently written before submitting.",
+        );
+      if (reproducesPrivateSource(senseSource, { title, summary: rawSummary, details }))
+        throw new Error(
+          "This proposal reproduces text from a priority that has not been published. Write the proposal independently, or publish the priority first.",
+        );
+    }
+    senseSourcePublished = sourceIsPublished;
   }
 
   const baseSlug = slugify(title) || proposalId.toLowerCase();
@@ -1700,6 +1739,17 @@ export async function saveProposal(
         }
       : {}),
     ...(requestedSenseSource ? { sourceSenseSubmissionId: requestedSenseSource } : {}),
+    ...(senseSource
+      ? {
+          sourceSensePrivacyBasis: senseSourcePublished ? "published-source" : "independent-wording",
+          ...(!senseSourcePublished
+            ? {
+                sourceSensePrivacyReviewedAt: now,
+                sourceSensePrivacyReviewedBy: user.memberId,
+              }
+            : {}),
+        }
+      : {}),
     provenance,
     authorId: user.memberId,
     authorName: user.name || "Verified Member",
@@ -1729,12 +1779,10 @@ export async function saveProposal(
   };
   await runInTransaction(db, async (session) => {
     const sessionOpts = session ? { session } : undefined;
-    await col.insertOne(created, sessionOpts);
-    await db
-      .collection("proposal_revisions")
-      .insertOne(revision, sessionOpts);
     if (senseSource) {
-      await db.collection("sense_submissions").updateOne(
+      // Claim the source before creating anything. A concurrent request that
+      // already claimed it must not produce a second proposal.
+      const claim = await db.collection("sense_submissions").updateOne(
         { submissionId: requestedSenseSource, linkedProposalId: { $exists: false } },
         {
           $set: {
@@ -1746,7 +1794,13 @@ export async function saveProposal(
         },
         sessionOpts,
       );
+      if (claim.modifiedCount !== 1)
+        throw new Error("That Sense Box priority is already linked to a proposal.");
     }
+    await col.insertOne(created, sessionOpts);
+    await db
+      .collection("proposal_revisions")
+      .insertOne(revision, sessionOpts);
     if (stage === "decide") {
       await recordGovernanceEvent(
         db,

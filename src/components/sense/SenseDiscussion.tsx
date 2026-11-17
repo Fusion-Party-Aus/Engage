@@ -95,7 +95,7 @@ export default function SenseDiscussion({
             <li key={comment.commentId} className="border-t pt-4 first:border-t-0 first:pt-0">
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <strong className="text-foreground">{comment.authorName}</strong>
-                <time dateTime={comment.createdAt}>{new Date(comment.createdAt).toLocaleString('en-AU')}</time>
+                <time dateTime={comment.createdAt} data-local-time="off">{comment.createdAtLabel}</time>
                 {comment.visibility === 'internal' && <Badge variant="warning">Organiser note</Badge>}
                 {(comment.isMine || canModerate) && !comment.deleted && (
                   <Button type="button" variant="ghost" size="sm" onClick={() => remove(comment.commentId)}>

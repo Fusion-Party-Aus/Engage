@@ -79,7 +79,7 @@
 | `member_notifications` | In-app inbox items |
 | `notification_deliveries` | Dedupe and delivery state |
 | `notification_outbox` | Durable governance notification queue (unique dedupe key, claim lease, retry state, retention TTL) |
-| `sense_submissions` | Sense Box priorities. `visibility: "private" | "published"` is explicit; legacy rows have no field and stay private. `linkedProposalId` records an organiser link. |
+| `sense_submissions` | Sense Box priorities. `visibility: "private" | "published"` is explicit; `publicationConsent` records whether the contributor agreed to review-then-publication. Legacy rows lack both fields and stay private. `linkedProposalId` records an organiser link. |
 | `sense_comments` | Public discussion and private organiser notes on a Sense Box priority (`visibility: "public" | "internal"`) |
 | `rate_limits` | Shared fixed-window counters for unauthenticated abuse protection (hashed subject, TTL) |
 | `site_settings`, `site_settings_events` | Public configuration and its audit |

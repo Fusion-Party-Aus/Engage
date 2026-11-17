@@ -4,6 +4,7 @@ import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { createAmendmentRevision } from "../../../../lib/amendments.ts";
 import {
   rebaseSuggestions,
+  validateWordingChanges,
   wordingSnapshot,
   type AmendmentSuggestion,
 } from "../../../../lib/amendment-suggestions.ts";
@@ -144,6 +145,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         typeof amendment.currentRevisionId === "string"
           ? amendment.currentRevisionId
           : null;
+      const wordingErrors = validateWordingChanges(changes);
+      if (wordingErrors.length)
+        return Response.json({ error: wordingErrors[0] }, { status: 400 });
       const revisionId = await createAmendmentRevision(
         db,
         amendmentId,

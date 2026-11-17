@@ -81,8 +81,17 @@ export const POST: APIRoute = async ({ request, locals, url, clientAddress }) =>
       adapterAddress: clientAddress,
     });
     if (refusal) return refusal;
-    await submitSense(db, body);
-    return Response.json({ saved: true }, { status: 201, headers });
+    const submissionId = await submitSense(db, body);
+    return Response.json(
+      {
+        saved: true,
+        receipt: {
+          submissionId,
+          statusPath: `/sense-box/status/${submissionId}/`,
+        },
+      },
+      { status: 201, headers },
+    );
   } catch (error) {
     return safeError(error);
   }

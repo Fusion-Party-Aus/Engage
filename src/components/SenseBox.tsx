@@ -11,6 +11,7 @@ import { SENSE_TOPICS } from '../lib/sense-box-options';
 export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '' }: { branches: { branchId: string; name: string; label?: string; code?: string }[]; initialBranch: string; turnstileSiteKey?: string }) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [receipt, setReceipt] = useState<{ submissionId: string; statusPath: string } | null>(null);
   const [error, setError] = useState('');
   const id = useRef('');
   const [branchId, setBranchId] = useState(initialBranch);
@@ -38,6 +39,7 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
       if (!response.ok) {
         throw new Error(result.error);
       }
+      setReceipt(result.receipt ?? null);
       setSaved(true);
     } catch (caught) {
       // Any failed or uncertain POST may have consumed the single-use Turnstile token.
@@ -53,9 +55,16 @@ export default function SenseBox({ branches, initialBranch, turnstileSiteKey = '
       <div role="status" className="space-y-4">
         <h2>Thank you for sharing</h2>
         <p>Your priority has been sent to the selected branch’s Sense Box. An organiser will review it.</p>
-        <p>If it is published, it will appear with other community priorities and members can discuss it. You won’t receive a personal reply because we don’t collect contact details here.</p>
+        <p>If it is published, it will appear with other community priorities and verified members can discuss it. We don’t collect contact details, so this status page is the only way to follow it.</p>        {receipt && (
+          <div className="rounded-lg border p-4">
+            <p className="mt-0"><strong>Keep this link to check what happens next.</strong></p>
+            <p className="text-sm text-muted-foreground">Anyone with the link can see the status. It does not show your account or contact details.</p>
+            <Button href={receipt.statusPath}>Check this priority’s status</Button>
+            <p className="mb-0 mt-3 text-sm text-muted-foreground">Reference: <code>{receipt.submissionId}</code></p>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
-          <Button href="/sense-box/#priorities">Read published priorities</Button>
+          <Button href="/sense-box/#priorities" variant="outline">Read published priorities</Button>
           <Button href="/proposals/" variant="outline">Explore proposals</Button>
         </div>
       </div>

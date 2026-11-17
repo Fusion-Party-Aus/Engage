@@ -167,7 +167,9 @@ describe("public Sense Box route", () => {
       senseRequest(body, { token: "valid-token", address: "198.51.100.21" }),
     );
     assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { saved: true });
+    const payload = (await response.json()) as { saved: boolean; receipt: { submissionId: string; statusPath: string } };
+    assert.equal(payload.saved, true);
+    assert.match(payload.receipt.statusPath, /^\/sense-box\/status\/.+\/$/);
 
     const db = await getDatabase(env);
     const stored = await db

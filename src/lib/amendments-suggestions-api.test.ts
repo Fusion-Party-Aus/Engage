@@ -5,6 +5,7 @@ import { getDatabase } from "./db.ts";
 import { saveProposal } from "./proposals-store.ts";
 import { POST as postAmendment } from "../pages/api/amendments.ts";
 import { POST as resolveAmendment } from "../pages/api/admin/amendments/resolve.ts";
+import { POST as applyAmendment } from "../pages/api/admin/amendments/apply.ts";
 import type { SessionUser } from "./types.ts";
 
 const env = { APP_MODE: "development" };
@@ -90,6 +91,86 @@ it("stores block suggestions, reconstructs changes and rebases moved anchors on 
   assert.equal(after?.baseRevisionId, latest.revisionId);
   assert.deepEqual(after?.changes.outcomes, ["A new leading commitment", "A clearer first outcome", "Outcome two"]);
   assert.equal(after?.suggestions[0].index, 1);
+});
+
+it("rejects amendments whose reconstructed wording exceeds authoritative limits", async () => {
+  const db = await getDatabase(env);
+  const proposal = await saveProposal(db, admin, {
+    title: `Length test ${crypto.randomUUID()}`,
+    space: "Governance",
+    summary: "A proposal used to test authoritative wording limits.",
+    outcomes: ["An outcome"],
+    details: "Rationale.",
+    stage: "deliberate",
+  });
+  const base = await latestRevision(db, proposal.proposalId);
+  const response = await postAmendment({
+    request: request("/api/amendments", memberCookie, {
+      proposalId: proposal.proposalId,
+      baseRevisionId: base.revisionId,
+      suggestions: [
+        { field: "title", index: 0, original: proposal.title, proposed: "x".repeat(201) },
+      ],
+    }),
+    locals,
+  } as never);
+  assert.equal(response.status, 400);
+  assert.match(((await response.json()) as { error: string }).error, /4–200/);
+});
+
+it("refuses to apply a competing amendment after another amendment already applied", async () => {
+  const db = await getDatabase(env);
+  const proposal = await saveProposal(db, admin, {
+    title: `Apply guard ${crypto.randomUUID()}`,
+    space: "Governance",
+    summary: "A proposal used to test the amendment precedence guard.",
+    outcomes: ["First outcome", "Second outcome"],
+    details: "Rationale.",
+    stage: "deliberate",
+  });
+  const base = await latestRevision(db, proposal.proposalId);
+  const appliedId = crypto.randomUUID();
+  const acceptedId = crypto.randomUUID();
+  const suggestion = {
+    suggestionId: "sug-applied",
+    field: "outcomes",
+    index: 0,
+    original: "First outcome",
+    proposed: "Applied change",
+    mode: "replace",
+  };
+  await db.collection("amendments").insertOne({
+    amendmentId: appliedId,
+    proposalId: proposal.proposalId,
+    baseRevisionId: base.revisionId,
+    currentRevisionId: crypto.randomUUID(),
+    authorId: "dev-member-01",
+    changes: { outcomes: ["Applied change", "Second outcome"] },
+    fields: ["outcomes"],
+    suggestions: [suggestion],
+    status: "applied",
+    conflicts: [],
+    createdAt: new Date(),
+  });
+  await db.collection("amendments").insertOne({
+    amendmentId: acceptedId,
+    proposalId: proposal.proposalId,
+    baseRevisionId: base.revisionId,
+    currentRevisionId: crypto.randomUUID(),
+    authorId: "dev-member-01",
+    changes: { outcomes: ["Competing change", "Second outcome"] },
+    fields: ["outcomes"],
+    suggestions: [{ ...suggestion, suggestionId: "sug-accepted", proposed: "Competing change" }],
+    status: "accepted",
+    conflicts: [],
+    createdAt: new Date(),
+  });
+  const response = await applyAmendment({
+    request: request("/api/admin/amendments/apply", adminCookie, { amendmentId: acceptedId }),
+    locals,
+  } as never);
+  assert.equal(response.status, 409);
+  assert.match(((await response.json()) as { error: string }).error, /precedence/);
 });
 
 it("refuses an anchor that disappeared and accepts explicit replacement wording", async () => {

@@ -6,6 +6,7 @@ import {
   addSenseComment,
   deleteSenseComment,
   getPublicSense,
+  getSenseReceipt,
   getSenseSubmission,
   listPublicSense,
   listSense,
@@ -90,6 +91,11 @@ test('publication is an explicit reviewer action and legacy submissions stay pri
 
   assert.equal((await listPublicSense(db, {})).total, 0, 'legacy submissions must never publish automatically');
   assert.equal((await getPublicSense(db, submissionId)), null);
+  await assert.rejects(
+    reviewSense(db, organiser, { submissionId: '22345678-1234-4234-8234-123456789abc', branchId: 'branch-vic', version: 0, action: 'publish' }),
+    /without consent/,
+    'legacy private submissions cannot be published',
+  );
 
   await reviewSense(db, organiser, { submissionId, branchId: 'branch-vic', version: 0, action: 'publish' });
   const list = await listPublicSense(db, {});
@@ -173,6 +179,21 @@ test('public comments require publication and verified participation', async () 
   );
 });
 
+test('a submission receipt is minimal, capability-based and tracks publication', async () => {
+  const db = await setup();
+  const submissionId = await submitSense(db, input);
+  const receipt = await getSenseReceipt(db, submissionId);
+  assert.equal(receipt?.stage, 'received');
+  assert.equal(receipt?.publicationConsent, true);
+  assert.equal('detail' in (receipt ?? {}), false);
+  assert.equal('reviewedBy' in (receipt ?? {}), false);
+  assert.equal('fingerprint' in (receipt ?? {}), false);
+
+  await reviewSense(db, organiser, { submissionId, branchId: 'branch-vic', version: 0, action: 'publish' });
+  assert.equal((await getSenseReceipt(db, submissionId))?.stage, 'published');
+  assert.equal(await getSenseReceipt(db, '../../etc/passwd'), null);
+});
+
 test('a review can link a published priority to an existing proposal without changing the proposal', async () => {
   const db = await setup();
   const submissionId = await published(db);
@@ -213,6 +234,7 @@ test('developing a proposal records the source and links the priority atomically
     sourceSenseSubmissionId: submissionId,
   });
   assert.equal(proposal.sourceSenseSubmissionId, submissionId);
+  assert.equal(proposal.sourceSensePrivacyBasis, 'published-source');
   const row = await db.collection('sense_submissions').findOne({ submissionId });
   assert.equal(row?.linkedProposalId, proposal.proposalId);
   assert.equal(row?.status, 'developing');
@@ -229,4 +251,66 @@ test('developing a proposal records the source and links the priority atomically
     }),
     /not authorised/,
   );
+});
+
+test('a private priority cannot be copied into a public proposal without an independent-writing review', async () => {
+  const db = await setup();
+  const submissionId = await submitSense(db, input);
+
+  await assert.rejects(
+    saveProposal(db, organiser, {
+      title: 'A different transport proposal',
+      space: 'Transport',
+      summary: 'An independently written proposal about transport.',
+      details: 'Independent rationale.',
+      sourceSenseSubmissionId: submissionId,
+    }),
+    /independently written/,
+    'a private source requires the acknowledgement',
+  );
+
+  await assert.rejects(
+    saveProposal(db, organiser, {
+      title: 'A different transport proposal',
+      space: 'Transport',
+      summary: 'An independently written proposal about transport.',
+      details: 'More frequent trains would help our community.',
+      sourceSenseSubmissionId: submissionId,
+      privateSourceAcknowledgement: true,
+    }),
+    /reproduces text/,
+    'copied source text is refused even with the acknowledgement',
+  );
+
+  const independent = await saveProposal(db, organiser, {
+    title: 'A different transport proposal',
+    space: 'Transport',
+    summary: 'An independently written proposal about regional services.',
+    details: 'Independent rationale.',
+    sourceSenseSubmissionId: submissionId,
+    privateSourceAcknowledgement: true,
+  });
+  assert.equal(independent.sourceSensePrivacyBasis, 'independent-wording');
+  assert.ok(independent.sourceSensePrivacyReviewedAt);
+  assert.equal(independent.sourceSensePrivacyReviewedBy, organiser.memberId);
+});
+
+test('concurrent proposal creation cannot both claim one priority', async () => {
+  const db = await setup();
+  const submissionId = await published(db);
+  const payload = {
+    space: 'Transport',
+    summary: 'A proposal developed from the same community priority.',
+    outcomes: ['Hourly services'],
+    details: 'Developed from a Sense Box priority.',
+    sourceSenseSubmissionId: submissionId,
+  };
+  const results = await Promise.allSettled([
+    saveProposal(db, organiser, { ...payload, title: 'First concurrent proposal' }),
+    saveProposal(db, organiser, { ...payload, title: 'Second concurrent proposal' }),
+  ]);
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+  const rejected = results.find((result) => result.status === 'rejected');
+  assert.match(String(rejected?.status === 'rejected' ? rejected.reason : ''), /already linked/);
+  assert.equal(await db.collection('proposals').countDocuments({ sourceSenseSubmissionId: submissionId }), 1);
 });

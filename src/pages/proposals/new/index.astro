@@ -7,6 +7,7 @@ import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Textarea } from '../../../components/ui/textarea';
+import { Checkbox } from '../../../components/ui/checkbox';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
 import {
   POLICY_CHANGE_GUIDANCE,
@@ -85,11 +86,16 @@ if (requestedSenseId && user) {
     senseError = error instanceof SenseError ? error.message : 'Couldn’t load that Sense Box priority.';
   }
 }
+const senseIsPublished = senseSource?.visibility === 'published';
+const privateSenseSource = Boolean(senseSource && !senseIsPublished);
 const sensePrefill = senseSource
   ? {
-      title: senseSource.title,
-      summary: senseSource.detail,
-      details: `This proposal was developed from a Sense Box priority raised in ${senseSource.locality || 'the community'}.\n\n${senseSource.detail}`,
+      displayTitle: senseSource.title,
+      title: senseIsPublished ? senseSource.title : '',
+      summary: senseIsPublished ? senseSource.detail : '',
+      details: senseIsPublished
+        ? `This proposal was developed from a Sense Box priority raised in ${senseSource.locality || 'the community'}.\n\n${senseSource.detail}`
+        : '',
       space: SENSE_TOPICS[senseSource.topic],
     }
   : null;
@@ -179,14 +185,27 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     {sensePrefill && (
       <Card className="policy-change-existing">
         <CardHeader>
-          <CardTitle>Developing a proposal from a Sense Box priority</CardTitle>
+          <CardTitle>
+            {privateSenseSource
+              ? 'Developing an independent proposal from a private priority'
+              : 'Developing a proposal from a Sense Box priority'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <p class="mt-0"><strong>{sensePrefill.title}</strong></p>
-          <p>{sensePrefill.summary}</p>
+          <p class="mt-0"><strong>{sensePrefill.displayTitle}</strong></p>
+          {privateSenseSource ? (
+            <Alert variant="warning">
+              <AlertDescription>
+                <p>This priority has not been published. Its text is deliberately not copied into the draft. Use it as a lead and write the proposal independently. You must confirm this below before submitting.</p>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <p>{sensePrefill.summary}</p>
+          )}
           <p class="text-sm text-muted-foreground">
-            The draft below is prefilled from the priority. Edit it into a proposal in your own words.
-            This does not publish the original submission or link it automatically.
+            {privateSenseSource
+              ? 'Submitting this proposal does not publish the original priority or reveal its text.'
+              : 'The draft below is prefilled from the priority. Edit it into a proposal in your own words. This does not publish the original submission or link it automatically.'}
           </p>
         </CardContent>
       </Card>
@@ -241,6 +260,16 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
         data-policy-title={isPolicyChange ? String(targetPolicy!.title) : undefined}
       >
         {senseSource && <input type="hidden" name="sourceSenseSubmissionId" value={senseSource.submissionId} />}
+        {privateSenseSource && (
+          <div class="rounded-lg border border-dashed p-4">
+            <label class="flex items-start gap-3">
+              <Checkbox name="privateSourceAcknowledgement" required className="mt-1 size-5 shrink-0" />
+              <span class="text-sm">
+                I confirm this proposal is independently written and does not reproduce the private priority’s text.
+              </span>
+            </label>
+          </div>
+        )}
         {isPolicyChange ? (
           <>
             <input type="hidden" name="targetPolicyId" value={targetPolicy!.policyId} />
@@ -558,6 +587,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
     const targetSection = String(data.get('targetSection') ?? '').trim();
     const proposedWording = String(data.get('proposedWording') ?? '').trim();
     const sourceSenseSubmissionId = String(data.get('sourceSenseSubmissionId') ?? '').trim();
+    const privateSourceAcknowledgement = data.get('privateSourceAcknowledgement') === 'on';
     const declaresPolicyChange = Boolean(targetPolicyId && changeType);
     const outcomes = String(data.get('outcomes') ?? '')
       .split('\n')
@@ -580,6 +610,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
       ...(attachmentUrl ? { attachmentUrl } : {}),
       ...(attachmentDescription ? { attachmentDescription } : {}),
       ...(sourceSenseSubmissionId ? { sourceSenseSubmissionId } : {}),
+      ...(privateSourceAcknowledgement ? { privateSourceAcknowledgement: true } : {}),
       stage: 'propose',
       ...(scopeKey ? { scope: scopeKey } : {}),
     };

@@ -14,6 +14,7 @@
     "preview": "astro preview",
     "perf:render": "node scripts/rendering-performance.mjs",
     "perimeter:browser": "node scripts/security-perimeter-browser.mjs",
+    "sense-box:browser": "node scripts/sense-box-amendments-browser.mjs",
     "check": "astro check",
     "docs:check-links": "node scripts/check-doc-links.mjs",
     "test": "node --experimental-strip-types --test src/**/*.test.ts",

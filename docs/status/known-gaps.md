@@ -98,9 +98,9 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 Two amendments can edit the same block and both be `ready`. Conflict detection previously compared an amendment only against the proposal revision, not against other amendments.
 
-**Partly addressed (`feat/sense-box-collaboration-inline-amendments`):** block-anchored suggestions now record the exact title, summary, commitment or rationale paragraph they change. Member and administrator views show when two non-rejected amendments target the same block, and the resolve path can rebase a suggestion whose quoted text moved. The precedence decision itself is still unbuilt: applying two competing amendments sequentially remains possible and the decision record continues to refuse derived wording for multiple applied amendments.
+**Partly addressed (`feat/sense-box-collaboration-inline-amendments`, #148):** block-anchored suggestions now record the exact title, summary, commitment or rationale paragraph they change. Member and administrator views show when two non-rejected amendments target the same block, and the resolve path can rebase a suggestion whose quoted text moved. The apply route refuses a second amendment when an already-applied amendment changed the same block, so two competing amendments cannot both be applied silently. An explicit precedence decision remains unbuilt: an officer must resolve the blocked pair outside the current workflow.
 
-**Remaining direction:** require an explicit precedence decision before a competing amendment can be applied, and test same-block, disjoint-block and three-amendment cases (#34, #148).
+**Remaining direction:** add a recorded precedence decision and test same-block, disjoint-block and three-amendment cases at the apply/ballot boundary (#34, #148).
 
 ### 10. Results are checked against the tally but the voting rules are incomplete
 

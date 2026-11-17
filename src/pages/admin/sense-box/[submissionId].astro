@@ -16,6 +16,9 @@ import CardDescription from '../../../components/admin/CardDescription.astro';
 import CardHeader from '../../../components/admin/CardHeader.astro';
 import CardTitle from '../../../components/admin/CardTitle.astro';
 import Field from '../../../components/admin/Field.astro';
+import Alert from '../../../components/admin/Alert.astro';
+import AlertTitle from '../../../components/admin/AlertTitle.astro';
+import AlertDescription from '../../../components/admin/AlertDescription.astro';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -87,7 +90,7 @@ const stageLabel = (stage: string) => stage === 'decide' ? 'Voting' : stage === 
           </Button>
         ) : (
           <Button href={`/proposals/new/?sense=${submission.submissionId}`} size="sm">
-            <FileText aria-hidden="true" /> Develop a proposal
+            <FileText aria-hidden="true" /> {published ? 'Develop a proposal' : 'Develop an independent proposal'}
           </Button>
         )}
         {published && (
@@ -115,16 +118,27 @@ const stageLabel = (stage: string) => stage === 'decide' ? 'Voting' : stage === 
           {submission.publishedAt && (
             <p class="mt-0 text-sm text-muted-foreground">Published {new Date(submission.publishedAt).toLocaleDateString('en-AU')}.</p>
           )}
-          <form data-sense-action={published ? 'unpublish' : 'publish'} data-version={submission.version} class="flex flex-wrap items-center gap-3">
-            <Button type="submit" size="sm" variant={published ? 'outline' : 'default'}>
-              {published ? 'Withdraw from public view' : 'Publish priority'}
-            </Button>
-            <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
-          </form>
-          {!published && (
-            <p class="mt-3 mb-0 text-sm text-muted-foreground">
-              Check that the priority does not contain personal or sensitive information before publishing.
-            </p>
+          {!submission.publicationConsent ? (
+            <Alert variant="warning">
+              <AlertTitle>Collected under the private-review promise</AlertTitle>
+              <AlertDescription>
+                <p>This priority was submitted before public publication was offered. It cannot be published without a new consent or a separate republishing process. Use it only as a private lead.</p>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <form data-sense-action={published ? 'unpublish' : 'publish'} data-version={submission.version} class="flex flex-wrap items-center gap-3">
+                <Button type="submit" size="sm" variant={published ? 'outline' : 'default'}>
+                  {published ? 'Withdraw from public view' : 'Publish priority'}
+                </Button>
+                <span role="status" aria-live="polite" class="text-sm text-muted-foreground"></span>
+              </form>
+              {!published && (
+                <p class="mt-3 mb-0 text-sm text-muted-foreground">
+                  Check that the priority does not contain personal or sensitive information before publishing.
+                </p>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

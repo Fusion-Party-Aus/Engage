@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  amendmentsCompete,
   applySuggestions,
   classifySuggestions,
   competingTargets,
@@ -8,6 +9,7 @@ import {
   normalizeSuggestions,
   paragraphs,
   rebaseSuggestions,
+  validateWordingChanges,
   wordingBlocks,
   wordingSnapshot,
   type AmendmentSuggestion,
@@ -140,6 +142,86 @@ test('word diff keeps unchanged words and marks edits', () => {
   assert.ok(same.startsWith('Trains'));
   assert.ok(segments.some((segment) => segment.type === 'remove' && segment.text.includes('infrequent')));
   assert.ok(segments.some((segment) => segment.type === 'add' && segment.text.includes('hourly')));
+});
+
+test('multiple additions in one field are applied in the order written', () => {
+  const applied = applySuggestions(base, [
+    suggestion({ field: 'outcomes', index: 2, original: '', proposed: 'Third commitment', mode: 'add' }),
+    suggestion({ field: 'outcomes', index: 3, original: '', proposed: 'Fourth commitment', mode: 'add' }),
+    suggestion({ field: 'details', index: 2, original: '', proposed: 'Third rationale paragraph.', mode: 'add' }),
+    suggestion({ field: 'details', index: 3, original: '', proposed: 'Fourth rationale paragraph.', mode: 'add' }),
+  ]);
+  assert.deepEqual(applied.unresolved, []);
+  assert.deepEqual(applied.changes.outcomes, [
+    'Run more services',
+    'Improve connections',
+    'Third commitment',
+    'Fourth commitment',
+  ]);
+  assert.equal(
+    applied.changes.details,
+    'The current timetable does not meet demand.\n\nRural towns are isolated.\n\nThird rationale paragraph.\n\nFourth rationale paragraph.',
+  );
+});
+
+test('additions, removals and replacements in one field do not shift each other', () => {
+  const applied = applySuggestions(base, [
+    suggestion({ field: 'outcomes', index: 0, original: 'Run more services', proposed: 'Run many more services' }),
+    suggestion({ field: 'outcomes', index: 1, original: 'Improve connections', proposed: '', mode: 'remove' }),
+    suggestion({ field: 'outcomes', index: 2, original: '', proposed: 'Add a new connection', mode: 'add' }),
+  ]);
+  assert.deepEqual(applied.unresolved, []);
+  assert.deepEqual(applied.changes.outcomes, ['Run many more services', 'Add a new connection']);
+});
+
+test('repeated wording is ambiguous and is not rebased by guessing', () => {
+  const repeated = wordingSnapshot({
+    ...base,
+    outcomes: ['Same commitment', 'Same commitment', 'Something else'],
+  });
+  const rebased = rebaseSuggestions(
+    [suggestion({ field: 'outcomes', index: 0, original: 'Same commitment', proposed: 'Changed' })],
+    { ...repeated, outcomes: ['A new first commitment', 'Same commitment', 'Same commitment', 'Something else'] },
+  );
+  assert.deepEqual(rebased.unresolved, ['outcomes']);
+  const classifications = classifySuggestions(
+    repeated,
+    { ...repeated, outcomes: ['A new first commitment', 'Same commitment', 'Same commitment', 'Something else'] },
+    [suggestion({ field: 'outcomes', index: 0, original: 'Same commitment', proposed: 'Changed' })],
+  );
+  assert.equal(classifications[0]?.state, 'conflict');
+});
+
+test('several additions at the same insertion point are retained in order', () => {
+  const applied = applySuggestions(base, [
+    suggestion({ field: 'outcomes', index: 0, original: '', proposed: 'First new', mode: 'add' }),
+    suggestion({ field: 'outcomes', index: 0, original: '', proposed: 'Second new', mode: 'add' }),
+  ]);
+  assert.deepEqual(applied.changes.outcomes, ['First new', 'Second new', 'Run more services', 'Improve connections']);
+});
+
+test('wording validation happens on the resulting whole field', () => {
+  assert.deepEqual(validateWordingChanges({ title: 'Valid title' }), []);
+  assert.match(validateWordingChanges({ title: 'x'.repeat(201) })[0] ?? '', /4–200/);
+  assert.match(validateWordingChanges({ summary: 'Too short' })[0] ?? '', /10–2,000/);
+  assert.match(validateWordingChanges({ outcomes: ['x'.repeat(501)] })[0] ?? '', /under 500/);
+});
+
+test('competition detection falls back to fields for legacy amendments', () => {
+  assert.equal(
+    amendmentsCompete(
+      { fields: ['title'] },
+      { fields: ['title', 'summary'] },
+    ),
+    true,
+  );
+  assert.equal(
+    amendmentsCompete(
+      { fields: ['title'] },
+      { fields: ['summary'] },
+    ),
+    false,
+  );
 });
 
 test('paragraph splitting ignores empty prose', () => {

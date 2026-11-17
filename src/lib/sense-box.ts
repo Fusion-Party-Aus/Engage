@@ -11,8 +11,12 @@ import {
   type SenseInbox,
   type SenseComment,
   type SensePublicItem,
+  type SenseReceipt,
   type SenseSubmissionDetail,
 } from './sense-box-options.ts';
+
+/** Publication consent wording introduced with review-then-publication. */
+export const SENSE_PUBLICATION_CONSENT_VERSION = 'sense-box-2026-11-17';
 
 export class SenseError extends Error {
   status: number;
@@ -22,7 +26,7 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{1
 const SUBMISSION_PROJECTION = {
   _id: 0, submissionId: 1, branchId: 1, title: 1, detail: 1, locality: 1,
   topic: 1, status: 1, createdAt: 1, version: 1, visibility: 1,
-  publishedAt: 1, linkedProposalId: 1,
+  publishedAt: 1, linkedProposalId: 1, publicationConsent: 1,
 } as const;
 
 function text(value: unknown, label: string, min: number, max: number): string {
@@ -95,8 +99,8 @@ export async function submitSense(db: Db, body: Record<string, unknown>): Promis
   try {
     await db.collection('sense_submissions').insertOne({
       _id, submissionId:body.requestId, ...content, fingerprint,
-      status:'new', version:0, visibility:'private', createdAt:new Date(),
-      consentVersion:'sense-box-2026-11-17',
+      status:'new', version:0, visibility:'private', publicationConsent:true, createdAt:new Date(),
+      consentVersion: SENSE_PUBLICATION_CONSENT_VERSION,
     });
   } catch (error) {
     if ((error as {code?:number}).code !== 11000) throw error;
@@ -156,6 +160,7 @@ function toSenseItem(row: Record<string, any>, commentCount = 0): SenseItem {
     ...(row.publishedAt ? { publishedAt: new Date(row.publishedAt).toISOString() } : {}),
     ...(row.linkedProposalId ? { linkedProposalId: String(row.linkedProposalId) } : {}),
     commentCount,
+    publicationConsent: row.publicationConsent === true,
   };
 }
 
@@ -228,12 +233,18 @@ export async function listPublicSense(
 }
 
 function toComment(row: Record<string, any>, viewer?: SessionUser | null): SenseComment {
+  const createdAt = new Date(row.createdAt);
   return {
     commentId: String(row.commentId),
     authorName: String(row.authorName || 'Engage member'),
     body: row.deletedAt ? '' : String(row.body ?? ''),
     visibility: row.visibility === 'internal' ? 'internal' : 'public',
-    createdAt: new Date(row.createdAt).toISOString(),
+    createdAt: createdAt.toISOString(),
+    createdAtLabel: new Intl.DateTimeFormat('en-AU', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Australia/Melbourne',
+    }).format(createdAt),
     deleted: Boolean(row.deletedAt),
     isMine: Boolean(viewer && row.memberId === viewer.memberId),
   };
@@ -272,8 +283,38 @@ export async function getPublicSense(db: Db, submissionId: string, viewer?: Sess
   };
 }
 
-export async function getSenseSubmission(db: Db, user: SessionUser, submissionId: string): Promise<SenseSubmissionDetail | null> {
-  const row = await db.collection('sense_submissions').findOne({ submissionId });
+/**
+ * Contributor receipt. The submission ID is the capability: it is a random
+ * UUID shown only to the person who submitted, and it reveals no contact,
+ * review, audit or account fields.
+ */
+export async function getSenseReceipt(db: Db, submissionId: string): Promise<SenseReceipt | null> {
+  if (!uuid.test(submissionId)) return null;
+  const row = await db.collection('sense_submissions').findOne(
+    { submissionId },
+    { projection: { _id: 0, submissionId: 1, branchId: 1, title: 1, topic: 1, createdAt: 1, status: 1, visibility: 1, publishedAt: 1, publicationConsent: 1 } },
+  );
+  if (!row) return null;
+  const stage = row.visibility === 'published' && row.publishedAt
+    ? 'published'
+    : row.status === 'archived'
+      ? 'closed'
+      : row.status === 'new'
+        ? 'received'
+        : 'reviewing';
+  return {
+    submissionId: String(row.submissionId),
+    branchId: String(row.branchId),
+    title: String(row.title),
+    topic: row.topic,
+    createdAt: new Date(row.createdAt).toISOString(),
+    stage,
+    publicationConsent: row.publicationConsent === true,
+    ...(row.publishedAt ? { publishedAt: new Date(row.publishedAt).toISOString() } : {}),
+  };
+}
+
+export async function getSenseSubmission(db: Db, user: SessionUser, submissionId: string): Promise<SenseSubmissionDetail | null> {  const row = await db.collection('sense_submissions').findOne({ submissionId });
   if (!row) return null;
   requireBranch(user, String(row.branchId));
   const comments = await listSenseComments(db, submissionId, 'all', user);
@@ -325,6 +366,10 @@ export async function reviewSense(db: Db, user: SessionUser, body: Record<string
   let update: Record<string, any>;
   if (action === 'publish') {
     if (raw.status === 'archived') throw new SenseError('Restore this submission before publishing it.', 409);
+    // Legacy submissions were collected under a private-review promise. They
+    // cannot be published until an explicit republishing process exists.
+    if (raw.publicationConsent !== true)
+      throw new SenseError('This priority was collected without consent to publish. It can only be used as a private lead.', 409);
     update = {
       $set: {
         visibility: 'published', publishedAt: new Date(), publishedBy: user.memberId,

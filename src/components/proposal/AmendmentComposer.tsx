@@ -155,7 +155,7 @@ export default function AmendmentComposer({ proposalId, baseRevisionId, snapshot
           const suggestion = suggestions.find((item) => item.field === block.field && item.index === block.index);
           const editing = draft && draft.field === block.field && draft.index === block.index && draft.mode !== 'add';
           return (
-            <div key={block.blockId} className="rounded-lg border p-3">
+            <div key={block.blockId} data-amendment-block={block.blockId} className="rounded-lg border p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{block.label}</p>
@@ -250,7 +250,7 @@ export default function AmendmentComposer({ proposalId, baseRevisionId, snapshot
         <div className="space-y-3">
           <h3 className="m-0 text-base">Preview</h3>
           {suggestions.map((suggestion) => (
-            <div key={`${suggestion.field}:${suggestion.index}`} className="rounded-lg border p-3">
+            <div key={`${suggestion.field}:${suggestion.index}`} data-suggestion-preview={`${suggestion.field}:${suggestion.index}`} className="rounded-lg border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <strong className="text-sm">{blockLabel(suggestion.field, suggestion.index)}</strong>
                 <Badge variant="muted">{suggestion.mode === 'add' ? 'Addition' : suggestion.mode === 'remove' ? 'Removal' : 'Replacement'}</Badge>

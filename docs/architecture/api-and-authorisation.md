@@ -18,6 +18,7 @@ All routes are `prerender = false`. `src/middleware.ts` is a perimeter layer onl
 | Votes | `GET/POST /api/votes` | Read and cast formal votes or save pending preferences |
 | Sense Box | `GET/POST/PATCH /api/sense-box` | Public submission; anonymous `GET` returns published priorities only; reviewers use `PATCH` for status, publication and proposal linking |
 | Sense Box discussion | `POST/DELETE /api/sense-box/comments` | Signed-in public discussion and reviewer-only organiser notes |
+| Sense Box receipt | `GET /sense-box/status/:submissionId/` | Contributor capability link; minimal status fields, no review or account data |
 | Legal | `POST /api/legal/acceptance` | Record terms/privacy acceptance |
 | Public v1 | `/api/v1/policies`, `/versions`, `/branches`, `/policy-categories`, `/openapi.json` | Read-only published catalogue |
 | Member | `GET/POST /api/member/branches`, `GET/POST /api/member/profile` | Following, branch membership self-service, and the owner's public biography and visibility |

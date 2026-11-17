@@ -114,6 +114,7 @@ const statusTone = (status: string) =>
                   <Badge variant="outline">{SENSE_TOPICS[item.topic]}</Badge>
                   <Badge variant={statusTone(item.status)}>{SENSE_STATUSES[item.status]}</Badge>
                   <Badge variant={item.visibility === 'published' ? 'success' : 'muted'}>{item.visibility === 'published' ? 'Published' : 'Private'}</Badge>
+                  {!item.publicationConsent && <Badge variant="warning">No publication consent</Badge>}
                 </div>
                 <div>
                   <h2 class="text-xl m-0">{item.title}</h2>

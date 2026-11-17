@@ -144,8 +144,9 @@ export function normalizeSuggestions(raw: unknown): AmendmentSuggestion[] {
     if (field === 'title' && (!original || !proposed))
       throw new Error('A title suggestion must replace the existing title.');
     const key = `${field}:${index}`;
-    if (seen.has(key)) throw new Error('Only one suggestion can target the same block.');
-    seen.add(key);
+    if (modeFor(original, proposed) !== 'add' && seen.has(key))
+      throw new Error('Only one suggestion can target the same block.');
+    if (modeFor(original, proposed) !== 'add') seen.add(key);
     return {
       suggestionId: `sug-${globalThis.crypto.randomUUID()}`,
       field: field as WordingField,
@@ -167,56 +168,15 @@ function cloneSnapshot(snapshot: WordingSnapshot): WordingSnapshot {
   };
 }
 
-function proseSlot(snapshot: WordingSnapshot, field: 'summary' | 'details') {
-  return paragraphs(snapshot[field]);
-}
-
 function setProse(snapshot: WordingSnapshot, field: 'summary' | 'details', parts: string[]) {
   snapshot[field] = parts.join('\n\n');
 }
 
-function applyOne(
-  snapshot: WordingSnapshot,
-  suggestion: AmendmentSuggestion,
-  strict: boolean,
-): string | null {
-  const { field, index, original, proposed, mode } = suggestion;
-
-  if (field === 'title') {
-    if (snapshot.title !== original) return 'title';
-    snapshot.title = proposed;
-    return null;
-  }
-
-  if (field === 'outcomes') {
-    const current = snapshot.outcomes[index];
-    if (mode === 'add') {
-      if (index > snapshot.outcomes.length) return 'outcomes';
-      snapshot.outcomes.splice(index, 0, proposed);
-      return null;
-    }
-    if (strict && current !== original) return 'outcomes';
-    if (mode === 'remove') snapshot.outcomes.splice(index, 1);
-    else snapshot.outcomes[index] = proposed;
-    return null;
-  }
-
-  const parts = proseSlot(snapshot, field);
-  if (mode === 'add') {
-    if (index > parts.length) return field;
-    parts.splice(index, 0, proposed);
-    setProse(snapshot, field, parts);
-    return null;
-  }
-  if (strict && parts[index] !== original) return field;
-  if (mode === 'remove') parts.splice(index, 1);
-  else parts[index] = proposed;
-  setProse(snapshot, field, parts);
-  return null;
-}
-
 /**
- * Apply suggestions to a snapshot. `strict` requires every quoted original to
+ * Apply suggestions to a snapshot by reconstructing each field from its base
+ * blocks. Additions are collected by insertion point and applied in the order
+ * they were written, so several additions and a removal in the same field do
+ * not shift each other's indices. `strict` requires every quoted original to
  * match its anchor; rebasing uses non-strict application after anchors move.
  */
 export function applySuggestions(
@@ -227,22 +187,63 @@ export function applySuggestions(
   const snapshot = cloneSnapshot(base);
   const touched = new Set<WordingField>();
   const unresolved: string[] = [];
-  const fieldOrder: Record<WordingField, number> = { title: 0, summary: 1, outcomes: 2, details: 3 };
-  const ordered = [...suggestions].sort((a, b) => {
-    if (a.field !== b.field) return fieldOrder[a.field] - fieldOrder[b.field];
-    if ((a.mode === 'add') !== (b.mode === 'add')) return a.mode === 'add' ? 1 : -1;
-    return b.index - a.index;
-  });
-  for (const suggestion of ordered) {
-    const failure = applyOne(snapshot, suggestion, options.strict !== false);
-    if (failure) {
-      if (!unresolved.includes(failure)) unresolved.push(failure);
+  const strict = options.strict !== false;
+
+  const titleSuggestions = suggestions.filter((suggestion) => suggestion.field === 'title');
+  for (const suggestion of titleSuggestions) {
+    if (suggestion.mode !== 'replace' || snapshot.title !== suggestion.original) {
+      unresolved.push('title');
       continue;
     }
-    touched.add(suggestion.field);
+    snapshot.title = suggestion.proposed;
+    touched.add('title');
   }
-  // Sort additions descending so multiple inserts at the same block keep the
-  // order the member wrote them in.
+
+  const rebuild = (field: 'summary' | 'details' | 'outcomes') => {
+    const baseBlocks = field === 'outcomes' ? [...snapshot.outcomes] : paragraphs(snapshot[field]);
+    const replacements = new Map<number, string>();
+    const removals = new Set<number>();
+    const additions = new Map<number, string[]>();
+    let changed = false;
+    for (const suggestion of suggestions.filter((item) => item.field === field)) {
+      if (suggestion.mode === 'add') {
+        const list = additions.get(suggestion.index) ?? [];
+        list.push(suggestion.proposed);
+        additions.set(suggestion.index, list);
+        changed = true;
+        continue;
+      }
+      if (suggestion.index >= baseBlocks.length) {
+        if (!unresolved.includes(field)) unresolved.push(field);
+        continue;
+      }
+      if (strict && baseBlocks[suggestion.index] !== suggestion.original) {
+        if (!unresolved.includes(field)) unresolved.push(field);
+        continue;
+      }
+      if (suggestion.mode === 'remove') removals.add(suggestion.index);
+      else replacements.set(suggestion.index, suggestion.proposed);
+      changed = true;
+    }
+    if (!changed) return;
+    const rebuilt: string[] = [];
+    const maxIndex = Math.max(baseBlocks.length, ...additions.keys());
+    for (let index = 0; index <= maxIndex; index += 1) {
+      for (const addition of additions.get(index) ?? []) rebuilt.push(addition);
+      if (index < baseBlocks.length) {
+        if (removals.has(index)) continue;
+        rebuilt.push(replacements.get(index) ?? baseBlocks[index]!);
+      }
+    }
+    if (field === 'outcomes') snapshot.outcomes = rebuilt;
+    else setProse(snapshot, field, rebuilt);
+    touched.add(field);
+  };
+
+  rebuild('summary');
+  rebuild('outcomes');
+  rebuild('details');
+
   const changes: Partial<WordingSnapshot> = {};
   for (const field of touched) {
     if (field === 'title') changes.title = snapshot.title;
@@ -251,6 +252,31 @@ export function applySuggestions(
     else changes.outcomes = snapshot.outcomes;
   }
   return { changes, unresolved };
+}
+
+/**
+ * Validate the whole-field wording that will be stored and later applied.
+ * This is the authoritative boundary for title/summary length, not the editor.
+ */
+export function validateWordingChanges(changes: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  if ('title' in changes) {
+    if (typeof changes.title !== 'string' || changes.title.trim().length < 4 || changes.title.trim().length > 200)
+      errors.push('The amended title must be 4–200 characters.');
+  }
+  if ('summary' in changes) {
+    if (typeof changes.summary !== 'string' || changes.summary.trim().length < 10 || changes.summary.trim().length > 2000)
+      errors.push('The amended summary must be 10–2,000 characters.');
+  }
+  if ('details' in changes) {
+    if (typeof changes.details !== 'string' || changes.details.length > 20_000)
+      errors.push('The amended rationale must be text under 20,000 characters.');
+  }
+  if ('outcomes' in changes) {
+    if (!Array.isArray(changes.outcomes) || changes.outcomes.some((value) => typeof value !== 'string' || value.length > 500))
+      errors.push('Each amended commitment must be text under 500 characters.');
+  }
+  return errors;
 }
 
 function locateOriginal(snapshot: WordingSnapshot, suggestion: AmendmentSuggestion): number[] {
@@ -283,6 +309,11 @@ export function classifySuggestions(
     if (latestMatches.length === 0) {
       return { suggestionId: suggestion.suggestionId, state: 'conflict' };
     }
+    // Repeated wording is ambiguous. Only keep the original position when it
+    // still holds the quoted text; otherwise an officer must resolve it.
+    if (latestMatches.length > 1 && !latestMatches.includes(suggestion.index)) {
+      return { suggestionId: suggestion.suggestionId, state: 'conflict' };
+    }
     const sameIndex = latestMatches.includes(suggestion.index);
     return {
       suggestionId: suggestion.suggestionId,
@@ -313,7 +344,7 @@ export function rebaseSuggestions(
       continue;
     }
     const matches = locateOriginal(latest, suggestion);
-    if (matches.length === 0) {
+    if (matches.length === 0 || (matches.length > 1 && !matches.includes(suggestion.index))) {
       unresolved.push(suggestion.field);
       classifications.push({ suggestionId: suggestion.suggestionId, state: 'conflict' });
       continue;
@@ -347,6 +378,28 @@ export function competingTargets(
   const ours = suggestionTargets(suggestions);
   const theirs = suggestionTargets(otherSuggestions);
   return [...ours].filter((key) => theirs.has(key));
+}
+
+/**
+ * Conservative competition check for the apply boundary. Block suggestions
+ * give exact targets; legacy amendments without suggestions fall back to the
+ * whole fields they replace.
+ */
+export function amendmentsCompete(
+  amendment: { suggestions?: AmendmentSuggestion[]; fields?: unknown; changes?: Record<string, unknown> },
+  other: { suggestions?: AmendmentSuggestion[]; fields?: unknown; changes?: Record<string, unknown> },
+): boolean {
+  if (amendment.suggestions?.length && other.suggestions?.length) {
+    return competingTargets(amendment.suggestions, other.suggestions).length > 0;
+  }
+  const fieldsFor = (value: typeof amendment) => new Set(
+    Array.isArray(value.fields)
+      ? value.fields.map(String)
+      : Object.keys(value.changes ?? {}),
+  );
+  const ours = fieldsFor(amendment);
+  for (const field of fieldsFor(other)) if (ours.has(field)) return true;
+  return false;
 }
 
 export interface DiffSegment {

@@ -3,6 +3,10 @@ import { getSessionUser } from "../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { saveProposal } from "../../../../lib/store.ts";
 import { hasPermission, hasPermissionAnywhere } from "../../../../lib/rbac.ts";
+import {
+  amendmentsCompete,
+  validateWordingChanges,
+} from "../../../../lib/amendment-suggestions.ts";
 export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = runtimeEnv(locals);
@@ -58,40 +62,30 @@ export const POST: APIRoute = async ({ request, locals }) => {
         { status: 403 },
       );
     const changes = amendment.changes as Record<string, unknown>;
-    if (
-      "title" in changes &&
-      (typeof changes.title !== "string" ||
-        changes.title.trim().length < 4 ||
-        changes.title.trim().length > 200)
-    )
+    const wordingErrors = validateWordingChanges(changes);
+    if (wordingErrors.length)
+      return Response.json({ error: wordingErrors[0] }, { status: 400 });
+
+    // A warning is not a safeguard. Refuse to apply an amendment that changes
+    // the same block as an amendment already applied. The officer still needs
+    // to record the precedence decision required by #34.
+    const appliedCompetitors = (await db
+      .collection("amendments")
+      .find({
+        proposalId: amendment.proposalId,
+        amendmentId: { $ne: amendmentId },
+        status: "applied",
+      })
+      .toArray()) as any[];
+    if (appliedCompetitors.some((other) => amendmentsCompete(amendment as any, other)))
       return Response.json(
-        { error: "Amendment title must be 4–200 characters." },
-        { status: 400 },
+        {
+          error:
+            "Another applied amendment changes the same wording. Record an explicit precedence decision before applying this amendment.",
+        },
+        { status: 409 },
       );
-    if (
-      "summary" in changes &&
-      (typeof changes.summary !== "string" ||
-        changes.summary.trim().length < 10 ||
-        changes.summary.trim().length > 2000)
-    )
-      return Response.json(
-        { error: "Amendment summary must be 10–2,000 characters." },
-        { status: 400 },
-      );
-    if ("details" in changes && typeof changes.details !== "string")
-      return Response.json(
-        { error: "Amendment details must be text." },
-        { status: 400 },
-      );
-    if (
-      "outcomes" in changes &&
-      (!Array.isArray(changes.outcomes) ||
-        changes.outcomes.some((v) => typeof v !== "string"))
-    )
-      return Response.json(
-        { error: "Amendment outcomes must be a list of text." },
-        { status: 400 },
-      );
+
     const updated = await saveProposal(
       db,
       user,
