@@ -1,5 +1,14 @@
 [
   {
+    "hash": "602ec11",
+    "date": "2026-11-17",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "db",
+    "summary": "Cut fresh database initialisation cost (#136)",
+    "details": "A fresh test database spent ~1.25 s in `initializeDatabase`, called 18 times per suite (~22 s). Index creation dominated: 92 `createIndex` calls, each a journal commit on a newly created collection. - Group the index catalogue by collection and send one `createIndexes` command per collection (46 commands). Keys, names, uniqueness, partial filters, TTL and `expireAfterSeconds` are unchanged; a failed grouped command falls back to per-index creation so one legacy conflict cannot block the rest, as before. - Bulk-write the 78 baseline policies instead of one upsert per record. - Split startup into `ensureDatabaseIndexes` (new `src/lib/db-indexes.ts`) and `seedBaselineContent`. `initializeDatabase` still runs both, so production startup and `getDatabase` are unchanged. Mongo tests that seed their own content use the schema half; notification-outbox keeps the full path and asserts the seeded register and indexes. - The in-memory preview implements `createIndexes` and `bulkWrite`. Verified on the local replica set: index phase 1.44 s -> 0.76 s and total 1.27 s -> 0.95 s over six interleaved pairs (shared host, so absolute wall time varied). A fresh database has the same 47 collections and 139 indexes, and the same 78 proposals and revisions, before and after. Full suite (833 tests) passed twice; each run left only `admin`, `config`, `engage` and `local`."
+  },
+  {
     "hash": "90bc0c1",
     "date": "2026-11-17",
     "type": "feat",
@@ -675,13 +684,5 @@
     "category": "fix",
     "scope": "ci",
     "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
-  },
-  {
-    "hash": "cb39b60",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record lifecycle audit, consent assessment and rollout checks"
   }
 ]
