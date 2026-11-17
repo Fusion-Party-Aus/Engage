@@ -1,7 +1,11 @@
 import type { APIRoute } from "astro";
 import { getSessionUser } from "../../../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../../../lib/db.ts";
-import { CollaborationError, reviewContribution } from "../../../../../lib/collaboration.ts";
+import {
+  CollaborationError,
+  reviewContribution,
+  setGalleryVisibility,
+} from "../../../../../lib/collaboration.ts";
 
 export const prerender = false;
 
@@ -13,7 +17,16 @@ export const PATCH: APIRoute = async ({ request, locals, params }) => {
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401, headers });
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const saved = await reviewContribution(await getDatabase(env), user, {
+    const db = await getDatabase(env);
+    if (body.action === "set_gallery_visibility") {
+      const result = await setGalleryVisibility(db, user, {
+        contributionId: params.contributionId,
+        hidden: body.hidden,
+        version: body.version,
+      });
+      return Response.json({ saved: true, ...result }, { headers });
+    }
+    const saved = await reviewContribution(db, user, {
       contributionId: params.contributionId,
       action: body.action,
       status: body.status,

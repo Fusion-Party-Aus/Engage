@@ -99,6 +99,7 @@ export interface ContributionRecordView {
   version: number;
   consentVersion: string;
   contentClearedAt: string | null;
+  galleryHiddenAt: string | null;
   /** The invitation as it read when this contribution was sent. */
   questions: Array<{ key: string; label: string }>;
   initiativeTitle: string;
@@ -808,6 +809,7 @@ function toContributionView(row: Record<string, any>): ContributionRecordView {
     version: Number(row.version ?? 0),
     consentVersion: String(row.consentVersion ?? ""),
     contentClearedAt: row.contentClearedAt ? new Date(row.contentClearedAt).toISOString() : null,
+    galleryHiddenAt: row.galleryHiddenAt ? new Date(row.galleryHiddenAt).toISOString() : null,
     questions: (Array.isArray(row.questions) ? row.questions : []).map((question: any) => ({
       key: String(question.key),
       label: String(question.label),
@@ -1036,6 +1038,140 @@ export async function reviewContribution(
     }
   });
   return { status: nextStatus, version: Number(current.version) + 1, acceptedAt };
+}
+
+export interface PublishedContribution {
+  contributionId: string;
+  name: string;
+  attribution: Attribution;
+  answers: Array<{ label: string; text: string }>;
+  caption: string;
+  media: Array<{ mediaId: string; mimeType: string }>;
+  publishedAt: string;
+}
+
+/**
+ * What may appear on the public gallery: an approved story whose contributor
+ * chose the website channel, whose material still exists, and which a reviewer
+ * has not hidden. Written responses are never published individually.
+ */
+const PUBLISHED_FILTER = {
+  status: "approved",
+  profile: "story",
+  channels: { $in: ["website"] },
+  contentClearedAt: { $exists: false },
+  galleryHiddenAt: { $exists: false },
+} as const;
+
+export async function listPublishedContributions(
+  db: Db,
+  initiativeSlug: string,
+): Promise<PublishedContribution[]> {
+  const rows = await db
+    .collection(CONTRIBUTIONS)
+    .find({ ...PUBLISHED_FILTER, initiativeSlug })
+    .sort({ updatedAt: -1 })
+    .limit(60)
+    .toArray();
+  return rows.map((row) => {
+    const questions = Array.isArray(row.questions) ? row.questions : [];
+    const answers = Object.entries((row.answers ?? {}) as Record<string, string>)
+      .filter(([, value]) => value.trim().length > 0)
+      .map(([key, value]) => ({
+        label: String(questions.find((question: any) => question.key === key)?.label ?? ""),
+        text: value,
+      }))
+      .filter((answer) => answer.label);
+    return {
+      contributionId: String(row.contributionId),
+      name: row.attribution === "named" ? String(row.displayName ?? "") : "",
+      attribution: row.attribution === "named" ? "named" : "anonymous",
+      answers,
+      caption: String(row.caption ?? ""),
+      media: (Array.isArray(row.media) ? row.media : []).map((entry: any) => ({
+        mediaId: String(entry.mediaId),
+        mimeType: String(entry.mimeType),
+      })),
+      publishedAt: new Date(row.updatedAt).toISOString(),
+    };
+  });
+}
+
+export async function countPublishedContributions(
+  db: Db,
+  initiativeSlug: string,
+): Promise<number> {
+  return db.collection(CONTRIBUTIONS).countDocuments({ ...PUBLISHED_FILTER, initiativeSlug });
+}
+
+/** Public media for a currently published story. Everything else is a 404. */
+export async function readPublishedMedia(
+  db: Db,
+  mediaId: string,
+): Promise<{ bytes: Buffer; mimeType: string }> {
+  if (!/^[a-f0-9]{24}$/i.test(mediaId)) {
+    throw new CollaborationError("That photo is not available.", 404);
+  }
+  const media = await db.collection(MEDIA).findOne({ mediaId });
+  if (!media) throw new CollaborationError("That photo is not available.", 404);
+  const published = await db
+    .collection(CONTRIBUTIONS)
+    .findOne({ ...PUBLISHED_FILTER, contributionId: media.contributionId });
+  if (!published) throw new CollaborationError("That photo is not available.", 404);
+  const stored = media.bytes;
+  const bytes = Buffer.isBuffer(stored)
+    ? stored
+    : stored instanceof Binary
+      ? Buffer.from(stored.buffer)
+      : Buffer.from(stored ?? []);
+  if (!bytes.length) throw new CollaborationError("That photo is not available.", 404);
+  return { bytes, mimeType: String(media.mimeType) };
+}
+
+/** A reviewer can remove a story from the public gallery without withdrawing it. */
+export async function setGalleryVisibility(
+  db: Db,
+  user: SessionUser | null | undefined,
+  input: { contributionId: unknown; hidden: unknown; version: unknown },
+): Promise<{ hidden: boolean; version: number }> {
+  const reviewer = assertReviewer(user);
+  const contributionId = clampText(input.contributionId, "Contribution", 36, 36);
+  const current = await db.collection(CONTRIBUTIONS).findOne({ contributionId });
+  if (!current) throw new CollaborationError("That contribution is no longer available.", 404);
+  if (current.status !== "approved" || current.contentClearedAt) {
+    throw new CollaborationError("Only an approved contribution can appear on the gallery.");
+  }
+  if (Number(input.version) !== Number(current.version)) {
+    throw new CollaborationError("This contribution changed since you opened it. Refresh and try again.", 409);
+  }
+  const hidden = input.hidden === true;
+  await runInTransaction(db, async (session) => {
+    const written = await db.collection(CONTRIBUTIONS).updateOne(
+      { contributionId, version: current.version },
+      {
+        $set: {
+          ...(hidden ? { galleryHiddenAt: new Date() } : {}),
+          updatedAt: new Date(),
+        },
+        ...(hidden ? {} : { $unset: { galleryHiddenAt: "" } }),
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    if (!written.matchedCount) {
+      throw new CollaborationError("This contribution changed while you were reviewing it. Refresh and try again.", 409);
+    }
+    await appendEvent(
+      db,
+      {
+        contributionId,
+        action: hidden ? "hide_from_gallery" : "show_in_gallery",
+        actorId: reviewer.memberId,
+      },
+      session,
+    );
+  });
+  return { hidden, version: Number(current.version) + 1 };
 }
 
 /** Private media is readable only by a reviewer, never by a public route. */

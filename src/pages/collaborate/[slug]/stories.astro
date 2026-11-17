@@ -1,0 +1,97 @@
+---
+import SiteLayout from '../../../layouts/SiteLayout.astro';
+import { Button } from '../../../components/ui/button';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { getPublicInitiative, listPublishedContributions } from '../../../lib/collaboration.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const db = await getDatabase(runtimeEnv(Astro.locals));
+const initiative = await getPublicInitiative(db, String(Astro.params.slug ?? ''));
+const stories = initiative ? await listPublishedContributions(db, initiative.slug) : [];
+if (!initiative) Astro.response.status = 404;
+---
+
+<SiteLayout
+  title={initiative ? `Stories from ${initiative.title} · Engage` : 'Stories · Engage'}
+  description={initiative?.summary ?? 'Published stories and photographs from a Fusion invitation.'}
+  canonical={initiative ? `/collaborate/${initiative.slug}/stories/` : '/collaborate/'}
+>
+  {initiative ? (
+    <div class="page-wrap section-space gallery-page">
+      <header class="page-intro">
+        <p class="text-sm font-semibold uppercase tracking-widest">Published stories</p>
+        <h1>{initiative.title}</h1>
+        <p>These stories and photographs were shared with Fusion and approved for the website. Each person chose how they are credited.</p>
+      </header>
+
+      {stories.length ? (
+        <ul class="gallery-list">
+          {stories.map((story) => (
+            <li>
+              <article>
+                {story.media.length > 0 && (
+                  <div class="gallery-photos">
+                    {story.media.map((media) => (
+                      <a href={`/api/collaboration/media/${media.mediaId}`} target="_blank" rel="noreferrer">
+                        <img
+                          src={`/api/collaboration/media/${media.mediaId}`}
+                          alt={story.caption || (story.name ? `Photograph shared by ${story.name}` : 'Photograph shared anonymously')}
+                          loading="lazy"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {story.answers.map((answer) => (
+                  <div class="gallery-answer">
+                    <h2>{answer.label}</h2>
+                    <p>{answer.text}</p>
+                  </div>
+                ))}
+                {story.caption && <p class="gallery-caption">{story.caption}</p>}
+                <p class="gallery-credit">
+                  {story.attribution === 'named' && story.name ? story.name : 'Shared anonymously'}
+                </p>
+              </article>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div class="gallery-empty">
+          <h2>No stories published yet</h2>
+          <p>Approved stories appear here once the person has allowed website use.</p>
+          <Button href={`/collaborate/${initiative.slug}/`}>Take part</Button>
+        </div>
+      )}
+
+      <p class="gallery-back"><a href={`/collaborate/${initiative.slug}/`}>Back to the invitation</a></p>
+    </div>
+  ) : (
+    <div class="page-wrap section-space">
+      <header class="page-intro">
+        <p class="text-sm font-semibold uppercase tracking-widest">Published stories</p>
+        <h1>These stories aren't here</h1>
+        <p>The invitation may be closed or the link may be old.</p>
+      </header>
+      <Button href="/collaborate/">See open invitations</Button>
+    </div>
+  )}
+</SiteLayout>
+
+<style>
+  .gallery-page { max-width: 58rem; }
+  .gallery-list { list-style: none; margin: 2.5rem 0 0; padding: 0; display: grid; gap: 3rem; }
+  .gallery-list li { border-top: 3px solid var(--horizon-accent); padding-top: 1.75rem; }
+  .gallery-photos { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .gallery-photos img { max-height: 26rem; max-width: 100%; border-radius: 0.5rem; object-fit: cover; }
+  .gallery-answer + .gallery-answer { margin-top: 1.25rem; }
+  .gallery-answer h2 { font-size: 1.15rem; margin: 0 0 0.35rem; }
+  .gallery-answer p { margin: 0; white-space: pre-wrap; }
+  .gallery-caption { margin: 1.25rem 0 0; color: var(--horizon-muted); }
+  .gallery-credit { margin: 1rem 0 0; font-weight: 600; }
+  .gallery-empty { margin-top: 2.5rem; display: grid; gap: 1rem; justify-items: start; }
+  .gallery-empty h2 { margin: 0; }
+  .gallery-back { margin-top: 3rem; }
+</style>

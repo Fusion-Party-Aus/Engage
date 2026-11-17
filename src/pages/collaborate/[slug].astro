@@ -3,15 +3,17 @@ import SiteLayout from '../../layouts/SiteLayout.astro';
 import ContributionForm from '../../components/collaboration/ContributionForm';
 import { Button } from '../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { getPublicInitiative } from '../../lib/collaboration.ts';
+import { countPublishedContributions, getPublicInitiative } from '../../lib/collaboration.ts';
 import { turnstileEnforced } from '../../lib/turnstile.ts';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
 
 const env = runtimeEnv(Astro.locals);
+const db = await getDatabase(env);
 // Draft and archived invitations have no public page.
-const initiative = await getPublicInitiative(await getDatabase(env), String(Astro.params.slug ?? ''));
+const initiative = await getPublicInitiative(db, String(Astro.params.slug ?? ''));
+const publishedCount = initiative ? await countPublishedContributions(db, initiative.slug) : 0;
 if (!initiative) Astro.response.status = 404;
 ---
 
@@ -33,6 +35,13 @@ if (!initiative) Astro.response.status = 404;
           {initiative.status === 'open' ? (
             <>
               <p class="collaborate-purpose">{initiative.purpose}</p>
+              {publishedCount > 0 && (
+                <p class="collaborate-gallery-link">
+                  <Button href={`/collaborate/${initiative.slug}/stories/`} variant="outline" size="sm">
+                    Read {publishedCount === 1 ? 'the published story' : `the ${publishedCount} published stories`}
+                  </Button>
+                </p>
+              )}
               <ContributionForm
                 client:load
                 initiativeSlug={initiative.slug}
@@ -99,7 +108,8 @@ if (!initiative) Astro.response.status = 404;
 <style>
   .collaborate-page { max-width: 68rem; }
   .collaborate-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 4rem; margin-top: 2rem; }
-  .collaborate-purpose { margin: 0 0 2rem; font-size: 1.05rem; }
+  .collaborate-purpose { margin: 0 0 1.25rem; font-size: 1.05rem; }
+  .collaborate-gallery-link { margin: 0 0 2rem; }
   .collaborate-layout aside { border-top: 3px solid var(--horizon-accent); padding-top: 1.5rem; align-self: start; }
   .collaborate-layout aside h2 { font-size: 1.35rem; margin: 0 0 0.75rem; }
   .collaborate-layout aside h2 + ul { margin-top: 0; }
