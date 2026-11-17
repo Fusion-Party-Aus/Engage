@@ -21,8 +21,10 @@ import {
   quorumRuleLabel,
   quorumVerdictLabel,
   readBallotQuorumRecord,
+  readQuorumRequirements,
   type BallotQuorumRecord,
   type QuorumPreview,
+  type QuorumRequirements,
 } from "./quorum.ts";
 import { proposalBallotId } from "./vote-storage.ts";
 import type { VoteTally } from "./types.ts";
@@ -37,10 +39,34 @@ import type { VoteTally } from "./types.ts";
  */
 export interface BallotOutcomeOptions {
   proposalId: string;
-  /** Defaults to the matter's primary ballot. */
+  /**
+   * Defaults to the matter's primary ballot. Only the primary ballot is
+   * supported: tally and revision binding are resolved from the proposal, so an
+   * arbitrary ballot ID here would mix facts from two different ballots.
+   */
   ballotId?: string;
   now?: Date;
   cryptoConfig?: BallotCryptoConfig | null;
+}
+
+/**
+ * Thrown when a caller asks for a ballot this read model cannot resolve
+ * independently of the proposal. Rejecting is deliberate: combining a requested
+ * ballot's closure with the proposal's tally would produce an authoritative-
+ * looking outcome assembled from two different ballots.
+ */
+export class UnsupportedBallotOutcomeError extends Error {
+  readonly ballotId: string;
+  readonly supportedBallotId: string;
+
+  constructor(ballotId: string, supportedBallotId: string) {
+    super(
+      `Ballot ${ballotId} is not supported by the ballot outcome read model; only the matter's primary ballot (${supportedBallotId}) is.`,
+    );
+    this.name = "UnsupportedBallotOutcomeError";
+    this.ballotId = ballotId;
+    this.supportedBallotId = supportedBallotId;
+  }
 }
 
 export type BallotOutcomeState = "unbound" | "open" | "closed" | "cancelled";
@@ -78,6 +104,20 @@ export type BallotQuorumView =
       verdictLabel: null;
     }
   | {
+      /**
+       * An open ballot whose votes cannot be counted (unbound, unreadable or
+       * undecryptable). The electorate and the thresholds it implies are still
+       * known, but participation is not, so no preview is produced and no
+       * participation figure is offered. Reporting zero here would show a
+       * ballot with real votes as having none.
+       */
+      status: "preview-unavailable";
+      requirements: QuorumRequirements;
+      ruleLabel: string;
+      verdictLabel: null;
+      reason: string;
+    }
+  | {
       status: "missing";
       ruleLabel: string;
       reason: string;
@@ -106,9 +146,23 @@ function asDate(value: unknown): Date | undefined {
   return Number.isFinite(date.getTime()) ? date : undefined;
 }
 
-function safeTally(summary: BoundBallotTallySummary | null): BallotTallyView | null {  if (!summary) return null;
-  const computable =
-    summary.state === "computed" || summary.state === "no-votes";
+function isCountable(state: BoundBallotTallySummary["state"]): boolean {
+  return state === "computed" || state === "no-votes";
+}
+
+/**
+ * Participation only when the votes were actually counted. Every other state
+ * yields null so a caller cannot mistake "not counted" for "nobody voted".
+ */
+function participationCount(
+  summary: BoundBallotTallySummary | null,
+): number | null {
+  return summary && isCountable(summary.state) ? summary.tally.total : null;
+}
+
+function safeTally(summary: BoundBallotTallySummary | null): BallotTallyView | null {
+  if (!summary) return null;
+  const computable = isCountable(summary.state);
   return {
     state: summary.state,
     ...(computable ? { tally: summary.tally } : {}),
@@ -160,7 +214,12 @@ export async function readBallotOutcome(
   if (!raw) return null;
   const proposal = normalizeProposalDoc(raw as Record<string, any>);
 
-  const ballotId = options.ballotId ?? proposalBallotId(proposal.proposalId);
+  const ballotId = proposalBallotId(proposal.proposalId);
+  const requestedBallotId = options.ballotId?.trim();
+  if (requestedBallotId && requestedBallotId !== ballotId) {
+    throw new UnsupportedBallotOutcomeError(requestedBallotId, ballotId);
+  }
+
   const ballot = (await db
     .collection(BALLOTS_COLLECTION)
     .findOne(
@@ -173,11 +232,7 @@ export async function readBallotOutcome(
     matter: proposal,
     now,
   });
-  const recordedRow = await readRecordedResult(
-    db,
-    proposal.proposalId,
-    ballotId,
-  );
+  const recordedRow = await readRecordedResult(db, proposal.proposalId);
   const certified =
     ballot?.status === "certified" || Boolean(recordedRow);
   const closed =
@@ -230,11 +285,11 @@ export async function readBallotOutcome(
   const quorum = await readQuorum(
     db,
     {
-      ballotId,
       record: quorumRecord,
       state,
       closeTime,
-      participation: summary?.tally.total ?? 0,
+      participation: participationCount(summary),
+      tallyState: summary?.state ?? null,
       now,
     },
   );
@@ -254,26 +309,37 @@ export async function readBallotOutcome(
 async function readRecordedResult(
   db: Db,
   proposalId: string,
-  ballotId: string,
 ): Promise<FormalDecisionRecord | null> {
-  const filter =
-    ballotId === proposalBallotId(proposalId)
-      ? proposalBallotResultFilter(proposalId)
-      : { ballotId };
   const row = await db
     .collection<FormalDecisionRecord>(FORMAL_DECISIONS_COLLECTION)
-    .findOne(filter);
+    .findOne(proposalBallotResultFilter(proposalId));
   return row ? (row as unknown as FormalDecisionRecord) : null;
+}
+
+function participationUnavailableReason(
+  tallyState: BoundBallotTallySummary["state"] | null,
+): string {
+  switch (tallyState) {
+    case "unbound":
+      return "Votes are not bound to the current revision, so participation cannot be counted.";
+    case "unreadable":
+      return "Votes could not be decrypted, so participation cannot be counted.";
+    case "decryption-unavailable":
+      return "Ballot decryption keys are unavailable, so participation cannot be counted.";
+    default:
+      return "The bound tally is unavailable, so participation cannot be counted.";
+  }
 }
 
 async function readQuorum(
   db: Db,
   input: {
-    ballotId: string;
     record: BallotQuorumRecord | null;
     state: BallotOutcomeState;
     closeTime?: Date;
-    participation: number;
+    /** Null when the votes could not be counted; never substituted with zero. */
+    participation: number | null;
+    tallyState: BoundBallotTallySummary["state"] | null;
     now: Date;
   },
 ): Promise<BallotQuorumView | null> {
@@ -286,10 +352,18 @@ async function readQuorum(
     };
   }
   if (input.state === "open") {
-    const preview = buildQuorumPreview(
-      await getQuorumElectoratePreview(db, input.now),
-      input.participation,
-    );
+    const electorate = await getQuorumElectoratePreview(db, input.now);
+    if (input.participation === null) {
+      const requirements = readQuorumRequirements(electorate);
+      return {
+        status: "preview-unavailable",
+        requirements,
+        ruleLabel: quorumRuleLabel({ ruleVersion: requirements.ruleVersion }),
+        verdictLabel: null,
+        reason: participationUnavailableReason(input.tallyState),
+      };
+    }
+    const preview = buildQuorumPreview(electorate, input.participation);
     return {
       status: "preview",
       preview,

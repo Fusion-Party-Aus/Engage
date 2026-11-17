@@ -1,20 +1,39 @@
 [
   {
-    "hash": "28dc590",
+    "hash": "c6c02b5",
     "date": "2026-11-17",
-    "type": "docs",
-    "category": "docs",
-    "scope": "architecture",
-    "summary": "Document domain modules after barrel removal (#119)"
+    "type": "fix",
+    "category": "fix",
+    "scope": "ballots",
+    "summary": "Correct the ballot outcome read model's quorum and identity semantics",
+    "details": "Address the review of the first slice so the read model can become the shared contract. Three semantic corrections, no new voting rules. Participation is never invented. `readQuorum` previously received `summary?.tally.total ?? 0`, so an unreadable, undecryptable or unbound tally previewed as zero participation and an apparently unmet quorum even though votes existed. `readBallotOutcome` now passes a participation count only when the tally state is `computed` or `no-votes`, and an open ballot with no countable participation gets a distinct `preview-unavailable` quorum view: the electorate and its thresholds, no participation figure and no preview. `quorum.ts` gains `readQuorumRequirements` for the participation-independent half, so the threshold still comes from the rule owner rather than being restated here. Missing evidence is no longer a failed quorum. The tally endpoint mapped `quorum.status === \"missing\"` to `verdictLabel: \"Inconclusive\"` and `quorumMet: false`, which the register UI turned into \"did not meet quorum\" and a forced inconclusive result. A ballot with no closure record cannot be assessed either way, so the endpoint now returns `status: \"unavailable\"` with no verdict, `participation: null` and `quorumMet: null`, and the register renders the named reason instead of a met/not-met sentence. The optional ballot identity is validated. `readBallotOutcome` accepted any `ballotId` but always read the proposal's bound tally, so a caller could receive one ballot's closure and recorded result beside another ballot's tally and binding. Unsupported IDs now throw `UnsupportedBallotOutcomeError`; only the matter's primary ballot is resolved, and the dead cross-ballot result filter is removed. Tests cover the three paths: an uncountable open ballot exposes no participation number anywhere in the outcome, unbound open-ballot votes behave the same, a non-primary ballot ID is rejected, and the endpoint returns an unknown quorum state for missing evidence and for an uncountable ballot. Refs #160"
   },
   {
-    "hash": "a885025",
+    "hash": "834280d",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballots",
+    "summary": "Add one authoritative ballot outcome read model",
+    "details": "Add readBallotOutcome, which composes the existing closure, bound tally, quorum and formal result reads into one state: unbound, open, closed or cancelled. It exposes a safe tally view, a quorum view (recorded, preview or missing) and the immutable recorded result. A tally is exposed only when it can be counted, so an unbound, unreadable or undecryptable ballot can never be presented as zero votes. A missing post-effective quorum snapshot is named instead of inventing thresholds. Migrate the admin ballot tally endpoint as the first consumer. It now gets closure precedence, the tally state and quorum labels from the module instead of recomputing them, so a ballot row closed before its deadline is reported closed. The response shape stays compatible with the register UI. Refs #160"
+  },
+  {
+    "hash": "017f71b",
     "date": "2026-11-17",
     "type": "refactor",
     "category": "improvement",
     "scope": "store",
-    "summary": "Import domain modules directly and delete the barrel (#119)",
-    "details": "Migrate every page, component and test importer from the deprecated src/lib/store.ts barrel to the owning domain module, then remove the barrel. The architecture test now fails if the barrel returns, if any source file imports it, or if a production lib module imports a page/component directory."
+    "summary": "Import domain modules directly and delete the barrel (#119) (#155)",
+    "details": "* refactor(store): import domain modules directly and delete the barrel (#119) Migrate every page, component and test importer from the deprecated src/lib/store.ts barrel to the owning domain module, then remove the barrel. The architecture test now fails if the barrel returns, if any source file imports it, or if a production lib module imports a page/component directory. * docs(architecture): document domain modules after barrel removal (#119) * chore(changelog): refresh snapshot for barrel removal (#119)"
+  },
+  {
+    "hash": "6311c68",
+    "date": "2026-11-17",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "lib",
+    "summary": "Delete unclaimed read model and dead settings getters (#153)",
+    "details": "Remove buildAuthorizedMatterBriefing, which had no production caller: reporting, PDF and decision-record reads go through decision-record.ts, and the module's only consumer was its own test. Remove six exported settings getters that no production module called; the *State functions and DEFAULT_* constants remain the interface. No route, page, permission, DTO or settings behaviour changes. Update the architecture overview and hardening notes so they stop describing the deleted module. Refs #152"
   },
   {
     "hash": "ad8deae",
@@ -669,21 +688,5 @@
     "category": "docs",
     "scope": "member",
     "summary": "Record passing lifecycle checks and campaign review materials"
-  },
-  {
-    "hash": "8d457fc",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "email",
-    "summary": "Keep verification notices within narrow mobile screens"
-  },
-  {
-    "hash": "300966c",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Let administrators inspect the proposed re-engagement audience"
   }
 ]

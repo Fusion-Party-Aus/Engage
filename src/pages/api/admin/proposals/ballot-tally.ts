@@ -132,12 +132,34 @@ function quorumResponse(quorum: BallotQuorumView | null) {
       quorumMet: preview.quorumMet,
     };
   }
+  if (quorum.status === "preview-unavailable") {
+    const requirements = quorum.requirements;
+    return {
+      final: false,
+      status: "unavailable",
+      ruleLabel: quorum.ruleLabel,
+      verdictLabel: null,
+      eligibleRegisteredMembers: requirements.eligibleRegisteredMembers,
+      activeEligibleMembers: requirements.activeEligibleMembers,
+      platformQuorumRequired: requirements.platformQuorumRequired,
+      platformQuorumMet: requirements.platformQuorumMet,
+      ballotQuorumRequired: requirements.ballotQuorumRequired,
+      ballotQuorumMet: null,
+      participation: null,
+      quorumMet: null,
+      anomalies: [quorum.reason],
+    };
+  }
+  // Missing evidence is not a failed quorum: no verdict and no quorumMet, so a
+  // consumer cannot read this as "quorum not met" and record an inconclusive
+  // result on the strength of an absent closure record.
   return {
     final: true,
     status: "unavailable",
     ruleLabel: quorum.ruleLabel,
-    verdictLabel: "Inconclusive",
-    quorumMet: false,
+    verdictLabel: null,
+    participation: null,
+    quorumMet: null,
     anomalies: [quorum.reason],
   };
 }

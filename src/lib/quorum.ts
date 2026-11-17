@@ -371,25 +371,34 @@ export interface QuorumPreview {
   quorumMet: boolean;
 }
 
+type QuorumElectorateSizing = Pick<
+  QuorumElectorate,
+  "eligibleRegisteredMembers" | "activeEligibleMembers" | "activeSince"
+>;
+
 /**
- * Current, provisional view for an open ballot. The binding calculation is the
- * snapshot taken at closure; this preview exists so members can see how close a
- * ballot is and why the requirement can move.
+ * The part of a quorum assessment that does not depend on how many votes can be
+ * counted: the electorate, and the thresholds that electorate implies.
+ *
+ * This exists so a caller with no trustworthy participation count can still
+ * state the requirement without inventing a participation figure.
  */
-export function buildQuorumPreview(
-  electorate: Pick<
-    QuorumElectorate,
-    "eligibleRegisteredMembers" | "activeEligibleMembers" | "activeSince"
-  >,
-  participationCount: number,
-): QuorumPreview {
-  const calculation = evaluateQuorum({
-    eligibleRegisteredMembers: electorate.eligibleRegisteredMembers,
-    activeEligibleMembers: electorate.activeEligibleMembers,
-    participationCount,
-    approve: 0,
-    reject: 0,
-  });
+export interface QuorumRequirements {
+  ruleVersion: string;
+  ruleEffectiveAt: Date;
+  activeWindowDays: number;
+  eligibleRegisteredMembers: number;
+  activeEligibleMembers: number;
+  activeSince: Date;
+  platformQuorumRequired: number;
+  platformQuorumMet: boolean;
+  ballotQuorumRequired: number;
+}
+
+function requirementsFrom(
+  electorate: QuorumElectorateSizing,
+  calculation: QuorumCalculation,
+): QuorumRequirements {
   return {
     ruleVersion: BALLOT_QUORUM_RULE_VERSION,
     ruleEffectiveAt: QUORUM_RULE_EFFECTIVE_AT,
@@ -400,6 +409,46 @@ export function buildQuorumPreview(
     platformQuorumRequired: calculation.platformQuorumRequired,
     platformQuorumMet: calculation.platformQuorumMet,
     ballotQuorumRequired: calculation.ballotQuorumRequired,
+  };
+}
+
+/** Requirement figures only: never a participation count or a verdict. */
+export function readQuorumRequirements(
+  electorate: QuorumElectorateSizing,
+): QuorumRequirements {
+  return requirementsFrom(
+    electorate,
+    evaluateQuorum({
+      eligibleRegisteredMembers: electorate.eligibleRegisteredMembers,
+      activeEligibleMembers: electorate.activeEligibleMembers,
+      participationCount: 0,
+      approve: 0,
+      reject: 0,
+    }),
+  );
+}
+
+/**
+ * Current, provisional view for an open ballot. The binding calculation is the
+ * snapshot taken at closure; this preview exists so members can see how close a
+ * ballot is and why the requirement can move.
+ *
+ * Requires a participation count. A caller that cannot count the votes must use
+ * `readQuorumRequirements` instead of passing zero here.
+ */
+export function buildQuorumPreview(
+  electorate: QuorumElectorateSizing,
+  participationCount: number,
+): QuorumPreview {
+  const calculation = evaluateQuorum({
+    eligibleRegisteredMembers: electorate.eligibleRegisteredMembers,
+    activeEligibleMembers: electorate.activeEligibleMembers,
+    participationCount,
+    approve: 0,
+    reject: 0,
+  });
+  return {
+    ...requirementsFrom(electorate, calculation),
     participationCount: calculation.participationCount,
     ballotQuorumMet: calculation.ballotQuorumMet,
     quorumMet: calculation.quorumMet,

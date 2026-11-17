@@ -1078,7 +1078,16 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         const quorumNote = document.createElement('p');
         quorumNote.className = 'admin-inline-note';
         const quorum = payload.quorum;
-        if (quorum.final) {
+        if (quorum.status === 'unavailable') {
+          // Participation or a closure record is missing. Say so plainly and do
+          // not imply a quorum verdict either way.
+          const reason = quorum.anomalies?.[0] ?? 'Quorum cannot be assessed.';
+          const requirement =
+            !quorum.final && typeof quorum.ballotQuorumRequired === 'number'
+              ? ` ${quorum.ballotQuorumRequired} of ${quorum.activeEligibleMembers ?? 0} recently active members required.`
+              : '';
+          quorumNote.textContent = `${reason}${requirement}`;
+        } else if (quorum.final) {
           const tests =
             quorum.status === 'legacy-not-applied'
               ? 'This ballot closed before the quorum rule took effect.'

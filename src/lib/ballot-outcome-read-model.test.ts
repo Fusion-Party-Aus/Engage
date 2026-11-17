@@ -316,6 +316,67 @@ describe("ballot outcome read model", () => {
     assert.equal(result?.quorum, null);
   });
 
+  it("does not preview zero participation for an uncountable open ballot", async () => {
+    const db = createMemoryDb();
+    await seed(db, "P-UNREADABLE-OPEN");
+    await db.collection("proposal_votes").insertOne({
+      ballotId: proposalBallotId("P-UNREADABLE-OPEN"),
+      proposalId: "P-UNREADABLE-OPEN",
+      revisionId: REVISION,
+      voterBlindIndex: "blind-1",
+      voteEnvelope: { keyId: "k1", iv: "iv", ciphertext: "cipher", tag: "tag" },
+      updatedAt: NOW,
+    });
+
+    const result = await outcome(db, "P-UNREADABLE-OPEN");
+    assert.equal(result?.state, "open");
+    assert.equal(result?.tally?.state, "decryption-unavailable");
+    assert.equal(result?.tally?.tally, undefined);
+    assert.equal(
+      result?.tally?.unreadableVoteCount,
+      0,
+      "votes were not read, so they must not be counted as unreadable either",
+    );
+    assert.equal(result?.quorum?.status, "preview-unavailable");
+    if (result?.quorum?.status === "preview-unavailable") {
+      assert.match(result.quorum.reason, /cannot be counted/i);
+      assert.equal(typeof result.quorum.requirements.ballotQuorumRequired, "number");
+    }
+
+    // The invariant covers the whole outcome, not just the tally field.
+    const serialised = JSON.stringify(result);
+    assert.equal(serialised.includes("participationCount"), false);
+    assert.equal(serialised.includes('"quorumMet"'), false);
+  });
+
+  it("does not preview zero participation when open-ballot votes are unbound", async () => {
+    const db = createMemoryDb();
+    await seed(db, "P-UNBOUND-OPEN");
+    await insertMany(db, "proposal_votes", [
+      castVoteDoc("P-UNBOUND-OPEN", "other-revision"),
+    ]);
+    const result = await outcome(db, "P-UNBOUND-OPEN");
+    assert.equal(result?.state, "open");
+    assert.equal(result?.tally?.state, "unbound");
+    assert.equal(result?.quorum?.status, "preview-unavailable");
+    if (result?.quorum?.status === "preview-unavailable") {
+      assert.match(result.quorum.reason, /not bound/i);
+    }
+  });
+
+  it("rejects a ballot id it cannot resolve independently of the proposal", async () => {
+    const db = createMemoryDb();
+    await seed(db, "P-OTHER-BALLOT");
+    await assert.rejects(
+      () => outcome(db, "P-OTHER-BALLOT", { ballotId: "some-other-ballot" }),
+      /only the matter's primary ballot/i,
+    );
+    const primary = await outcome(db, "P-OTHER-BALLOT", {
+      ballotId: proposalBallotId("P-OTHER-BALLOT"),
+    });
+    assert.equal(primary?.state, "open");
+  });
+
   it("returns null only when the proposal does not exist", async () => {
     const db = createMemoryDb();
     assert.equal(await outcome(db, "MISSING"), null);

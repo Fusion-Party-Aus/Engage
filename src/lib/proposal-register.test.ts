@@ -592,4 +592,73 @@ describe("on-demand ballot tally endpoint", () => {
     assert.equal(body.computedLabel, "Successful");
     assert.deepEqual(body.summary.tally, { approve: 1, abstain: 0, reject: 0, total: 1 });
   });
+
+  it("does not present missing quorum evidence as a failed quorum", async () => {
+    const db = await getDatabase(devEnv);
+    const id = `TALLY-MISSING-QUORUM-${crypto.randomUUID().slice(0, 8)}`;
+    await db.collection("proposals").insertOne({
+      proposalId: id,
+      slug: id.toLowerCase(),
+      title: "Closed ballot with no quorum snapshot",
+      space: "Governance",
+      stage: "decide",
+      kind: "policy",
+      ballotRevisionId: "rev-tally-2",
+      ballotClosesAt: new Date("2026-11-16T12:00:00Z"),
+    });
+
+    const res = await callTally(
+      `https://engage.test/api/admin/proposals/ballot-tally?proposalId=${id}`,
+      "engage_dev_user=administrator",
+    );
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as any;
+    assert.equal(body.closed, true);
+    assert.equal(body.quorum.final, true);
+    assert.equal(body.quorum.status, "unavailable");
+    assert.equal(body.quorum.verdictLabel, null, "missing evidence has no verdict");
+    assert.equal(body.quorum.quorumMet, null, "missing evidence is not a quorum failure");
+    assert.equal(body.quorum.participation, null);
+    assert.match(body.quorum.anomalies[0], /quorum closure record/i);
+    assert.equal(JSON.stringify(body.quorum).includes("Inconclusive"), false);
+  });
+
+  it("does not publish a participation figure for an uncountable open ballot", async () => {
+    const db = await getDatabase(devEnv);
+    const id = `TALLY-UNREADABLE-${crypto.randomUUID().slice(0, 8)}`;
+    await db.collection("proposals").insertOne({
+      proposalId: id,
+      slug: id.toLowerCase(),
+      title: "Open ballot with undecryptable votes",
+      space: "Governance",
+      stage: "decide",
+      kind: "policy",
+      ballotRevisionId: "rev-tally-3",
+      ballotClosesAt: new Date("2099-01-01T00:00:00Z"),
+    });
+    await db.collection(PROPOSAL_VOTES).insertOne({
+      ballotId: proposalBallotId(id),
+      proposalId: id,
+      revisionId: "rev-tally-3",
+      voterBlindIndex: "blind-endpoint-1",
+      voteEnvelope: { keyId: "k1", iv: "iv", ciphertext: "cipher", tag: "tag" },
+      updatedAt: new Date(),
+    });
+
+    const res = await callTally(
+      `https://engage.test/api/admin/proposals/ballot-tally?proposalId=${id}`,
+      "engage_dev_user=administrator",
+    );
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as any;
+    assert.equal(body.closed, false);
+    assert.equal(body.summary.state, "decryption-unavailable");
+    assert.equal(body.summary.tally, undefined);
+    assert.equal(body.quorum.final, false);
+    assert.equal(body.quorum.status, "unavailable");
+    assert.equal(body.quorum.participation, null, "zero must never stand in for uncountable");
+    assert.equal(body.quorum.ballotQuorumMet, null);
+    assert.equal(body.quorum.quorumMet, null);
+    assert.equal(typeof body.quorum.ballotQuorumRequired, "number");
+  });
 });
