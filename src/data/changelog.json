@@ -1,5 +1,23 @@
 [
   {
+    "hash": "4af6dd8",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "sense-box,amendments",
+    "summary": "Close review privacy and integrity gaps",
+    "details": "Legacy priorities collected under the private-review promise can no longer be published, and private source text is never prefilled into a proposal. A private lead requires an explicit independent-writing acknowledgement and is rejected if it reproduces the source. Submission now returns a capability status link so a contributor can follow the outcome without an account, and the verified-membership discussion rule is stated explicitly. Amendment suggestions now apply multiple additions and mixed edits without index drift, refuse ambiguous duplicate-text rebases, validate final title/summary lengths at the submission and resolution boundary, and block applying a competing amendment after one has already applied. Proposal creation claims a Sense Box source before insert and checks the atomic update, with concurrency coverage. Adds the Sense Box and amendment browser journey to CI, covering failed submission recovery, publication, public and internal discussion, stale administrator data, multiple additions, keyboard activation and mobile layouts."
+  },
+  {
+    "hash": "e43cad0",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "changelog",
+    "summary": "Refresh generated history for participation changes",
+    "details": "Regenerate the public changelog snapshot after the UI SDK, inline amendment and Sense Box collaboration commits."
+  },
+  {
     "hash": "ae7ff0d",
     "date": "2026-11-17",
     "type": "feat",
@@ -670,21 +688,5 @@
     "category": "docs",
     "scope": "member",
     "summary": "Record passing lifecycle checks and campaign review materials"
-  },
-  {
-    "hash": "8d457fc",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "email",
-    "summary": "Keep verification notices within narrow mobile screens"
-  },
-  {
-    "hash": "300966c",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Let administrators inspect the proposed re-engagement audience"
   }
 ]
