@@ -1070,7 +1070,17 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         const computedText = payload.computedLabel ? ` · Computed outcome: ${payload.computedLabel}` : '';
         basis.textContent = `Bound tally: Approve ${summary.tally.approve ?? 0}, Abstain ${summary.tally.abstain ?? 0}, Reject ${summary.tally.reject ?? 0} (${summary.tally.total ?? 0} total)${computedText}`;
       } else {
-        basis.textContent = summary.message || `Ballot state: ${summary.state}`;
+        // Never show the internal tally state to an administrator.
+        const problem: Record<string, string> = {
+          unbound: 'Votes are not bound to the current revision, so they cannot be counted',
+          unreadable: 'Some votes could not be decrypted, so the tally is incomplete',
+          'decryption-unavailable': 'Decryption keys are not available, so votes cannot be counted',
+        };
+        const counts: string[] = [];
+        if (summary.unboundVoteCount) counts.push(`${summary.unboundVoteCount} not bound to this revision`);
+        if (summary.unreadableVoteCount) counts.push(`${summary.unreadableVoteCount} unreadable`);
+        const explanation = problem[summary.state] ?? 'This ballot cannot be counted yet';
+        basis.textContent = counts.length ? `${explanation} (${counts.join(', ')}).` : `${explanation}.`;
       }
       tallyContainer.appendChild(basis);
 
@@ -1078,7 +1088,16 @@ const canManageBallot = (item: any) => user.isAdmin || (user.isBranchAdmin && it
         const quorumNote = document.createElement('p');
         quorumNote.className = 'admin-inline-note';
         const quorum = payload.quorum;
-        if (quorum.final) {
+        if (quorum.status === 'unavailable') {
+          // Participation or a closure record is missing. Say so plainly and do
+          // not imply a quorum verdict either way.
+          const reason = quorum.anomalies?.[0] ?? 'Quorum cannot be assessed.';
+          const requirement =
+            !quorum.final && typeof quorum.ballotQuorumRequired === 'number'
+              ? ` ${quorum.ballotQuorumRequired} of ${quorum.activeEligibleMembers ?? 0} recently active members required.`
+              : '';
+          quorumNote.textContent = `${reason}${requirement}`;
+        } else if (quorum.final) {
           const tests =
             quorum.status === 'legacy-not-applied'
               ? 'This ballot closed before the quorum rule took effect.'
