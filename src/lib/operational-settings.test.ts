@@ -13,7 +13,6 @@ import {
   OPERATIONAL_THRESHOLD_FIELDS,
   getCrmSettingsState,
   getJobsSettingsState,
-  getOperationalSettings,
   getOperationalSettingsState,
   listOperationalSettingsEvents,
   saveCrmSettings,
@@ -135,7 +134,6 @@ describe("operational settings persistence", () => {
     assert.deepEqual(state.values, DEFAULT_OPERATIONAL_THRESHOLDS);
     assert.equal(state.source, "default");
     assert.deepEqual(state.invalidFields, []);
-    assert.deepEqual(await getOperationalSettings(db), DEFAULT_OPERATIONAL_THRESHOLDS);
   });
 
   it("merges saved values over the defaults", async () => {
@@ -159,7 +157,7 @@ describe("operational settings persistence", () => {
     });
     assert.deepEqual(state.invalidFields, []);
     assert.equal(state.updatedByName, actor.name);
-    assert.equal((await getOperationalSettings(db)).digestWarnHours, 3);
+    assert.equal(state.values.digestWarnHours, 3);
   });
 
   it("flags missing or out-of-bounds stored fields without trusting them", async () => {
