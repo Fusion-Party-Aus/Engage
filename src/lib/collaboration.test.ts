@@ -6,6 +6,7 @@ import {
   exportApproved,
   getInitiative,
   listContributions,
+  purgeExpiredContent,
   readContributionMedia,
   reviewContribution,
   seedPilotInitiative,
@@ -251,6 +252,98 @@ test("a withdrawal is recorded without deleting the audit trail", async () => {
   });
   assert.equal(await db.collection("collaboration_contributions").countDocuments(), 1);
   assert.equal((await listContributions(db, reviewer, { status: "withdrawn" })).total, 1);
+});
+
+test("withdrawing a contribution removes its words, name, contact details and photographs at once", async () => {
+  const db = await setup();
+  const result = await submitContribution(
+    db,
+    submission({ contactAllowed: true, email: "sam@example.com" }),
+    [photo()],
+  );
+  const before = await listContributions(db, reviewer);
+  assert.equal(before.items[0]?.media.length, 1);
+
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "withdrawn",
+    version: 0,
+  });
+
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.deepEqual(row?.answers, {});
+  assert.equal(row?.caption, "");
+  assert.equal(row?.displayName, "");
+  assert.equal(row?.email, "");
+  assert.deepEqual(row?.media, []);
+  assert.ok(row?.contentClearedAt);
+  assert.equal(await db.collection("collaboration_media").countDocuments(), 0);
+  const events = await db.collection("collaboration_events").find({ contributionId: result.contributionId }).toArray();
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.toStatus, "withdrawn");
+});
+
+test("the retention sweep is dry by default and clears only material past its window", async () => {
+  const db = await setup();
+  const old = new Date(Date.now() - 200 * 86_400_000);
+
+  const declined = await submitContribution(db, submission());
+  await reviewContribution(db, reviewer, {
+    contributionId: declined.contributionId,
+    action: "set_status",
+    status: "declined",
+    version: 0,
+  });
+  await db.collection("collaboration_contributions").updateOne(
+    { contributionId: declined.contributionId },
+    { $set: { updatedAt: old } },
+  );
+
+  const recent = await submitContribution(db, submission({ requestId: REQUEST_ID_2 }));
+  await reviewContribution(db, reviewer, {
+    contributionId: recent.contributionId,
+    action: "set_status",
+    status: "declined",
+    version: 0,
+  });
+
+  const dry = await purgeExpiredContent(db);
+  assert.deepEqual(dry, { declined: 1, withdrawn: 0, contactAddresses: 0, applied: false });
+  const stillThere = await db.collection("collaboration_contributions").findOne({ contributionId: declined.contributionId });
+  assert.ok(Object.keys(stillThere?.answers ?? {}).length > 0);
+
+  const applied = await purgeExpiredContent(db, { apply: true });
+  assert.equal(applied.declined, 1);
+  const cleared = await db.collection("collaboration_contributions").findOne({ contributionId: declined.contributionId });
+  assert.deepEqual(cleared?.answers, {});
+  assert.equal(cleared?.contentClearedReason, "declined");
+  assert.equal(cleared?.status, "declined");
+  const untouched = await db.collection("collaboration_contributions").findOne({ contributionId: recent.contributionId });
+  assert.ok(Object.keys(untouched?.answers ?? {}).length > 0);
+});
+
+test("an approved reply address is cleared after a year while the story stays", async () => {
+  const db = await setup();
+  const result = await submitContribution(
+    db,
+    submission({ contactAllowed: true, email: "sam@example.com" }),
+  );
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  await db.collection("collaboration_contributions").updateOne(
+    { contributionId: result.contributionId },
+    { $set: { updatedAt: new Date(Date.now() - 400 * 86_400_000) } },
+  );
+  const applied = await purgeExpiredContent(db, { apply: true });
+  assert.equal(applied.contactAddresses, 1);
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(row?.email, "");
+  assert.ok(Object.keys(row?.answers ?? {}).length > 0);
 });
 
 test("approved export carries permissions, not contact details or internal notes", async () => {
