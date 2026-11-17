@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createMemoryDb } from "./db.ts";
 import {
   CollaborationError,
+  contributionTokenSecret,
   createInitiative,
   exportApproved,
   getInitiative,
@@ -1332,5 +1333,71 @@ test("the contributor can unlink the account, and a withdrawn contribution canno
       user: memberUser,
     }),
     /not valid/,
+  );
+});
+
+test("management-token signing fails closed in production without a configured secret", () => {
+  assert.throws(
+    () => contributionTokenSecret({ APP_MODE: "production" }),
+    /signing secret is configured/,
+  );
+  assert.equal(
+    contributionTokenSecret({ APP_MODE: "production", BETTER_AUTH_SECRET: "a-secure-secret" }),
+    "a-secure-secret",
+  );
+  assert.equal(contributionTokenSecret({ APP_MODE: "development" }), "engage-collaboration-local");
+});
+
+test("a submission reference cannot be reused across invitations", async () => {
+  const db = await setup();
+  const created = await createInitiative(db, reviewer, newInvitation);
+  await db.collection("collaboration_initiatives").updateOne(
+    { slug: created.slug },
+    {
+      $set: {
+        status: "open",
+        questions: [{ key: "meaning", label: "What does Fusion mean to you?" }],
+      },
+    },
+  );
+  const shared = { answers: { meaning: "The same words, deliberately reused with the same reference." } };
+  await submitContribution(db, submission(shared));
+  await assert.rejects(
+    submitContribution(db, submission({ ...shared, initiativeSlug: created.slug })),
+    /already been sent/,
+  );
+});
+
+test("a written consultation cannot be published to the gallery", async () => {
+  const db = await setup();
+  const created = await createInitiative(db, reviewer, { ...newInvitation, profile: "consultation" });
+  await updateInitiative(db, reviewer, {
+    slug: created.slug,
+    title: created.title,
+    summary: created.summary,
+    purpose: created.purpose,
+    status: "open",
+    correctionEmail: created.correctionEmail,
+    questions: created.questions,
+  });
+  const result = await submitContribution(db, {
+    ...submission(),
+    initiativeSlug: created.slug,
+    answers: { [created.questions[0]!.key]: "A written response that is long enough to be accepted." },
+    channels: ["website"],
+  });
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  await assert.rejects(
+    setGalleryPublication(db, reviewer, {
+      contributionId: result.contributionId,
+      state: "publish",
+      version: 1,
+    }),
+    /not published individually/,
   );
 });

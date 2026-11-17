@@ -2,7 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import { Binary, ObjectId, type ClientSession, type Db } from "mongodb";
 import { runInTransaction } from "./db.ts";
 import { hasPermission } from "./rbac.ts";
-import type { SessionUser } from "./types.ts";
+import type { PlatformEnv, SessionUser } from "./types.ts";
 import {
   CLAIM_CONSENT_VERSION,
   COLLABORATION_CONSENT_VERSION,
@@ -457,6 +457,30 @@ export interface SubmissionResult {
 }
 
 /**
+ * The secret used to derive management tokens. Production fails closed rather
+ * than falling back to a shared development string that would make every
+ * management link predictable.
+ */
+export function contributionTokenSecret(
+  env: Pick<
+    PlatformEnv,
+    "APP_MODE" | "RATE_LIMIT_SECRET" | "BETTER_AUTH_SECRET" | "SESSION_SECRET"
+  >,
+): string {
+  const secret = String(
+    env.RATE_LIMIT_SECRET || env.BETTER_AUTH_SECRET || env.SESSION_SECRET || "",
+  ).trim();
+  if (secret) return secret;
+  if (env.APP_MODE === "production") {
+    throw new CollaborationError(
+      "Contribution management links are unavailable until a signing secret is configured.",
+      503,
+    );
+  }
+  return "engage-collaboration-local";
+}
+
+/**
  * A stable management token for one submission. Derived from the client's
  * request reference and a deployment secret, so an idempotent retry can return
  * the same token without storing the raw value.
@@ -864,6 +888,7 @@ export async function submitContribution(
   const fingerprint = createHash("sha256")
     .update(
       JSON.stringify({
+        initiativeSlug: initiative.slug,
         answers,
         caption,
         attribution,
@@ -1575,6 +1600,9 @@ export async function setGalleryPublication(
   const contributionId = clampText(input.contributionId, "Contribution", 36, 36);
   const current = await db.collection(CONTRIBUTIONS).findOne({ contributionId });
   if (!current) throw new CollaborationError("That contribution is no longer available.", 404);
+  if (current.profile === "consultation") {
+    throw new CollaborationError("Written consultation responses are not published individually.");
+  }
   if (current.status !== "approved" || current.contentClearedAt) {
     throw new CollaborationError("Only an approved contribution can appear on the gallery.");
   }
