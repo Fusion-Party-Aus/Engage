@@ -62,8 +62,11 @@ Consent version: `stories-2026-11-17`.
 | Ordinary edits (crop, resize, colour) | Off | Stored and exported with the contribution |
 | AI-assisted photo edits | Off | Requires ordinary edits; stored and exported; not applied by this application |
 | May we reply? | Off | An email is required only when the answer is yes; it is never exported |
+| Own work and permission | Required | The contributor attests that the story and photos are theirs and that anyone recognisable agreed; the photo field asks people not to send images of children |
 
 Server-side enforcement lives in `submitContribution` and `reviewContribution` (`src/lib/collaboration.ts`). A client cannot widen its own permissions by editing the submitted form.
+
+The attestation is a promise, not a check. Reviewers apply [story and photograph contribution safeguards](../guides/story-contribution-safeguards.md), which cover photographer credit, other identifiable people, minors, AI edits and mistaken publication.
 
 ## Data handling
 
@@ -81,6 +84,7 @@ Photographs:
 - Metadata segments are removed before storage: EXIF, XMP and JPEG comments; PNG `tEXt`, `zTXt`, `iTXt` and `eXIf`. Pixels are not altered.
 - Bytes are stored in a separate collection and are reachable only through `/api/admin/collaboration/media/<mediaId>`, which requires `collaboration.review`. There is no public image route.
 - The list read never selects image bytes.
+- Withdrawal deletes the story text, name, reply address and photographs immediately, keeping only the review record and its date. Declined material is cleared 90 days after the decision, and an approved reply address is cleared after 12 months. `npm run collaboration:retention` reports what is due and `--apply` performs it.
 
 Abuse protection:
 
@@ -121,13 +125,13 @@ Then, in the admin panel: edit the invitation, review contributions, record uses
 - Horizon CMS integration. Hand-off is a manual export.
 - Funnel analytics from arrival to submission. No event is emitted today.
 - Automated contributor email, including a withdrawal receipt.
-- A retention schedule for declined and withdrawn contributions.
-- Legal review of this new processing purpose, photographer and third-party rights, and guidance for photographs of minors. The privacy policy has not been extended for this feature. These must be settled before public launch; [known-gaps](../status/known-gaps.md) records them.
+- Approval of the safeguards draft: the minors rule, credit format, removal timeframes and retention periods. The privacy policy now describes this purpose (version 1.3) but remains owner-authorised and unreviewed, so it must not be published as legally cleared.
 
 ## Verification
 
 - `src/lib/collaboration.test.ts`: guest submission without an account, consent and validation refusals, anonymity, idempotency, closed intake, reviewer-only access, approval boundaries, version conflicts, permitted-channel use recording, withdrawal, export minimisation, private media and question-key stability.
 - `src/lib/collaboration-media.test.ts`: JPEG and PNG metadata stripping, signature sniffing, size limits, filename sanitising.
 - `src/lib/collaboration-matter.test.ts`: the governance capability and stage refusals.
+- Retention coverage in `src/lib/collaboration.test.ts`: withdrawal clears material at once, the sweep is dry by default and only clears past its window, and an approved reply address is cleared after a year.
 - `src/lib/collaboration-mongo.test.ts`: real MongoDB coverage for unique references, version concurrency, BSON media round-trip and export isolation. Run with `VOTING_TEST_MONGODB_URI` set.
 - Rendered check on 17 November 2026: desktop and 390 px mobile layouts, guest submission with a photograph returning 201, success copy, admin queue rendering the contribution and consent summary, invitation editor rendering, no console or request errors, no horizontal overflow, and the media route returning 401 without a reviewer session.
