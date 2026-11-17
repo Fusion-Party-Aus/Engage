@@ -10,6 +10,8 @@ interface Owner {
   id: string;
   name: string;
   status: string;
+  ready: boolean;
+  reasons: string[];
 }
 
 interface Events {
@@ -20,6 +22,8 @@ interface Events {
 
 interface Owners {
   assigned: boolean;
+  ready: boolean;
+  version: number;
   primary: Owner | null;
   backup: Owner | null;
   retention: Owner | null;
@@ -40,6 +44,7 @@ function toPicker(owner: Owner | null): PickerResult | null {
  */
 export default function OperationalOwners({ initial }: { initial: Owners }) {
   const [owners, setOwners] = useState(initial);
+  const [version, setVersion] = useState(initial.version);
   const [primary, setPrimary] = useState<PickerResult | null>(toPicker(initial.primary));
   const [backup, setBackup] = useState<PickerResult | null>(toPicker(initial.backup));
   const [retention, setRetention] = useState<PickerResult | null>(toPicker(initial.retention));
@@ -59,6 +64,7 @@ export default function OperationalOwners({ initial }: { initial: Owners }) {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          version,
           primaryOwnerId: primary?.id ?? '',
           backupOwnerId: backup?.id ?? '',
           retentionOwnerId: retention?.id ?? '',
@@ -69,10 +75,12 @@ export default function OperationalOwners({ initial }: { initial: Owners }) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Couldn’t save the operational owners. Try again.');
       if (result.owners) {
-        setOwners(result.owners as Owners);
-        setPrimary(toPicker((result.owners as Owners).primary));
-        setBackup(toPicker((result.owners as Owners).backup));
-        setRetention(toPicker((result.owners as Owners).retention));
+        const saved = result.owners as Owners;
+        setOwners(saved);
+        setVersion(saved.version);
+        setPrimary(toPicker(saved.primary));
+        setBackup(toPicker(saved.backup));
+        setRetention(toPicker(saved.retention));
       }
       setFeedback('Operational owners saved. The correction commitments now point to these people.');
     } catch (caught) {
@@ -84,10 +92,27 @@ export default function OperationalOwners({ initial }: { initial: Owners }) {
 
   return (
     <div className="grid gap-5">
+      {owners.assigned && !owners.ready && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            <span>The roster is not ready:</span>
+            <ul className="m-0 grid list-disc gap-1 pl-5">
+              {([['Primary owner', owners.primary], ['Backup owner', owners.backup], ['Retention owner', owners.retention]] as const)
+                .filter(([, owner]) => owner && !owner.ready)
+                .map(([label, owner]) => (
+                  <li key={label}>{label}: {owner!.reasons.join('; ')}.</li>
+                ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <p className="m-0 text-sm text-muted-foreground">
-        {owners.assigned
-          ? 'Assigned. Changes take effect immediately and are recorded in the audit trail.'
-          : 'Not yet assigned. Until all three people and a correction address are set, the pilot has no accountable coverage.'}
+        {owners.ready
+          ? 'Assigned and ready. Changes take effect immediately and are recorded in the audit trail.'
+          : owners.assigned
+            ? 'Assigned, but not ready. One or more owners cannot currently act on contributions; see the reasons below.'
+            : 'Not yet assigned. Until all three people and a correction address are set, the pilot has no accountable coverage.'}
       </p>
 
       <SearchPicker
@@ -119,9 +144,9 @@ export default function OperationalOwners({ initial }: { initial: Owners }) {
       />
 
       <Field
-        label="Correction and removal address"
+        label="Default correction and removal address"
         htmlFor="operations-email"
-        hint="Shown on public invitations. The primary owner monitors it."
+        hint="Invitations use this unless they set their own. The primary owner monitors it."
       >
         <Input
           id="operations-email"

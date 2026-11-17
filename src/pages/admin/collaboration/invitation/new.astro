@@ -7,7 +7,8 @@ import CardHeader from '../../../../components/admin/CardHeader.astro';
 import CardTitle from '../../../../components/admin/CardTitle.astro';
 import InitiativeCreate from '../../../../components/collaboration/InitiativeCreate';
 import { getSessionUser } from '../../../../lib/auth.ts';
-import { runtimeEnv } from '../../../../lib/db.ts';
+import { getDatabase, runtimeEnv } from '../../../../lib/db.ts';
+import { readCollaborationOwners } from '../../../../lib/collaboration-operations.ts';
 import { PILOT_INITIATIVE } from '../../../../lib/collaboration-options.ts';
 import { hasPermission } from '../../../../lib/rbac.ts';
 
@@ -18,6 +19,8 @@ const env = runtimeEnv(Astro.locals);
 const user = await getSessionUser(Astro.request, env);
 if (!user) return Astro.redirect('/member/');
 if (!hasPermission(user, 'collaboration.manage')) return Astro.rewrite('/403/');
+
+const owners = await readCollaborationOwners(await getDatabase(env));
 ---
 
 <AdminLayout
@@ -35,7 +38,7 @@ if (!hasPermission(user, 'collaboration.manage')) return Astro.rewrite('/403/');
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <InitiativeCreate client:load defaultCorrectionEmail={PILOT_INITIATIVE.correctionEmail} />
+      <InitiativeCreate client:load defaultCorrectionEmail={owners.correctionEmail || PILOT_INITIATIVE.correctionEmail} />
     </CardContent>
   </Card>
 </AdminLayout>

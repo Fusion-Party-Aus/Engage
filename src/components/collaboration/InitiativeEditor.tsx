@@ -20,6 +20,7 @@ interface Props {
   purpose: string;
   status: InitiativeStatus;
   correctionEmail: string;
+  defaultCorrectionEmail: string;
   questions: readonly ContributionQuestion[];
   profile: 'story' | 'consultation';
 }
@@ -103,7 +104,15 @@ export default function InitiativeEditor(props: Props) {
             ))}
           </NativeSelect>
         </Field>
-        <Field label="Corrections and removals" htmlFor="invitation-email" hint="Where contributors write to correct or remove their contribution.">
+        <Field
+          label="Correction address"
+          htmlFor="invitation-email"
+          hint={
+            props.defaultCorrectionEmail
+              ? `Optional. Leave blank to use the operations default: ${props.defaultCorrectionEmail}.`
+              : 'Optional. Leave blank to use the operations default, which is not set yet.'
+          }
+        >
           <Input id="invitation-email" type="email" value={correctionEmail} maxLength={254} onChange={(event) => setCorrectionEmail(event.currentTarget.value)} />
         </Field>
       </div>

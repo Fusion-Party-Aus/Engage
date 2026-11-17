@@ -303,8 +303,10 @@ export async function createInitiative(
   const purpose = clampText(input.purpose, "Purpose", 10, 1_200);
   const label = clampText(input.question, "First question", 3, 160);
   const hint = clampText(input.hint, "Question hint", 0, 200);
-  const correctionEmail = clampText(input.correctionEmail, "Correction email", 5, 254);
-  if (!emailLooksValid(correctionEmail)) {
+  // Empty means inherit the operations default. A non-empty value is an
+  // explicit per-invitation override.
+  const correctionEmail = clampText(input.correctionEmail, "Correction email", 0, 254);
+  if (correctionEmail && !emailLooksValid(correctionEmail)) {
     throw new CollaborationError("Enter a valid email address for corrections and removals.");
   }
   const profile =
@@ -383,8 +385,10 @@ export async function updateInitiative(
   if (input.questions.length > MAX_INITIATIVE_QUESTIONS) {
     throw new CollaborationError(`Use ${MAX_INITIATIVE_QUESTIONS} questions or fewer.`);
   }
-  const correctionEmail = clampText(input.correctionEmail, "Correction email", 5, 254);
-  if (!emailLooksValid(correctionEmail)) {
+  // Empty means inherit the operations default. A non-empty value is an
+  // explicit per-invitation override.
+  const correctionEmail = clampText(input.correctionEmail, "Correction email", 0, 254);
+  if (correctionEmail && !emailLooksValid(correctionEmail)) {
     throw new CollaborationError("Enter a valid email address for corrections and removals.");
   }
   const existingKeys = new Set(current.questions.map((question) => question.key));

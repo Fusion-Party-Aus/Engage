@@ -67,8 +67,16 @@ export default function InitiativeCreate({ defaultCorrectionEmail }: Props) {
       <Field label="Question hint" htmlFor="new-hint" hint="Optional. Shown under the question.">
         <Input id="new-hint" name="hint" maxLength={200} />
       </Field>
-      <Field label="Corrections and removals" htmlFor="new-email" hint="Where contributors write to correct or remove their contribution.">
-        <Input id="new-email" name="correctionEmail" type="email" required maxLength={254} defaultValue={defaultCorrectionEmail} />
+      <Field
+        label="Correction address"
+        htmlFor="new-email"
+        hint={
+          defaultCorrectionEmail
+            ? `Optional. Leave blank to use the operations default: ${defaultCorrectionEmail}.`
+            : 'Optional. Leave blank to use the operations default, which is not set yet.'
+        }
+      >
+        <Input id="new-email" name="correctionEmail" type="email" maxLength={254} />
       </Field>
 
       {error && (

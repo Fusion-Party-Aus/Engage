@@ -18,6 +18,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const view = await saveCollaborationOwners(await getDatabase(env), user, {
+      version: body.version,
       primaryOwnerId: body.primaryOwnerId,
       backupOwnerId: body.backupOwnerId,
       retentionOwnerId: body.retentionOwnerId,

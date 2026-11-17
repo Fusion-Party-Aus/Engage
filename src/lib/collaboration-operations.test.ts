@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createMemoryDb } from "./db.ts";
 import {
   OperationSettingsError,
+  resolveCorrectionEmail,
   readCollaborationOwners,
   saveCollaborationOwners,
 } from "./collaboration-operations.ts";
@@ -33,10 +34,16 @@ async function setup() {
       db.collection("memberships").insertOne({ memberId, status: "verified" }),
     ),
   );
+  await Promise.all(
+    ["owner-admin", "primary-person", "backup-person", "sweep-person"].map((memberId) =>
+      db.collection("application_roles").insertOne({ memberId, role: "administrator" }),
+    ),
+  );
   return db;
 }
 
 const valid = {
+  version: 0,
   primaryOwnerId: "primary-person",
   backupOwnerId: "backup-person",
   retentionOwnerId: "sweep-person",
@@ -91,7 +98,9 @@ test("a save stores the roster, resolves names and records an audit event", asyn
   const db = await setup();
   const saved = await saveCollaborationOwners(db, manager, valid);
   assert.equal(saved.assigned, true);
+  assert.equal(saved.ready, true);
   assert.equal(saved.primary?.name, "Primary Person");
+  assert.equal(saved.primary?.ready, true);
   assert.equal(saved.backup?.name, "Backup Person");
   assert.equal(saved.retention?.name, "Sweep Person");
   assert.equal(saved.correctionEmail, "stories@fusionparty.org.au");
@@ -110,6 +119,7 @@ test("changing personnel updates the roster without touching contributors", asyn
   await saveCollaborationOwners(db, manager, valid);
   const changed = await saveCollaborationOwners(db, manager, {
     ...valid,
+    version: 1,
     backupOwnerId: "sweep-person",
     retentionOwnerId: "backup-person",
   });
@@ -133,4 +143,52 @@ test("an owner who later loses their account leaves the roster visibly unassigne
   assert.equal(owners.assigned, false);
   assert.equal(owners.primary, null);
   assert.equal(owners.backup?.name, "Backup Person");
+});
+
+test("an assigned roster is not ready until every owner can act on contributions", async () => {
+  const db = await setup();
+  const saved = await saveCollaborationOwners(db, manager, valid);
+  assert.equal(saved.assigned, true);
+  assert.equal(saved.ready, true);
+
+  await db.collection("application_roles").deleteOne({ memberId: "primary-person" });
+  const withoutPermission = await readCollaborationOwners(db);
+  assert.equal(withoutPermission.assigned, true);
+  assert.equal(withoutPermission.ready, false);
+  assert.match(withoutPermission.primary?.reasons.join(" ") ?? "", /collaboration\.review/);
+
+  await db.collection("memberships").updateOne(
+    { memberId: "backup-person" },
+    { $set: { status: "pending" } },
+  );
+  const unverified = await readCollaborationOwners(db);
+  assert.match(unverified.backup?.reasons.join(" ") ?? "", /not verified/);
+
+  await db.collection("user").updateOne(
+    { _id: "sweep-person" } as never,
+    { $set: { disabled: true } },
+  );
+  const disabled = await readCollaborationOwners(db);
+  assert.match(disabled.retention?.reasons.join(" ") ?? "", /disabled/);
+  assert.equal(disabled.ready, false);
+});
+
+test("a stale settings version is refused, and the settings and audit event commit together", async () => {
+  const db = await setup();
+  const first = await saveCollaborationOwners(db, manager, valid);
+  assert.equal(first.version, 1);
+  await assert.rejects(
+    saveCollaborationOwners(db, manager, { ...valid, version: 0 }),
+    /changed while you were editing/,
+  );
+  assert.equal(await db.collection("collaboration_operation_events").countDocuments(), 1);
+  const settings = await db.collection("collaboration_operations").findOne({ configId: "global" });
+  assert.equal(settings?.version, 1);
+});
+
+test("an invitation inherits the operations address unless it sets its own", () => {
+  assert.equal(resolveCorrectionEmail("", "default@fusionparty.org.au"), "default@fusionparty.org.au");
+  assert.equal(resolveCorrectionEmail(null, "default@fusionparty.org.au"), "default@fusionparty.org.au");
+  assert.equal(resolveCorrectionEmail("local@branch.org.au", "default@fusionparty.org.au"), "local@branch.org.au");
+  assert.equal(resolveCorrectionEmail("", ""), "");
 });

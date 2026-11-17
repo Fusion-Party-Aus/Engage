@@ -1,5 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
+import { runInTransaction } from "./db.ts";
 import { hasPermission } from "./rbac.ts";
+import { resolveMemberEffectivePermissions } from "./roles-store.ts";
 import type { SessionUser } from "./types.ts";
 
 /**
@@ -26,6 +28,9 @@ export interface OwnerSummary {
   id: string;
   name: string;
   status: string;
+  /** Active, verified and holding the permission needed to act on contributions. */
+  ready: boolean;
+  reasons: string[];
 }
 
 export interface OwnersEvent {
@@ -35,7 +40,10 @@ export interface OwnersEvent {
 }
 
 export interface CollaborationOwnersView {
+  /** Everyone has been chosen. This does not mean they can do the work. */
   assigned: boolean;
+  /** Every chosen owner is active, verified and authorised. */
+  ready: boolean;
   primary: OwnerSummary | null;
   backup: OwnerSummary | null;
   retention: OwnerSummary | null;
@@ -43,6 +51,7 @@ export interface CollaborationOwnersView {
   escalationDetails: string;
   updatedAt: string | null;
   updatedBy: string | null;
+  version: number;
   events: OwnersEvent[];
 }
 
@@ -53,6 +62,7 @@ interface OwnersRecord {
   retentionOwnerId: string | null;
   correctionEmail: string;
   escalationDetails: string;
+  version: number;
   updatedAt?: Date;
   updatedBy?: string;
 }
@@ -65,6 +75,7 @@ function emptyRecord(): OwnersRecord {
     retentionOwnerId: null,
     correctionEmail: "",
     escalationDetails: "",
+    version: 0,
   };
 }
 
@@ -78,6 +89,7 @@ function normalise(row: Record<string, any> | null): OwnersRecord {
     retentionOwnerId: row.retentionOwnerId ? String(row.retentionOwnerId) : null,
     correctionEmail: String(row.correctionEmail ?? ""),
     escalationDetails: String(row.escalationDetails ?? ""),
+    version: Number(row.version ?? 0),
     ...(row.updatedAt ? { updatedAt: new Date(row.updatedAt) } : {}),
     ...(row.updatedBy ? { updatedBy: String(row.updatedBy) } : {}),
   };
@@ -94,10 +106,20 @@ async function resolveOwner(db: Db, memberId: string | null): Promise<OwnerSumma
   const account = await db.collection("user").findOne(accountFilter(memberId));
   if (!account) return null;
   const membership = await db.collection("memberships").findOne({ memberId });
+  const status = String(membership?.status ?? "unverified");
+  const permissions = await resolveMemberEffectivePermissions(db, memberId);
+  const reasons: string[] = [];
+  if (account.disabled === true) reasons.push("the account is disabled");
+  if (status !== "verified") reasons.push("the membership is not verified");
+  if (!permissions.national.includes("collaboration.review")) {
+    reasons.push("they lack the collaboration.review permission");
+  }
   return {
     id: memberId,
     name: String(account.name ?? "Member"),
-    status: String(membership?.status ?? "unverified"),
+    status,
+    ready: reasons.length === 0,
+    reasons,
   };
 }
 
@@ -121,6 +143,17 @@ function validEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+/**
+ * One address model: the invitation may override the operations default. An
+ * empty override inherits. There is no third, invitation-local fallback.
+ */
+export function resolveCorrectionEmail(
+  override: string | null | undefined,
+  fallback: string | null | undefined,
+): string {
+  return String(override ?? "").trim() || String(fallback ?? "").trim();
+}
+
 export async function readCollaborationOwners(db: Db): Promise<CollaborationOwnersView> {
   const row = await db.collection(SETTINGS).findOne({ configId: "global" });
   const record = normalise(row);
@@ -130,8 +163,10 @@ export async function readCollaborationOwners(db: Db): Promise<CollaborationOwne
     resolveOwner(db, record.retentionOwnerId),
     db.collection(EVENTS).find({}).sort({ at: -1, _id: -1 }).limit(5).toArray(),
   ]);
+  const chosen = Boolean(primary && backup && retention && record.correctionEmail);
   return {
-    assigned: Boolean(primary && backup && retention && record.correctionEmail),
+    assigned: chosen,
+    ready: chosen && Boolean(primary?.ready && backup?.ready && retention?.ready),
     primary,
     backup,
     retention,
@@ -139,6 +174,7 @@ export async function readCollaborationOwners(db: Db): Promise<CollaborationOwne
     escalationDetails: record.escalationDetails,
     updatedAt: record.updatedAt ? record.updatedAt.toISOString() : null,
     updatedBy: record.updatedBy ?? null,
+    version: record.version,
     events: events.map((event) => ({
       at: new Date(event.at).toISOString(),
       actorId: String(event.actorId),
@@ -148,6 +184,7 @@ export async function readCollaborationOwners(db: Db): Promise<CollaborationOwne
 }
 
 export interface OwnersInput {
+  version: unknown;
   primaryOwnerId: unknown;
   backupOwnerId: unknown;
   retentionOwnerId: unknown;
@@ -175,8 +212,18 @@ export async function saveCollaborationOwners(
     throw new OperationSettingsError("Enter a valid correction email address.");
   }
   const escalationDetails = clamp(input.escalationDetails, "Escalation details", 2, 500);
+  const expectedVersion = input.version;
+  if (!Number.isSafeInteger(expectedVersion) || Number(expectedVersion) < 0) {
+    throw new OperationSettingsError("Reload the page and try again.");
+  }
 
   const before = normalise(await db.collection(SETTINGS).findOne({ configId: "global" }));
+  if (before.version !== Number(expectedVersion)) {
+    throw new OperationSettingsError(
+      "These owners changed while you were editing. Reload and try again.",
+      409,
+    );
+  }
   const after = {
     configId: "global" as const,
     primaryOwnerId,
@@ -189,30 +236,50 @@ export async function saveCollaborationOwners(
     (key) => key !== "configId" && before[key] !== after[key],
   );
   const now = new Date();
-  await db.collection(SETTINGS).updateOne(
-    { configId: "global" },
-    { $set: { ...after, updatedAt: now, updatedBy: user.memberId } },
-    { upsert: true },
-  );
-  await db.collection(EVENTS).insertOne({
-    eventId: new ObjectId().toHexString(),
-    actorId: user.memberId,
-    changedFields,
-    before: {
-      primaryOwnerId: before.primaryOwnerId,
-      backupOwnerId: before.backupOwnerId,
-      retentionOwnerId: before.retentionOwnerId,
-      correctionEmail: before.correctionEmail,
-      escalationDetails: before.escalationDetails,
-    },
-    after: {
-      primaryOwnerId,
-      backupOwnerId,
-      retentionOwnerId,
-      correctionEmail,
-      escalationDetails,
-    },
-    at: now,
+  await runInTransaction(db, async (session) => {
+    const written = await db.collection(SETTINGS).updateOne(
+      { configId: "global", version: Number(expectedVersion) },
+      {
+        $set: {
+          ...after,
+          version: Number(expectedVersion) + 1,
+          updatedAt: now,
+          updatedBy: user.memberId,
+        },
+      },
+      // The first save creates version 0; a duplicate unique key from a racing
+      // create is treated as a conflict below.
+      { upsert: Number(expectedVersion) === 0, session },
+    );
+    if (!written.matchedCount && !written.upsertedId) {
+      throw new OperationSettingsError(
+        "These owners changed while you were editing. Reload and try again.",
+        409,
+      );
+    }
+    await db.collection(EVENTS).insertOne(
+      {
+        eventId: new ObjectId().toHexString(),
+        actorId: user.memberId,
+        changedFields,
+        before: {
+          primaryOwnerId: before.primaryOwnerId,
+          backupOwnerId: before.backupOwnerId,
+          retentionOwnerId: before.retentionOwnerId,
+          correctionEmail: before.correctionEmail,
+          escalationDetails: before.escalationDetails,
+        },
+        after: {
+          primaryOwnerId,
+          backupOwnerId,
+          retentionOwnerId,
+          correctionEmail,
+          escalationDetails,
+        },
+        at: now,
+      },
+      { session },
+    );
   });
   return readCollaborationOwners(db);
 }

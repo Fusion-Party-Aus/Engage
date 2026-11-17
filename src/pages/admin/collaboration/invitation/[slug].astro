@@ -10,6 +10,7 @@ import InitiativeEditor from '../../../../components/collaboration/InitiativeEdi
 import { getSessionUser } from '../../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../../lib/db.ts';
 import { getInitiative } from '../../../../lib/collaboration.ts';
+import { readCollaborationOwners } from '../../../../lib/collaboration-operations.ts';
 import { readFunnelSummary } from '../../../../lib/collaboration-funnel.ts';
 import { isPublicInitiativeStatus } from '../../../../lib/collaboration-options.ts';
 import { hasPermission } from '../../../../lib/rbac.ts';
@@ -25,6 +26,7 @@ if (!hasPermission(user, 'collaboration.manage')) return Astro.rewrite('/403/');
 const db = await getDatabase(env);
 const initiative = await getInitiative(db, String(Astro.params.slug ?? ''));
 const funnel = initiative ? await readFunnelSummary(db, initiative.slug) : null;
+const owners = await readCollaborationOwners(db);
 if (!initiative) Astro.response.status = 404;
 ---
 
@@ -98,6 +100,7 @@ if (!initiative) Astro.response.status = 404;
             purpose={initiative.purpose}
             status={initiative.status}
             correctionEmail={initiative.correctionEmail}
+            defaultCorrectionEmail={owners.correctionEmail}
             questions={initiative.questions}
             profile={initiative.profile}
           />

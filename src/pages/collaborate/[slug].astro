@@ -5,6 +5,10 @@ import FunnelBeacon from '../../components/collaboration/FunnelBeacon';
 import { Button } from '../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { countPublishedContributions, getPublicInitiative } from '../../lib/collaboration.ts';
+import {
+  readCollaborationOwners,
+  resolveCorrectionEmail,
+} from '../../lib/collaboration-operations.ts';
 import { turnstileEnforced } from '../../lib/turnstile.ts';
 
 export const prerender = false;
@@ -15,6 +19,9 @@ const db = await getDatabase(env);
 // Draft and archived invitations have no public page.
 const initiative = await getPublicInitiative(db, String(Astro.params.slug ?? ''));
 const publishedCount = initiative ? await countPublishedContributions(db, initiative.slug) : 0;
+const owners = await readCollaborationOwners(db);
+// The invitation may override the operations default; empty means inherit.
+const correctionEmail = resolveCorrectionEmail(initiative?.correctionEmail, owners.correctionEmail);
 if (!initiative) Astro.response.status = 404;
 ---
 
@@ -57,10 +64,12 @@ if (!initiative) Astro.response.status = 404;
             <div class="collaborate-closed">
               <h2>This invitation is closed</h2>
               <p>We are not collecting new stories here. Thank you to everyone who contributed.</p>
-              <p>
-                To correct or remove something you sent, email{' '}
-                <a href={`mailto:${initiative.correctionEmail}`}>{initiative.correctionEmail}</a>.
-              </p>
+              {correctionEmail && (
+                <p>
+                  To correct or remove something you sent, email{' '}
+                  <a href={`mailto:${correctionEmail}`}>{correctionEmail}</a>.
+                </p>
+              )}
               <Button href="/proposals/">See what members are deciding</Button>
             </div>
           )}
@@ -74,10 +83,12 @@ if (!initiative) Astro.response.status = 404;
               We only use your words{initiative.profile === 'story' ? ' or photos' : ''} in the places you tick.
             </li>
             <li>If we want to check something, we will reply only if you asked us to.</li>
-            <li>
-              You can ask us to correct or remove it at any time: email{' '}
-              <a href={`mailto:${initiative.correctionEmail}`}>{initiative.correctionEmail}</a>.
-            </li>
+            {correctionEmail && (
+              <li>
+                You can ask us to correct or remove it at any time: email{' '}
+                <a href={`mailto:${correctionEmail}`}>{correctionEmail}</a>.
+              </li>
+            )}
           </ul>
           <h2>What we will not do</h2>
           <ul>

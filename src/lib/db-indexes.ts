@@ -130,6 +130,13 @@ const SERVICE_INDEXES: IndexDefinition[] = [
     { unique: true, name: "collaboration_event_unique" },
   ],
   ["collaboration_events", { contributionId: 1, at: -1 }],
+  // One global operational-owner record (#143), plus its audit trail.
+  [
+    "collaboration_operations",
+    { configId: 1 },
+    { unique: true, name: "collaboration_operations_global" },
+  ],
+  ["collaboration_operation_events", { at: -1 }],
   // Aggregate funnel counts (#143). One row per invitation, day and stage.
   [
     "collaboration_funnel",
