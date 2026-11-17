@@ -17,6 +17,7 @@ Documentation is not a substitute for the code. Where this set and the implement
 |---|---|
 | Understand the product, users and scope | [product/overview.md](product/overview.md) |
 | Understand how Engage relates to Fusion's other systems | [product/ecosystem.md](product/ecosystem.md) |
+| Understand public story and photograph contributions | [product/collaboration-matters.md](product/collaboration-matters.md) |
 | Learn the vocabulary and core records | [domain/domain-model.md](domain/domain-model.md) |
 | Understand eligibility, authority and branch scope | [domain/governance-model.md](domain/governance-model.md) |
 | Trace an idea from submission to published policy | [domain/governance-lifecycle.md](domain/governance-lifecycle.md) |
@@ -45,7 +46,8 @@ docs/
 ├── README.md                         # This index and maintenance rules
 ├── product/
 │   ├── overview.md                   # Purpose, users, journeys, scope
-│   └── ecosystem.md                  # Fusion, Horizon, CRM, Core/Auth, Signal, CMS
+│   ├── ecosystem.md                  # Fusion, Horizon, CRM, Core/Auth, Signal, CMS
+│   └── collaboration-matters.md      # Public story and photograph contributions
 ├── domain/
 │   ├── domain-model.md               # Concepts, records, relationships
 │   ├── governance-model.md           # Five authorities, branches, eligibility

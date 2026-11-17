@@ -20,6 +20,7 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Read a published policy | Implemented when a record is published | `/policies/[slug]/` |
 | Branch directory | Implemented | `/branches/` |
 | Public concern submission (Sense Box) | Implemented | `/sense-box/`, rate-limited |
+| Public story and photograph contribution | Implemented | `/collaborate/<slug>/`, guest intake, private review, [model](../product/collaboration-matters.md) |
 | How-it-works and changelog | Implemented | `/how-it-works/`, `/changelog/` |
 | Terms and privacy pages | Implemented but inactive as a gate | Documents are owner-authorised; acceptance gate off |
 | Branded 403/404/500 | Implemented | `src/pages/403.astro`, `404.astro`, `500.astro` |

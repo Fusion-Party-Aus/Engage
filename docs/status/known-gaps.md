@@ -1,6 +1,6 @@
 # Known gaps, defects and open decisions
 
-**Status:** Current · **Verified:** 16 November 2026
+**Status:** Current · **Verified:** 17 November 2026
 
 > **RFC 0001 programme status.** The Sprint 1 integrity, lifecycle, rendering
 > performance and Turnstile slices were merged to `main` as `3b36947` (PR #51) on
@@ -220,6 +220,22 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 **Direction:** Configure and monitor an external scheduler. Treat missing jobs as an operational incident.
 
 ## Priority 3 — product and documentation gaps
+
+### 29. Story contributions have legal and operational obligations before launch
+
+**Implemented (17 November 2026, #143):** a public collaboration matter (`/collaborate/<slug>/`) accepts stories and photographs from people with no account, with granular consent, private review, metadata-stripped media, a reviewer-only export and no automatic publication. See [public collaboration matters](../product/collaboration-matters.md).
+
+**Still open before public launch:**
+
+- the privacy policy has not been extended for this processing purpose, and no legal review has occurred;
+- guidance for photographs of other identifiable people, photographer credit and minors is not written;
+- AI-assisted editing is recorded as a permission but there is no derivative-approval step, and the production-image policy for edited photographs is undecided;
+- withdrawal is an email to the invitation's correction address, actioned by a reviewer; there is no self-service path and no automated receipt;
+- no retention schedule exists for declined or withdrawn contributions;
+- no funnel analytics are emitted, and no contributor email is sent automatically;
+- approved material reaches Horizon only through a manual JSON export.
+
+**Direction:** settle the legal and image-policy questions before promoting the invitation publicly. Do not describe a contribution as a verified membership testimonial.
 
 ### 22. The Policy Registry is empty on a fresh install
 
