@@ -3,7 +3,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 import PlatformSettings from '../../../components/PlatformSettings';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { getSiteConfig, listSiteConfigEvents } from '../../../lib/site-config.ts';
+import { getSiteConfigState, listSiteConfigEvents } from '../../../lib/site-config.ts';
 import {
   CRM_SETTING_FIELDS,
   JOBS_SETTING_FIELDS,
@@ -38,7 +38,7 @@ if (!user) return Astro.redirect('/member/');
 if (!user.isAdmin) return Astro.redirect('/admin/');
 
 const [
-  config,
+  siteConfigState,
   events,
   thresholdState,
   thresholdEvents,
@@ -47,7 +47,7 @@ const [
   jobsState,
   jobsEvents,
 ] = await Promise.all([
-  getSiteConfig(db, env),
+  getSiteConfigState(db, env),
   listSiteConfigEvents(db),
   getOperationalSettingsState(db),
   listOperationalSettingsEvents(db, 20, 'thresholds'),
@@ -97,7 +97,13 @@ const fieldHint = (field: (typeof CRM_SETTING_FIELDS)[number] | (typeof JOBS_SET
   isAdmin={user.isAdmin}
   isBranchAdmin={user.isBranchAdmin}
 >
-  <PlatformSettings client:load initialConfig={plain(config)} initialEvents={plain(events)} />
+  <PlatformSettings
+    client:load
+    initialConfig={plain(siteConfigState.config)}
+    initialEvents={plain(events)}
+    initialInvalidFields={siteConfigState.invalidFields}
+    initialReadFailed={siteConfigState.readFailed}
+  />
 
   <section class="mt-10 border-t border-border pt-8" aria-labelledby="operational-thresholds-heading">
     <div class="mb-4 max-w-2xl">
