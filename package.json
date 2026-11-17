@@ -31,7 +31,8 @@
     "branches:participation-migrate": "node --experimental-strip-types scripts/migrate-branch-participation.ts",
     "membership:verify": "node --experimental-strip-types scripts/membership-verification.ts",
     "collaboration:seed": "node --experimental-strip-types scripts/seed-collaboration-pilot.ts",
-    "collaboration:retention": "node --experimental-strip-types scripts/collaboration-retention.ts"
+    "collaboration:retention": "node --experimental-strip-types scripts/collaboration-retention.ts",
+    "horizon:smoke": "node --experimental-strip-types scripts/horizon-consumer-smoke.ts"
   },
   "dependencies": {
     "@astrojs/node": "11.1.9",
