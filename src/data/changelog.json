@@ -1,12 +1,39 @@
 [
   {
-    "hash": "0237117",
+    "hash": "ae7ff0d",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "sense-box",
+    "summary": "Publish reviewed priorities with discussion and proposal handoff",
+    "details": "Organisers get a per-priority workspace, an explicit publish/withdraw action, private notes and public discussion. Published priorities are readable without signing in and minimally projected; legacy private submissions stay private. Reviewers can link a priority to an existing proposal or draft a proposal prefilled from it, recording the source and linking the priority atomically. Consent, privacy and product documentation now describe review-then-publication."
+  },
+  {
+    "hash": "067cea4",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "amendments",
+    "summary": "Add block-anchored inline suggestions",
+    "details": "Members can suggest exact changes to a title, summary paragraph, commitment or rationale paragraph, with an optional note. The server reconstructs whole-field changes from the quoted blocks, so ballot binding and apply semantics are unchanged. Member and administrator views show word-level diffs, moved anchors and competing amendments. Resolution rebases a moved suggestion and refuses one whose quoted wording disappeared. Also fixes the administrator ballot action to require ready, matching the route."
+  },
+  {
+    "hash": "72282c5",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "ui-sdk",
+    "summary": "Add ui-sdk runtime and usage guidance",
+    "details": "Install @ui-sdk/react and @ui-sdk/core for React 19 behaviours, import the default styles once through the Horizon stylesheet, and install the ui-sdk skill. Document the required reading before new components are built."
+  },
+  {
+    "hash": "90bc0c1",
     "date": "2026-11-17",
     "type": "feat",
     "category": "feature",
     "scope": "settings",
-    "summary": "Make public site settings stored and audited only (#128)",
-    "details": "Remove the environment fallbacks for search indexing, the header action, sharing image, social channels, branch directory, repository link and the public pulse poll. Stored values under Platform settings win; absent values use the documented code defaults. APP_MODE still supplies the production indexing default. The repository link is now editable in the Operations section instead of read-only, with URL validation, the operations audit section and no raw keys. Invalid saved values fall back to defaults and the settings page names the saved settings that could not be used. Align the stored-value sanitiser with the API validators so an invalid saved value cannot partly apply. Tests cover every removed variable having no effect, stored values winning, defaults, invalid fallback, API validation and audit."
+    "summary": "Make public site settings stored and audited only (#128) (#144)",
+    "details": "* feat(settings): make public site settings stored and audited only (#128) Remove the environment fallbacks for search indexing, the header action, sharing image, social channels, branch directory, repository link and the public pulse poll. Stored values under Platform settings win; absent values use the documented code defaults. APP_MODE still supplies the production indexing default. The repository link is now editable in the Operations section instead of read-only, with URL validation, the operations audit section and no raw keys. Invalid saved values fall back to defaults and the settings page names the saved settings that could not be used. Align the stored-value sanitiser with the API validators so an invalid saved value cannot partly apply. Tests cover every removed variable having no effect, stored values winning, defaults, invalid fallback, API validation and audit. * chore(changelog): record public site settings migration (#128)"
   },
   {
     "hash": "831e950",
@@ -659,29 +686,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Let administrators inspect the proposed re-engagement audience"
-  },
-  {
-    "hash": "9e72e64",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "member",
-    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
-  },
-  {
-    "hash": "71a61de",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ci",
-    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
-  },
-  {
-    "hash": "cb39b60",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record lifecycle audit, consent assessment and rollout checks"
   }
 ]
