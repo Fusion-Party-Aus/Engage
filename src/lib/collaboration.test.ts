@@ -9,6 +9,9 @@ import {
   getPublicInitiative,
   listContributions,
   listInitiatives,
+  listPublishedContributions,
+  readPublishedMedia,
+  setGalleryVisibility,
   purgeExpiredContent,
   readContributionMedia,
   reviewContribution,
@@ -849,4 +852,138 @@ test("a consultation invitation collects written responses only", async () => {
   assert.equal(row?.attribution, "anonymous");
   assert.equal(row?.allowEdits, false);
   assert.equal(row?.hasMedia, false);
+});
+
+test("the public gallery contains only approved website stories, credited as chosen", async () => {
+  const db = await setup();
+  const named = await submitContribution(db, submission({ channels: ["website"] }), [photo()]);
+  const anonymous = await submitContribution(
+    db,
+    submission({ requestId: REQUEST_ID_2, channels: ["website"], attribution: "anonymous", displayName: "Hidden" }),
+  );
+  const socialOnly = await submitContribution(
+    db,
+    submission({ requestId: "32345678-1234-4234-8234-123456789abc", channels: ["social"] }),
+  );
+  const unapproved = await submitContribution(
+    db,
+    submission({ requestId: "42345678-1234-4234-8234-123456789abc", channels: ["website"] }),
+  );
+  for (const id of [named.contributionId, anonymous.contributionId, socialOnly.contributionId]) {
+    await reviewContribution(db, reviewer, {
+      contributionId: id,
+      action: "set_status",
+      status: "approved",
+      version: 0,
+    });
+  }
+
+  const gallery = await listPublishedContributions(db, PILOT_SLUG);
+  assert.deepEqual(
+    gallery.map((entry) => entry.contributionId).sort(),
+    [named.contributionId, anonymous.contributionId].sort(),
+  );
+  const namedEntry = gallery.find((entry) => entry.contributionId === named.contributionId)!;
+  const anonymousEntry = gallery.find((entry) => entry.contributionId === anonymous.contributionId)!;
+  assert.equal(namedEntry.name, "Sam Rivera");
+  assert.equal(anonymousEntry.name, "");
+  assert.equal(namedEntry.media.length, 1);
+  assert.equal(namedEntry.answers.some((answer) => answer.label === "What does Fusion mean to you?"), true);
+  assert.equal(unapproved.contributionId.length > 0, true);
+});
+
+test("published photographs are served only while their story is published", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission({ channels: ["website"] }), [photo()]);
+  const mediaId = (await listContributions(db, reviewer)).items[0]!.media[0]!.mediaId;
+
+  await assert.rejects(readPublishedMedia(db, mediaId), /not available/);
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  const published = await readPublishedMedia(db, mediaId);
+  assert.equal(published.mimeType, "image/jpeg");
+  assert.ok(published.bytes.length > 0);
+
+  await setGalleryVisibility(db, reviewer, {
+    contributionId: result.contributionId,
+    hidden: true,
+    version: 1,
+  });
+  await assert.rejects(readPublishedMedia(db, mediaId), /not available/);
+  await setGalleryVisibility(db, reviewer, {
+    contributionId: result.contributionId,
+    hidden: false,
+    version: 2,
+  });
+  assert.ok((await readPublishedMedia(db, mediaId)).bytes.length > 0);
+
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "withdrawn",
+    version: 3,
+  });
+  await assert.rejects(readPublishedMedia(db, mediaId), /not available/);
+  assert.equal(await db.collection("collaboration_media").countDocuments(), 0);
+});
+
+test("gallery visibility is a reviewer action, needs approval, and is audited", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission({ channels: ["website"] }));
+  await assert.rejects(
+    setGalleryVisibility(db, outsider, { contributionId: result.contributionId, hidden: true, version: 0 }),
+    /permission/,
+  );
+  await assert.rejects(
+    setGalleryVisibility(db, reviewer, { contributionId: result.contributionId, hidden: true, version: 0 }),
+    /approved/,
+  );
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  await assert.rejects(
+    setGalleryVisibility(db, reviewer, { contributionId: result.contributionId, hidden: true, version: 0 }),
+    /changed since/,
+  );
+  await setGalleryVisibility(db, reviewer, { contributionId: result.contributionId, hidden: true, version: 1 });
+  const inbox = await listContributions(db, reviewer);
+  assert.ok(inbox.items[0]?.galleryHiddenAt);
+  const actions = (await db.collection("collaboration_events").find({ contributionId: result.contributionId }).toArray()).map(
+    (event) => event.action,
+  );
+  assert.deepEqual(actions, ["set_status", "hide_from_gallery"]);
+});
+
+test("a written consultation is never published individually, even with website consent", async () => {
+  const db = await setup();
+  const created = await createInitiative(db, reviewer, { ...newInvitation, profile: "consultation" });
+  await updateInitiative(db, reviewer, {
+    slug: created.slug,
+    title: created.title,
+    summary: created.summary,
+    purpose: created.purpose,
+    status: "open",
+    correctionEmail: created.correctionEmail,
+    questions: created.questions,
+  });
+  const result = await submitContribution(db, {
+    ...submission(),
+    initiativeSlug: created.slug,
+    answers: { [created.questions[0]!.key]: "A long written response from a local resident." },
+    channels: ["website"],
+  });
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  assert.equal((await listPublishedContributions(db, created.slug)).length, 0);
 });
