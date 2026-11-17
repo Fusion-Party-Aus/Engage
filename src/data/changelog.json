@@ -1,5 +1,23 @@
 [
   {
+    "hash": "e12368c",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Make optional story answers explicit",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "a4107bf",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record public collaboration matters",
+    "details": "Refs #143"
+  },
+  {
     "hash": "5a087b0",
     "date": "2026-11-17",
     "type": "docs",
@@ -663,22 +681,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record administrator test email delivery"
-  },
-  {
-    "hash": "eb5f365",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "email",
-    "summary": "Let administrators send themselves a sample digest",
-    "details": "Add an admin-only self-addressed test email with Horizon styling, sample ballots and a non-mutating demo unsubscribe link. Allow tests while scheduled digests are disabled, limit duplicate sends, hold uncertain outcomes and report test receipts separately from member delivery rates."
-  },
-  {
-    "hash": "cfbf459",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record notification preferences and digest rollout defaults"
   }
 ]
