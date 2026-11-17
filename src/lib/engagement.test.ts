@@ -14,11 +14,11 @@ import { digestBallots, renderDigest, runBallotDigests, unsubscribeToken, readUn
 import { JOBS_OPERATIONAL_SETTINGS_ID, OPERATIONAL_SETTINGS_COLLECTION } from "./operational-settings.ts";
 import {
   castVote,
-  listOutstandingDecisions,
   promotePendingVotePreferences,
   savePendingVotePreference,
 } from "./voting-store.ts";
 import { PENDING_VOTE_PREFERENCES } from "./proposal-helpers.ts";
+import { outstandingMatterBallots } from "./electorate.ts";
 import type { PlatformEnv, ProposalSummaryView, SessionUser } from "./types.ts";
 import { PROPOSAL_VOTES } from "./vote-storage.ts";
 const now = new Date("2027-01-10T00:00:00Z");
@@ -59,7 +59,7 @@ test("closed ballots reject formal votes, saved choices and promotion and leave 
  await db.collection("memberships").insertOne({memberId,status:"verified"});
  await db.collection(PENDING_VOTE_PREFERENCES).insertOne({memberId,proposalId:"P1",ballotId:"proposal:P1",revisionId:"r1",choice:"approve"});
  assert.equal(await promotePendingVotePreferences(db,memberId),0);
- assert.equal((await listOutstandingDecisions(db,memberId,user)).length,0);
+ assert.equal((await outstandingMatterBallots(db,user)).length,0);
 });
 test("digest excludes voted, closed, hidden and ineligible branch proposals",async()=>{
  const {db,p}=await fixture();

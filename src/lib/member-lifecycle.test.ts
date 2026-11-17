@@ -7,7 +7,7 @@ import { recordEmailEvent } from './engagement-email.ts';
 import { recordLifecycle, recordParticipation, lifecycleConversion, memberNextAction } from './member-lifecycle.ts';
 import { previewMemberReengagement } from './member-reengagement.ts';
 import { safeMemberReturn } from './return-destination.ts';
-import { listOutstandingDecisions } from './voting-store.ts';
+import { outstandingMatterBallots } from './electorate.ts';
 const env={APP_MODE:'preview',RESEND_API_KEY:'synthetic',AUTH_EMAIL_FROM:'test@example.test',BETTER_AUTH_URL:'https://example.test'};
 const now=new Date('2026-11-09T00:00:00Z');
 async function fixture(db=createMemoryDb()) {
@@ -98,8 +98,8 @@ test('outstanding discovery excludes unbound and ineligible ballots and retains 
  for(const id of ['unbound','revised','voted']) await db.collection('proposals').insertOne({proposalId:id,slug:id,title:id,stage:'decide',...(id!=='unbound'?{ballotRevisionId:'r2'}:{})});
  for(const [id,revisionId] of [['revised','r1'],['voted','r2']]) await db.collection('proposal_votes').insertOne({memberId,proposalId:id,ballotId:`proposal:${id}`,revisionId});
  const user={memberId,status:'verified',canParticipate:true} as any;
- assert.deepEqual((await listOutstandingDecisions(db,memberId,user)).map(p=>p.proposalId),['revised']);
- assert.equal((await listOutstandingDecisions(db,memberId,{...user,canParticipate:false})).length,0);
+ assert.deepEqual((await outstandingMatterBallots(db,user)).map(p=>p.proposalId),['revised']);
+ assert.equal((await outstandingMatterBallots(db,{...user,canParticipate:false})).length,0);
 });
 test('real MongoDB concurrently claims exactly one verification delivery',{skip:!process.env.VOTING_TEST_MONGODB_URI},async()=>{
  const client=await new MongoClient(process.env.VOTING_TEST_MONGODB_URI!).connect();
@@ -126,15 +126,16 @@ test('dry-run endpoint rejects anonymous access and non-admin members',async()=>
  }
 });
 test('shared outstanding discovery includes undated amendment ballots and digest keeps its seven-day window',async()=>{
- const {outstandingBallots,digestBallots}=await import('./engagement-email.ts');
+ const {outstandingBallots}=await import('./electorate.ts');
+ const {digestBallots}=await import('./engagement-email.ts');
  const db=createMemoryDb();const memberId='test';
  const proposal={proposalId:'p',slug:'p',title:'p',stage:'decide',ballotRevisionId:'r1'} as any;
  await db.collection('amendments').insertOne({amendmentId:'a',proposalId:'p',title:'a',status:'voting',baseRevisionId:'r1',ballotRevisionId:'r1',currentRevisionId:'a1',ballotAmendmentRevisionId:'a1'});
  const user={memberId,canParticipate:true,status:'verified'} as any;
- assert.equal((await outstandingBallots(db,user,[proposal])).length,2);
+ assert.equal((await outstandingBallots(db,user,{proposals:[proposal]})).length,2);
  assert.equal((await digestBallots(db,user,[proposal])).length,0);
  await db.collection('proposal_votes').insertOne({memberId,proposalId:'p',ballotId:'proposal:p',revisionId:'r1'});
- const outstanding=await outstandingBallots(db,user,[proposal]);
+ const outstanding=await outstandingBallots(db,user,{proposals:[proposal]});
  assert.equal(outstanding.length,1);assert.ok(outstanding[0].key.startsWith('amendment:'));
 });
 test('legacy preference absence is reviewable, not refusal, and reviewed inferred consent can qualify without general consent',async()=>{
