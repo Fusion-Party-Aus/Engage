@@ -1,20 +1,119 @@
 [
   {
-    "hash": "28dc590",
+    "hash": "dc349b2",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record contributor management and retention corrections",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "a851144",
     "date": "2026-11-17",
     "type": "docs",
     "category": "docs",
-    "scope": "architecture",
-    "summary": "Document domain modules after barrel removal (#119)"
+    "scope": "collaboration",
+    "summary": "Record the management link, retention dates and pilot owners",
+    "details": "Fix the outdated guardian exception, point the empty gallery at the separate publication step, add management screenshots, and add an operations page that names the four unassigned responsibilities: inbox owner, backup, escalation and retention sweep operator. Refs #143"
   },
   {
-    "hash": "a885025",
+    "hash": "370a811",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Let contributors correct or withdraw with a private link",
+    "details": "Each contribution receives a management token derived from its request reference and a deployment secret, so a retry returns the same link. Only a hash is stored and the raw token lives in the URL fragment, never in a request URL, log or referrer. The link shows the contribution and status, allows a correction that returns it to review and off the gallery, removes a published story from the gallery, or withdraws everything at once. The action is audited as the contributor's and the link stops working afterwards. Retention corrections from review: reply-address expiry runs from a stable approval date, and each sweep clear is conditional on the record still being in the expected state, with the media delete in the same transaction. The show action now requires a prior publication. Interest ratios say they are event ratios, not visitor rates. Refs #143"
+  },
+  {
+    "hash": "017f71b",
     "date": "2026-11-17",
     "type": "refactor",
     "category": "improvement",
     "scope": "store",
-    "summary": "Import domain modules directly and delete the barrel (#119)",
-    "details": "Migrate every page, component and test importer from the deprecated src/lib/store.ts barrel to the owning domain module, then remove the barrel. The architecture test now fails if the barrel returns, if any source file imports it, or if a production lib module imports a page/component directory."
+    "summary": "Import domain modules directly and delete the barrel (#119) (#155)",
+    "details": "* refactor(store): import domain modules directly and delete the barrel (#119) Migrate every page, component and test importer from the deprecated src/lib/store.ts barrel to the owning domain module, then remove the barrel. The architecture test now fails if the barrel returns, if any source file imports it, or if a production lib module imports a page/component directory. * docs(architecture): document domain modules after barrel removal (#119) * chore(changelog): refresh snapshot for barrel removal (#119)"
+  },
+  {
+    "hash": "86e94fd",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record explicit gallery publication and interest counts",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "36c07d8",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record publication, minors, removal and funnel rules",
+    "details": "Correct the gallery claims about a missing public image route and about what withdrawal can erase. Add dated screenshots of the gallery states, the explicit publication control and the interest panel so the review can see them. Refs #143"
+  },
+  {
+    "hash": "8bdea4a",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish explicitly and measure interest",
+    "details": "Separate approval from publication: an approved story appears in the gallery only after a reviewer presses Publish, and hiding or showing it later keeps the first publication date. Approval alone never makes material public. Adopt the adult-only pilot rule with a simple 18+ attestation, no date of birth, and no publication of identifiable children. Record the approved removal commitments in the safeguards. Add aggregate interest counts for arrivals, first interaction, accepted contributions and the optional account step. A row holds only invitation, UTC day, stage, count and expiry. There is no cookie, session, address, identifier or typed content; the public endpoint is rate limited and the rows expire. Refs #143"
+  },
+  {
+    "hash": "6311c68",
+    "date": "2026-11-17",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "lib",
+    "summary": "Delete unclaimed read model and dead settings getters (#153)",
+    "details": "Remove buildAuthorizedMatterBriefing, which had no production caller: reporting, PDF and decision-record reads go through decision-record.ts, and the module's only consumer was its own test. Remove six exported settings getters that no production module called; the *State functions and DEFAULT_* constants remain the interface. No route, page, permission, DTO or settings behaviour changes. Update the architecture overview and hardening notes so they stop describing the deleted module. Refs #152"
+  },
+  {
+    "hash": "b7452cc",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh after merging main"
+  },
+  {
+    "hash": "b60a93d",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the approved story gallery",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "d0da24d",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Document the approved gallery and its limits",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "dd7f08b",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover gallery consent, hiding and withdrawal",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "6ca7177",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish an approved story gallery",
+    "details": "Show an approved story on /collaborate/<slug>/stories/ only while it is approved, the contributor allowed website use, it is a story-profile contribution, its material is intact and a reviewer has not hidden it. Credit follows the contributor's choice and no name is stored for an anonymous story. Photographs are served from a public route that re-checks publication on every request, so hiding or withdrawing removes access immediately. Reviewers can hide a story from the gallery, or restore it, without changing its approval. The action is versioned and audited. In-memory array filters now honour $in, which the gallery query needs and the preview previously ignored. Refs #143"
   },
   {
     "hash": "ad8deae",
@@ -24,6 +123,203 @@
     "scope": "db",
     "summary": "Cut fresh database initialisation cost (#136) (#151)",
     "details": "* perf(db): cut fresh database initialisation cost (#136) A fresh test database spent ~1.25 s in `initializeDatabase`, called 18 times per suite (~22 s). Index creation dominated: 92 `createIndex` calls, each a journal commit on a newly created collection. - Group the index catalogue by collection and send one `createIndexes` command per collection (46 commands). Keys, names, uniqueness, partial filters, TTL and `expireAfterSeconds` are unchanged; a failed grouped command falls back to per-index creation so one legacy conflict cannot block the rest, as before. - Bulk-write the 78 baseline policies instead of one upsert per record. - Split startup into `ensureDatabaseIndexes` (new `src/lib/db-indexes.ts`) and `seedBaselineContent`. `initializeDatabase` still runs both, so production startup and `getDatabase` are unchanged. Mongo tests that seed their own content use the schema half; notification-outbox keeps the full path and asserts the seeded register and indexes. - The in-memory preview implements `createIndexes` and `bulkWrite`. Verified on the local replica set: index phase 1.44 s -> 0.76 s and total 1.27 s -> 0.95 s over six interleaved pairs (shared host, so absolute wall time varied). A fresh database has the same 47 collections and 139 indexes, and the same 78 proposals and revisions, before and after. Full suite (833 tests) passed twice; each run left only `admin`, `config`, `engage` and `local`. * chore(changelog): record database initialisation change (#136) * fix(settings): tie-break site settings events by insertion order * chore(changelog): record the site event ordering fix"
+  },
+  {
+    "hash": "66ede29",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record collaboration invitations, profiles and fixes",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "ee6e657",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record invitation management, profiles and journey evidence",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "edde034",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover the reviewed journeys and remove a flaky event read",
+    "details": "Cover invitation lifecycle, profile isolation, notes preservation, terminal states, accepted private input, question snapshots, stale answers, repeated placements and reference search. Select the settings event by content rather than position, because several can share a millisecond. Refs #143"
+  },
+  {
+    "hash": "35a5c15",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Keep review history and finish the guest journey",
+    "details": "- Load existing notes and the contributor message, and only overwrite them when edited, so a status change cannot erase the record of a photographer's permission. Write the decision and its audit event in one transaction. - Make withdrawal and retention clearing terminal for the material, and offer 'Accepted as consultation input' as a separate outcome from publication. - Snapshot the invitation title, purpose and question labels with each contribution, and refuse an answer to a removed question rather than dropping it silently. - Allow several placements in the same channel and show the recorded history. - Keep the Save action available when 'withdrawn' is chosen, require a declared upload size, add photo previews, and allow blob: only for local previews. - Give contributors a reference, explain what 'no name' means for a photo, and require a reply address before AI-assisted edits. Offer an optional account next step after contributing. Refs #143"
+  },
+  {
+    "hash": "c7e4eff",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Manage multiple invitations and typed profiles",
+    "details": "Replace the single seeded invitation with an authorised invitation directory: create as a draft, open, pause, close, archive and restore, with contribution counts per invitation. Archiving and drafting have no public page. Each invitation is created with one reviewed contribution profile. A written responses invitation never asks for photographs, a name or edit permission, and the server rejects photos sent to it, so a consultation does not inherit the storytelling form. Refs #143"
+  },
+  {
+    "hash": "5155389",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh after merging main"
+  },
+  {
+    "hash": "2755ce0",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record contribution withdrawal, retention and safeguards",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "b2a45d3",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "db",
+    "summary": "Allow a local MongoDB selection timeout override",
+    "details": "A slow local Docker MongoDB took longer than 400 ms to answer its first selection, so development silently fell back to the in-memory preview and pages looked empty. The override applies locally; production keeps its 3 s default. Refs #143"
+  },
+  {
+    "hash": "b245754",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Add pre-launch safeguards and privacy text",
+    "details": "Write the operating rules for photographer credit, other identifiable people, minors, AI-assisted edits, publishing and mistaken publication, and mark what still needs an owner decision. Extend the privacy policy (version 1.3) for the contribution purpose, its reviewer access and its retention schedule, while it remains owner-authorised with legal review outstanding. Refs #143"
+  },
+  {
+    "hash": "f882ed8",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover withdrawal clearing and retention windows",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "e2c0586",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Delete material on withdrawal and by retention sweep",
+    "details": "Withdrawing a story now removes its text, name, reply address and photographs immediately, keeping only the review record and its date. Add a monthly sweep for declined material after 90 days, legacy withdrawals and approved reply addresses after 12 months. The sweep is dry-run by default and records what it would clear. Tell contributors the photo and third-party rules at intake, and warn reviewers that withdrawal is irreversible for the material. Refs #143"
+  },
+  {
+    "hash": "4c35e88",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the collaboration documentation note",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "c9a692b",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Separate accounts, membership and contributing",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "49e9bae",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record the contribution form clarification",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "e12368c",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "collaboration",
+    "summary": "Make optional story answers explicit",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "a4107bf",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record public collaboration matters",
+    "details": "Refs #143"
+  },
+  {
+    "hash": "5a087b0",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "agents",
+    "summary": "Require new features to be configurable by default",
+    "details": "Add a standing rule: editor-facing wording, questions and options belong in stored configuration, while permissions, consent vocabulary and security bounds stay in reviewed code. Refs #143"
+  },
+  {
+    "hash": "8ca0dbc",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record the matter model and launch obligations",
+    "details": "Describe the collaboration Matter, its consent and data handling, what editors can change without code, and the legal and image-policy gaps that must close before the invitation is promoted publicly. Refs #143"
+  },
+  {
+    "hash": "869f76e",
+    "date": "2026-11-17",
+    "type": "test",
+    "category": "ops",
+    "scope": "collaboration",
+    "summary": "Cover guest intake, consent and private media",
+    "details": "Prove the guest path needs no account, consent cannot be widened from the client, private-only contributions cannot be approved, an anonymous name is never stored, concurrency cannot overwrite a decision, and image bytes stay private and metadata-free. Real-MongoDB cases cover unique references, version writes and the BSON media round trip. Refs #143"
+  },
+  {
+    "hash": "8cb56f8",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add the story review queue and invitation editor",
+    "details": "Reviewers see each contribution with its answers, private photographs and consent summary, then record a decision, a note and where an approved item was used. Editors own the invitation wording, questions and open state without a deployment; question keys stay stable so earlier answers remain attached. Refs #143"
+  },
+  {
+    "hash": "c86bcd2",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish the story invitation and contribution form",
+    "details": "Add /collaborate/ and /collaborate/<slug>/ where anyone can read the invitation and send story answers, photographs, or both without an account or party membership. The form asks for publication channels, credit, edit and AI-edit permission and an optional reply address before sending, keeps every answer when a submission fails, and never claims publication has happened. Refs #143"
+  },
+  {
+    "hash": "a11c60d",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Model public story matters and guest intake",
+    "details": "Register a collaboration Matter type with no governance capability and no lifecycle stage, so a public invitation can never be deliberated, balloted, amended, ratified or published as policy. Add guest submission with a versioned consent scope, private media storage, metadata stripping for JPEG and PNG, reviewer-only permissions, and a durable rate limit plus Turnstile action for the public form. Refs #143"
   },
   {
     "hash": "90bc0c1",
@@ -416,274 +712,5 @@
     "scope": "platform",
     "summary": "Usability, governance lifecycle, contributor feedback & admin reporting (#20)",
     "details": "* feat(platform): redirect reclaim.fusionparty.org.au to Engage The Reclaim policy site is retired. A Worker bound to the reclaim custom domain now answers every request with a 301 to the same path on engage.fusionparty.org.au, preserving query strings so Engage's existing legacy redirects (pending-vote, all-policies, reclaim-our-*) still resolve. The previous reclaim Worker is left deployed for rollback. * chore(changelog): record Reclaim domain redirect * feat(platform): map Reclaim division paths to Engage proposals Old links to /reclaim-our-economy/<proposal>/ and /reclaim-our-future/<proposal>/ now land on /proposals/<proposal>/ instead of a 404 on Engage. Retired section index pages, whose names are not proposal slugs, resolve to the proposal list. Other paths and query strings are unchanged. * chore(changelog): record Reclaim path mapping * feat(discovery): surface Sense Box and next actions when caught up on ballots * feat(policies): link empty policy registry directly to fusionparty.org.au/policy * feat(governance): add contributor feedback, proposal supersession, and resolution lifecycle support * feat(admin): add ballot progress, branch summary, and privacy-preserving CSV export * chore(changelog): record usability, governance and reporting updates * fix(governance): address review findings and add Reddit-style comment composer * chore(changelog): record review fixes and comment composer update * feat(notifications): surface contribution responses and catch-up alerts in header and My Engage * chore(changelog): record in-app notifications update * fix(governance): address PR #20 CodeRabbit review comments * chore(changelog): record PR #20 review fixes * docs(research): compare participatory governance patterns with Engage * docs(research): record verification and refresh changelog * fix(governance): address PR #20 review findings * chore(changelog): update snapshot after main merge * docs(research): validate governance patterns with REA runtime evidence * chore(changelog): record REA governance research"
-  },
-  {
-    "hash": "b8af56b",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record GitHub protection defaults (#19)"
-  },
-  {
-    "hash": "041c469",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "repo",
-    "summary": "Add CODEOWNERS for default review routing (#18)",
-    "details": "Every path defaults to @finneh4249 so pull requests are routed to a single accountable reviewer. Ownership is advisory only: the main ruleset keeps a one-approval requirement for all contributors."
-  },
-  {
-    "hash": "430bec4",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box destination picker"
-  },
-  {
-    "hash": "5549e0c",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Offer accessible geographic destination picker"
-  },
-  {
-    "hash": "63e0a28",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record branch identity repair"
-  },
-  {
-    "hash": "2a7452a",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "branches",
-    "summary": "Reuse existing identities and accept national concerns"
-  },
-  {
-    "hash": "123606c",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record self-service branch membership"
-  },
-  {
-    "hash": "e839386",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Let verified members manage branch membership"
-  },
-  {
-    "hash": "e22aa5e",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box availability fix"
-  },
-  {
-    "hash": "7efcbbb",
-    "date": "2026-11-13",
-    "type": "fix",
-    "category": "fix",
-    "scope": "sense-box",
-    "summary": "Accept local concerns before branch setup"
-  },
-  {
-    "hash": "f2b384d",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box release"
-  },
-  {
-    "hash": "8ec0cf1",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "sense-box",
-    "summary": "Collect private branch community priorities"
-  },
-  {
-    "hash": "9ef66f5",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "proposals",
-    "summary": "Capture approved desktop and mobile journeys"
-  },
-  {
-    "hash": "b5207f2",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Implement approved reading and voting journey"
-  },
-  {
-    "hash": "41b4682",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "proposals",
-    "summary": "Record approved design reset and requirements audit"
-  },
-  {
-    "hash": "99a9ea0",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Include voting status safeguard"
-  },
-  {
-    "hash": "7560540",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "voting",
-    "summary": "Refresh proposal hero after saving a vote"
-  },
-  {
-    "hash": "a17770f",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record proposal participation redesign"
-  },
-  {
-    "hash": "fc8d130",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Connect policy reading with voting and simplify discovery"
-  },
-  {
-    "hash": "dede16c",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record proposal experience changes"
-  },
-  {
-    "hash": "1c13678",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Simplify discovery and expose ballot progression"
-  },
-  {
-    "hash": "50a7710",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "agents.md",
-    "summary": "Enhance AGENTS.md with more bounded structure for Coding agents working on the repository"
-  },
-  {
-    "hash": "d619b8f",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record audited platform settings"
-  },
-  {
-    "hash": "5bb7e82",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add audited platform settings and branch hierarchy validation",
-    "details": "Replace the raw JSON platform settings form with a task-based settings workspace. Administrators can manage visibility, public features, social channels and the branch website directory, with server-side URL validation, read-only infrastructure notes and a recorded change history that supports restoring earlier values. Enforce branch parent kinds on the server so states and territories sit under National and local branches sit under a state or territory. Add coverage for the settings API, audit history, restore behaviour and branch hierarchy rules."
-  },
-  {
-    "hash": "b808f0b",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record durable migrations and branch seed"
-  },
-  {
-    "hash": "e2137a5",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add durable database migrations and standard branch seed",
-    "details": "Add Admin -> Migrations for national administrators. The page previews each additive migration, shows the last recorded run and any error, and applies Standard branches or Branch participation individually or in order. Every run is recorded in data_migrations with run count, timestamps, actor and result. Standard branches is an idempotent seed for Fusion National, VIC, NSW, QLD, WA, SA, TAS, ACT and NT with National as parent; existing branches are never renamed, re-parented or un-recognised. Branch participation remains blocked until the National branch exists. The command-line seed now uses the same service, and the participation migration remains available for deployment automation."
-  },
-  {
-    "hash": "b980369",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record branch participation and verification"
-  },
-  {
-    "hash": "a727732",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Separate branch following from verified membership",
-    "details": "Members choose the branches they follow during onboarding and in My Engage. Authorised administrators verify followers as members in a focused Branch governance workspace. Branch subscriptions are now Engage-owned preferences, while verified organisational membership stays in branch_memberships with source, verification and audit metadata. National governance is included for every verified account and never removed by branch preferences. Existing members without branch connections receive national scope silently and a one-time state branch invitation. Eligibility is decided in one service used by proposal pages, ballot submission, pending-vote promotion and digests. Followers can discover branch activity but cannot vote. Revocation requires a reason and preserves historical votes and the person's following preference. The migration backfills legacy membership metadata, adds subscriptions without duplicating them, assigns open proposals without branch context to national governance, and leaves branch-owned and archived records untouched. The Underground CRM boundary is implemented through applyExternalMembership: external membership facts can update organisational membership but never branch subscriptions, and local administrators cannot silently override CRM-sourced records. Tests cover national defaults, follow/unfollow idempotency, source integrity, permissions, migration, parent/child eligibility and new proposal defaults."
-  },
-  {
-    "hash": "ba482d0",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the member engagement admin repair"
-  },
-  {
-    "hash": "34166c8",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Repair proxy test sends and clarify admin delivery reporting",
-    "details": "Use JSON and the configured public origin to prevent the reverse proxy from rejecting admin test email before provider submission. Separate explicit provider rejection from uncertain sends, expose safe self-only receipts, and keep test bounces isolated from member preferences. Replace raw engagement reporting with responsive cards, period controls, a read-only audience preview and expandable diagnostics. Historical ballot opportunity coverage remains explicitly unavailable. Validation: 144 tests passed, 15 optional tests skipped; Astro check and build passed; mocked-provider HTTP and DOM interaction checks passed. Browser screenshots and authenticated production delivery remain blocked and are documented."
-  },
-  {
-    "hash": "69ca17a",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record passing lifecycle checks and campaign review materials"
-  },
-  {
-    "hash": "8d457fc",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "email",
-    "summary": "Keep verification notices within narrow mobile screens"
-  },
-  {
-    "hash": "300966c",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "member",
-    "summary": "Let administrators inspect the proposed re-engagement audience"
   }
 ]
