@@ -15,7 +15,8 @@ This page records the model, the consent rules, the data handling and what is de
 - A submitter chooses publication channels (website, social, email, print), whether to be named, whether ordinary edits are allowed, and separately whether AI-assisted photo edits are allowed. All channels may be left unselected, which means private consultation only.
 - Every contribution lands in a private review queue at `/admin/collaboration/`. A reviewer records `new`, `needs follow-up`, `approved`, `declined` or `withdrawn`.
 - Approval is not publication. Where an approved contribution is actually used is recorded separately, per permitted channel, with a reference.
-- Approved material is handed to the website team by downloading a JSON export. There is no CMS integration yet.
+- Stories approved for the **website** channel appear on a public gallery at `/collaborate/<slug>/stories/`. A reviewer can hide a story from the gallery without withdrawing it.
+- Approved material is also handed to the website team by downloading a JSON export. There is no CMS integration yet.
 
 An Engage account and Fusion party membership are separate things, and neither is required here. A contribution creates no account, no membership and no branch affiliation. A contributor who later creates an account is offered an optional next step, not a condition of contributing.
 
@@ -53,7 +54,7 @@ Creating an invitation and opening it are separate decisions: creation always pr
 
 Contribution states, set by a reviewer with `collaboration.review`:
 
-`new` → `needs_follow_up` → `approved` or `declined`, and any state → `withdrawn`. Each change writes a `collaboration_events` row with the actor, from/to status, time and optional note. A contribution is never deleted by a status change; withdrawal keeps the record and the audit trail.
+`new` → `needs_follow_up` → `approved` or `declined`, and any state → `withdrawn`. An approved story can be hidden from or returned to the public gallery without changing its status. Each change writes a `collaboration_events` row with the actor, from/to status, time and optional note. A contribution is never deleted by a status change; withdrawal keeps the record and the audit trail.
 
 `needs_follow_up` writes a message intended for the contributor. Nothing is emailed automatically, so the reviewer sends it through the contact address the contributor supplied. The review screen says so.
 
@@ -90,6 +91,7 @@ Photographs:
 - Metadata segments are removed before storage: EXIF, XMP and JPEG comments; PNG `tEXt`, `zTXt`, `iTXt` and `eXIf`. Pixels are not altered.
 - Bytes are stored in a separate collection and are reachable only through `/api/admin/collaboration/media/<mediaId>`, which requires `collaboration.review`. There is no public image route.
 - The list read never selects image bytes.
+- The public gallery route re-checks approval, website consent, profile and hidden state on every request, so no published copy survives withdrawal.
 - Withdrawal deletes the story text, name, reply address and photographs immediately, keeping only the review record and its date. Declined material is cleared 90 days after the decision, and an approved reply address is cleared after 12 months. `npm run collaboration:retention` reports what is due and `--apply` performs it.
 
 Abuse protection:
@@ -129,7 +131,6 @@ Review contributions at `/admin/collaboration/`, record uses, and download the a
 
 - Claiming a contribution after creating an account. Contribution never requires one.
 - Self-service withdrawal. A contributor keeps an eight-character reference and emails the correction address; reviewers can find the record by that reference.
-- A public gallery of approved stories or photographs.
 - An approval step for a specific AI-edited derivative, and the production-image policy decision behind it. The application records permission; it does not perform or approve edits.
 - Horizon CMS integration. Hand-off is a manual export.
 - Funnel analytics from arrival to submission. No event is emitted today.
@@ -143,4 +144,5 @@ Review contributions at `/admin/collaboration/`, record uses, and download the a
 - `src/lib/collaboration-matter.test.ts`: the governance capability and stage refusals.
 - Retention coverage in `src/lib/collaboration.test.ts`: withdrawal clears material at once, the sweep is dry by default and only clears past its window, and an approved reply address is cleared after a year.
 - `src/lib/collaboration-mongo.test.ts`: real MongoDB coverage for unique references, version concurrency, BSON media round-trip and export isolation. Run with `VOTING_TEST_MONGODB_URI` set.
-- Rendered journeys on 17 November 2026, in a production build against MongoDB: a guest submits a story with a photograph (201) and sees the success screen with a reference; a private-only response is accepted as consultation input; a second invitation is created as a draft (public page 404), opened (200) and archived (404); review notes survive a reload and a later status change; the media route returns 401 without a reviewer session; desktop and 390 px mobile layouts have no horizontal overflow and no console or request errors.
+- Rendered journeys on 17 November 2026, in a production build against MongoDB: a guest submits a story with a photograph (201) and sees the success screen with a reference; a private-only response is accepted as consultation input; a second invitation is created as a draft (public page 404), opened (200) and archived (404); review notes survive a reload and a later status change; the private media route returns 401 without a reviewer session; desktop and 390 px mobile layouts have no horizontal overflow and no console or request errors.
+- Gallery journeys: an approved website story appears with the chosen credit and photograph; hiding it removes it from the gallery and its media route returns 404; restoring it brings both back; withdrawal removes it permanently. Written consultation responses never appear.

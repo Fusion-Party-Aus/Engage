@@ -238,7 +238,8 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 - there is no derivative-approval step for an AI-edited photograph, and the production-image policy for edited photographs is undecided;
 - withdrawal is requested by email to the invitation's correction address, actioned by a reviewer; there is no self-service path and no automated receipt;
 - no funnel analytics are emitted, and no contributor email is sent automatically;
-- approved material reaches Horizon only through a manual JSON export.
+- the public gallery is a simple list with no moderation queue for reported content, no paging beyond 60 stories and no Horizon CMS integration;
+- approved material reaches Horizon through the public gallery or a manual JSON export.
 
 **Direction:** settle the legal and image-policy questions before promoting the invitation publicly. Do not describe a contribution as a verified membership testimonial.
 

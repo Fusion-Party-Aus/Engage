@@ -71,6 +71,10 @@ Permission for AI-assisted edits is off by default and separate from ordinary ed
 - Show the derivative to the contributor and get approval before any public use, when a reply address exists. If there is no reply address, do not use an AI-assisted derivative.
 - Mark an AI-assisted derivative in internal notes and in the hand-off export record.
 
+## The public gallery
+
+An approved story appears on the invitation's public gallery only when the contributor allowed the website channel. Credit follows their choice; "no name" means no name is stored or printed, though a photograph may still identify them. Hide a story from the gallery if a question arises, rather than withdrawing it, when the material may still be used elsewhere. Hiding and restoring are reviewer actions with an audit trail. Written consultation responses are never published individually.
+
 ## Publishing and recording use
 
 - Use approved material only in the channels the contributor selected. The review screen refuses any other channel.
