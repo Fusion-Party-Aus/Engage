@@ -236,14 +236,14 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 **Still open before public launch:**
 
 - the privacy policy now describes this purpose, account linking and the aggregate counts (version 1.6) but remains owner-authorised with legal review outstanding;
-- the correction inbox, escalation path and monthly retention sweep have no named owner or backup; see [collaboration pilot operations](collaboration-pilot-operations.md);
+- the correction inbox, escalation path and monthly retention sweep can now be assigned at `/admin/collaboration/operations/`, but no people are assigned yet; see [collaboration pilot operations](collaboration-pilot-operations.md);
 - the credit format is not decided, and a single caption may not describe several individual photographs well enough;
 - there is no derivative-approval step for an AI-edited photograph, and the production-image policy for edited photographs is undecided;
 
 - invitation interest counts are aggregate events, not people, and an account step is not a registration; there is no per-channel or per-source attribution;
 - no contributor email is sent automatically;
-- the public gallery is a simple list with no moderation queue for reported content, no paging beyond 60 stories and no Horizon CMS integration;
-- Horizon consumes an authenticated feed or a manual JSON export. A simulated consumer passes the contract, but no production Horizon deployment has polled the feed yet, and there is no direct CMS write.
+- the public gallery is a simple list with no moderation queue for reported content and no paging beyond 60 stories;
+- approved material reaches Horizon through a manual JSON export. Consumer-neutral external synchronisation, including corrections, hiding and withdrawal, is tracked in #157 and is not implemented.
 
 **Direction:** settle the legal and image-policy questions before promoting the invitation publicly. Do not describe a contribution as a verified membership testimonial.
 

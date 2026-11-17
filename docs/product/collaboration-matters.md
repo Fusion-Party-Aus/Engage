@@ -99,6 +99,15 @@ A signed-in member who holds a contribution's private link can choose to link it
 - A contribution can be linked to one account. A second account is refused.
 - A linked story appears on the member's public profile at `/members/<id>/` only while it is public in the gallery. Hiding or withdrawing it removes it from the profile at the same time. Unpublished or unapproved linked material never appears, and the profile shows the same excerpt and credit the gallery shows.
 
+## Operational ownership
+
+The people responsible for corrections, continuity and the retention sweep are an administrator setting at `/admin/collaboration/operations/`, not a deployment value or a document.
+
+- Fields: primary owner, backup owner, retention sweep owner, correction address and escalation details.
+- Only `collaboration.manage` can change them, and every save is audited with before/after values.
+- The page shows whether the roster is complete. Public promotion stays gated until it is.
+- Changing personnel needs no deployment.
+
 ## Aggregate interest counts
 
 Each invitation records four events so an editor can see where people stop:
@@ -173,7 +182,7 @@ Review contributions at `/admin/collaboration/`, record uses, and download the a
 
 - Self-service withdrawal. A contributor keeps an eight-character reference and emails the correction address; reviewers can find the record by that reference.
 - An approval step for a specific AI-edited derivative, and the production-image policy decision behind it. The application records permission; it does not perform or approve edits.
-- Horizon CMS integration. Hand-off is a manual export.
+- External publication synchronisation beyond the JSON export. Corrections, hiding and withdrawal do not propagate to another system; this is tracked in #157.
 - Funnel analytics from arrival to submission. No event is emitted today.
 - Automated contributor email, including a withdrawal receipt.
 - Approval of the safeguards draft: the minors rule, credit format, removal timeframes and retention periods. The privacy policy now describes this purpose and the aggregate counts (version 1.4) but remains owner-authorised and unreviewed, so it must not be published as legally cleared.
@@ -186,8 +195,7 @@ Review contributions at `/admin/collaboration/`, record uses, and download the a
 - Retention coverage in `src/lib/collaboration.test.ts`: withdrawal clears material at once, the sweep is dry by default and only clears past its window, and an approved reply address is cleared after a year.
 - `src/lib/collaboration-mongo.test.ts`: real MongoDB coverage for unique references, version concurrency, BSON media round-trip and export isolation. Run with `VOTING_TEST_MONGODB_URI` set.
 - Rendered journeys on 17 November 2026, in a production build against MongoDB: a guest submits a story with a photograph (201) and sees the success screen with a reference; a private-only response is accepted as consultation input; a second invitation is created as a draft (public page 404), opened (200) and archived (404); review notes survive a reload and a later status change; the private media route returns 401 without a reviewer session; desktop and 390 px mobile layouts have no horizontal overflow and no console or request errors.
-- Horizon feed check: an unconfigured feed returns 503, a wrong token 401, and a valid token returns only the published website story, without reply addresses or internal fields; hiding the story removes it from the next poll; `since` and the entity tag behave incrementally.
-- Simulated Horizon consumer on 17 November 2026: `npm run horizon:smoke` reported `unauthorised 401`, `authorised 200`, one story, `contractErrors 0`, `notModified 304`, a 200 image of 3,486 bytes and `incrementalStories 0`. This observes the feed from a consumer, not a real Horizon deployment.
 - Gallery journeys: approving a website story leaves it out of the gallery; publishing it shows the chosen credit and photograph; hiding removes it and its media route returns 404; showing brings both back with the original publication date; withdrawal removes it permanently. Written consultation responses never appear. Screenshots and the environment note are in [gallery evidence](../status/evidence/collaboration-gallery/README.md).
 - Funnel journeys: a page arrival, first form interaction and successful submission each increment their stage once; the editor's 30-day panel shows the counts and conversions; the stored row contains only invitation, day, stage, count and expiry.
+- Operational-owner setting: the page started unassigned, three member pickers and the contact fields saved, the roster showed as assigned, the values survived a reload, recent changes were recorded, and the queue links to the page. No console errors.
 - Contributor management journey: a signed-in member can optionally link the contribution after ticking consent, the link survives a reload and shows in the review queue, and a published linked story appears in a "Published stories" section on the member profile with a link to its gallery anchor. Hiding the story removes it from the profile, and unlinking removes it while keeping the contribution. Claiming changes neither publication nor management authority. The success screen offers a private link whose token stays in the URL fragment; the link shows the contribution and status; removing from the gallery takes effect immediately; a correction returns the story to review and off the gallery; withdrawal deletes the material and invalidates the link. No request URL contained the token during the check.

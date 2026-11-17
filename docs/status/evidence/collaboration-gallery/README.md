@@ -16,6 +16,7 @@ These screenshots show the public gallery, the explicit publication step and the
 | `manage-withdrawn.jpg` | The same link after withdrawal: the material is gone, the link has stopped working, and the page is explicit that copies outside Engage cannot be recalled. |
 | `manage-linked.jpg` | A signed-in contributor after optionally linking the contribution to their Engage account, with the unlink action available. |
 | `profile-story.jpg` | A member profile showing a linked, published story with its excerpt and a link to the gallery anchor. Hiding the story removes this section. |
+| `owners-assigned.jpg` | The operational-owner setting after assigning a primary owner, backup, retention owner, correction address and escalation details. The page confirms the roster is assigned and keeps recent changes. |
 
 Verified in the same run: the public media route returned 200 while published and 404 once hidden or withdrawn; the image alt text read "Photograph 1 of 1 shared by Gallery Person"; the console and request log contained no errors from the gallery or interest endpoints.
 

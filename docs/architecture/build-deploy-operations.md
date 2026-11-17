@@ -25,7 +25,6 @@ Configuration is read through `runtimeEnv(locals)` and typed as `PlatformEnv`. `
 |---|---|
 | Runtime | `APP_MODE`, `PUBLIC_ORIGIN`, `BETTER_AUTH_URL`, `SESSION_SECRET` |
 | Database | `MONGODB_URI`, `MONGODB_DB_NAME`, initial Mongo credentials for Compose |
-| Horizon feed | `HORIZON_FEED_TOKEN`, a bearer credential for the read-only story feed. Empty switches the feed off. |
 | Auth | `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 | Email | `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, `RESEND_WEBHOOK_SECRET` |
 | Jobs | `ENGAGE_CRON_SECRET`, `ENGAGE_EMAIL_SECRET` |
