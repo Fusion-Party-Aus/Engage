@@ -1,5 +1,21 @@
 [
   {
+    "hash": "a6b4168",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "settings",
+    "summary": "Tie-break site settings events by insertion order"
+  },
+  {
+    "hash": "3453e65",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record database initialisation change (#136)"
+  },
+  {
     "hash": "602ec11",
     "date": "2026-11-17",
     "type": "perf",
@@ -668,21 +684,5 @@
     "category": "feature",
     "scope": "member",
     "summary": "Let administrators inspect the proposed re-engagement audience"
-  },
-  {
-    "hash": "9e72e64",
-    "date": "2026-11-09",
-    "type": "test",
-    "category": "ops",
-    "scope": "member",
-    "summary": "Capture desktop and mobile lifecycle states in isolated CI"
-  },
-  {
-    "hash": "71a61de",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ci",
-    "summary": "Run MongoDB regressions on a compatible Ubuntu runner"
   }
 ]
