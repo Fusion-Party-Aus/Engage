@@ -9,7 +9,7 @@ import {
   revokeBranchMember,
   verifyBranchMember,
 } from "../../../../lib/branch-participation.ts";
-import { listMembers } from "../../../../lib/store.ts";
+import { listMembers } from "../../../../lib/members-store.ts";
 
 export const prerender = false;
 

@@ -4,7 +4,7 @@ import { getSessionUser } from "../../../../lib/auth.ts";
 import { privateJson, toRatifiedPolicyDto } from "../../../../lib/api-contracts.ts";
 import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { requireApiPermission } from "../../../../lib/rbac.ts";
-import { isGovernanceResolution } from "../../../../lib/store.ts";
+import { isGovernanceResolution } from "../../../../lib/proposal-helpers.ts";
 import {
   applyRatifiedPolicyChange,
   isPolicyChangeType,

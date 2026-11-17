@@ -8,7 +8,7 @@ import {
   LIFECYCLE_SYSTEM_ACTOR,
   scheduledBallotClosesAtFrom,
 } from "./lifecycle-schedule.ts";
-import { secondProposal } from "./store.ts";
+import { secondProposal } from "./proposals-store.ts";
 import type { SessionUser } from "./types.ts";
 import { proposalBallotId } from "./vote-storage.ts";
 

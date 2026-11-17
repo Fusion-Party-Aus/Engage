@@ -10,12 +10,8 @@ import {
 import { BALLOT_RESULTS_BALLOT_INDEX } from "./ballot-results-index-migration.ts";
 import { GOVERNANCE_EVENTS_COLLECTION } from "./governance-relationships.ts";
 import { resolveLegacyPermissions } from "./rbac.ts";
-import {
-  ProposalDeletionConflictError,
-  castVote,
-  deleteProposal,
-  saveProposal,
-} from "./store.ts";
+import { ProposalDeletionConflictError, deleteProposal, saveProposal } from "./proposals-store.ts";
+import { castVote } from "./voting-store.ts";
 import type { SessionUser } from "./types.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 

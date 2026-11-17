@@ -15,7 +15,7 @@ import {
   applyOpenBallotExpiryMigration,
   previewOpenBallotExpiryMigration,
 } from "./ballot-expiry-migration.ts";
-import { castVote } from "./store.ts";
+import { castVote } from "./voting-store.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 import type { SessionUser } from "./types.ts";
 

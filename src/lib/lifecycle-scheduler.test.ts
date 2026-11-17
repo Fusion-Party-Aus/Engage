@@ -23,12 +23,8 @@ import {
   scheduledBallotClosesAtFrom,
 } from "./lifecycle-schedule.ts";
 import { resolveLegacyPermissions } from "./rbac.ts";
-import {
-  ProposalSecondingError,
-  castVote,
-  saveProposal,
-  secondProposal,
-} from "./store.ts";
+import { ProposalSecondingError, saveProposal, secondProposal } from "./proposals-store.ts";
+import { castVote } from "./voting-store.ts";
 import type { SessionUser } from "./types.ts";
 import { PROPOSAL_VOTES, proposalBallotId } from "./vote-storage.ts";
 

@@ -16,7 +16,11 @@ import {
 import { canIncludeProposalInAdminReport } from '../../lib/admin-reporting.ts';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { isGovernanceResolution, isPolicyRegistryRecordForResolution, listProposals } from '../../lib/store.ts';
+import {
+  isGovernanceResolution,
+  isPolicyRegistryRecordForResolution,
+} from '../../lib/proposal-helpers.ts';
+import { listProposals } from '../../lib/proposals-store.ts';
 import { buildBallotProgressRows } from '../../lib/admin-reporting.ts';
 import ParticipationPanel from '../../components/admin/ParticipationPanel.astro';
 import { Button } from '../../components/ui/button';
