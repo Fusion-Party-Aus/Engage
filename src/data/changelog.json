@@ -1,21 +1,66 @@
 [
   {
-    "hash": "38f7961",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "profiles",
-    "summary": "Harden partial updates and CRM id collisions",
-    "details": "Write only the profile fields supplied by a partial update and return the persisted values, so a biography-only save cannot restore an older visibility choice. Refuse to publish a CRM person id that collides with another member id, and return 404 for an ambiguous path instead of rendering the wrong person. When profile settings fail to load, disable the form and show an error rather than defaulting visibility to public. Add coverage for partial updates and the 24-hex collision case. Refs #113"
+    "hash": "5a087b0",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "agents",
+    "summary": "Require new features to be configurable by default",
+    "details": "Add a standing rule: editor-facing wording, questions and options belong in stored configuration, while permissions, consent vocabulary and security bounds stay in reviewed code. Refs #143"
   },
   {
-    "hash": "84d9c73",
-    "date": "2026-11-16",
-    "type": "chore",
+    "hash": "8ca0dbc",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record the matter model and launch obligations",
+    "details": "Describe the collaboration Matter, its consent and data handling, what editors can change without code, and the legal and image-policy gaps that must close before the invitation is promoted publicly. Refs #143"
+  },
+  {
+    "hash": "869f76e",
+    "date": "2026-11-17",
+    "type": "test",
     "category": "ops",
-    "scope": "changelog",
-    "summary": "Record profile visibility after merging main",
-    "details": "Regenerate the snapshot on the merged branch and preserve older entries outside the generator's window. Refs #113"
+    "scope": "collaboration",
+    "summary": "Cover guest intake, consent and private media",
+    "details": "Prove the guest path needs no account, consent cannot be widened from the client, private-only contributions cannot be approved, an anonymous name is never stored, concurrency cannot overwrite a decision, and image bytes stay private and metadata-free. Real-MongoDB cases cover unique references, version writes and the BSON media round trip. Refs #143"
+  },
+  {
+    "hash": "8cb56f8",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "admin",
+    "summary": "Add the story review queue and invitation editor",
+    "details": "Reviewers see each contribution with its answers, private photographs and consent summary, then record a decision, a note and where an approved item was used. Editors own the invitation wording, questions and open state without a deployment; question keys stay stable so earlier answers remain attached. Refs #143"
+  },
+  {
+    "hash": "c86bcd2",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish the story invitation and contribution form",
+    "details": "Add /collaborate/ and /collaborate/<slug>/ where anyone can read the invitation and send story answers, photographs, or both without an account or party membership. The form asks for publication channels, credit, edit and AI-edit permission and an optional reply address before sending, keeps every answer when a submission fails, and never claims publication has happened. Refs #143"
+  },
+  {
+    "hash": "a11c60d",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Model public story matters and guest intake",
+    "details": "Register a collaboration Matter type with no governance capability and no lifecycle stage, so a public invitation can never be deliberated, balloted, amended, ratified or published as policy. Add guest submission with a versioned consent scope, private media storage, metadata stripping for JPEG and PNG, reviewer-only permissions, and a durable rate limit plus Turnstile action for the public form. Refs #143"
+  },
+  {
+    "hash": "2767fcc",
+    "date": "2026-11-16",
+    "type": "feat",
+    "category": "feature",
+    "scope": "profiles",
+    "summary": "Add profile visibility and CRM identifier seam (#121)",
+    "details": "* feat(profiles): add profile visibility and CRM identifier seam Let owners hide their public profile; other viewers and visitors receive 404 and author links are suppressed, while the owner keeps a preview. Extend the profile settings route to update biography and visibility together. Add an opt-in CRM identifier seam: with ENGAGE_PROFILE_CRM_IDENTIFIERS=on, an active CRM identity link becomes the canonical profile path and legacy member-id paths redirect with 301; the lookup is local and off by default. Add coverage for both behaviours and verify the visibility control in the browser harness. Refs #113 * docs(profiles): document profile visibility and CRM redirect Record the owner visibility switch, hidden-profile 404 and link suppression, the opt-in CRM identifier seam and its 301 behaviour, initials-only avatars, the absent self-service account deletion, and the display-only comment score. Refs #113 * chore(changelog): record profile visibility and CRM redirect Refresh the public changelog for the owner visibility switch and the opt-in CRM identifier seam, preserving older entries outside the generator's 80-commit window. Refs #113 * chore(changelog): record profile visibility after merging main Regenerate the snapshot on the merged branch and preserve older entries outside the generator's window. Refs #113 * fix(profiles): harden partial updates and CRM id collisions Write only the profile fields supplied by a partial update and return the persisted values, so a biography-only save cannot restore an older visibility choice. Refuse to publish a CRM person id that collides with another member id, and return 404 for an ambiguous path instead of rendering the wrong person. When profile settings fail to load, disable the form and show an error rather than defaulting visibility to public. Add coverage for partial updates and the 24-hex collision case. Refs #113 * chore(changelog): record profile hardening fixes Refresh the snapshot for the partial-update and CRM-collision fixes. Refs #113"
   },
   {
     "hash": "b8320aa",
@@ -25,33 +70,6 @@
     "scope": "proposals",
     "summary": "Paginate the public list and add a display-only tally projection (#52) (#112)",
     "details": "* feat(ballots): project display-only tallies after a committed vote Public list pages (/ and /proposals/) tallied every vote and decrypted every encrypted ballot just to show a count. Add a display-only ballot_tallies row per (ballotId, revisionId), written best-effort after the vote transaction commits. The projection is never authoritative: recordFormalDecision keeps recomputing the outcome from the bound votes and does not read it. A failed or slow projection write is logged as an operational event and cannot fail, delay or alter the vote. Vote changes decrement the previous choice and increment the new one, a re-cast of the same choice is a no-op, and rows are revision-scoped. The row stores counts and a timestamp only: no member id, choice, reason or envelope. listProposals can now omit vote tallies so public reads never touch proposal_votes; the web pages overlay certified results and the projection in the next commit. Adds the unique compound index to initializeDatabase and a rebuild/repair path for the CLI. Refs #52 * perf(proposals): paginate the public list and stop scanning ballots /proposals/ loaded every proposal, applied search, stage, branch and sort in the page, and decrypted every vote for the row totals. It now reads a bounded display page of 25 rows from MongoDB with server-side pagination. - Page, total, page count and range are computed from the filtered set; invalid or out-of-range pages clamp; ties order deterministically by proposal id. - Links keep q, stage, branch, space, sort, focus and joined; changing a filter starts at page 1. Pagination uses the Button primitive with previous/next and a live range status. - Each page self-references its canonical address and emits rel=prev/rel=next. The repository has no noIndex convention for parameterised lists, so pages stay indexable with a self-canonical rather than inventing one. - Rows no longer read proposal_votes. A certified ballot shows the tally stored on ballot_results; otherwise a fresh ballot_tallies row is used; a missing or stale row shows \"Voting open — tally updating\" with a link to the matter. - / overlays the same projection on the register it already reads, so home no longer decrypts votes either. Matters without a trustworthy aggregate are left out of the highlights rather than showing a wrong percentage. Visibility is still decided by canViewProposal and re-checked after the coarse MongoDB pre-filter; eligibility, ballot binding and deadlines are untouched. Refs #52 * feat(scripts): rebuild the ballot tally projection from votes Add npm run ballots:tally-projection. It reports missing, mismatched and orphan projection rows against the votes they should represent, and with --apply rebuilds them. It never deletes, edits or rewrites a vote and never certifies a result. Dry run is the default; --verify exits non-zero when rows need repair; an explicit --database is required; production writes additionally require --allow-production and --confirm-production engage_production. Encrypted votes need the ballot keys and the tool refuses to write a partial tally without them. Refs #52 * fix(proposals): keep the active stage tab and certified tallies correct The parsed stage is now '' rather than 'all' for an unfiltered list, so the All tab has to compare against '' to stay marked current. A certified result is authoritative even when the matter no longer carries a ballotRevisionId (for example after a zero-vote unbind). Resolve certified results by every visible matter's ballot, not only those with a current binding, so the row shows the recorded tally instead of falling back to no tally. Refs #52 * docs(status): record public list pagination and the tally projection Adds the before/after harness snapshots for / and /proposals/ (before 57402f0, after 65ace21) and records what changed: 25-row server pagination with filter preservation and canonical/rel links, a display-only ballot_tallies projection, certified tallies from ballot_results, and a neutral tally-updating state for missing or stale rows. The profiler window records 3 -> 0 proposal_votes operations on /proposals/ and 6 -> 0 on /, with getMore batches falling from three to one on every measured public page. Reports the /proposals/ HTML increase honestly: it renders 25 rows instead of 15 at the specified page size, not extra markup per row. Updates I12 and S4, notes the detail page's remaining live tally and the deployment step to backfill the projection, and adds the new collection and CLI to the architecture docs. Refs #52 * fix(ballots): move a re-bound amendment tally to the right revision row An amendment ballot can be re-bound to a newer wording revision. A member who had already voted on the previous revision casts again on the new one, so the previous count belongs to the old row, not the new row. The projection now learns the revision the previous vote was bound to and recounts both rows from their votes instead of applying a delta to the wrong row. Main matter ballots cannot reach this path: castVote refuses a ballot whose existing votes are not all bound to its current revision. Adds a projection test for the move. Refs #52 * docs(status): correct the public-list suite count The final run includes the revision-move projection test: 655 tests, 0 fail. Refs #52 * chore(changelog): record public list pagination and the tally projection Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52 * fix(ballots): make tally projection writes atomic under concurrency The projection's first-vote path read the votes and wrote absolute counts when no row existed. A concurrent increment could land between that read and write, or after it, double counting; the full suite exposed it as an extra abstain. The normal path is now one atomic upsert increment, so a first vote creates the row and counts it in a single operation. Two concurrent first votes can no longer each create a row or lose one. A write conflict from a transactional revision move retries inside the deadline. The only remaining recount is for an unreadable prior vote and the repair CLI. It is compare-and-set guarded on an internal version token and bounded by a watermark recorded in appliedThrough, so an increment for a vote the recount already included is skipped, and an increment that landed first forces a fresh recount. The deadline is enforced before each write (and with maxTimeMS on the recount), so a timed-out rebuild leaves the row for the repair CLI instead of writing a stale absolute count. A revision move is two transactional deltas on the old and new rows, not a recount. A row whose counts are negative or do not sum to its total is never displayed; it reads as tally pending until repaired. Tests: many concurrent first votes, concurrent vote changes and a concurrent revision move each equal the authoritative tally; ten rebuild-versus-increment races; a recorder that a timed-out rebuild writes nothing; and the public list treating an inconsistent row as pending. Refs #52 * docs(status): record the race-safe projection write strategy Replaces the read-then-write description with the atomic strategy: an upsert increment for normal votes, transactional deltas for a revision move, and a compare-and-set recount bounded by a watermark and deadline for the last-resort path. Records that an internally inconsistent row is displayed as pending, the residual out-of-order watermark caveat, the concurrency tests and both full suite results. Refs #52 * chore(changelog): record the race-safe tally projection writes Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52 * chore(changelog): record public read models after merging main"
-  },
-  {
-    "hash": "867c5a9",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record profile visibility and CRM redirect",
-    "details": "Refresh the public changelog for the owner visibility switch and the opt-in CRM identifier seam, preserving older entries outside the generator's 80-commit window. Refs #113"
-  },
-  {
-    "hash": "b5cf2ca",
-    "date": "2026-11-16",
-    "type": "docs",
-    "category": "docs",
-    "scope": "profiles",
-    "summary": "Document profile visibility and CRM redirect",
-    "details": "Record the owner visibility switch, hidden-profile 404 and link suppression, the opt-in CRM identifier seam and its 301 behaviour, initials-only avatars, the absent self-service account deletion, and the display-only comment score. Refs #113"
-  },
-  {
-    "hash": "d593a12",
-    "date": "2026-11-16",
-    "type": "feat",
-    "category": "feature",
-    "scope": "profiles",
-    "summary": "Add profile visibility and CRM identifier seam",
-    "details": "Let owners hide their public profile; other viewers and visitors receive 404 and author links are suppressed, while the owner keeps a preview. Extend the profile settings route to update biography and visibility together. Add an opt-in CRM identifier seam: with ENGAGE_PROFILE_CRM_IDENTIFIERS=on, an active CRM identity link becomes the canonical profile path and legacy member-id paths redirect with 301; the lookup is local and off by default. Add coverage for both behaviours and verify the visibility control in the browser harness. Refs #113"
   },
   {
     "hash": "72c1cd4",
@@ -662,139 +680,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record notification preferences and digest rollout defaults"
-  },
-  {
-    "hash": "bc6409f",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "notifications",
-    "summary": "Separate email preferences and explain rollout defaults",
-    "details": "Enable digests by default for a fixed cohort of existing accounts while requiring new accounts to opt in. Preserve opt-outs and suppressions. Add My Engage Notifications with independent account, Engage digest and general communication preferences, onboarding controls, category-scoped unsubscribe tracking and accurate email explanations."
-  },
-  {
-    "hash": "79d916a",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Reconcile delivery backlogs before sending reminders",
-    "details": "Handle webhook batches beyond 500 events, age out unrelated provider mail, preserve explicit null deadlines in scheduling guards, and refresh the public changelog snapshot."
-  },
-  {
-    "hash": "7a56a95",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "engagement",
-    "summary": "Add proposal rankings, ballot deadlines and member reminders",
-    "details": "Add Horizon-styled opt-in ballot digests, signed unsubscribe and delivery webhooks, aggregate email reporting, and My Engage closing-soon and participation follow-through views. Include the audited one-time schedule for current ballots to close at the end of 24 December 2026 Melbourne time."
-  },
-  {
-    "hash": "0b8b375",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "settings",
-    "summary": "Save the configured source repository URL"
-  },
-  {
-    "hash": "fcd2e5b",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the race-safe tally projection writes",
-    "details": "Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52"
-  },
-  {
-    "hash": "636adee",
-    "date": "2026-11-16",
-    "type": "docs",
-    "category": "docs",
-    "scope": "status",
-    "summary": "Record the race-safe projection write strategy",
-    "details": "Replaces the read-then-write description with the atomic strategy: an upsert increment for normal votes, transactional deltas for a revision move, and a compare-and-set recount bounded by a watermark and deadline for the last-resort path. Records that an internally inconsistent row is displayed as pending, the residual out-of-order watermark caveat, the concurrency tests and both full suite results. Refs #52"
-  },
-  {
-    "hash": "62a467f",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ballots",
-    "summary": "Make tally projection writes atomic under concurrency",
-    "details": "The projection's first-vote path read the votes and wrote absolute counts when no row existed. A concurrent increment could land between that read and write, or after it, double counting; the full suite exposed it as an extra abstain. The normal path is now one atomic upsert increment, so a first vote creates the row and counts it in a single operation. Two concurrent first votes can no longer each create a row or lose one. A write conflict from a transactional revision move retries inside the deadline. The only remaining recount is for an unreadable prior vote and the repair CLI. It is compare-and-set guarded on an internal version token and bounded by a watermark recorded in appliedThrough, so an increment for a vote the recount already included is skipped, and an increment that landed first forces a fresh recount. The deadline is enforced before each write (and with maxTimeMS on the recount), so a timed-out rebuild leaves the row for the repair CLI instead of writing a stale absolute count. A revision move is two transactional deltas on the old and new rows, not a recount. A row whose counts are negative or do not sum to its total is never displayed; it reads as tally pending until repaired. Tests: many concurrent first votes, concurrent vote changes and a concurrent revision move each equal the authoritative tally; ten rebuild-versus-increment races; a recorder that a timed-out rebuild writes nothing; and the public list treating an inconsistent row as pending. Refs #52"
-  },
-  {
-    "hash": "974e68d",
-    "date": "2026-11-16",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record public list pagination and the tally projection",
-    "details": "Regenerates the public snapshot from this branch's history. The generator's fixed 80-commit window drops the oldest entries, which is the pre-existing truncation tracked in #96, not a decision in this slice. Refs #52"
-  },
-  {
-    "hash": "fba31bc",
-    "date": "2026-11-16",
-    "type": "docs",
-    "category": "docs",
-    "scope": "status",
-    "summary": "Correct the public-list suite count",
-    "details": "The final run includes the revision-move projection test: 655 tests, 0 fail. Refs #52"
-  },
-  {
-    "hash": "8b15d5a",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "ballots",
-    "summary": "Move a re-bound amendment tally to the right revision row",
-    "details": "An amendment ballot can be re-bound to a newer wording revision. A member who had already voted on the previous revision casts again on the new one, so the previous count belongs to the old row, not the new row. The projection now learns the revision the previous vote was bound to and recounts both rows from their votes instead of applying a delta to the wrong row. Main matter ballots cannot reach this path: castVote refuses a ballot whose existing votes are not all bound to its current revision. Adds a projection test for the move. Refs #52"
-  },
-  {
-    "hash": "e66a1c4",
-    "date": "2026-11-16",
-    "type": "docs",
-    "category": "docs",
-    "scope": "status",
-    "summary": "Record public list pagination and the tally projection",
-    "details": "Adds the before/after harness snapshots for / and /proposals/ (before 57402f0, after 65ace21) and records what changed: 25-row server pagination with filter preservation and canonical/rel links, a display-only ballot_tallies projection, certified tallies from ballot_results, and a neutral tally-updating state for missing or stale rows. The profiler window records 3 -> 0 proposal_votes operations on /proposals/ and 6 -> 0 on /, with getMore batches falling from three to one on every measured public page. Reports the /proposals/ HTML increase honestly: it renders 25 rows instead of 15 at the specified page size, not extra markup per row. Updates I12 and S4, notes the detail page's remaining live tally and the deployment step to backfill the projection, and adds the new collection and CLI to the architecture docs. Refs #52"
-  },
-  {
-    "hash": "e7bfa48",
-    "date": "2026-11-16",
-    "type": "fix",
-    "category": "fix",
-    "scope": "proposals",
-    "summary": "Keep the active stage tab and certified tallies correct",
-    "details": "The parsed stage is now '' rather than 'all' for an unfiltered list, so the All tab has to compare against '' to stay marked current. A certified result is authoritative even when the matter no longer carries a ballotRevisionId (for example after a zero-vote unbind). Resolve certified results by every visible matter's ballot, not only those with a current binding, so the row shows the recorded tally instead of falling back to no tally. Refs #52"
-  },
-  {
-    "hash": "65ace21",
-    "date": "2026-11-16",
-    "type": "feat",
-    "category": "feature",
-    "scope": "scripts",
-    "summary": "Rebuild the ballot tally projection from votes",
-    "details": "Add npm run ballots:tally-projection. It reports missing, mismatched and orphan projection rows against the votes they should represent, and with --apply rebuilds them. It never deletes, edits or rewrites a vote and never certifies a result. Dry run is the default; --verify exits non-zero when rows need repair; an explicit --database is required; production writes additionally require --allow-production and --confirm-production engage_production. Encrypted votes need the ballot keys and the tool refuses to write a partial tally without them. Refs #52"
-  },
-  {
-    "hash": "d186ce7",
-    "date": "2026-11-16",
-    "type": "perf",
-    "category": "improvement",
-    "scope": "proposals",
-    "summary": "Paginate the public list and stop scanning ballots",
-    "details": "/proposals/ loaded every proposal, applied search, stage, branch and sort in the page, and decrypted every vote for the row totals. It now reads a bounded display page of 25 rows from MongoDB with server-side pagination. - Page, total, page count and range are computed from the filtered set; invalid or out-of-range pages clamp; ties order deterministically by proposal id. - Links keep q, stage, branch, space, sort, focus and joined; changing a filter starts at page 1. Pagination uses the Button primitive with previous/next and a live range status. - Each page self-references its canonical address and emits rel=prev/rel=next. The repository has no noIndex convention for parameterised lists, so pages stay indexable with a self-canonical rather than inventing one. - Rows no longer read proposal_votes. A certified ballot shows the tally stored on ballot_results; otherwise a fresh ballot_tallies row is used; a missing or stale row shows \"Voting open — tally updating\" with a link to the matter. - / overlays the same projection on the register it already reads, so home no longer decrypts votes either. Matters without a trustworthy aggregate are left out of the highlights rather than showing a wrong percentage. Visibility is still decided by canViewProposal and re-checked after the coarse MongoDB pre-filter; eligibility, ballot binding and deadlines are untouched. Refs #52"
-  },
-  {
-    "hash": "d471f6e",
-    "date": "2026-11-16",
-    "type": "feat",
-    "category": "feature",
-    "scope": "ballots",
-    "summary": "Project display-only tallies after a committed vote",
-    "details": "Public list pages (/ and /proposals/) tallied every vote and decrypted every encrypted ballot just to show a count. Add a display-only ballot_tallies row per (ballotId, revisionId), written best-effort after the vote transaction commits. The projection is never authoritative: recordFormalDecision keeps recomputing the outcome from the bound votes and does not read it. A failed or slow projection write is logged as an operational event and cannot fail, delay or alter the vote. Vote changes decrement the previous choice and increment the new one, a re-cast of the same choice is a no-op, and rows are revision-scoped. The row stores counts and a timestamp only: no member id, choice, reason or envelope. listProposals can now omit vote tallies so public reads never touch proposal_votes; the web pages overlay certified results and the projection in the next commit. Adds the unique compound index to initializeDatabase and a rebuild/repair path for the CLI. Refs #52"
   }
 ]
