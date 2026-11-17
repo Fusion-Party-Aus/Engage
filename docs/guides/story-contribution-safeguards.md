@@ -89,7 +89,7 @@ Approving a story does not publish it. An approved story appears on the invitati
 - Record where it was used, with a page address, campaign or issue reference.
 - Do not re-edit beyond the permission recorded.
 - Do not add a quote, caption or framing the contributor did not supply.
-- The hand-off export excludes reply addresses and internal notes. Do not add them to a public page or a content system.
+- The hand-off export and the authenticated Horizon feed exclude reply addresses and internal notes. Do not add them to a public page or a content system. The feed mirrors the gallery, so hiding a story removes it from the next poll as well.
 
 ## Withdrawal, correction and retention
 

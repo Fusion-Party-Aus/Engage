@@ -244,7 +244,7 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 - invitation interest counts are aggregate events, not people, and an account step is not a registration; there is no per-channel or per-source attribution;
 - no contributor email is sent automatically;
 - the public gallery is a simple list with no moderation queue for reported content, no paging beyond 60 stories and no Horizon CMS integration;
-- approved material reaches Horizon through the public gallery or a manual JSON export.
+- Horizon consumes an authenticated feed or a manual JSON export; there is no direct CMS write, and no production Horizon consumer has been observed.
 
 **Direction:** settle the legal and image-policy questions before promoting the invitation publicly. Do not describe a contribution as a verified membership testimonial.
 

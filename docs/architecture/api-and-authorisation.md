@@ -251,6 +251,40 @@ Conventions:
 
 A consumer must not infer that a 404 means a policy never existed; it may be unpublished or withdrawn.
 
+### Horizon story feed
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v1/horizon/stories` | Published collaboration stories, consent scope included |
+| `GET /api/v1/horizon/stories?initiative=<slug>` | The same feed for one invitation |
+| `GET /api/v1/horizon/stories?since=<ISO date>` | Stories published after the given time |
+
+This endpoint is **not** part of the public API. It requires `Authorization: Bearer <HORIZON_FEED_TOKEN>` and fails closed with 503 when the credential is not configured. A missing or wrong token is 401. The token is never accepted in a query string.
+
+Scope follows the public gallery: approved, published by a reviewer, website consent, story profile, material intact, not hidden. Written consultation responses never appear. The payload includes answers, chosen credit, caption, media URLs, channels and consent flags, and excludes reply addresses, internal notes, member identifiers and management tokens. `If-None-Match` returns 304, and `nextSince` supports incremental polling.
+
+```json
+{
+  "generatedAt": "2026-11-17T05:23:59.000Z",
+  "since": null,
+  "nextSince": "2026-11-17T05:23:59.287Z",
+  "stories": [
+    {
+      "id": "<contribution uuid>",
+      "initiative": { "slug": "help-us-tell-fusions-story", "title": "Help us tell Fusion's story" },
+      "publishedAt": "2026-11-17T05:23:59.287Z",
+      "name": "Horizon Person",
+      "attribution": "named",
+      "answers": [{ "label": "What brought you to Fusion?", "text": "…" }],
+      "caption": "",
+      "media": [{ "url": "https://…/api/collaboration/media/<id>", "mimeType": "image/png", "alt": "Photograph 1 of 1 shared by Horizon Person" }],
+      "channels": ["website"],
+      "editorial": { "consentVersion": "stories-2026-11-17", "allowEdits": false, "allowAiEdits": false }
+    }
+  ]
+}
+```
+
 ## Known authorisation inconsistencies
 
 These are current defects, not intended design:
