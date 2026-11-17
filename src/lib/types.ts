@@ -85,8 +85,6 @@ export interface PlatformEnv {
   SESSION_SECRET?: string;
   BETTER_AUTH_URL?: string;
   PUBLIC_ORIGIN?: string;
-  /** Bearer credential for the read-only Horizon story feed. Never public. */
-  HORIZON_FEED_TOKEN?: string;
   BETTER_AUTH_SECRET?: string;
   /** Optional dedicated key for hashing rate-limit subjects. */
   RATE_LIMIT_SECRET?: string;
