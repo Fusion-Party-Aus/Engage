@@ -2,7 +2,7 @@
 
 **Status:** Draft for approval · **Written:** 17 November 2026 · **Issue:** [#143](https://github.com/Fusion-Party-Aus/Engage/issues/143)
 
-These are the rules for accepting, reviewing, publishing and removing stories and photographs through a collaboration invitation. They are written for the pilot described in [public collaboration matters](../product/collaboration-matters.md).
+These are the rules for accepting, reviewing, publishing and removing contributions through a collaboration invitation. An invitation is created with one of two profiles: story with photographs, or written responses. The photo, credit and edit rules below apply to the story profile only; a written-response invitation records no name, photographs or edit permission. They are written for the pilot described in [public collaboration matters](../product/collaboration-matters.md).
 
 This is an operational draft. It is not legal advice, and the items under "Decisions still needed" require an owner or legal decision before the invitation is promoted publicly.
 

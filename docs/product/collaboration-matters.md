@@ -9,6 +9,8 @@ This page records the model, the consent rules, the data handling and what is de
 ## What the pilot does
 
 - `/collaborate/` lists open invitations. `/collaborate/<slug>/` is the invitation and the form.
+- Editors create and manage any number of invitations at `/admin/collaboration/invitation/`. An invitation is created as a private draft and has no public page until it is opened.
+- Each invitation has one reviewed contribution profile, chosen at creation: **story with photographs** or **written responses**. A written-response invitation never asks for photos, a name, or edit permission, and the server rejects photos sent to it. This keeps photography consent out of a future station or policy consultation without a form builder.
 - A guest can send story answers, up to three photographs, or both.
 - A submitter chooses publication channels (website, social, email, print), whether to be named, whether ordinary edits are allowed, and separately whether AI-assisted photo edits are allowed. All channels may be left unselected, which means private consultation only.
 - Every contribution lands in a private review queue at `/admin/collaboration/`. A reviewer records `new`, `needs follow-up`, `approved`, `declined` or `withdrawn`.
@@ -41,9 +43,13 @@ Invitation states, set by an editor:
 
 | State | Public page | Accepts contributions |
 |---|---|---|
+| `draft` | None (404) | No |
 | `open` | Renders the form | Yes |
 | `paused` | Shows the closed notice | No |
 | `closed` | Shows the closed notice | No |
+| `archived` | None (404); retained for records | No |
+
+Creating an invitation and opening it are separate decisions: creation always produces a draft. An archived invitation can be restored, which clears `archivedAt`. Contributions belong to the invitation that accepted them and are never moved or merged.
 
 Contribution states, set by a reviewer with `collaboration.review`:
 
@@ -104,22 +110,25 @@ Neither key is in the legacy Moderator set. A branch administrator has no access
 
 ## Configuration and code
 
-An editor changes these without a deployment: title, summary, purpose, questions and hints, question order, the correction email, and the open/paused/closed state. Existing questions keep their keys when the wording changes, so earlier answers stay attached. Re-seeding is insert-only and cannot overwrite an edit.
+An editor changes these without a deployment: creating invitations, the contribution profile at creation, title, summary, purpose, questions and hints, question order, the correction email, and the draft/open/paused/closed/archived state. Existing questions keep their keys when the wording changes, so earlier answers stay attached. Re-seeding is insert-only and cannot overwrite an edit.
 
 These stay in code because changing them must pass review: the consent vocabulary, statuses, upload limits, permission keys, metadata stripping and the export shape.
 
 ## Operating the pilot
 
+Create an invitation at `/admin/collaboration/invitation/new/`, add or edit its questions, then set it to `open` when the wording is ready. The seeded pilot invitation is a bootstrap only:
+
 ```sh
-# Once per environment. Insert-only; safe to rerun.
+# Optional: create the pilot invitation if it does not exist. Insert-only.
 npm run collaboration:seed
 ```
 
-Then, in the admin panel: edit the invitation, review contributions, record uses, and download the approved export. Pause intake by setting the invitation to `paused` or `closed`.
+Review contributions at `/admin/collaboration/`, record uses, and download the approved export. Pause intake by setting the invitation to `paused` or `closed`; retire it with `archived`.
 
 ## What is not built
 
 - Claiming a contribution after creating an account. Contribution never requires one.
+- Self-service withdrawal. A contributor keeps an eight-character reference and emails the correction address; reviewers can find the record by that reference.
 - A public gallery of approved stories or photographs.
 - An approval step for a specific AI-edited derivative, and the production-image policy decision behind it. The application records permission; it does not perform or approve edits.
 - Horizon CMS integration. Hand-off is a manual export.
@@ -129,9 +138,9 @@ Then, in the admin panel: edit the invitation, review contributions, record uses
 
 ## Verification
 
-- `src/lib/collaboration.test.ts`: guest submission without an account, consent and validation refusals, anonymity, idempotency, closed intake, reviewer-only access, approval boundaries, version conflicts, permitted-channel use recording, withdrawal, export minimisation, private media and question-key stability.
+- `src/lib/collaboration.test.ts`: guest submission without an account, consent and validation refusals, anonymity, idempotency, closed intake, reviewer-only access, approval boundaries, version conflicts, permitted-channel use recording, withdrawal, export minimisation, private media and question-key stability. It also covers invitation creation, unique addresses, draft privacy, open/pause/archive/restore, per-invitation counts, reference search, profile isolation, terminal states, accepted private input, repeated placements on one channel, preserved review notes, question snapshots and stale-answer refusal.
 - `src/lib/collaboration-media.test.ts`: JPEG and PNG metadata stripping, signature sniffing, size limits, filename sanitising.
 - `src/lib/collaboration-matter.test.ts`: the governance capability and stage refusals.
 - Retention coverage in `src/lib/collaboration.test.ts`: withdrawal clears material at once, the sweep is dry by default and only clears past its window, and an approved reply address is cleared after a year.
 - `src/lib/collaboration-mongo.test.ts`: real MongoDB coverage for unique references, version concurrency, BSON media round-trip and export isolation. Run with `VOTING_TEST_MONGODB_URI` set.
-- Rendered check on 17 November 2026: desktop and 390 px mobile layouts, guest submission with a photograph returning 201, success copy, admin queue rendering the contribution and consent summary, invitation editor rendering, no console or request errors, no horizontal overflow, and the media route returning 401 without a reviewer session.
+- Rendered journeys on 17 November 2026, in a production build against MongoDB: a guest submits a story with a photograph (201) and sees the success screen with a reference; a private-only response is accepted as consultation input; a second invitation is created as a draft (public page 404), opened (200) and archived (404); review notes survive a reload and a later status change; the media route returns 401 without a reviewer session; desktop and 390 px mobile layouts have no horizontal overflow and no console or request errors.
