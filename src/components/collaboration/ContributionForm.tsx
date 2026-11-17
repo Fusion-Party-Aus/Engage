@@ -114,7 +114,7 @@ export default function ContributionForm({
           You don’t need an account. If you ask us to correct or remove this, quote reference{' '}
           <strong className="font-mono text-foreground">{saved.reference.slice(0, 8)}</strong>.
         </p>
-        {saved.manageToken && (
+        {saved.manageToken ? (
           <div className="grid gap-2 rounded-md border p-4">
             <p className="m-0 font-semibold">Keep this private link</p>
             <p className="m-0 text-sm text-muted-foreground">
@@ -127,6 +127,11 @@ export default function ContributionForm({
               </Button>
             </div>
           </div>
+        ) : (
+          <p className="m-0 text-sm text-muted-foreground">
+            This contribution was already saved. For your security, the private link is only shown in the first
+            response. Use the link you saved, or email the correction address on the invitation.
+          </p>
         )}
         <div className="grid gap-2">
           <p className="m-0 font-semibold">You’ve already contributed. Want to see what else you can shape?</p>

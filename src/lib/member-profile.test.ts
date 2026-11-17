@@ -906,7 +906,8 @@ describe("published stories linked to an account", () => {
     overrides: Record<string, unknown> = {},
   ): Promise<void> {
     const base: Record<string, unknown> = {
-      contributionId: "story-public-1",
+      contributionId: "submission-reference-1",
+      storyId: "public-story-1",
       initiativeSlug: "help-us-tell-fusions-story",
       initiativeTitle: "Help us tell Fusion's story",
       status: "approved",
@@ -942,7 +943,7 @@ describe("published stories linked to an account", () => {
     assert.equal(story.mediaCount, 1);
     assert.equal(
       story.href,
-      "/collaborate/help-us-tell-fusions-story/stories/#story-public-1",
+      "/collaborate/help-us-tell-fusions-story/stories/#public-story-1",
     );
     const serialised = JSON.stringify(page);
     assert.equal(serialised.includes("Never show this note"), false);
@@ -954,15 +955,15 @@ describe("published stories linked to an account", () => {
     const seeded = await seed();
     const adaId = seeded.ada.toHexString();
     const cases = [
-      { contributionId: "hidden", galleryHiddenAt: new Date() },
-      { contributionId: "unpublished", galleryPublishedAt: undefined },
-      { contributionId: "social", channels: ["social"] },
-      { contributionId: "consultation", profile: "consultation" },
-      { contributionId: "declined", status: "declined" },
-      { contributionId: "withdrawn", status: "withdrawn" },
-      { contributionId: "cleared", contentClearedAt: new Date() },
-      { contributionId: "other-member", claimedByMemberId: seeded.bob.toHexString() },
-      { contributionId: "unclaimed", claimedByMemberId: undefined },
+      { contributionId: "hidden", storyId: "hidden", galleryHiddenAt: new Date() },
+      { contributionId: "unpublished", storyId: "unpublished", galleryPublishedAt: undefined },
+      { contributionId: "social", storyId: "social", channels: ["social"] },
+      { contributionId: "consultation", storyId: "consultation", profile: "consultation" },
+      { contributionId: "declined", storyId: "declined", status: "declined" },
+      { contributionId: "withdrawn", storyId: "withdrawn", status: "withdrawn" },
+      { contributionId: "cleared", storyId: "cleared", contentClearedAt: new Date() },
+      { contributionId: "other-member", storyId: "other-member", claimedByMemberId: seeded.bob.toHexString() },
+      { contributionId: "unclaimed", storyId: "unclaimed", claimedByMemberId: undefined },
     ];
     for (const change of cases) {
       await linkStory(adaId, change);

@@ -801,7 +801,7 @@ async function loadPublishedStories(
     .collection("collaboration_contributions")
     .find({ ...PUBLISHED_CONTRIBUTION_FILTER, claimedByMemberId: memberId })
     .project({
-      contributionId: 1,
+      storyId: 1,
       initiativeSlug: 1,
       initiativeTitle: 1,
       answers: 1,
@@ -818,8 +818,8 @@ async function loadPublishedStories(
     const raw = (answers[0] ?? "").replace(/\s+/g, " ");
     const excerpt = raw.length > 220 ? `${raw.slice(0, 220).replace(/\s+\S*$/, "")}…` : raw;
     return {
-      id: String(row.contributionId),
-      href: `/collaborate/${encodeURIComponent(String(row.initiativeSlug))}/stories/#${encodeURIComponent(String(row.contributionId))}`,
+      id: String(row.storyId),
+      href: `/collaborate/${encodeURIComponent(String(row.initiativeSlug))}/stories/#${encodeURIComponent(String(row.storyId))}`,
       initiativeSlug: String(row.initiativeSlug),
       initiativeTitle: String(row.initiativeTitle ?? row.initiativeSlug),
       excerpt,

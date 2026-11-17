@@ -895,17 +895,64 @@ test("the public gallery contains only approved website stories, credited as cho
     await setGalleryPublication(db, reviewer, { contributionId: id, state: "publish", version: 1 });
   }
   const gallery = await listPublishedContributions(db, PILOT_SLUG);
-  assert.deepEqual(
-    gallery.map((entry) => entry.contributionId).sort(),
-    [named.contributionId, anonymous.contributionId].sort(),
+  const storyIds = await Promise.all(
+    [named.contributionId, anonymous.contributionId].map(async (contributionId) =>
+      String((await db.collection("collaboration_contributions").findOne({ contributionId }))?.storyId),
+    ),
   );
-  const namedEntry = gallery.find((entry) => entry.contributionId === named.contributionId)!;
-  const anonymousEntry = gallery.find((entry) => entry.contributionId === anonymous.contributionId)!;
+  assert.deepEqual(gallery.map((entry) => entry.contributionId).sort(), storyIds.sort());
+  const namedEntry = gallery.find((entry) => entry.contributionId === storyIds[0])!;
+  const anonymousEntry = gallery.find((entry) => entry.contributionId === storyIds[1])!;
+  assert.notEqual(namedEntry.contributionId, named.contributionId);
+  assert.notEqual(anonymousEntry.contributionId, anonymous.contributionId);
   assert.equal(namedEntry.name, "Sam Rivera");
   assert.equal(anonymousEntry.name, "");
   assert.equal(namedEntry.media.length, 1);
   assert.equal(namedEntry.answers.some((answer) => answer.label === "What does Fusion mean to you?"), true);
   assert.equal(unapproved.contributionId.length > 0, true);
+});
+
+test("a public story never reveals the submission reference, and a replay cannot reissue authority", async () => {
+  const db = await setup();
+  const original = await submitContribution(db, submission({ channels: ["website"] }));
+  assert.ok(original.manageToken);
+  await reviewContribution(db, reviewer, {
+    contributionId: original.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  await setGalleryPublication(db, reviewer, {
+    contributionId: original.contributionId,
+    state: "publish",
+    version: 1,
+  });
+
+  const gallery = await listPublishedContributions(db, PILOT_SLUG);
+  assert.equal(gallery.length, 1);
+  const publicStory = gallery[0]!;
+  assert.notEqual(publicStory.contributionId, original.contributionId);
+  assert.match(publicStory.contributionId, /^[a-f0-9]{24}$/);
+  const exposed = JSON.stringify(gallery);
+  assert.equal(exposed.includes(original.contributionId), false);
+  assert.equal(exposed.includes(original.manageToken!), false);
+
+  // An outsider replays the public story's content with the same reference.
+  const replay = await submitContribution(db, submission({ channels: ["website"] }));
+  assert.equal(replay.contributionId, original.contributionId);
+  assert.equal(replay.manageToken, null);
+  assert.equal(await db.collection("collaboration_contributions").countDocuments(), 1);
+
+  // The original contributor's token still works; the replay granted nothing.
+  await manageContribution(db, {
+    token: original.manageToken!,
+    action: "correct",
+    answers: { meaning: "The original contributor's correction, still authorised." },
+  });
+  const row = await db.collection("collaboration_contributions").findOne({
+    contributionId: original.contributionId,
+  });
+  assert.equal(row?.answers.meaning, "The original contributor's correction, still authorised.");
 });
 
 test("published photographs are served only while their story is published", async () => {
@@ -1101,8 +1148,10 @@ test("a management token is stable, hashed at rest and opens only its own contri
     [],
     { tokenSecret: "test-secret" },
   );
-  assert.equal(first.manageToken, retry.manageToken);
+  assert.ok(first.manageToken);
+  assert.equal(retry.manageToken, null);
   assert.match(first.manageToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.ok(second.manageToken);
   assert.notEqual(first.manageToken, second.manageToken);
 
   const row = await db.collection("collaboration_contributions").findOne({ contributionId: first.contributionId });
@@ -1135,9 +1184,9 @@ test("the contributor can correct their words, which returns the story to review
   });
   assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 1);
 
-  const view = await viewManagedContribution(db, result.manageToken);
+  const view = await viewManagedContribution(db, result.manageToken!);
   await manageContribution(db, {
-    token: result.manageToken,
+    token: result.manageToken!,
     action: "correct",
     answers: { meaning: "A corrected story that says what I actually meant to say." },
     caption: "A corrected caption",
@@ -1173,12 +1222,12 @@ test("the contributor can hide from the gallery, then withdraw everything withou
     version: 1,
   });
 
-  await manageContribution(db, { token: result.manageToken, action: "hide" });
+  await manageContribution(db, { token: result.manageToken!, action: "hide" });
   assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 0);
   const approved = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
   assert.equal(approved?.status, "approved");
 
-  const withdrawn = await manageContribution(db, { token: result.manageToken, action: "withdraw" });
+  const withdrawn = await manageContribution(db, { token: result.manageToken!, action: "withdraw" });
   assert.equal(withdrawn.withdrawn, true);
   const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
   assert.equal(row?.status, "withdrawn");
@@ -1187,9 +1236,9 @@ test("the contributor can hide from the gallery, then withdraw everything withou
   assert.deepEqual(row?.media, []);
   assert.equal(row?.manageTokenHash, undefined);
   assert.equal(await db.collection("collaboration_media").countDocuments(), 0);
-  await assert.rejects(viewManagedContribution(db, result.manageToken), /not valid/);
+  await assert.rejects(viewManagedContribution(db, result.manageToken!), /not valid/);
   await assert.rejects(
-    manageContribution(db, { token: result.manageToken, action: "withdraw" }),
+    manageContribution(db, { token: result.manageToken!, action: "withdraw" }),
     /not valid/,
   );
 });
@@ -1220,11 +1269,11 @@ test("linking a contribution needs a signed-in member and explicit consent", asy
   const db = await setup();
   const result = await submitContribution(db, submission());
   await assert.rejects(
-    manageContribution(db, { token: result.manageToken, action: "claim", consentToLink: true, user: null }),
+    manageContribution(db, { token: result.manageToken!, action: "claim", consentToLink: true, user: null }),
     /Sign in/,
   );
   await assert.rejects(
-    manageContribution(db, { token: result.manageToken, action: "claim", consentToLink: false, user: memberUser }),
+    manageContribution(db, { token: result.manageToken!, action: "claim", consentToLink: false, user: memberUser }),
     /Confirm/,
   );
   await assert.rejects(
@@ -1237,7 +1286,7 @@ test("a claim stores the member, time and consent version, and is idempotent", a
   const db = await setup();
   const result = await submitContribution(db, submission());
   const first = await manageContribution(db, {
-    token: result.manageToken,
+    token: result.manageToken!,
     action: "claim",
     consentToLink: true,
     user: memberUser,
@@ -1249,7 +1298,7 @@ test("a claim stores the member, time and consent version, and is idempotent", a
   assert.equal(row?.claimConsentVersion, "claim-2026-11-17");
 
   const again = await manageContribution(db, {
-    token: result.manageToken,
+    token: result.manageToken!,
     action: "claim",
     consentToLink: true,
     user: memberUser,
@@ -1261,7 +1310,7 @@ test("a claim stores the member, time and consent version, and is idempotent", a
 
   await assert.rejects(
     manageContribution(db, {
-      token: result.manageToken,
+      token: result.manageToken!,
       action: "claim",
       consentToLink: true,
       user: otherUser,
@@ -1285,7 +1334,7 @@ test("claiming changes neither publication nor who can manage the contribution",
     version: 1,
   });
   await manageContribution(db, {
-    token: result.manageToken,
+    token: result.manageToken!,
     action: "claim",
     consentToLink: true,
     user: memberUser,
@@ -1296,7 +1345,7 @@ test("claiming changes neither publication nor who can manage the contribution",
   assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 1);
 
   // The token still manages it, and no account permission was created.
-  await manageContribution(db, { token: result.manageToken, action: "hide" });
+  await manageContribution(db, { token: result.manageToken!, action: "hide" });
   assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 0);
   assert.equal(
     await db.collection("application_roles").countDocuments({ memberId: "member-1" }),
@@ -1308,13 +1357,13 @@ test("the contributor can unlink the account, and a withdrawn contribution canno
   const db = await setup();
   const result = await submitContribution(db, submission());
   await manageContribution(db, {
-    token: result.manageToken,
+    token: result.manageToken!,
     action: "claim",
     consentToLink: true,
     user: memberUser,
   });
   const unlinked = await manageContribution(db, {
-    token: result.manageToken,
+    token: result.manageToken!,
     action: "unclaim",
     user: memberUser,
   });
@@ -1324,10 +1373,10 @@ test("the contributor can unlink the account, and a withdrawn contribution canno
   const events = await db.collection("collaboration_events").find({ contributionId: result.contributionId }).toArray();
   assert.equal(events.some((event) => event.action === "unclaim_by_member"), true);
 
-  await manageContribution(db, { token: result.manageToken, action: "withdraw" });
+  await manageContribution(db, { token: result.manageToken!, action: "withdraw" });
   await assert.rejects(
     manageContribution(db, {
-      token: result.manageToken,
+      token: result.manageToken!,
       action: "claim",
       consentToLink: true,
       user: memberUser,

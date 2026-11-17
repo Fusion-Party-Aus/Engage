@@ -450,10 +450,11 @@ export interface SubmissionResult {
   /** True when at least one publication channel was permitted. */
   shareable: boolean;
   /**
-   * The contributor's management token. Shown once, kept in a URL fragment so it
-   * never reaches the server in a URL. Only its hash is stored.
+   * The contributor's management token, returned only when this request created
+   * the contribution. A replay of an existing submission returns null: matching
+   * content is not proof of ownership. Only its hash is stored.
    */
-  manageToken: string;
+  manageToken: string | null;
 }
 
 /**
@@ -917,15 +918,19 @@ export async function submitContribution(
         409,
       );
     }
+    // A replay must not reissue management authority. The original response is
+    // the only place the token existed.
     return {
       contributionId: String(existing.contributionId),
       shareable: channels.length > 0,
-      manageToken,
+      manageToken: null,
     };
   }
 
   const now = new Date();
   const contributionId = input.requestId;
+  // Public identifier, deliberately unrelated to the submission reference.
+  const storyId = new ObjectId().toHexString();
   const media: ContributionMediaDescriptor[] = prepared.map(({ file, image }) => ({
     mediaId: new ObjectId().toHexString(),
     mimeType: image.mimeType,
@@ -938,6 +943,7 @@ export async function submitContribution(
     await db.collection(CONTRIBUTIONS).insertOne({
       _id,
       contributionId,
+      storyId,
       initiativeSlug: initiative.slug,
       // Snapshot what the contributor actually read and answered.
       initiativeTitle: initiative.title,
@@ -1508,6 +1514,7 @@ export interface PublishedContribution {
  */
 export const PUBLISHED_CONTRIBUTION_FILTER = {
   status: "approved",
+  storyId: { $exists: true },
   profile: "story",
   channels: { $in: ["website"] },
   contentClearedAt: { $exists: false },
@@ -1536,7 +1543,7 @@ export async function listPublishedContributions(
       }))
       .filter((answer) => answer.label);
     return {
-      contributionId: String(row.contributionId),
+      contributionId: String(row.storyId),
       name: row.attribution === "named" ? String(row.displayName ?? "") : "",
       attribution: row.attribution === "named" ? "named" : "anonymous",
       answers,

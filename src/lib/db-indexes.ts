@@ -119,6 +119,15 @@ const SERVICE_INDEXES: IndexDefinition[] = [
     { name: "collaboration_status" },
   ],
   [
+    "collaboration_contributions",
+    { storyId: 1 },
+    {
+      unique: true,
+      name: "collaboration_story_unique",
+      partialFilterExpression: { storyId: { $exists: true } },
+    },
+  ],
+  [
     "collaboration_media",
     { mediaId: 1 },
     { unique: true, name: "collaboration_media_unique" },
