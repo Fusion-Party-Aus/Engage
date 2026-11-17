@@ -139,13 +139,11 @@ The development cookie (`engage_dev_user`) is accepted only when `APP_MODE` is e
 Feature flags currently include:
 
 - `APP_MODE`
-- `ENGAGE_ALLOW_INDEXING`
 - `LEGAL_ACCEPTANCE_ENABLED`
 - `BALLOT_ENCRYPTION_MODE`
-- `ENGAGE_PUBLIC_PULSE_POLL` (inert; no poll implementation)
 - `FORMAL_BALLOTS_ENABLED` (present in local env but not read by code)
 
-Scheduled digest enablement, CRM verification enablement and their tuning are administrator settings under **Platform settings**, not environment flags. See [build, deployment and operations](build-deploy-operations.md#crm-verification-and-scheduled-jobs).
+Scheduled digest enablement, CRM verification enablement and their tuning are administrator settings under **Platform settings**, not environment flags. So are public site settings: search indexing, the header action, sharing image, social channels, branch directory, repository link and the public pulse poll trial. See [build, deployment and operations](build-deploy-operations.md#public-site-settings).
 
 ### Caching
 

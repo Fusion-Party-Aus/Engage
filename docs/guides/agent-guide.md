@@ -111,7 +111,7 @@ The dev cookie works only in `development`, `test` or `preview`. It is ignored i
 
 ### Inert flags
 
-`ENGAGE_PUBLIC_PULSE_POLL` and `FORMAL_BALLOTS_ENABLED` do not implement features. Do not build UI that implies they do.
+`FORMAL_BALLOTS_ENABLED` does not implement a feature. The public pulse poll setting under **Platform settings** is also inert: it stores a trial choice but no poll page exists. Do not build UI that implies otherwise.
 
 ### Unwired notifications
 

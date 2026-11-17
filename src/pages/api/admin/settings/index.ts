@@ -4,7 +4,7 @@ import { getDatabase, runtimeEnv } from "../../../../lib/db.ts";
 import { hasPermission } from "../../../../lib/rbac.ts";
 import { resolvePublicOrigin } from "../../../../lib/public-origin.ts";
 import {
-  getSiteConfig,
+  getSiteConfigState,
   listSiteConfigEvents,
   updateSiteConfig,
   validateSiteConfigInput,
@@ -13,8 +13,8 @@ import {
 export const prerender = false;
 
 /** Infrastructure descriptions are not editable: they must match the deployment. */
-const READ_ONLY_KEYS = ["backupSummary", "handoverSummary", "docsUrl", "repoUrl"];
-const SECTIONS = ["visibility", "features", "social", "directory", "general"];
+const READ_ONLY_KEYS = ["backupSummary", "handoverSummary", "docsUrl"];
+const SECTIONS = ["visibility", "features", "social", "directory", "operations", "general"];
 const noStore = { "cache-control": "private, no-store" };
 
 function sameOrigin(request: Request, env: ReturnType<typeof runtimeEnv>): boolean {
@@ -41,11 +41,14 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const { env, error } = await authorise(request, locals);
   if (error) return error;
   const db = await getDatabase(env);
-  const [config, events] = await Promise.all([
-    getSiteConfig(db, env),
+  const [state, events] = await Promise.all([
+    getSiteConfigState(db, env),
     listSiteConfigEvents(db),
   ]);
-  return Response.json({ config, events }, { headers: noStore });
+  return Response.json(
+    { config: state.config, events, invalidFields: state.invalidFields, readFailed: state.readFailed },
+    { headers: noStore },
+  );
 };
 
 export const PATCH: APIRoute = async ({ request, locals }) => {
@@ -73,7 +76,10 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       user!.name || user!.email,
     );
     const events = await listSiteConfigEvents(db);
-    return Response.json({ config, events }, { headers: noStore });
+    return Response.json(
+      { config, events, invalidFields: [], readFailed: false },
+      { headers: noStore },
+    );
   } catch (cause) {
     return Response.json(
       { error: cause instanceof Error ? cause.message : "Could not update settings." },
@@ -112,7 +118,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       changeSummary: `Restored: ${event.summary}`,
     }, user!.name || user!.email);
     return Response.json(
-      { config, events: await listSiteConfigEvents(db) },
+      { config, events: await listSiteConfigEvents(db), invalidFields: [], readFailed: false },
       { headers: noStore },
     );
   } catch (cause) {

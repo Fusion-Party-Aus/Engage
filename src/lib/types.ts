@@ -111,14 +111,6 @@ export interface PlatformEnv {
    * member-id profile paths then redirect with 301. Off by default.
    */
   ENGAGE_PROFILE_CRM_IDENTIFIERS?: string;
-  ENGAGE_ALLOW_INDEXING?: string;
-  ENGAGE_DEFAULT_OG_IMAGE?: string;
-  ENGAGE_PUBLIC_PULSE_POLL?: string;
-  ENGAGE_PRIMARY_CTA_LABEL?: string;
-  ENGAGE_PRIMARY_CTA_HREF?: string;
-  ENGAGE_SOCIAL_LINKS_JSON?: string;
-  ENGAGE_STATE_SITES_JSON?: string;
-  ENGAGE_REPO_URL?: string;
   /**
    * Opt-in MongoDB driver command monitoring for the local rendering
    * performance harness. Ignored in production.

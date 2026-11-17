@@ -31,7 +31,6 @@ Configuration is read through `runtimeEnv(locals)` and typed as `PlatformEnv`. `
 | CRM | `ENGAGE_CRM_*` base URL, token, membership type IDs and electorate map. Enablement and tuning are administrative settings. |
 | Ballots | `BALLOT_ENCRYPTION_MODE`, `BALLOT_ENCRYPTION_KEYS`, active key ID, blind-index key |
 | Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
-| Site | `ENGAGE_ALLOW_INDEXING`, CTA, social/state-site JSON, repo URL, OG image |
 | Legal | `LEGAL_ACCEPTANCE_ENABLED` |
 
 Rules:
@@ -39,9 +38,25 @@ Rules:
 - Never commit `.env` or secrets.
 - Production requires a real `MONGODB_URI`; the app throws rather than falling back.
 - `BETTER_AUTH_SECRET` must be at least 32 characters.
-- Setting `ENGAGE_ALLOW_INDEXING=false` or serving from a non-production host adds `noindex`.
+- Serving from a non-production host, or turning search indexing off under Platform settings, adds `noindex`.
 - `FORMAL_BALLOTS_ENABLED` appears in a local env file but is not read by code. Do not rely on it.
-- `ENGAGE_PUBLIC_PULSE_POLL` is an inert public-sentiment flag; no poll is implemented.
+- The public sentiment poll is a stored trial flag with no implementation. Turning it on changes no page.
+
+### Public site settings
+
+Search indexing, the header action, sharing preview image, national social channels, branch directory, repository link and the public pulse poll trial are administrator settings stored in MongoDB. They are edited under **Platform settings** and have no environment fallback.
+
+| Setting | Code default |
+|---|---|
+| Appear in search engines | On when `APP_MODE=production`, off otherwise |
+| Header action | “Suggest an idea” linking to `/proposals/new/`, shown |
+| Sharing preview image | `/engage-og-card.png` |
+| Social channels | Fusion's national Facebook, website, Instagram, YouTube and Bluesky channels |
+| Branch directory | The nine state and territory websites and Facebook pages |
+| Source repository | `https://github.com/Fusion-Party-Aus/Engage` |
+| Public sentiment poll (trial) | Off; no poll is implemented |
+
+A saved value that fails validation is not used. The public site falls back to the code default, and Platform settings names the saved settings that could not be used until an administrator saves a valid value. Every save records the administrator, time, changed fields and before/after values in `site_settings_events`.
 
 ## Checks and tests
 
@@ -295,9 +310,9 @@ The CRM settings live in one document in `operational_settings` with `_id: "crm"
 - **No production verification.** Everything here was verified against a local replica set. There is no evidence of a production run.
 - **No metrics, traces or alert delivery.** The health command is the alerting input; nothing sends alerts yet.
 - **No admin health page.** Health is a command and a coarse probe in this slice. The only administrator surface is the operational settings under **Platform settings**, not a live health view.
-- **Operational tuning has moved to administrator settings.** The eight health thresholds, the CRM batch size, reconcile cadence, outage alert attempts, request timeout, and the digest and CRM enablement gates are all stored, validated and audited in Engage ([#128](https://github.com/Fusion-Party-Aus/Engage/issues/128)). Site settings still read environment fallbacks; production verification of the settings migrations remains outstanding.
+- **Operational tuning has moved to administrator settings.** The eight health thresholds, the CRM batch size, reconcile cadence, outage alert attempts, request timeout, and the digest and CRM enablement gates are all stored, validated and audited in Engage ([#128](https://github.com/Fusion-Party-Aus/Engage/issues/128)). Public site settings are stored the same way. Production verification of the settings migrations remains outstanding.
 
-**Deployment migration.** A deployment that previously used the former digest or CRM verification environment variables must, after upgrading, turn the job on under **Platform settings → Scheduled jobs** or **Platform settings → CRM verification**. Those variables are ignored, and the safe default when a setting is missing is off. CRM tuning values that were previously set in the environment also need to be entered once in **Platform settings → CRM verification**; the documented defaults apply until then.
+**Deployment migration.** A deployment that previously used the former digest or CRM verification environment variables must, after upgrading, turn the job on under **Platform settings → Scheduled jobs** or **Platform settings → CRM verification**. Those variables are ignored, and the safe default when a setting is missing is off. CRM tuning values that were previously set in the environment also need to be entered once in **Platform settings → CRM verification**; the documented defaults apply until then. A deployment that previously configured public site appearance through the environment must enter those values once under **Platform settings** after upgrading. The former variables are ignored, so the code defaults apply until each value is saved.
 
 
 ## Changelog

@@ -1168,7 +1168,7 @@ Findings here are observations of query shape, code structure or configuration u
 | Duplicated concepts | `proposal`/`policy` aliases, `status`/`stage`, `policyId`/`proposalId` | Cognitive load and compatibility code |
 | Lazy imports to break cycles | `auth.ts`, `store.ts`, `branch-participation.ts` | Fragile dependency graph |
 | Documentation drift | ADR 0003, known-gaps, unique index, verified commit | Reviewers cannot trust the docs without checking code |
-| Inert configuration | `FORMAL_BALLOTS_ENABLED`, `ENGAGE_PUBLIC_PULSE_POLL` | Operators may believe a feature is enabled |
+| Inert configuration | `FORMAL_BALLOTS_ENABLED`, the public pulse poll setting | Operators may believe a feature is enabled |
 
 **Complexity that is justified and should stay.** Not every unusual choice is a defect:
 
@@ -2201,7 +2201,7 @@ If only a few weeks are available, do Phase 1 and I10. They close the highest-ri
 | R25 | Production has no scheduler configured | `docs/architecture/notifications-and-jobs.md`; Coolify compose |
 | R26 | Container limit is 256 MB | `docker-compose.coolify-production.yml` |
 | R27 | Hardcoded colours bypass Horizon tokens | `index.astro`, `member/index.astro`, `changelog/index.astro` |
-| R28 | Inert flags exist | `FORMAL_BALLOTS_ENABLED`, `ENGAGE_PUBLIC_PULSE_POLL` |
+| R28 | Inert flags exist | `FORMAL_BALLOTS_ENABLED`, the public pulse poll setting |
 
 ### 15.2 External sources
 
