@@ -955,6 +955,22 @@ test("a public story never reveals the submission reference, and a replay cannot
   assert.equal(row?.answers.meaning, "The original contributor's correction, still authorised.");
 });
 
+test("concurrent identical submissions create one record and issue one token", async () => {
+  const db = await setup();
+  const [first, second] = await Promise.all([
+    submitContribution(db, submission(), [], { tokenSecret: "race-secret" }),
+    submitContribution(db, submission(), [], { tokenSecret: "race-secret" }),
+  ]);
+  assert.equal(first.contributionId, second.contributionId);
+  assert.equal(await db.collection("collaboration_contributions").countDocuments(), 1);
+  const issued = [first.manageToken, second.manageToken].filter(
+    (token): token is string => Boolean(token),
+  );
+  assert.equal(issued.length, 1);
+  const view = await viewManagedContribution(db, issued[0]!);
+  assert.equal(view.contributionId, first.contributionId);
+});
+
 test("published photographs are served only while their story is published", async () => {
   const db = await setup();
   const result = await submitContribution(db, submission({ channels: ["website"] }), [photo()]);

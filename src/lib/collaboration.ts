@@ -1002,6 +1002,13 @@ export async function submitContribution(
         409,
       );
     }
+    // A concurrent request lost the insert race. It did not create the
+    // contribution, so it must not receive management authority either.
+    return {
+      contributionId: String(saved?.contributionId ?? contributionId),
+      shareable: channels.length > 0,
+      manageToken: null,
+    };
   }
 
   // One count per accepted contribution. An idempotent retry returns above and

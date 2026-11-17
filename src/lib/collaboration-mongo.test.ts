@@ -10,6 +10,7 @@ import {
   reviewContribution,
   seedPilotInitiative,
   submitContribution,
+  viewManagedContribution,
 } from "./collaboration.ts";
 import { PILOT_SLUG } from "./collaboration-options.ts";
 import type { SessionUser } from "./types.ts";
@@ -75,6 +76,27 @@ test(
       const inbox = await listContributions(db, reviewer);
       assert.equal(inbox.total, 1);
       assert.equal(inbox.items[0]?.email, "");
+    });
+  },
+);
+
+test(
+  "concurrent identical submissions create one record and issue one token",
+  { skip: !uri },
+  async () => {
+    await withDatabase(async (db) => {
+      await seedPilotInitiative(db);
+      const requestId = "62345678-1234-4234-8234-123456789abc";
+      const [first, second] = await Promise.all([
+        submitContribution(db, { ...base, requestId }, [], { tokenSecret: "race-secret" }),
+        submitContribution(db, { ...base, requestId }, [], { tokenSecret: "race-secret" }),
+      ]);
+      assert.equal(first.contributionId, second.contributionId);
+      assert.equal(await db.collection("collaboration_contributions").countDocuments(), 1);
+      const issued = [first.manageToken, second.manageToken].filter(Boolean);
+      assert.equal(issued.length, 1);
+      const view = await viewManagedContribution(db, issued[0]!);
+      assert.equal(view.contributionId, requestId);
     });
   },
 );
