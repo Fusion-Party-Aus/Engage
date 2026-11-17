@@ -1,6 +1,15 @@
 [
   {
-    "hash": "c6c02b5",
+    "hash": "ba76e30",
+    "date": "2026-11-17",
+    "type": "fix",
+    "category": "fix",
+    "scope": "admin",
+    "summary": "Describe an uncountable tally in plain language",
+    "details": "The register's inline outcome panel fell back to `Ballot state: decryption-unavailable` whenever the bound tally had no numeric value, so an administrator saw an internal state identifier instead of what was wrong. Map the tally states to plain language and name the counts that explain them, so \"decryption keys are not available\" replaces a token. Refs #160"
+  },
+  {
+    "hash": "9a2baa1",
     "date": "2026-11-17",
     "type": "fix",
     "category": "fix",
@@ -680,13 +689,5 @@
     "scope": "engagement",
     "summary": "Repair proxy test sends and clarify admin delivery reporting",
     "details": "Use JSON and the configured public origin to prevent the reverse proxy from rejecting admin test email before provider submission. Separate explicit provider rejection from uncertain sends, expose safe self-only receipts, and keep test bounces isolated from member preferences. Replace raw engagement reporting with responsive cards, period controls, a read-only audience preview and expandable diagnostics. Historical ballot opportunity coverage remains explicitly unavailable. Validation: 144 tests passed, 15 optional tests skipped; Astro check and build passed; mocked-provider HTTP and DOM interaction checks passed. Browser screenshots and authenticated production delivery remain blocked and are documented."
-  },
-  {
-    "hash": "69ca17a",
-    "date": "2026-11-09",
-    "type": "docs",
-    "category": "docs",
-    "scope": "member",
-    "summary": "Record passing lifecycle checks and campaign review materials"
   }
 ]
