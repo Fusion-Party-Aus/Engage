@@ -1,5 +1,31 @@
 [
   {
+    "hash": "36c07d8",
+    "date": "2026-11-17",
+    "type": "docs",
+    "category": "docs",
+    "scope": "collaboration",
+    "summary": "Record publication, minors, removal and funnel rules",
+    "details": "Correct the gallery claims about a missing public image route and about what withdrawal can erase. Add dated screenshots of the gallery states, the explicit publication control and the interest panel so the review can see them. Refs #143"
+  },
+  {
+    "hash": "8bdea4a",
+    "date": "2026-11-17",
+    "type": "feat",
+    "category": "feature",
+    "scope": "collaboration",
+    "summary": "Publish explicitly and measure interest",
+    "details": "Separate approval from publication: an approved story appears in the gallery only after a reviewer presses Publish, and hiding or showing it later keeps the first publication date. Approval alone never makes material public. Adopt the adult-only pilot rule with a simple 18+ attestation, no date of birth, and no publication of identifiable children. Record the approved removal commitments in the safeguards. Add aggregate interest counts for arrivals, first interaction, accepted contributions and the optional account step. A row holds only invitation, UTC day, stage, count and expiry. There is no cookie, session, address, identifier or typed content; the public endpoint is rate limited and the rows expire. Refs #143"
+  },
+  {
+    "hash": "b7452cc",
+    "date": "2026-11-17",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh after merging main"
+  },
+  {
     "hash": "b60a93d",
     "date": "2026-11-17",
     "type": "chore",
@@ -681,29 +707,5 @@
     "category": "fix",
     "scope": "branches",
     "summary": "Reuse existing identities and accept national concerns"
-  },
-  {
-    "hash": "123606c",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record self-service branch membership"
-  },
-  {
-    "hash": "e839386",
-    "date": "2026-11-13",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Let verified members manage branch membership"
-  },
-  {
-    "hash": "e22aa5e",
-    "date": "2026-11-13",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record Sense Box availability fix"
   }
 ]
