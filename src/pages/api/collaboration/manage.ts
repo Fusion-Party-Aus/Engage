@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { getSessionUser } from "../../../lib/auth.ts";
 import { getDatabase, runtimeEnv } from "../../../lib/db.ts";
 import { resolvePublicOrigin } from "../../../lib/public-origin.ts";
 import { CollaborationError, manageContribution } from "../../../lib/collaboration.ts";
@@ -43,6 +44,8 @@ export const POST: APIRoute = async (context) => {
       action: body.action,
       answers: body.answers,
       caption: body.caption,
+      consentToLink: body.consentToLink,
+      user: await getSessionUser(request, env),
     });
     return Response.json({ saved: true, ...result }, { headers });
   } catch (error) {

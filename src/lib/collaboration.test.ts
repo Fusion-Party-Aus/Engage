@@ -1212,3 +1212,126 @@ test("show cannot resurrect a story that was never published", async () => {
     /not been published/,
   );
 });
+
+const memberUser = { memberId: "member-1", name: "Member One" } as unknown as SessionUser;
+const otherUser = { memberId: "member-2", name: "Member Two" } as unknown as SessionUser;
+
+test("linking a contribution needs a signed-in member and explicit consent", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission());
+  await assert.rejects(
+    manageContribution(db, { token: result.manageToken, action: "claim", consentToLink: true, user: null }),
+    /Sign in/,
+  );
+  await assert.rejects(
+    manageContribution(db, { token: result.manageToken, action: "claim", consentToLink: false, user: memberUser }),
+    /Confirm/,
+  );
+  await assert.rejects(
+    manageContribution(db, { token: "not-a-real-token-not-a-real-token-not-a-real", action: "claim", consentToLink: true, user: memberUser }),
+    /not valid/,
+  );
+});
+
+test("a claim stores the member, time and consent version, and is idempotent", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission());
+  const first = await manageContribution(db, {
+    token: result.manageToken,
+    action: "claim",
+    consentToLink: true,
+    user: memberUser,
+  });
+  assert.equal(first.claimed, true);
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(row?.claimedByMemberId, "member-1");
+  assert.ok(row?.claimedAt instanceof Date);
+  assert.equal(row?.claimConsentVersion, "claim-2026-11-17");
+
+  const again = await manageContribution(db, {
+    token: result.manageToken,
+    action: "claim",
+    consentToLink: true,
+    user: memberUser,
+  });
+  assert.equal(again.alreadyLinked, true);
+  const events = await db.collection("collaboration_events").find({ contributionId: result.contributionId }).toArray();
+  assert.equal(events.filter((event) => event.action === "claim_by_member").length, 1);
+  assert.equal(events[0]?.actorId, "member-1");
+
+  await assert.rejects(
+    manageContribution(db, {
+      token: result.manageToken,
+      action: "claim",
+      consentToLink: true,
+      user: otherUser,
+    }),
+    /different account/,
+  );
+});
+
+test("claiming changes neither publication nor who can manage the contribution", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission({ channels: ["website"] }), [photo()]);
+  await reviewContribution(db, reviewer, {
+    contributionId: result.contributionId,
+    action: "set_status",
+    status: "approved",
+    version: 0,
+  });
+  await setGalleryPublication(db, reviewer, {
+    contributionId: result.contributionId,
+    state: "publish",
+    version: 1,
+  });
+  await manageContribution(db, {
+    token: result.manageToken,
+    action: "claim",
+    consentToLink: true,
+    user: memberUser,
+  });
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(row?.status, "approved");
+  assert.ok(row?.galleryPublishedAt);
+  assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 1);
+
+  // The token still manages it, and no account permission was created.
+  await manageContribution(db, { token: result.manageToken, action: "hide" });
+  assert.equal((await listPublishedContributions(db, PILOT_SLUG)).length, 0);
+  assert.equal(
+    await db.collection("application_roles").countDocuments({ memberId: "member-1" }),
+    0,
+  );
+});
+
+test("the contributor can unlink the account, and a withdrawn contribution cannot be claimed", async () => {
+  const db = await setup();
+  const result = await submitContribution(db, submission());
+  await manageContribution(db, {
+    token: result.manageToken,
+    action: "claim",
+    consentToLink: true,
+    user: memberUser,
+  });
+  const unlinked = await manageContribution(db, {
+    token: result.manageToken,
+    action: "unclaim",
+    user: memberUser,
+  });
+  assert.equal(unlinked.claimed, false);
+  const row = await db.collection("collaboration_contributions").findOne({ contributionId: result.contributionId });
+  assert.equal(row?.claimedByMemberId, undefined);
+  const events = await db.collection("collaboration_events").find({ contributionId: result.contributionId }).toArray();
+  assert.equal(events.some((event) => event.action === "unclaim_by_member"), true);
+
+  await manageContribution(db, { token: result.manageToken, action: "withdraw" });
+  await assert.rejects(
+    manageContribution(db, {
+      token: result.manageToken,
+      action: "claim",
+      consentToLink: true,
+      user: memberUser,
+    }),
+    /not valid/,
+  );
+});

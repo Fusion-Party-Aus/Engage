@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import { Field } from '../ui/field';
 import { Textarea } from '../ui/textarea';
 import { COLLABORATION_STATUSES, type CollaborationStatus } from '../../lib/collaboration-options';
@@ -16,6 +17,8 @@ interface ManagedView {
   hiddenFromGallery: boolean;
   contactAllowed: boolean;
   emailMasked: string;
+  claimedByMemberId: string | null;
+  claimedAt: string | null;
   createdAt: string;
 }
 
@@ -33,6 +36,9 @@ export default function ManageContribution() {
   const [caption, setCaption] = useState('');
   const [withdrawn, setWithdrawn] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [session, setSession] = useState<null | { memberId: string; name: string }>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [linkConsent, setLinkConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
@@ -44,6 +50,14 @@ export default function ManageContribution() {
       return;
     }
     setToken(fromHash);
+    fetch('/api/session', { headers: { accept: 'application/json' } })
+      .then((response) => response.json())
+      .then((data) => {
+        const identity = data?.identity;
+        if (identity?.memberId) setSession({ memberId: String(identity.memberId), name: String(identity.name ?? '') });
+      })
+      .catch(() => {})
+      .finally(() => setSessionLoaded(true));
     call(fromHash, 'view').then((result) => {
       if (result?.view) {
         setView(result.view as ManagedView);
@@ -91,6 +105,23 @@ export default function ManageContribution() {
     if (result) {
       setView((current) => current ? { ...current, published: false, hiddenFromGallery: true } : current);
       setFeedback('Removed from the public gallery. Your approval is unchanged.');
+    }
+  }
+
+  async function linkToAccount() {
+    if (!linkConsent) return;
+    const result = await call(token, 'claim', { consentToLink: true });
+    if (result) {
+      setView((current) => current ? { ...current, claimedByMemberId: session?.memberId ?? null } : current);
+      setFeedback('Linked to your account. You can unlink at any time.');
+    }
+  }
+
+  async function unlinkFromAccount() {
+    const result = await call(token, 'unclaim');
+    if (result) {
+      setView((current) => current ? { ...current, claimedByMemberId: null } : current);
+      setFeedback('Unlinked from your account. The private link still works.');
     }
   }
 
@@ -180,6 +211,40 @@ export default function ManageContribution() {
           </Field>
         )}
       </div>
+
+      {sessionLoaded && session && (
+        <div className="grid gap-2 rounded-md border p-4">
+          <p className="m-0 font-semibold">Your Engage account</p>
+          {view.claimedByMemberId === session.memberId ? (
+            <>
+              <p className="m-0 text-sm text-muted-foreground">
+                Linked to your account as {session.name || 'this account'}.
+              </p>
+              <div><Button type="button" size="sm" variant="outline" disabled={busy} onClick={unlinkFromAccount}>Unlink</Button></div>
+            </>
+          ) : view.claimedByMemberId ? (
+            <p className="m-0 text-sm text-muted-foreground">This contribution is linked to a different account.</p>
+          ) : (
+            <>
+              <label className="flex items-start gap-3 text-sm">
+                <Checkbox className="mt-0.5 size-5" checked={linkConsent} onChange={(event) => setLinkConsent(event.currentTarget.checked)} />
+                <span>Link this contribution to my account{session.name ? ` (${session.name})` : ''}.</span>
+              </label>
+              <p className="m-0 text-sm text-muted-foreground">
+                Optional. It does not change publication, approval, or who can manage this contribution. The
+                private link remains the only way to correct or withdraw it.
+              </p>
+              <div><Button type="button" size="sm" disabled={busy || !linkConsent} onClick={linkToAccount}>Link to my account</Button></div>
+            </>
+          )}
+        </div>
+      )}
+      {sessionLoaded && !session && (
+        <p className="m-0 text-sm text-muted-foreground">
+          Optional: if you sign in and reopen this private link, you can connect the contribution to your
+          account.
+        </p>
+      )}
 
       {feedback && <p role="status" className="m-0 text-sm">{feedback}</p>}
       {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}

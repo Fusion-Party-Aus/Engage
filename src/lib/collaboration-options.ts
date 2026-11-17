@@ -8,6 +8,8 @@
  */
 
 export const COLLABORATION_CONSENT_VERSION = "stories-2026-11-17";
+/** Consent for linking an existing contribution to an Engage account. */
+export const CLAIM_CONSENT_VERSION = "claim-2026-11-17";
 
 /**
  * Statuses, channels, attribution and edit permissions are fixed in code on

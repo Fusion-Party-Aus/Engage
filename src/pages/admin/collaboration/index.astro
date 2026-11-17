@@ -106,6 +106,7 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
                 <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <Badge variant={statusTone(item.status)}>{COLLABORATION_STATUSES[item.status]}</Badge>
                   {item.inputAcceptedAt && <Badge variant="info">Input accepted</Badge>}
+                  {item.claimedAt && <Badge variant="outline">Account linked</Badge>}
                   {item.galleryPublishedAt && !item.galleryHiddenAt && <Badge variant="success">In gallery</Badge>}
                   {item.galleryPublishedAt && item.galleryHiddenAt && <Badge variant="muted">Hidden from gallery</Badge>}
                   <span>{item.attribution === 'named' ? item.displayName : 'No name'}</span>

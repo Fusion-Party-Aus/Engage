@@ -4,6 +4,7 @@ import { runInTransaction } from "./db.ts";
 import { hasPermission } from "./rbac.ts";
 import type { SessionUser } from "./types.ts";
 import {
+  CLAIM_CONSENT_VERSION,
   COLLABORATION_CONSENT_VERSION,
   COLLABORATION_STATUSES,
   CONTRIBUTION_LIMITS,
@@ -108,6 +109,7 @@ export interface ContributionRecordView {
   initiativeTitle: string;
   initiativePurpose: string;
   inputAcceptedAt: string | null;
+  claimedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -481,6 +483,8 @@ export interface ManagedContribution {
   hiddenFromGallery: boolean;
   contactAllowed: boolean;
   emailMasked: string;
+  claimedByMemberId: string | null;
+  claimedAt: string | null;
   createdAt: string;
 }
 
@@ -528,17 +532,95 @@ export async function viewManagedContribution(
     hiddenFromGallery: Boolean(row.galleryHiddenAt),
     contactAllowed: row.contactAllowed === true,
     emailMasked: maskEmail(String(row.email ?? "")),
+    claimedByMemberId: row.claimedByMemberId ? String(row.claimedByMemberId) : null,
+    claimedAt: row.claimedAt ? new Date(row.claimedAt).toISOString() : null,
     createdAt: new Date(row.createdAt).toISOString(),
   };
 }
 
-export type ManageAction = "view" | "correct" | "hide" | "withdraw";
+export type ManageAction = "view" | "correct" | "hide" | "withdraw" | "claim" | "unclaim";
 
 export interface ManageInput {
   token: unknown;
   action: unknown;
   answers?: unknown;
   caption?: unknown;
+  consentToLink?: unknown;
+  user?: SessionUser | null;
+}
+
+/**
+ * Link a contribution to the signed-in member who holds its private link.
+ *
+ * Claiming is optional and records only the member identifier, the time and the
+ * consent version. It does not change publication, approval or who may manage
+ * the contribution: the private link remains the only authority. A contributor
+ * can unlink at any time from the same page.
+ */
+async function setContributionClaim(
+  db: Db,
+  current: Record<string, any>,
+  user: SessionUser | null | undefined,
+  claim: boolean,
+): Promise<{ claimed: boolean; alreadyLinked?: boolean }> {
+  if (!user) throw new CollaborationError("Sign in before linking a contribution.", 401);
+  const contributionId = String(current.contributionId);
+  if (current.contentClearedAt || current.status === "withdrawn") {
+    throw new CollaborationError("This contribution has been withdrawn.", 409);
+  }
+  const owner = current.claimedByMemberId ? String(current.claimedByMemberId) : null;
+  if (!claim) {
+    if (owner && owner !== user.memberId) {
+      throw new CollaborationError("This contribution is linked to a different account.", 409);
+    }
+    if (!owner) return { claimed: false };
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version, claimedByMemberId: user.memberId },
+        {
+          $set: { updatedAt: new Date() },
+          $unset: { claimedByMemberId: "", claimedAt: "", claimConsentVersion: "" },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+      }
+      await appendEvent(
+        db,
+        { contributionId, action: "unclaim_by_member", actorId: user.memberId },
+        session,
+      );
+    });
+    return { claimed: false };
+  }
+  if (owner === user.memberId) return { claimed: true, alreadyLinked: true };
+  if (owner) throw new CollaborationError("This contribution is linked to a different account.", 409);
+  await runInTransaction(db, async (session) => {
+    const written = await db.collection(CONTRIBUTIONS).updateOne(
+      { contributionId, version: current.version, claimedByMemberId: { $exists: false } },
+      {
+        $set: {
+          claimedByMemberId: user.memberId,
+          claimedAt: new Date(),
+          claimConsentVersion: CLAIM_CONSENT_VERSION,
+          updatedAt: new Date(),
+        },
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    if (!written.matchedCount) {
+      throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+    }
+    await appendEvent(
+      db,
+      { contributionId, action: "claim_by_member", actorId: user.memberId },
+      session,
+    );
+  });
+  return { claimed: true };
 }
 
 /**
@@ -549,13 +631,26 @@ export interface ManageInput {
 export async function manageContribution(
   db: Db,
   input: ManageInput,
-): Promise<{ view?: ManagedContribution; corrected?: boolean; withdrawn?: boolean; hidden?: boolean }> {
+): Promise<{
+  view?: ManagedContribution;
+  corrected?: boolean;
+  withdrawn?: boolean;
+  hidden?: boolean;
+  claimed?: boolean;
+  alreadyLinked?: boolean;
+}> {
   const token = String(input.token ?? "");
   const current = await findManagedContribution(db, token);
   if (!current) throw new CollaborationError("That link is not valid. Check it and try again.", 404);
   const action = input.action;
   if (action === "view") {
     return { view: await viewManagedContribution(db, token) };
+  }
+  if (action === "claim" || action === "unclaim") {
+    if (input.consentToLink !== true && action === "claim") {
+      throw new CollaborationError("Confirm you want to link this contribution to your account.");
+    }
+    return setContributionClaim(db, current, input.user, action === "claim");
   }
   const contributionId = String(current.contributionId);
   if (current.contentClearedAt || current.status === "withdrawn") {
@@ -1135,6 +1230,7 @@ function toContributionView(row: Record<string, any>): ContributionRecordView {
     initiativeTitle: String(row.initiativeTitle ?? row.initiativeSlug ?? ""),
     initiativePurpose: String(row.initiativePurpose ?? ""),
     inputAcceptedAt: row.inputAcceptedAt ? new Date(row.inputAcceptedAt).toISOString() : null,
+    claimedAt: row.claimedAt ? new Date(row.claimedAt).toISOString() : null,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
   };
