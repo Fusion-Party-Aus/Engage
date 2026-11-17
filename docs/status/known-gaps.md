@@ -1,6 +1,6 @@
 # Known gaps, defects and open decisions
 
-**Status:** Current · **Verified:** 16 November 2026
+**Status:** Current · **Verified:** 17 November 2026
 
 > **RFC 0001 programme status.** The Sprint 1 integrity, lifecycle, rendering
 > performance and Turnstile slices were merged to `main` as `3b36947` (PR #51) on
@@ -94,13 +94,13 @@ This is an honest register, not a task list with commitments. Items are grouped 
 
 ## Priority 2 — data integrity, security and operations
 
-### 9. No inter-amendment conflict detection
+### 9. Inter-amendment conflict precedence is visible but not resolved
 
-Two amendments can edit the same field and both be `ready`. Conflict detection compares an amendment against the proposal revision, not against other amendments. Applying them sequentially may produce an unintended combined wording.
+Two amendments can edit the same block and both be `ready`. Conflict detection previously compared an amendment only against the proposal revision, not against other amendments.
 
-**Partially addressed for reporting:** the member-facing decision record (#54) derives adopted wording only for zero or one applied amendment (D15/D16). Two or more applied amendments show an explicit collision-review-required state and produce no derived text. The administrator responsibility queue surfaces amendment decisions that already have an existing officer action, but there is no collision-review workflow and the collision rule itself is unbuilt.
+**Partly addressed (`feat/sense-box-collaboration-inline-amendments`, #148):** block-anchored suggestions now record the exact title, summary, commitment or rationale paragraph they change, and additions record the blocks either side of the insertion point. Member and administrator views show when two non-rejected amendments target the same block, and the resolve path can rebase a suggestion whose quoted text moved. The apply route refuses a second amendment when an already-applied amendment changed the same block, so two competing amendments cannot both be applied silently. Application is claimed before the proposal write and finalised afterwards; a failed write releases the claim and an interrupted application can be retried. An explicit precedence decision remains unbuilt: an officer must resolve the blocked pair outside the current workflow.
 
-**Direction:** Detect field overlap at resolution time and require an explicit precedence decision.
+**Remaining direction:** add a recorded precedence decision and test same-block, disjoint-block and three-amendment cases at the apply/ballot boundary (#34, #148).
 
 ### 10. Results are checked against the tally but the voting rules are incomplete
 
@@ -193,11 +193,11 @@ Projections and indexes are no-ops and there are no transactions. Development an
 
 **Direction:** Run persistence-sensitive tests against real MongoDB. Do not rely on in-memory behaviour for uniqueness or minimisation.
 
-### 18. Amendments can open a ballot without being resolved
+### 18. Amendment ballot UI offered a proposed amendment the route refused
 
-`open-ballot` accepts `proposed` as well as `ready`. A proposed amendment can therefore skip the review/rebind step.
+The `open-ballot` route requires `ready`, and its tests assert that a `proposed` amendment is refused. The administrator proposal views nevertheless rendered the open-ballot form for `proposed` as well, producing a 404 after submit.
 
-**Direction:** Require `ready`, or document why an unreviewed amendment is permitted in the ballot.
+**Resolved (`feat/sense-box-collaboration-inline-amendments`, #148):** both administrator views now offer the ballot action only for `ready`. The route remains the authority; no governance rule changed.
 
 ### 19. Branch referral creation skips the permission catalogue
 
@@ -224,6 +224,28 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 **Direction:** Configure and monitor an external scheduler. Treat missing jobs as an operational incident.
 
 ## Priority 3 — product and documentation gaps
+
+### 29. Story contributions have legal and operational obligations before launch
+
+**Implemented (17 November 2026, #143):** a public collaboration matter (`/collaborate/<slug>/`) accepts stories and photographs from people with no account, with granular consent, private review, metadata-stripped media, a reviewer-only export and no automatic publication. See [public collaboration matters](../product/collaboration-matters.md).
+
+**Retention and safeguards (implemented same day):** withdrawal deletes story text, name, reply address and photographs immediately and keeps only the review record. Declined material is cleared after 90 days, approved reply addresses 12 months after approval, via `npm run collaboration:retention` (dry-run by default; `npm run collaboration:retention -- --apply` to act). Each clear is conditional on the record still being in the expected state. A contributor can also correct, hide or withdraw with a private link; a lost link is recovered by email. An operational draft covering photographer credit, other identifiable people, minors, AI edits and mistaken publication is in [story and photograph safeguards](../guides/story-contribution-safeguards.md).
+
+**Pilot rules adopted 17 November 2026:** adults only with a simple 18+ attestation; no publication of identifiable children, even with guardian permission; hide disputed material within 1 business day, resolve within 5 business days, and be explicit that copies distributed outside Engage cannot be recalled.
+
+**Still open before public launch:**
+
+- the privacy policy now describes this purpose, account linking and the aggregate counts (version 1.6) but remains owner-authorised with legal review outstanding;
+- the correction inbox, escalation path and monthly retention sweep can now be assigned at `/admin/collaboration/operations/`, but no people are assigned yet; see [collaboration pilot operations](collaboration-pilot-operations.md);
+- the credit format is not decided, and a single caption may not describe several individual photographs well enough;
+- there is no derivative-approval step for an AI-edited photograph, and the production-image policy for edited photographs is undecided;
+
+- invitation interest counts are aggregate events, not people, and an account step is not a registration; there is no per-channel or per-source attribution;
+- no contributor email is sent automatically;
+- the public gallery is a simple list with no moderation queue for reported content and no paging beyond 60 stories;
+- approved material reaches Horizon through a manual JSON export. Consumer-neutral external synchronisation, including corrections, hiding and withdrawal, is tracked in #157 and is not implemented.
+
+**Direction:** settle the legal and image-policy questions before promoting the invitation publicly. Do not describe a contribution as a verified membership testimonial.
 
 ### 22. The Policy Registry is empty on a fresh install
 

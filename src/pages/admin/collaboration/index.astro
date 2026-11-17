@@ -1,0 +1,242 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { Badge } from '../../../components/ui/badge';
+import { Button } from '../../../components/ui/button';
+import { NativeSelect } from '../../../components/ui/native-select';
+import { Input } from '../../../components/ui/input';
+import Card from '../../../components/admin/Card.astro';
+import CardContent from '../../../components/admin/CardContent.astro';
+import CardDescription from '../../../components/admin/CardDescription.astro';
+import CardHeader from '../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../components/admin/CardTitle.astro';
+import Field from '../../../components/admin/Field.astro';
+import ContributionReviewer from '../../../components/collaboration/ContributionReviewer';
+import { getSessionUser } from '../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { listContributions } from '../../../lib/collaboration.ts';
+import {
+  COLLABORATION_STATUSES,
+  PUBLICATION_CHANNELS,
+  consentSummary,
+  type CollaborationStatus,
+} from '../../../lib/collaboration-options.ts';
+import { hasPermission } from '../../../lib/rbac.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/');
+if (!hasPermission(user, 'collaboration.review')) return Astro.rewrite('/403/');
+
+const db = await getDatabase(env);
+const inbox = await listContributions(db, user, {
+  status: Astro.url.searchParams.get('status') ?? undefined,
+  q: Astro.url.searchParams.get('q') ?? undefined,
+  page: Astro.url.searchParams.get('page') ?? undefined,
+});
+
+const statusTone = (status: CollaborationStatus) =>
+  status === 'approved' ? 'success'
+  : status === 'needs_follow_up' ? 'warning'
+  : status === 'declined' ? 'destructive'
+  : status === 'withdrawn' ? 'muted'
+  : 'outline';
+
+const pageHref = (page: number) => {
+  const params = new URLSearchParams(Object.fromEntries(Astro.url.searchParams));
+  params.set('page', String(page));
+  return `?${params.toString()}`;
+};
+const page = Number(Astro.url.searchParams.get('page') ?? 1);
+---
+
+<AdminLayout
+  title="Contributions"
+  description="Review what people sent to Fusion's public invitations."
+  section="stories"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  <div class="admin-stack">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="m-0 text-sm text-muted-foreground">
+          {inbox.total} {inbox.total === 1 ? 'contribution' : 'contributions'} · {inbox.withMedia} with {inbox.withMedia === 1 ? 'a photo' : 'photos'}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          {hasPermission(user, 'collaboration.manage') && (
+            <>
+              <Button href="/admin/collaboration/invitation/" size="sm" variant="outline">Invitations</Button>
+              <Button href="/admin/collaboration/operations/" size="sm" variant="outline">Operations</Button>
+            </>
+          )}
+          <Button href="/api/admin/collaboration/export" size="sm" variant="outline">Export approved</Button>
+        </div>
+      </div>
+
+    <Card class="gap-0">
+      <CardHeader>
+        <CardTitle class="text-base">Review queue</CardTitle>
+        <CardDescription>New contributions are private until you approve them. Nothing is published from here.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form class="flex flex-wrap items-end gap-4" method="get">
+          <Field label="Reference" htmlFor="story-reference" class="min-w-52">
+            <Input id="story-reference" name="q" placeholder="First few characters" defaultValue={Astro.url.searchParams.get('q') ?? ''} />
+          </Field>
+          <Field label="Status" htmlFor="story-status" class="min-w-52">
+            <NativeSelect id="story-status" name="status" defaultValue={Astro.url.searchParams.get('status') ?? ''}>
+              <option value="">All statuses</option>
+              {Object.entries(COLLABORATION_STATUSES).map(([key, label]) => (
+                <option value={key} selected={Astro.url.searchParams.get('status') === key}>
+                  {label} ({inbox.counts[key as CollaborationStatus] ?? 0})
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Button type="submit" size="sm">Filter</Button>
+        </form>
+      </CardContent>
+    </Card>
+
+    {inbox.items.length ? (
+      <ul class="m-0 grid list-none gap-4 p-0">
+        {inbox.items.map((item) => (
+          <li data-contribution={item.contributionId}>
+            <Card class="gap-4">
+              <CardHeader class="gap-2">
+                <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <Badge variant={statusTone(item.status)}>{COLLABORATION_STATUSES[item.status]}</Badge>
+                  {item.inputAcceptedAt && <Badge variant="info">Input accepted</Badge>}
+                  {item.claimedAt && <Badge variant="outline">Account linked</Badge>}
+                  {item.galleryPublishedAt && !item.galleryHiddenAt && <Badge variant="success">In gallery</Badge>}
+                  {item.galleryPublishedAt && item.galleryHiddenAt && <Badge variant="muted">Hidden from gallery</Badge>}
+                  <span>{item.attribution === 'named' ? item.displayName : 'No name'}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{item.initiativeTitle}</span>
+                  <span aria-hidden="true">·</span>
+                  <time datetime={item.createdAt}>{new Date(item.createdAt).toLocaleDateString('en-AU')}</time>
+                  {item.media.length > 0 && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{item.media.length} {item.media.length === 1 ? 'photo' : 'photos'}</span>
+                    </>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent class="grid gap-4">
+                {item.contentClearedAt ? (
+                  <p class="m-0 text-sm text-muted-foreground">
+                    Content removed on {new Date(item.contentClearedAt).toLocaleDateString('en-AU')}. Only the review record remains.
+                  </p>
+                ) : (
+                <dl class="m-0 grid gap-3">
+                  {Object.entries(item.answers).map(([key, answer]) => (
+                    <div>
+                      <dt class="text-sm font-semibold">
+                      {item.questions.find((question) => question.key === key)?.label ?? key}
+                    </dt>
+                      <dd class="m-0 whitespace-pre-wrap break-words">{answer}</dd>
+                    </div>
+                  ))}
+                  {item.caption && (
+                    <div>
+                      <dt class="text-sm font-semibold">Photo caption</dt>
+                      <dd class="m-0">{item.caption}</dd>
+                    </div>
+                  )}
+                </dl>
+                )}
+
+                {item.media.length > 0 && (
+                  <div class="flex flex-wrap gap-3">
+                    {item.media.map((media, index) => (
+                      <a
+                        href={`/api/admin/collaboration/media/${media.mediaId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        class="block overflow-hidden rounded-md border"
+                        aria-label={`Open photo ${index + 1}`}
+                      >
+                        <img
+                          src={`/api/admin/collaboration/media/${media.mediaId}`}
+                          alt={`Contribution photo ${index + 1}`}
+                          width="160"
+                          height="160"
+                          loading="lazy"
+                          class="size-40 object-cover"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
+
+                <div class="grid gap-1 text-sm text-muted-foreground">
+                  <p class="m-0">
+                    Consent recorded: {consentSummary({
+                      channels: item.channels,
+                      attribution: item.attribution,
+                      allowEdits: item.allowEdits,
+                      allowAiEdits: item.allowAiEdits,
+                    })}
+                  </p>
+                  {item.contactAllowed && item.email ? (
+                    <p class="m-0">Can reply to {item.email}</p>
+                  ) : (
+                    <p class="m-0">No reply requested.</p>
+                  )}
+                  {item.usedChannels.length > 0 && (
+                    <p class="m-0">
+                      Used: {item.usedChannels.map((key) => PUBLICATION_CHANNELS[key] ?? key).join(', ')}
+                    </p>
+                  )}
+                  {item.internalNotes && <p class="m-0">Notes: {item.internalNotes}</p>}
+                  {item.initiativePurpose && (
+                    <details>
+                      <summary>What the contributor was told</summary>
+                      <p class="m-0">{item.initiativePurpose}</p>
+                    </details>
+                  )}
+                </div>
+
+                <ContributionReviewer
+                  client:load
+                  contributionId={item.contributionId}
+                  version={item.version}
+                  status={item.status}
+                  channels={item.channels}
+                  history={item.publicationHistory}
+                  initialNotes={item.internalNotes}
+                  initialMessage={item.contributorMessage}
+                  acceptedAt={item.inputAcceptedAt}
+                  galleryPublishedAt={item.galleryPublishedAt}
+                  galleryHiddenAt={item.galleryHiddenAt}
+                  initiativeSlug={item.initiativeSlug}
+                />
+              </CardContent>
+            </Card>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-base">No contributions yet</CardTitle>
+          <CardDescription>
+            {Astro.url.searchParams.get('status')
+              ? 'Nothing matches this status. Clear the filter to see everything.'
+              : 'Stories will appear here after someone sends one. Nothing appears publicly.'}
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )}
+
+    {inbox.total > inbox.items.length && (
+      <div class="flex items-center gap-3">
+        {page > 1 && <Button href={pageHref(page - 1)} size="sm" variant="outline">Newer</Button>}
+        <Button href={pageHref(page + 1)} size="sm" variant="outline">Older</Button>
+      </div>
+    )}
+  </div>
+</AdminLayout>

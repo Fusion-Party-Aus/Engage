@@ -41,6 +41,12 @@ type IndexDefinition = [
  */
 const CORE_INDEXES: IndexDefinition[] = [
   ["sense_submissions", { branchId: 1, createdAt: -1 }],
+  ["sense_submissions", { submissionId: 1 }, { unique: true }],
+  ["sense_submissions", { visibility: 1, publishedAt: -1 }],
+  ["sense_submissions", { linkedProposalIds: 1 }],
+  ["sense_submissions", { linkedProposalId: 1 }],
+  ["sense_comments", { submissionId: 1, visibility: 1, createdAt: 1 }],
+  ["sense_comments", { commentId: 1 }, { unique: true }],
   [
     "rate_limits",
     { expiresAt: 1 },
@@ -100,6 +106,63 @@ const SERVICE_INDEXES: IndexDefinition[] = [
   ],
   [OPERATIONAL_SETTINGS_EVENTS_COLLECTION, { createdAt: -1 }],
   [OPERATIONAL_SETTINGS_COLLECTION, { updatedAt: -1 }],
+  // Public collaboration matters (#143). Contributions are private until an
+  // explicit approval; media bytes live in their own collection so a list read
+  // can never select them by accident.
+  [
+    "collaboration_initiatives",
+    { slug: 1 },
+    { unique: true, name: "collaboration_slug_unique" },
+  ],
+  [
+    "collaboration_contributions",
+    { contributionId: 1 },
+    { unique: true, name: "collaboration_contribution_unique" },
+  ],
+  [
+    "collaboration_contributions",
+    { status: 1, createdAt: -1 },
+    { name: "collaboration_status" },
+  ],
+  [
+    "collaboration_contributions",
+    { storyId: 1 },
+    {
+      unique: true,
+      name: "collaboration_story_unique",
+      partialFilterExpression: { storyId: { $exists: true } },
+    },
+  ],
+  [
+    "collaboration_media",
+    { mediaId: 1 },
+    { unique: true, name: "collaboration_media_unique" },
+  ],
+  ["collaboration_media", { contributionId: 1 }],
+  [
+    "collaboration_events",
+    { eventId: 1 },
+    { unique: true, name: "collaboration_event_unique" },
+  ],
+  ["collaboration_events", { contributionId: 1, at: -1 }],
+  // One global operational-owner record (#143), plus its audit trail.
+  [
+    "collaboration_operations",
+    { configId: 1 },
+    { unique: true, name: "collaboration_operations_global" },
+  ],
+  ["collaboration_operation_events", { at: -1 }],
+  // Aggregate funnel counts (#143). One row per invitation, day and stage.
+  [
+    "collaboration_funnel",
+    { initiativeSlug: 1, day: 1, stage: 1 },
+    { unique: true, name: "collaboration_funnel_bucket" },
+  ],
+  [
+    "collaboration_funnel",
+    { expiresAt: 1 },
+    { expireAfterSeconds: 0, name: "collaboration_funnel_retention" },
+  ],
 ];
 
 // Matter, discussion, governance, branch and membership indexes.

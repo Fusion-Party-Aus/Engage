@@ -79,7 +79,8 @@
 | `member_notifications` | In-app inbox items |
 | `notification_deliveries` | Dedupe and delivery state |
 | `notification_outbox` | Durable governance notification queue (unique dedupe key, claim lease, retry state, retention TTL) |
-| `sense_submissions` | Public Sense Box concerns |
+| `sense_submissions` | Sense Box priorities. `visibility: "private" | "published"` is explicit; `publicationConsent` records whether the contributor agreed to review-then-publication. Legacy rows lack both fields and stay private. `linkedProposalIds` is a one-to-many list of proposals the priority informs; a legacy `linkedProposalId` is read as the first entry and folded into the array on the next write. |
+| `sense_comments` | Public discussion and private organiser notes on a Sense Box priority (`visibility: "public" | "internal"`) |
 | `rate_limits` | Shared fixed-window counters for unauthenticated abuse protection (hashed subject, TTL) |
 | `site_settings`, `site_settings_events` | Public configuration and its audit |
 | `operational_audit` | Operational actions |
@@ -99,6 +100,7 @@
   scope?, publicationScope?: "private" | "branch" | "national",
   ballotRevisionId?, ballotClosesAt?, ballotClosedAt?,
   secondedBy?, secondedAt?, deliberationEndsAt?,
+  sourceSenseSubmissionId?,   // provenance only; never publishes the priority
   attachmentUrl?, attachmentDescription?, provenance?,
   authorId?, authorName?, createdAt, updatedAt,
   implementationNote?, supersededByProposalId?, supersededByNote?
@@ -130,6 +132,21 @@ The `proposals` collection also accepts legacy aliases (`policyId`, `category`, 
 ```
 
 Only the four snapshot fields are hashed. Attachment, kind, space and provenance changes do not create a revision. A new revision is appended only when the hash changes.
+
+### Amendment suggestion
+
+```ts
+{
+  suggestionId, field: "title" | "summary" | "details" | "outcomes",
+  index,                     // paragraph or commitment position in the base revision
+  original,                  // exact quoted block
+  proposed,                  // replacement text; empty means remove
+  comment?, mode: "replace" | "remove" | "add",
+  anchorBefore?, anchorAfter? // exact surrounding blocks captured for an addition
+}
+```
+
+Suggestions are stored on the amendment and on each `amendment_revisions` row as evidence. The authoritative ballot/apply value remains the whole-field `changes` map, reconstructed by the server from the base snapshot. A rebase places an addition between its captured anchors; if those anchors are missing, duplicated or no longer adjacent, the addition requires officer resolution rather than a guessed index.
 
 ### Vote
 

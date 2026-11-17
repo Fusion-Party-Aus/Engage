@@ -20,7 +20,14 @@ This page answers "does Engage do this today?" Use it instead of inferring from 
 | Read a published policy | Implemented when a record is published | `/policies/[slug]/` |
 | Branch directory | Implemented | `/branches/` |
 | Public concern submission (Sense Box) | Implemented | `/sense-box/`, rate-limited |
+| Review-then-publish Sense Box priorities | Implemented | Explicit publication action; legacy rows stay private |
+| Public Sense Box discussion | Implemented | `/sense-box/[submissionId]/`; signed-in members comment, anyone reads |
+| Sense Box contributor receipt | Implemented | `/sense-box/status/[submissionId]/`; minimal status, capability link |
+| Link or develop a proposal from Sense Box | Implemented | One priority can inform multiple proposals; admin workspace and composer prefill record the source |
+| Block-anchored amendments | Implemented | Title, summary, commitments and rationale with inline diffs |
+| Public story and photograph contribution | Implemented | Admin-managed invitations at `/admin/collaboration/invitation/`, guest intake at `/collaborate/<slug>/`, private review, approved gallery at `/collaborate/<slug>/stories/`, private contributor management link, optional account linking shown on the public profile, aggregate interest counts, [model](../product/collaboration-matters.md) |
 | How-it-works and changelog | Implemented | `/how-it-works/`, `/changelog/` |
+| Collaboration operational owners | Implemented | `/admin/collaboration/operations/`, audited admin setting |
 | Terms and privacy pages | Implemented but inactive as a gate | Documents are owner-authorised; acceptance gate off |
 | Branded 403/404/500 | Implemented | `src/pages/403.astro`, `404.astro`, `500.astro` |
 

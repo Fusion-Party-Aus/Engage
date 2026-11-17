@@ -107,7 +107,7 @@ const activeDeliberationIds = proposals
   .map((proposal) => proposal.proposalId);
 const [unresolvedAmendments, membersAwaitingReview, unrespondedComments] = await Promise.all([
   proposalIds.length
-    ? db.collection('amendments').countDocuments({ proposalId: { $in: proposalIds }, status: { $in: ['proposed', 'conflict', 'endorsed'] } })
+    ? db.collection('amendments').countDocuments({ proposalId: { $in: proposalIds }, status: { $in: ['proposed', 'conflict', 'endorsed', 'applying'] } })
     : Promise.resolve(0),
   user.isAdmin ? db.collection('memberships').countDocuments({ status: 'pending' }) : Promise.resolve(0),
   activeDeliberationIds.length

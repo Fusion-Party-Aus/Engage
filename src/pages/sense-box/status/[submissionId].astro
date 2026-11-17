@@ -1,0 +1,80 @@
+---
+import SiteLayout from '../../../layouts/SiteLayout.astro';
+import { Badge } from '../../../components/ui/badge';
+import { Button } from '../../../components/ui/button';
+import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
+import { getSenseReceipt, senseDestinations } from '../../../lib/sense-box.ts';
+import { SENSE_TOPICS } from '../../../lib/sense-box-options.ts';
+
+export const prerender = false;
+const env = runtimeEnv(Astro.locals);
+const db = await getDatabase(env);
+const submissionId = Astro.params.submissionId ?? '';
+const receipt = await getSenseReceipt(db, submissionId);
+if (!receipt) return Astro.rewrite('/404/');
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const branches = await senseDestinations(db);
+const branchName = branches.find((branch) => branch.branchId === receipt.branchId)?.name ?? 'Fusion';
+const stage = {
+  received: { label: 'Received', tone: 'muted' as const, copy: 'Your priority has been received. An organiser will review it.' },
+  reviewing: { label: 'In review', tone: 'warning' as const, copy: 'An organiser is reviewing this priority and will decide whether to publish it.' },
+  published: { label: 'Published', tone: 'success' as const, copy: 'This priority is published. Anyone can read it and verified members can discuss it.' },
+  closed: { label: 'Closed', tone: 'outline' as const, copy: 'This priority is closed. It is not open for new discussion.' },
+}[receipt.stage];
+const signInHref = `/member/?returnTo=${encodeURIComponent(`/sense-box/status/${receipt.submissionId}/`)}&intent=discuss`;
+---
+<SiteLayout title="Your Sense Box priority · Engage" description="Check what happened to a Sense Box priority." noIndex>
+  <div class="page-wrap section-space sense-status">
+    <Button href="/sense-box/" variant="ghost" size="sm">← Sense Box</Button>
+
+    <header class="sense-status__head">
+      <div class="sense-status__meta">
+        <span>{branchName}</span>
+        <time datetime={receipt.createdAt}>Submitted {new Date(receipt.createdAt).toLocaleDateString('en-AU')}</time>
+        <Badge variant="outline">{SENSE_TOPICS[receipt.topic]}</Badge>
+        <Badge variant={stage.tone}>{stage.label}</Badge>
+      </div>
+      <h1>{receipt.title}</h1>
+      <p>{stage.copy}</p>
+    </header>
+
+    {!receipt.publicationConsent && (
+      <div class="sense-status__note" role="status">
+        <strong>This priority stays private.</strong>
+        <p>It was submitted before public publication was offered. It cannot be published without a new consent or a separate republishing process.</p>
+      </div>
+    )}
+
+    {receipt.stage === 'published' && (
+      <section class="sense-status__next" aria-labelledby="published-heading">
+        <h2 id="published-heading">Read and discuss</h2>
+        <p>Your priority is now on the public Sense Box page.</p>
+        <div class="flex flex-wrap gap-2">
+          <Button href={`/sense-box/${receipt.submissionId}/`}>Open the published priority</Button>
+          <Button href={signInHref} variant="outline">Join the discussion</Button>
+        </div>
+      </section>
+    )}
+
+    <section class="sense-status__next" aria-labelledby="follow-heading">
+      <h2 id="follow-heading">How to follow this priority</h2>
+      <p>Keep this page’s link. The Sense Box does not collect your name or contact details, so it cannot email you an update.</p>
+      <p>Anyone can submit a priority. Reading published priorities is open to everyone; joining the public discussion requires a verified Engage account so that members remain accountable for what they say.</p>
+      <p class="sense-status__ref">Reference: <code>{receipt.submissionId}</code></p>
+    </section>
+  </div>
+</SiteLayout>
+<style>
+  .sense-status{max-width:52rem}
+  .sense-status__head{border-bottom:1px solid var(--horizon-line);padding-bottom:1.5rem;margin-bottom:2rem}
+  .sense-status__meta{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;color:var(--horizon-muted);font-size:.9rem}
+  .sense-status__head h1{margin:.75rem 0 .5rem}
+  .sense-status__head p{margin:0;color:var(--horizon-muted);max-width:44rem}
+  .sense-status__note{border-left:3px solid var(--horizon-warn-ink);background:var(--horizon-warn-bg);color:var(--horizon-warn-ink);padding:1rem 1.25rem;border-radius:.75rem;margin-bottom:2rem}
+  .sense-status__note p{margin:.35rem 0 0}
+  .sense-status__next{margin-top:2rem}
+  .sense-status__next h2{margin:0 0 .5rem;font-size:1.5rem}
+  .sense-status__next p{margin:.5rem 0;color:var(--horizon-muted)}
+  .sense-status__ref{font-size:.9rem}
+</style>

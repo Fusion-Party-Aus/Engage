@@ -255,6 +255,15 @@ export interface ProposalRecord {
   secondedAt?: Date;
   /** The deliberation deadline derived from `secondedAt` (D4). */
   deliberationEndsAt?: Date;
+  /**
+   * The Sense Box priority a reviewer used as the starting point for this
+   * proposal. Provenance only; it does not publish or adopt the submission.
+   */
+  sourceSenseSubmissionId?: string;
+  /** Recorded when a private priority was used as a lead, not copied. */
+  sourceSensePrivacyReviewedAt?: Date;
+  sourceSensePrivacyReviewedBy?: string;
+  sourceSensePrivacyBasis?: "published-source" | "independent-wording";
   supersededByProposalId?: string;
   supersededByNote?: string;
   /**

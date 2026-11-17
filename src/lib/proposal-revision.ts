@@ -8,6 +8,37 @@ export interface ProposalWordingSnapshot {
   details: string;
 }
 
+export interface ProposalRevisionSnapshot extends ProposalWordingSnapshot {
+  targetSection?: string;
+  proposedWording?: string;
+}
+
+/**
+ * The exact immutable snapshot written by the proposal save path. Keep the key
+ * order stable: revision identifiers and content hashes depend on it.
+ */
+export function proposalRevisionSnapshot(
+  proposal: Record<string, any>,
+): ProposalRevisionSnapshot {
+  const wording = proposalWordingSnapshot(proposal);
+  return {
+    ...wording,
+    title: wording.title.trim(),
+    summary: wording.summary.trim(),
+    details: wording.details.trim(),
+    ...(proposal.targetSection
+      ? { targetSection: String(proposal.targetSection) }
+      : {}),
+    ...(proposal.proposedWording
+      ? { proposedWording: String(proposal.proposedWording) }
+      : {}),
+  };
+}
+
+export function revisionContentHash(snapshot: ProposalRevisionSnapshot): string {
+  return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+}
+
 /**
  * The canonical wording snapshot used for immutable proposal revisions.
  * Keep the key order stable: legacy revision identifiers and hashes depend on it.
@@ -26,6 +57,8 @@ export function proposalWordingSnapshot(
 }
 
 export function wordingContentHash(snapshot: ProposalWordingSnapshot): string {
+  // Legacy four-field contract used by pre-existing revision identifiers.
+  // New save-path revisions use proposalRevisionSnapshot/revisionContentHash.
   return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
 }
 

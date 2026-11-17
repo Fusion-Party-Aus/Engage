@@ -1,0 +1,1744 @@
+import { createHash, createHmac } from "node:crypto";
+import { Binary, ObjectId, type ClientSession, type Db } from "mongodb";
+import { runInTransaction } from "./db.ts";
+import { hasPermission } from "./rbac.ts";
+import type { PlatformEnv, SessionUser } from "./types.ts";
+import {
+  CLAIM_CONSENT_VERSION,
+  COLLABORATION_CONSENT_VERSION,
+  COLLABORATION_STATUSES,
+  CONTRIBUTION_LIMITS,
+  CONTRIBUTION_PROFILES,
+  INITIATIVE_STATUSES,
+  MAX_INITIATIVE_QUESTIONS,
+  MEDIA_LIMITS,
+  PUBLICATION_CHANNELS,
+  PILOT_INITIATIVE,
+  PILOT_SLUG,
+  isPublicInitiativeStatus,
+  nextQuestionKey,
+  slugifyTitle,
+  type Attribution,
+  type CollaborationInitiative,
+  type CollaborationStatus,
+  type ContributionProfile,
+  type ContributionQuestion,
+  type InitiativeStatus,
+  type PublicationChannel,
+} from "./collaboration-options.ts";
+import { prepareImage, safeFilename } from "./collaboration-media.ts";
+import { recordFunnelEvent } from "./collaboration-funnel.ts";
+import { rateLimitSecret } from "./rate-limit.ts";
+
+/**
+ * Public collaboration matters (#143).
+ *
+ * A collaboration matter invites stories and photographs for Fusion's public
+ * storytelling. It is not a proposal, a ballot, a membership record or a policy
+ * decision. Contributors need no account and no party membership, and nothing
+ * they send is published automatically.
+ */
+
+export class CollaborationError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "CollaborationError";
+    this.status = status;
+  }
+}
+
+const UUID_PATTERN =
+  /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+
+const INITIATIVES = "collaboration_initiatives";
+const CONTRIBUTIONS = "collaboration_contributions";
+const MEDIA = "collaboration_media";
+const EVENTS = "collaboration_events";
+
+/**
+ * Retention defaults. They are obligations, not editorial settings: changing
+ * one shortens or lengthens how long personal material is kept.
+ */
+export const RETENTION = {
+  /** Declined material is cleared after this many days. */
+  declinedDays: 90,
+  /** A withdrawal made before automatic clearing existed is swept after this. */
+  withdrawnDays: 30,
+  /** An approved contribution's contact address is cleared after this many days. */
+  approvedContactDays: 365,
+} as const;
+
+export interface ContributionMediaDescriptor {
+  mediaId: string;
+  mimeType: string;
+  byteSize: number;
+  originalFilename: string;
+}
+
+export interface ContributionRecordView {
+  contributionId: string;
+  initiativeSlug: string;
+  answers: Record<string, string>;
+  caption: string;
+  displayName: string;
+  email: string;
+  attribution: Attribution;
+  channels: PublicationChannel[];
+  allowEdits: boolean;
+  allowAiEdits: boolean;
+  contactAllowed: boolean;
+  status: CollaborationStatus;
+  contributorMessage: string;
+  internalNotes: string;
+  usedChannels: PublicationChannel[];
+  publicationHistory: Array<{
+    channel: PublicationChannel;
+    reference: string;
+    recordedBy: string;
+    recordedAt: string;
+  }>;
+  media: ContributionMediaDescriptor[];
+  version: number;
+  consentVersion: string;
+  contentClearedAt: string | null;
+  galleryPublishedAt: string | null;
+  galleryHiddenAt: string | null;
+  /** The invitation as it read when this contribution was sent. */
+  questions: Array<{ key: string; label: string }>;
+  initiativeTitle: string;
+  initiativePurpose: string;
+  inputAcceptedAt: string | null;
+  claimedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContributionInbox {
+  items: ContributionRecordView[];
+  total: number;
+  counts: Record<CollaborationStatus, number>;
+  withMedia: number;
+}
+
+function clampText(
+  value: unknown,
+  label: string,
+  min: number,
+  max: number,
+): string {
+  if (value === undefined || value === null) {
+    if (min === 0) return "";
+    throw new CollaborationError(`${label} is required.`);
+  }
+  if (typeof value !== "string") throw new CollaborationError(`${label} must be text.`);
+  const trimmed = value.replace(/\r\n/g, "\n").trim();
+  if (trimmed.length < min) throw new CollaborationError(`${label} is too short.`);
+  if (trimmed.length > max) {
+    throw new CollaborationError(`${label} must be ${max} characters or fewer.`);
+  }
+  return trimmed;
+}
+
+function channelsFrom(value: unknown): PublicationChannel[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new CollaborationError("Choose how we may use your contribution.");
+  const chosen: PublicationChannel[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string" || !Object.hasOwn(PUBLICATION_CHANNELS, raw)) {
+      throw new CollaborationError("Choose how we may use your contribution.");
+    }
+    const channel = raw as PublicationChannel;
+    if (!chosen.includes(channel)) chosen.push(channel);
+  }
+  return chosen;
+}
+
+function attributionFrom(value: unknown): Attribution {
+  if (value === "named" || value === "anonymous") return value;
+  throw new CollaborationError("Choose whether we may use your name.");
+}
+
+function emailLooksValid(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+/** Collaborators need no account, so only the reviewer is authorised here. */
+function assertReviewer(user: SessionUser | null | undefined): SessionUser {
+  if (!user) throw new CollaborationError("Sign in required.", 401);
+  if (!hasPermission(user, "collaboration.review")) {
+    throw new CollaborationError("You do not have permission to review contributions.", 403);
+  }
+  return user;
+}
+
+export async function listOpenInitiatives(db: Db): Promise<CollaborationInitiative[]> {
+  const rows = await db
+    .collection(INITIATIVES)
+    .find({ status: "open" })
+    .sort({ createdAt: 1 })
+    .toArray();
+  return rows.map(toInitiative);
+}
+
+export async function getInitiative(
+  db: Db,
+  slug: string,
+): Promise<CollaborationInitiative | null> {
+  const row = await db.collection(INITIATIVES).findOne({ slug });
+  return row ? toInitiative(row) : null;
+}
+
+/** A draft or archived invitation has no public page. */
+export async function getPublicInitiative(
+  db: Db,
+  slug: string,
+): Promise<CollaborationInitiative | null> {
+  const initiative = await getInitiative(db, slug);
+  return initiative && isPublicInitiativeStatus(initiative.status) ? initiative : null;
+}
+
+export interface InitiativeSummary {
+  initiative: CollaborationInitiative;
+  contributions: number;
+  awaitingReview: number;
+}
+
+/** Every invitation, newest first, with the counts an editor needs. */
+export async function listInitiatives(db: Db): Promise<InitiativeSummary[]> {
+  const rows = await db.collection(INITIATIVES).find({}).sort({ createdAt: -1 }).toArray();
+  return Promise.all(
+    rows.map(async (row) => {
+      const initiative = toInitiative(row);
+      const [contributions, awaitingReview] = await Promise.all([
+        db.collection(CONTRIBUTIONS).countDocuments({ initiativeSlug: initiative.slug }),
+        db
+          .collection(CONTRIBUTIONS)
+          .countDocuments({ initiativeSlug: initiative.slug, status: { $in: ["new", "needs_follow_up"] } }),
+      ]);
+      return { initiative, contributions, awaitingReview };
+    }),
+  );
+}
+
+function toInitiative(row: Record<string, any>): CollaborationInitiative {
+  const questions = Array.isArray(row.questions) ? row.questions : [];
+  return {
+    slug: String(row.slug),
+    title: String(row.title),
+    summary: String(row.summary ?? ""),
+    purpose: String(row.purpose ?? ""),
+    profile: Object.hasOwn(CONTRIBUTION_PROFILES, row.profile) ? (row.profile as ContributionProfile) : "story",
+    questions: questions.map((question: any) => ({
+      key: String(question.key),
+      label: String(question.label),
+      ...(question.hint ? { hint: String(question.hint) } : {}),
+    })) satisfies ContributionQuestion[],
+    status: Object.hasOwn(INITIATIVE_STATUSES, row.status) ? (row.status as InitiativeStatus) : "draft",
+    archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
+    correctionEmail: String(row.correctionEmail ?? PILOT_INITIATIVE.correctionEmail),
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
+  };
+}
+
+/**
+ * Create the pilot initiative if it does not exist. Insert-only: an editor's
+ * wording, questions and open/paused/closed decision must survive a redeploy.
+ * Re-seeding only fills a missing record.
+ */
+export async function seedPilotInitiative(
+  db: Db,
+  overrides: Partial<typeof PILOT_INITIATIVE> = {},
+): Promise<CollaborationInitiative> {
+  const now = new Date();
+  const definition = { ...PILOT_INITIATIVE, ...overrides, slug: overrides.slug ?? PILOT_SLUG };
+  await db.collection(INITIATIVES).updateOne(
+    { slug: definition.slug },
+    {
+      $setOnInsert: {
+        slug: definition.slug,
+        title: definition.title,
+        summary: definition.summary,
+        purpose: definition.purpose,
+        questions: definition.questions,
+        profile: definition.profile,
+        status: definition.status,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    { upsert: true },
+  );
+  const saved = await getInitiative(db, definition.slug);
+  if (!saved) throw new CollaborationError("Could not create the initiative.", 500);
+  return saved;
+}
+
+export interface InitiativeCreateInput {
+  title: unknown;
+  summary: unknown;
+  purpose: unknown;
+  question: unknown;
+  hint?: unknown;
+  correctionEmail: unknown;
+  profile?: unknown;
+}
+
+/**
+ * Create an invitation as a draft. It has no public page until an editor opens
+ * it, which keeps creation and publication as separate decisions.
+ */
+export async function createInitiative(
+  db: Db,
+  user: SessionUser | null | undefined,
+  input: InitiativeCreateInput,
+): Promise<CollaborationInitiative> {
+  if (!user) throw new CollaborationError("Sign in required.", 401);
+  if (!hasPermission(user, "collaboration.manage")) {
+    throw new CollaborationError("You do not have permission to create an invitation.", 403);
+  }
+  const title = clampText(input.title, "Title", 3, 120);
+  const summary = clampText(input.summary, "Summary", 10, 600);
+  const purpose = clampText(input.purpose, "Purpose", 10, 1_200);
+  const label = clampText(input.question, "First question", 3, 160);
+  const hint = clampText(input.hint, "Question hint", 0, 200);
+  // Empty means inherit the operations default. A non-empty value is an
+  // explicit per-invitation override.
+  const correctionEmail = clampText(input.correctionEmail, "Correction email", 0, 254);
+  if (correctionEmail && !emailLooksValid(correctionEmail)) {
+    throw new CollaborationError("Enter a valid email address for corrections and removals.");
+  }
+  const profile =
+    input.profile === undefined || input.profile === ""
+      ? "story"
+      : input.profile;
+  if (typeof profile !== "string" || !Object.hasOwn(CONTRIBUTION_PROFILES, profile)) {
+    throw new CollaborationError("Choose what this invitation collects.");
+  }
+  const base = slugifyTitle(title) || "invitation";
+  const now = new Date();
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    const slug = attempt === 1 ? base : `${base}-${attempt}`;
+    // The unique index is the backstop; this check also keeps the in-memory
+    // preview honest, where indexes are not enforced.
+    if (await db.collection(INITIATIVES).countDocuments({ slug })) continue;
+    try {
+      await db.collection(INITIATIVES).insertOne({
+        slug,
+        title,
+        summary,
+        purpose,
+        questions: [{ key: nextQuestionKey([]), label, ...(hint ? { hint } : {}) }],
+        profile,
+        status: "draft",
+        correctionEmail,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: user.memberId,
+      });
+      const saved = await getInitiative(db, slug);
+      if (!saved) throw new CollaborationError("Could not create the invitation.", 500);
+      return saved;
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000) throw error;
+    }
+  }
+  throw new CollaborationError("Could not find a free address for this invitation. Try a different title.", 409);
+}
+
+export interface InitiativeUpdateInput {
+  slug: unknown;
+  title: unknown;
+  summary: unknown;
+  purpose: unknown;
+  status: unknown;
+  questions: unknown;
+  correctionEmail: unknown;
+}
+
+/**
+ * Editors own the invitation's words and questions. Keys are stable: an existing
+ * question keeps its key when its label changes, so earlier answers survive;
+ * a new question receives the next free opaque key. Nothing here can change the
+ * consent vocabulary, statuses, limits or permissions, which are enforced rules.
+ */
+export async function updateInitiative(
+  db: Db,
+  user: SessionUser | null | undefined,
+  input: InitiativeUpdateInput,
+): Promise<CollaborationInitiative> {
+  if (!user) throw new CollaborationError("Sign in required.", 401);
+  if (!hasPermission(user, "collaboration.manage")) {
+    throw new CollaborationError("You do not have permission to change this invitation.", 403);
+  }
+  const slug = clampText(input.slug, "Invitation", 1, 120);
+  const current = await getInitiative(db, slug);
+  if (!current) throw new CollaborationError("That invitation no longer exists.", 404);
+  const status = input.status;
+  if (typeof status !== "string" || !Object.hasOwn(INITIATIVE_STATUSES, status)) {
+    throw new CollaborationError("Choose the invitation's state.");
+  }
+  if (!Array.isArray(input.questions) || input.questions.length < 1) {
+    throw new CollaborationError("Ask at least one question.");
+  }
+  if (input.questions.length > MAX_INITIATIVE_QUESTIONS) {
+    throw new CollaborationError(`Use ${MAX_INITIATIVE_QUESTIONS} questions or fewer.`);
+  }
+  // Empty means inherit the operations default. A non-empty value is an
+  // explicit per-invitation override.
+  const correctionEmail = clampText(input.correctionEmail, "Correction email", 0, 254);
+  if (correctionEmail && !emailLooksValid(correctionEmail)) {
+    throw new CollaborationError("Enter a valid email address for corrections and removals.");
+  }
+  const existingKeys = new Set(current.questions.map((question) => question.key));
+  const questions: ContributionQuestion[] = [];
+  for (const raw of input.questions) {
+    const entry = raw as Record<string, unknown>;
+    const label = clampText(entry.label, "Question", 3, 160);
+    const hint = clampText(entry.hint, "Question hint", 0, 200);
+    const key =
+      typeof entry.key === "string" && existingKeys.has(entry.key)
+        ? entry.key
+        : nextQuestionKey([...current.questions, ...questions]);
+    if (questions.some((question) => question.key === key)) {
+      throw new CollaborationError("Reload the invitation and try again.");
+    }
+    questions.push({ key, label, ...(hint ? { hint } : {}) });
+  }
+  await db.collection(INITIATIVES).updateOne(
+    { slug },
+    {
+      $set: {
+        title: clampText(input.title, "Title", 3, 120),
+        summary: clampText(input.summary, "Summary", 10, 600),
+        purpose: clampText(input.purpose, "Purpose", 10, 1_200),
+        status,
+        questions,
+        correctionEmail: correctionEmail,
+        updatedAt: new Date(),
+        updatedBy: user.memberId,
+        ...(status === "archived" ? { archivedAt: new Date() } : {}),
+      },
+      ...(status === "archived" ? {} : { $unset: { archivedAt: "" } }),
+    },
+  );
+  const saved = await getInitiative(db, slug);
+  if (!saved) throw new CollaborationError("That invitation no longer exists.", 404);
+  return saved;
+}
+
+export interface SubmissionInput {
+  initiativeSlug: string;
+  requestId: string;
+  answers: Record<string, unknown>;
+  caption?: unknown;
+  displayName?: unknown;
+  email?: unknown;
+  attribution: unknown;
+  channels: unknown;
+  allowEdits?: unknown;
+  allowAiEdits?: unknown;
+  contactAllowed?: unknown;
+  consent?: unknown;
+  adultAttested?: unknown;
+  website?: unknown;
+}
+
+export interface SubmissionResult {
+  contributionId: string;
+  /** True when at least one publication channel was permitted. */
+  shareable: boolean;
+  /**
+   * The contributor's management token, returned only when this request created
+   * the contribution. A replay of an existing submission returns null: matching
+   * content is not proof of ownership. Only its hash is stored.
+   */
+  manageToken: string | null;
+}
+
+/**
+ * The secret used to derive management tokens. Production fails closed rather
+ * than falling back to a shared development string that would make every
+ * management link predictable.
+ */
+export function contributionTokenSecret(
+  env: Pick<
+    PlatformEnv,
+    "APP_MODE" | "RATE_LIMIT_SECRET" | "BETTER_AUTH_SECRET" | "SESSION_SECRET"
+  >,
+): string {
+  const secret = String(
+    env.RATE_LIMIT_SECRET || env.BETTER_AUTH_SECRET || env.SESSION_SECRET || "",
+  ).trim();
+  if (secret) return secret;
+  if (env.APP_MODE === "production") {
+    throw new CollaborationError(
+      "Contribution management links are unavailable until a signing secret is configured.",
+      503,
+    );
+  }
+  return "engage-collaboration-local";
+}
+
+/**
+ * A stable management token for one submission. Derived from the client's
+ * request reference and a deployment secret, so an idempotent retry can return
+ * the same token without storing the raw value.
+ */
+export function contributionManageToken(
+  requestId: string,
+  secret: string,
+): string {
+  return createHmac("sha256", secret).update(`collaboration-manage:${requestId}`).digest("base64url");
+}
+
+function manageTokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+const MANAGE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+export interface ManagedContribution {
+  contributionId: string;
+  initiativeSlug: string;
+  initiativeTitle: string;
+  questions: Array<{ key: string; label: string }>;
+  answers: Array<{ key: string; label: string; text: string }>;
+  caption: string;
+  profile: "story" | "consultation";
+  status: CollaborationStatus;
+  published: boolean;
+  hiddenFromGallery: boolean;
+  contactAllowed: boolean;
+  emailMasked: string;
+  claimedByMemberId: string | null;
+  claimedAt: string | null;
+  createdAt: string;
+}
+
+function maskEmail(value: string): string {
+  const [local, domain] = value.split("@");
+  if (!local || !domain) return "";
+  const visible = local.slice(0, 1);
+  return `${visible}${"*".repeat(Math.max(local.length - 1, 2))}@${domain}`;
+}
+
+async function findManagedContribution(db: Db, token: string) {
+  if (!MANAGE_TOKEN_PATTERN.test(token)) return null;
+  return db.collection(CONTRIBUTIONS).findOne({ manageTokenHash: manageTokenHash(token) });
+}
+
+/** What the contributor sees when they open their private link. */
+export async function viewManagedContribution(
+  db: Db,
+  token: string,
+): Promise<ManagedContribution> {
+  const row = await findManagedContribution(db, token);
+  if (!row) throw new CollaborationError("That link is not valid. Check it and try again.", 404);
+  const questions = Array.isArray(row.questions) ? row.questions : [];
+  const storedAnswers = (row.answers ?? {}) as Record<string, string>;
+  return {
+    contributionId: String(row.contributionId),
+    initiativeSlug: String(row.initiativeSlug),
+    initiativeTitle: String(row.initiativeTitle ?? row.initiativeSlug),
+    questions: questions.map((question: any) => ({
+      key: String(question.key),
+      label: String(question.label),
+    })),
+    answers: Object.entries(storedAnswers)
+      .filter(([, text]) => String(text).trim())
+      .map(([key, text]) => ({
+        key,
+        label: String(questions.find((question: any) => question.key === key)?.label ?? ""),
+        text: String(text),
+      }))
+      .filter((answer) => answer.label),
+    caption: String(row.caption ?? ""),
+    profile: row.profile === "consultation" ? "consultation" : "story",
+    status: (Object.hasOwn(COLLABORATION_STATUSES, row.status) ? row.status : "new") as CollaborationStatus,
+    published: Boolean(row.galleryPublishedAt) && !row.galleryHiddenAt,
+    hiddenFromGallery: Boolean(row.galleryHiddenAt),
+    contactAllowed: row.contactAllowed === true,
+    emailMasked: maskEmail(String(row.email ?? "")),
+    claimedByMemberId: row.claimedByMemberId ? String(row.claimedByMemberId) : null,
+    claimedAt: row.claimedAt ? new Date(row.claimedAt).toISOString() : null,
+    createdAt: new Date(row.createdAt).toISOString(),
+  };
+}
+
+export type ManageAction = "view" | "correct" | "hide" | "withdraw" | "claim" | "unclaim";
+
+export interface ManageInput {
+  token: unknown;
+  action: unknown;
+  answers?: unknown;
+  caption?: unknown;
+  consentToLink?: unknown;
+  user?: SessionUser | null;
+}
+
+/**
+ * Link a contribution to the signed-in member who holds its private link.
+ *
+ * Claiming is optional and records only the member identifier, the time and the
+ * consent version. It does not change publication, approval or who may manage
+ * the contribution: the private link remains the only authority. A contributor
+ * can unlink at any time from the same page.
+ */
+async function setContributionClaim(
+  db: Db,
+  current: Record<string, any>,
+  user: SessionUser | null | undefined,
+  claim: boolean,
+): Promise<{ claimed: boolean; alreadyLinked?: boolean }> {
+  if (!user) throw new CollaborationError("Sign in before linking a contribution.", 401);
+  const contributionId = String(current.contributionId);
+  if (current.contentClearedAt || current.status === "withdrawn") {
+    throw new CollaborationError("This contribution has been withdrawn.", 409);
+  }
+  const owner = current.claimedByMemberId ? String(current.claimedByMemberId) : null;
+  if (!claim) {
+    if (owner && owner !== user.memberId) {
+      throw new CollaborationError("This contribution is linked to a different account.", 409);
+    }
+    if (!owner) return { claimed: false };
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version, claimedByMemberId: user.memberId },
+        {
+          $set: { updatedAt: new Date() },
+          $unset: { claimedByMemberId: "", claimedAt: "", claimConsentVersion: "" },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+      }
+      await appendEvent(
+        db,
+        { contributionId, action: "unclaim_by_member", actorId: user.memberId },
+        session,
+      );
+    });
+    return { claimed: false };
+  }
+  if (owner === user.memberId) return { claimed: true, alreadyLinked: true };
+  if (owner) throw new CollaborationError("This contribution is linked to a different account.", 409);
+  await runInTransaction(db, async (session) => {
+    const written = await db.collection(CONTRIBUTIONS).updateOne(
+      { contributionId, version: current.version, claimedByMemberId: { $exists: false } },
+      {
+        $set: {
+          claimedByMemberId: user.memberId,
+          claimedAt: new Date(),
+          claimConsentVersion: CLAIM_CONSENT_VERSION,
+          updatedAt: new Date(),
+        },
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    if (!written.matchedCount) {
+      throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+    }
+    await appendEvent(
+      db,
+      { contributionId, action: "claim_by_member", actorId: user.memberId },
+      session,
+    );
+  });
+  return { claimed: true };
+}
+
+/**
+ * Self-service correction, gallery removal and withdrawal. The token is the only
+ * authority: no account is required and no other contribution can be reached.
+ * Corrections return the story to review and remove it from the gallery.
+ */
+export async function manageContribution(
+  db: Db,
+  input: ManageInput,
+): Promise<{
+  view?: ManagedContribution;
+  corrected?: boolean;
+  withdrawn?: boolean;
+  hidden?: boolean;
+  claimed?: boolean;
+  alreadyLinked?: boolean;
+}> {
+  const token = String(input.token ?? "");
+  const current = await findManagedContribution(db, token);
+  if (!current) throw new CollaborationError("That link is not valid. Check it and try again.", 404);
+  const action = input.action;
+  if (action === "view") {
+    return { view: await viewManagedContribution(db, token) };
+  }
+  if (action === "claim" || action === "unclaim") {
+    if (input.consentToLink !== true && action === "claim") {
+      throw new CollaborationError("Confirm you want to link this contribution to your account.");
+    }
+    return setContributionClaim(db, current, input.user, action === "claim");
+  }
+  const contributionId = String(current.contributionId);
+  if (current.contentClearedAt || current.status === "withdrawn") {
+    throw new CollaborationError("This contribution has already been withdrawn.", 409);
+  }
+
+  if (action === "withdraw") {
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version },
+        {
+          $set: { status: "withdrawn", updatedAt: new Date() },
+          $unset: { manageTokenHash: "" },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+      }
+      await appendEvent(
+        db,
+        { contributionId, action: "withdraw_by_contributor", actorId: "contributor" },
+        session,
+      );
+      await clearContributionContent(db, contributionId, "withdrawn", { session, touch: false });
+    });
+    return { withdrawn: true };
+  }
+
+  if (action === "hide") {
+    if (!current.galleryPublishedAt || current.galleryHiddenAt) {
+      return { hidden: true };
+    }
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version },
+        {
+          $set: { galleryHiddenAt: new Date(), updatedAt: new Date() },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+      }
+      await appendEvent(
+        db,
+        { contributionId, action: "hide_by_contributor", actorId: "contributor" },
+        session,
+      );
+    });
+    return { hidden: true };
+  }
+
+  if (action !== "correct") throw new CollaborationError("Choose what to do.");
+
+  const questions = Array.isArray(current.questions) ? current.questions : [];
+  const knownKeys = new Set(questions.map((question: any) => String(question.key)));
+  const answers: Record<string, string> = {};
+  const supplied = input.answers;
+  if (supplied !== undefined && (typeof supplied !== "object" || supplied === null || Array.isArray(supplied))) {
+    throw new CollaborationError("Could not read the answers.");
+  }
+  for (const [key, value] of Object.entries((supplied ?? {}) as Record<string, unknown>)) {
+    if (!knownKeys.has(key)) continue;
+    const text = clampText(value, "Your answer", 0, CONTRIBUTION_LIMITS.answer);
+    if (text) answers[key] = text;
+  }
+  const caption =
+    current.profile === "consultation"
+      ? ""
+      : clampText(input.caption, "Photo caption", 0, CONTRIBUTION_LIMITS.caption);
+  const longest = Object.values(answers).reduce((length, text) => Math.max(length, text.length), 0);
+  if (longest < 20 && !caption) {
+    throw new CollaborationError("Keep a few words, at least 20 characters, before saving.");
+  }
+  await runInTransaction(db, async (session) => {
+    const written = await db.collection(CONTRIBUTIONS).updateOne(
+      { contributionId, version: current.version },
+      {
+        $set: {
+          answers,
+          caption,
+          updatedAt: new Date(),
+          correctedAt: new Date(),
+          // A correction is re-reviewed before it can be public again.
+          ...(current.status === "approved" ? { status: "needs_follow_up" } : {}),
+          ...(current.galleryPublishedAt ? { galleryHiddenAt: new Date() } : {}),
+        },
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    if (!written.matchedCount) {
+      throw new CollaborationError("This contribution changed. Reload your link and try again.", 409);
+    }
+    await appendEvent(
+      db,
+      { contributionId, action: "correct_by_contributor", actorId: "contributor" },
+      session,
+    );
+  });
+  return { corrected: true };
+}
+
+export async function submitContribution(
+  db: Db,
+  input: SubmissionInput,
+  files: readonly File[] = [],
+  options: { tokenSecret?: string } = {},
+): Promise<SubmissionResult> {
+  if (input.website) throw new CollaborationError("Could not accept this submission.");
+  if (input.consent !== true) {
+    throw new CollaborationError("Confirm this is your own story and photos before sending.");
+  }
+  if (input.adultAttested !== true) {
+    throw new CollaborationError("Confirm you are 18 or over before sending.");
+  }
+  if (!UUID_PATTERN.test(String(input.requestId ?? ""))) {
+    throw new CollaborationError("Please reload the page and try again.");
+  }
+  const initiative = await getInitiative(db, String(input.initiativeSlug ?? ""));
+  if (!initiative) throw new CollaborationError("That invitation is not available.", 404);
+  if (initiative.status !== "open") {
+    throw new CollaborationError("This invitation is not accepting contributions right now.", 409);
+  }
+
+  const knownKeys = new Set(initiative.questions.map((question) => question.key));
+  for (const [key, value] of Object.entries(input.answers ?? {})) {
+    if (!knownKeys.has(key) && typeof value === "string" && value.trim()) {
+      throw new CollaborationError(
+        "This invitation changed while you were writing. Your words are still here. Reload to see the current questions.",
+        409,
+      );
+    }
+  }
+  if (initiative.profile === "consultation" && files.length > 0) {
+    throw new CollaborationError("This invitation asks for written responses only.");
+  }
+  const answers: Record<string, string> = {};
+  for (const question of initiative.questions) {
+    const value = clampText(
+      input.answers?.[question.key],
+      question.label,
+      0,
+      CONTRIBUTION_LIMITS.answer,
+    );
+    if (value) answers[question.key] = value;
+  }
+  const caption =
+    initiative.profile === "consultation"
+      ? ""
+      : clampText(input.caption, "Photo caption", 0, CONTRIBUTION_LIMITS.caption);
+  const attribution: Attribution =
+    initiative.profile === "consultation" ? "anonymous" : attributionFrom(input.attribution);
+  const channels = channelsFrom(input.channels);
+  const allowEdits = initiative.profile === "story" && input.allowEdits === true;
+  const allowAiEdits = initiative.profile === "story" && input.allowAiEdits === true;
+  if (allowAiEdits && !allowEdits) {
+    throw new CollaborationError(
+      "Choose whether ordinary edits are allowed before optional AI-assisted edits.",
+    );
+  }
+  const contactAllowed = input.contactAllowed === true;
+  const email = contactAllowed
+    ? clampText(input.email, "Email", 5, CONTRIBUTION_LIMITS.email)
+    : "";
+  if (email && !emailLooksValid(email)) {
+    throw new CollaborationError("Enter an email address we can reply to, or leave it blank.");
+  }
+  if (allowAiEdits && !contactAllowed) {
+    throw new CollaborationError(
+      "Add a reply address so we can show you an AI-assisted edit before it is used, or leave it off.",
+    );
+  }
+  const displayName =
+    attribution === "named"
+      ? clampText(input.displayName, "Your name", 2, CONTRIBUTION_LIMITS.displayName)
+      : "";
+
+  if (files.length > MEDIA_LIMITS.files) {
+    throw new CollaborationError(`Add up to ${MEDIA_LIMITS.files} photos.`);
+  }
+  const prepared: Array<{ file: File; image: ReturnType<typeof prepareImage> }> = [];
+  let totalBytes = 0;
+  for (const file of files) {
+    const bytes = Buffer.from(await file.arrayBuffer());
+    totalBytes += bytes.length;
+    if (totalBytes > MEDIA_LIMITS.totalBytes) {
+      throw new CollaborationError(
+        `Photos must total ${MEDIA_LIMITS.totalBytes / (1024 * 1024)} MB or less.`,
+        413,
+      );
+    }
+    prepared.push({ file, image: prepareImage(bytes) });
+  }
+
+  const longestAnswer = Object.values(answers).reduce(
+    (longest, value) => Math.max(longest, value.length),
+    0,
+  );
+  if (!prepared.length && longestAnswer < 20) {
+    throw new CollaborationError("Add a few words, or a photo, before sending.");
+  }
+
+  const fingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        initiativeSlug: initiative.slug,
+        answers,
+        caption,
+        attribution,
+        channels,
+        allowEdits,
+        allowAiEdits,
+        email,
+        displayName,
+        consent: true,
+        media: prepared.map((entry) => entry.image.sha256),
+      }),
+    )
+    .digest("hex");
+  const manageToken = contributionManageToken(
+    input.requestId,
+    options.tokenSecret || rateLimitSecret(),
+  );
+  const _id = new ObjectId(
+    createHash("sha256").update(input.requestId).digest("hex").slice(0, 24),
+  );
+  const existing = await db.collection(CONTRIBUTIONS).findOne({ _id });
+  if (existing) {
+    if (existing.fingerprint !== fingerprint) {
+      throw new CollaborationError(
+        "This form has already been sent. Reload the page to share something else.",
+        409,
+      );
+    }
+    // A replay must not reissue management authority. The original response is
+    // the only place the token existed.
+    return {
+      contributionId: String(existing.contributionId),
+      shareable: channels.length > 0,
+      manageToken: null,
+    };
+  }
+
+  const now = new Date();
+  const contributionId = input.requestId;
+  // Public identifier, deliberately unrelated to the submission reference.
+  const storyId = new ObjectId().toHexString();
+  const media: ContributionMediaDescriptor[] = prepared.map(({ file, image }) => ({
+    mediaId: new ObjectId().toHexString(),
+    mimeType: image.mimeType,
+    byteSize: image.bytes.length,
+    originalFilename: safeFilename(file.name),
+  }));
+
+  let inserted = false;
+  try {
+    await db.collection(CONTRIBUTIONS).insertOne({
+      _id,
+      contributionId,
+      storyId,
+      initiativeSlug: initiative.slug,
+      // Snapshot what the contributor actually read and answered.
+      initiativeTitle: initiative.title,
+      initiativePurpose: initiative.purpose,
+      questions: initiative.questions.map((question) => ({ key: question.key, label: question.label })),
+      profile: initiative.profile,
+      adultAttestedAt: now,
+      answers,
+      caption,
+      displayName,
+      email,
+      attribution,
+      channels,
+      allowEdits,
+      allowAiEdits,
+      contactAllowed,
+      status: "new",
+      contributorMessage: "",
+      internalNotes: "",
+      usedChannels: [],
+      publicationHistory: [],
+      media,
+      hasMedia: media.length > 0,
+      manageTokenHash: manageTokenHash(manageToken),
+      fingerprint,
+      version: 0,
+      consentVersion: COLLABORATION_CONSENT_VERSION,
+      createdAt: now,
+      updatedAt: now,
+    });
+    inserted = true;
+    for (const [index, entry] of prepared.entries()) {
+      const descriptor = media[index]!;
+      await db.collection(MEDIA).insertOne({
+        mediaId: descriptor.mediaId,
+        contributionId,
+        initiativeSlug: initiative.slug,
+        mimeType: entry.image.mimeType,
+        byteSize: entry.image.bytes.length,
+        sha256: entry.image.sha256,
+        originalFilename: descriptor.originalFilename,
+        bytes: entry.image.bytes,
+        createdAt: now,
+      });
+    }
+  } catch (error) {
+    if (inserted) {
+      await db.collection(CONTRIBUTIONS).deleteOne({ contributionId }).catch(() => {});
+      await db.collection(MEDIA).deleteMany({ contributionId }).catch(() => {});
+    }
+    if ((error as { code?: number }).code !== 11000) throw error;
+    const saved = await db.collection(CONTRIBUTIONS).findOne({ _id });
+    if (saved?.fingerprint !== fingerprint) {
+      throw new CollaborationError(
+        "This form has already been sent. Reload the page to share something else.",
+        409,
+      );
+    }
+    // A concurrent request lost the insert race. It did not create the
+    // contribution, so it must not receive management authority either.
+    return {
+      contributionId: String(saved?.contributionId ?? contributionId),
+      shareable: channels.length > 0,
+      manageToken: null,
+    };
+  }
+
+  // One count per accepted contribution. An idempotent retry returns above and
+  // does not increment again. A counting failure must not fail the submission.
+  if (inserted) {
+    await recordFunnelEvent(db, initiative.slug, "submitted").catch(() => {});
+  }
+  return { contributionId, shareable: channels.length > 0, manageToken };
+}
+
+/**
+ * Remove the contributor's words, name, contact address and photographs, and
+ * keep only the review record. Irreversible by design.
+ */
+async function clearContributionContent(
+  db: Db,
+  contributionId: string,
+  reason: "withdrawn" | "declined" | "retention",
+  options: { keepContact?: boolean; session?: ClientSession; touch?: boolean } = {},
+): Promise<void> {
+  await db.collection(MEDIA).deleteMany({ contributionId }, { session: options.session });
+  await db.collection(CONTRIBUTIONS).updateOne(
+    { contributionId },
+    {
+      $set: {
+        answers: {},
+        caption: "",
+        displayName: "",
+        contributorMessage: "",
+        internalNotes: "",
+        media: [],
+        hasMedia: false,
+        ...(options.keepContact ? {} : { email: "", contactAllowed: false }),
+        contentClearedAt: new Date(),
+        contentClearedReason: reason,
+        ...(options.touch === false ? {} : { updatedAt: new Date() }),
+      },
+    },
+    { session: options.session },
+  );
+}
+
+class StaleRetentionError extends Error {}
+
+/**
+ * Clear one expired record only if it is still in the expected state and has not
+ * changed since it was selected. The conditional write and the media delete run
+ * together, so a status change between selection and clearing cannot destroy
+ * material that no longer qualifies.
+ */
+/** Exported for the retention tests; the sweep is the only production caller. */
+export async function clearExpiredContribution(
+  db: Db,
+  contributionId: string,
+  status: "declined" | "withdrawn",
+): Promise<boolean> {
+  const current = await db.collection(CONTRIBUTIONS).findOne({ contributionId });
+  if (!current || current.status !== status || current.contentClearedAt) return false;
+  try {
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        {
+          contributionId,
+          status,
+          version: current.version,
+          contentClearedAt: { $exists: false },
+        },
+        {
+          $set: {
+            answers: {},
+            caption: "",
+            displayName: "",
+            contributorMessage: "",
+            internalNotes: "",
+            media: [],
+            hasMedia: false,
+            email: "",
+            contactAllowed: false,
+            contentClearedAt: new Date(),
+            contentClearedReason: status,
+            updatedAt: new Date(),
+          },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) throw new StaleRetentionError();
+      await db.collection(MEDIA).deleteMany({ contributionId }, { session });
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof StaleRetentionError) return false;
+    throw error;
+  }
+}
+
+/**
+ * Retention sweep, dry-run by default. Withdrawals clear immediately at the
+ * moment of review; this catches declined material after the retention window,
+ * legacy withdrawals, and stale contact addresses.
+ */
+export async function purgeExpiredContent(
+  db: Db,
+  options: { now?: Date; apply?: boolean } = {},
+): Promise<{
+  declined: number;
+  withdrawn: number;
+  contactAddresses: number;
+  applied: boolean;
+}> {
+  const now = options.now ?? new Date();
+  const day = 86_400_000;
+  const before = (days: number) => new Date(now.getTime() - days * day);
+  const declined = await db
+    .collection(CONTRIBUTIONS)
+    .find({ status: "declined", contentClearedAt: { $exists: false }, updatedAt: { $lt: before(RETENTION.declinedDays) } })
+    .project({ contributionId: 1 })
+    .toArray();
+  const withdrawn = await db
+    .collection(CONTRIBUTIONS)
+    .find({ status: "withdrawn", contentClearedAt: { $exists: false }, updatedAt: { $lt: before(RETENTION.withdrawnDays) } })
+    .project({ contributionId: 1 })
+    .toArray();
+  const contacts = await db
+    .collection(CONTRIBUTIONS)
+    .find({
+      status: "approved",
+      email: { $ne: "" },
+      // Legacy approvals have no approvedAt. Fall back to updatedAt once, so an
+      // existing record is still swept rather than kept forever.
+      $or: [
+        { approvedAt: { $lt: before(RETENTION.approvedContactDays) } },
+        { approvedAt: { $exists: false }, updatedAt: { $lt: before(RETENTION.approvedContactDays) } },
+      ],
+    })
+    .project({ contributionId: 1, version: 1 })
+    .toArray();
+
+  let declinedCleared = declined.length;
+  let withdrawnCleared = withdrawn.length;
+  let contactsCleared = contacts.length;
+  if (options.apply) {
+    declinedCleared = 0;
+    for (const row of declined) {
+      if (await clearExpiredContribution(db, String(row.contributionId), "declined")) {
+        declinedCleared += 1;
+      }
+    }
+    withdrawnCleared = 0;
+    for (const row of withdrawn) {
+      if (await clearExpiredContribution(db, String(row.contributionId), "withdrawn")) {
+        withdrawnCleared += 1;
+      }
+    }
+    contactsCleared = 0;
+    for (const row of contacts) {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        {
+          contributionId: row.contributionId,
+          status: "approved",
+          version: row.version,
+          email: { $ne: "" },
+        },
+        { $set: { email: "", contactAllowed: false, updatedAt: new Date() }, $inc: { version: 1 } },
+      );
+      if (written.matchedCount) contactsCleared += 1;
+    }
+  }
+  return {
+    declined: declinedCleared,
+    withdrawn: withdrawnCleared,
+    contactAddresses: contactsCleared,
+    applied: options.apply === true,
+  };
+}
+
+export async function listContributions(
+  db: Db,
+  user: SessionUser | null | undefined,
+  filters: { status?: unknown; page?: unknown; q?: unknown } = {},
+): Promise<ContributionInbox> {
+  assertReviewer(user);
+  const status =
+    typeof filters.status === "string" && Object.hasOwn(COLLABORATION_STATUSES, filters.status)
+      ? (filters.status as CollaborationStatus)
+      : undefined;
+  const page = Number(filters.page ?? 1);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 10_000) {
+    throw new CollaborationError("Choose a valid page.");
+  }
+  const reference =
+    typeof filters.q === "string" ? filters.q.trim().replace(/[^a-z0-9]/gi, "").slice(0, 36) : "";
+  const filter: Record<string, unknown> = status ? { status } : {};
+  if (reference.length >= 3) {
+    filter.contributionId = new RegExp(`^${reference}`, "i");
+  }
+  const [total, rows, statusCounts, withMedia] = await Promise.all([
+    db.collection(CONTRIBUTIONS).countDocuments(filter),
+    db
+      .collection(CONTRIBUTIONS)
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(page * 20)
+      .toArray(),
+    Promise.all(
+      Object.keys(COLLABORATION_STATUSES).map(async (key) => [
+        key,
+        await db.collection(CONTRIBUTIONS).countDocuments({ status: key }),
+      ] as const),
+    ),
+    db.collection(CONTRIBUTIONS).countDocuments({ hasMedia: true }),
+  ]);
+  return {
+    items: rows.slice((page - 1) * 20).map(toContributionView),
+    total,
+    counts: Object.fromEntries(statusCounts) as Record<CollaborationStatus, number>,
+    withMedia,
+  };
+}
+
+function toContributionView(row: Record<string, any>): ContributionRecordView {
+  return {
+    contributionId: String(row.contributionId),
+    initiativeSlug: String(row.initiativeSlug),
+    answers: (row.answers ?? {}) as Record<string, string>,
+    caption: String(row.caption ?? ""),
+    displayName: String(row.displayName ?? ""),
+    email: String(row.email ?? ""),
+    attribution: row.attribution === "named" ? "named" : "anonymous",
+    channels: Array.isArray(row.channels) ? row.channels : [],
+    allowEdits: row.allowEdits === true,
+    allowAiEdits: row.allowAiEdits === true,
+    contactAllowed: row.contactAllowed === true,
+    status: (Object.hasOwn(COLLABORATION_STATUSES, row.status) ? row.status : "new") as CollaborationStatus,
+    contributorMessage: String(row.contributorMessage ?? ""),
+    internalNotes: String(row.internalNotes ?? ""),
+    usedChannels: Array.isArray(row.usedChannels) ? row.usedChannels : [],
+    publicationHistory: (Array.isArray(row.publicationHistory) ? row.publicationHistory : []).map(
+      (entry: any) => ({
+        channel: entry.channel as PublicationChannel,
+        reference: String(entry.reference ?? ""),
+        recordedBy: String(entry.recordedBy ?? ""),
+        recordedAt: new Date(entry.recordedAt).toISOString(),
+      }),
+    ),
+    media: (Array.isArray(row.media) ? row.media : []).map((entry: any) => ({
+      mediaId: String(entry.mediaId),
+      mimeType: String(entry.mimeType),
+      byteSize: Number(entry.byteSize ?? 0),
+      originalFilename: String(entry.originalFilename ?? "photo"),
+    })),
+    version: Number(row.version ?? 0),
+    consentVersion: String(row.consentVersion ?? ""),
+    contentClearedAt: row.contentClearedAt ? new Date(row.contentClearedAt).toISOString() : null,
+    galleryPublishedAt: row.galleryPublishedAt ? new Date(row.galleryPublishedAt).toISOString() : null,
+    galleryHiddenAt: row.galleryHiddenAt ? new Date(row.galleryHiddenAt).toISOString() : null,
+    questions: (Array.isArray(row.questions) ? row.questions : []).map((question: any) => ({
+      key: String(question.key),
+      label: String(question.label),
+    })),
+    initiativeTitle: String(row.initiativeTitle ?? row.initiativeSlug ?? ""),
+    initiativePurpose: String(row.initiativePurpose ?? ""),
+    inputAcceptedAt: row.inputAcceptedAt ? new Date(row.inputAcceptedAt).toISOString() : null,
+    claimedAt: row.claimedAt ? new Date(row.claimedAt).toISOString() : null,
+    createdAt: new Date(row.createdAt).toISOString(),
+    updatedAt: new Date(row.updatedAt).toISOString(),
+  };
+}
+
+async function appendEvent(
+  db: Db,
+  input: {
+    contributionId: string;
+    action: string;
+    actorId: string;
+    fromStatus?: CollaborationStatus;
+    toStatus?: CollaborationStatus;
+    note?: string;
+    channel?: PublicationChannel;
+  },
+  session?: ClientSession,
+): Promise<void> {
+  await db.collection(EVENTS).insertOne(
+    {
+      eventId: new ObjectId().toHexString(),
+      ...input,
+      at: new Date(),
+    },
+    { session },
+  );
+}
+
+export type ReviewAction = "set_status" | "record_use";
+
+export interface ReviewInput {
+  contributionId: unknown;
+  action: unknown;
+  status?: unknown;
+  contributorMessage?: unknown;
+  internalNotes?: unknown;
+  channel?: unknown;
+  reference?: unknown;
+  version: unknown;
+}
+
+/**
+ * One reviewed decision at a time. Optimistic `version` prevents two reviewers
+ * overwriting each other, and every change leaves an audit event.
+ */
+export async function reviewContribution(
+  db: Db,
+  user: SessionUser | null | undefined,
+  input: ReviewInput,
+): Promise<{ status: CollaborationStatus; version: number; acceptedAt: string | null }> {
+  const reviewer = assertReviewer(user);
+  const contributionId = clampText(input.contributionId, "Contribution", 36, 36);
+  const current = await db.collection(CONTRIBUTIONS).findOne({ contributionId });
+  if (!current) throw new CollaborationError("That contribution is no longer available.", 404);
+  if (!Number.isSafeInteger(input.version) || Number(input.version) < 0) {
+    throw new CollaborationError("Reload this contribution and try again.");
+  }
+  if (Number(input.version) !== Number(current.version)) {
+    throw new CollaborationError(
+      "This contribution changed since you opened it. Refresh and try again.",
+      409,
+    );
+  }
+  const fromStatus = current.status as CollaborationStatus;
+  const acceptedAt = current.inputAcceptedAt
+    ? new Date(current.inputAcceptedAt).toISOString()
+    : null;
+  // Withdrawal and retention clearing are terminal for the material. A record
+  // with no story, name or photographs cannot be published later.
+  const materialGone = fromStatus === "withdrawn" || Boolean(current.contentClearedAt);
+
+  if (input.action === "accept_input") {
+    if (materialGone) {
+      throw new CollaborationError(
+        "This contribution was withdrawn or its material has been cleared, so it cannot be accepted.",
+        409,
+      );
+    }
+    const now = new Date();
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version },
+        {
+          $set: { inputAcceptedAt: now, inputAcceptedBy: reviewer.memberId, updatedAt: now },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError(
+          "This contribution changed while you were reviewing it. Refresh and try again.",
+          409,
+        );
+      }
+      await appendEvent(
+        db,
+        { contributionId, action: "accept_input", actorId: reviewer.memberId },
+        session,
+      );
+    });
+    return { status: fromStatus, version: Number(current.version) + 1, acceptedAt: now.toISOString() };
+  }
+
+  if (input.action === "record_use") {
+    if (fromStatus !== "approved" || materialGone) {
+      throw new CollaborationError("Approve this contribution before recording where it was used.");
+    }
+    const channel = input.channel;
+    if (typeof channel !== "string" || !Object.hasOwn(PUBLICATION_CHANNELS, channel)) {
+      throw new CollaborationError("Choose where it was used.");
+    }
+    if (!Array.isArray(current.channels) || !current.channels.includes(channel)) {
+      throw new CollaborationError(
+        "The contributor did not allow this use. Choose a permitted channel.",
+      );
+    }
+    const reference = clampText(input.reference, "Where it was used", 2, 200);
+    const usedChannels = Array.isArray(current.usedChannels) ? [...current.usedChannels] : [];
+    if (!usedChannels.includes(channel)) usedChannels.push(channel);
+    await runInTransaction(db, async (session) => {
+      const written = await db.collection(CONTRIBUTIONS).updateOne(
+        { contributionId, version: current.version },
+        {
+          $set: {
+            usedChannels,
+            publicationHistory: [
+              ...(Array.isArray(current.publicationHistory) ? current.publicationHistory : []),
+              { channel, reference, recordedBy: reviewer.memberId, recordedAt: new Date() },
+            ],
+            updatedAt: new Date(),
+          },
+          $inc: { version: 1 },
+        },
+        { session },
+      );
+      if (!written.matchedCount) {
+        throw new CollaborationError(
+          "This contribution changed while you were reviewing it. Refresh and try again.",
+          409,
+        );
+      }
+      await appendEvent(
+        db,
+        {
+          contributionId,
+          action: "record_use",
+          actorId: reviewer.memberId,
+          channel: channel as PublicationChannel,
+          note: reference,
+        },
+        session,
+      );
+    });
+    return { status: fromStatus, version: Number(current.version) + 1, acceptedAt };
+  }
+
+  if (input.action !== "set_status") throw new CollaborationError("Choose what to do.");
+  const status = input.status;
+  if (typeof status !== "string" || !Object.hasOwn(COLLABORATION_STATUSES, status)) {
+    throw new CollaborationError("Choose a valid status.");
+  }
+  const nextStatus = status as CollaborationStatus;
+  if (materialGone) {
+    throw new CollaborationError(
+      "This contribution was withdrawn or its material has been cleared and cannot be reopened.",
+      409,
+    );
+  }
+  if (nextStatus === "approved") {
+    if (!Array.isArray(current.channels) || current.channels.length === 0) {
+      throw new CollaborationError(
+        "The contributor allowed private use only, so this cannot be published. Accept it as consultation input instead.",
+      );
+    }
+    if (current.attribution === "named" && !String(current.displayName ?? "").trim()) {
+      throw new CollaborationError("A named contribution needs a name before approval.");
+    }
+  }
+  // An omitted field means "leave it alone"; an explicit string, including "",
+  // is an intentional edit. This stops a status change erasing review notes.
+  const contributorMessage =
+    input.contributorMessage === undefined
+      ? String(current.contributorMessage ?? "")
+      : clampText(input.contributorMessage, "Message for the contributor", 0, 1_000);
+  const internalNotes =
+    input.internalNotes === undefined
+      ? String(current.internalNotes ?? "")
+      : clampText(input.internalNotes, "Internal notes", 0, 2_000);
+  await runInTransaction(db, async (session) => {
+    const written = await db.collection(CONTRIBUTIONS).updateOne(
+      { contributionId, version: current.version },
+      {
+        $set: {
+          status: nextStatus,
+          contributorMessage,
+          internalNotes,
+          updatedAt: new Date(),
+          // Retention of a reply address runs from this date, not from later
+          // reviewer activity.
+          ...(nextStatus === "approved" ? { approvedAt: new Date() } : {}),
+        },
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    if (!written.matchedCount) {
+      throw new CollaborationError(
+        "This contribution changed while you were reviewing it. Refresh and try again.",
+        409,
+      );
+    }
+    await appendEvent(
+      db,
+      {
+        contributionId,
+        action: "set_status",
+        actorId: reviewer.memberId,
+        fromStatus,
+        toStatus: nextStatus,
+      },
+      session,
+    );
+    // A withdrawal removes the material at once, in the same transaction as the
+    // decision and its audit event. Only the review record remains.
+    if (nextStatus === "withdrawn") {
+      await clearContributionContent(db, contributionId, "withdrawn", { session, touch: false });
+    }
+  });
+  return { status: nextStatus, version: Number(current.version) + 1, acceptedAt };
+}
+
+export interface PublishedContribution {
+  contributionId: string;
+  name: string;
+  attribution: Attribution;
+  answers: Array<{ label: string; text: string }>;
+  caption: string;
+  media: Array<{ mediaId: string; mimeType: string }>;
+  publishedAt: string;
+}
+
+/**
+ * What may appear on the public gallery: an approved story whose contributor
+ * chose the website channel, whose material still exists, and which a reviewer
+ * has not hidden. Written responses are never published individually.
+ */
+export const PUBLISHED_CONTRIBUTION_FILTER = {
+  status: "approved",
+  storyId: { $exists: true },
+  profile: "story",
+  channels: { $in: ["website"] },
+  contentClearedAt: { $exists: false },
+  // Approval alone never publishes. A reviewer publishes deliberately.
+  galleryPublishedAt: { $exists: true },
+  galleryHiddenAt: { $exists: false },
+} as const;
+
+export async function listPublishedContributions(
+  db: Db,
+  initiativeSlug: string,
+): Promise<PublishedContribution[]> {
+  const rows = await db
+    .collection(CONTRIBUTIONS)
+    .find({ ...PUBLISHED_CONTRIBUTION_FILTER, initiativeSlug })
+    .sort({ galleryPublishedAt: -1, _id: -1 })
+    .limit(60)
+    .toArray();
+  return rows.map((row) => {
+    const questions = Array.isArray(row.questions) ? row.questions : [];
+    const answers = Object.entries((row.answers ?? {}) as Record<string, string>)
+      .filter(([, value]) => value.trim().length > 0)
+      .map(([key, value]) => ({
+        label: String(questions.find((question: any) => question.key === key)?.label ?? ""),
+        text: value,
+      }))
+      .filter((answer) => answer.label);
+    return {
+      contributionId: String(row.storyId),
+      name: row.attribution === "named" ? String(row.displayName ?? "") : "",
+      attribution: row.attribution === "named" ? "named" : "anonymous",
+      answers,
+      caption: String(row.caption ?? ""),
+      media: (Array.isArray(row.media) ? row.media : []).map((entry: any) => ({
+        mediaId: String(entry.mediaId),
+        mimeType: String(entry.mimeType),
+      })),
+      publishedAt: new Date(row.galleryPublishedAt).toISOString(),
+    };
+  });
+}
+
+export async function countPublishedContributions(
+  db: Db,
+  initiativeSlug: string,
+): Promise<number> {
+  return db.collection(CONTRIBUTIONS).countDocuments({ ...PUBLISHED_CONTRIBUTION_FILTER, initiativeSlug });
+}
+
+/** Public media for a currently published story. Everything else is a 404. */
+export async function readPublishedMedia(
+  db: Db,
+  mediaId: string,
+): Promise<{ bytes: Buffer; mimeType: string }> {
+  if (!/^[a-f0-9]{24}$/i.test(mediaId)) {
+    throw new CollaborationError("That photo is not available.", 404);
+  }
+  const media = await db.collection(MEDIA).findOne({ mediaId });
+  if (!media) throw new CollaborationError("That photo is not available.", 404);
+  const published = await db
+    .collection(CONTRIBUTIONS)
+    .findOne({ ...PUBLISHED_CONTRIBUTION_FILTER, contributionId: media.contributionId });
+  if (!published) throw new CollaborationError("That photo is not available.", 404);
+  const stored = media.bytes;
+  const bytes = Buffer.isBuffer(stored)
+    ? stored
+    : stored instanceof Binary
+      ? Buffer.from(stored.buffer)
+      : Buffer.from(stored ?? []);
+  if (!bytes.length) throw new CollaborationError("That photo is not available.", 404);
+  return { bytes, mimeType: String(media.mimeType) };
+}
+
+/**
+ * Gallery publication is a second, explicit decision after approval.
+ *
+ * - `publish`: first public appearance, only for an approved story with website
+ *   consent. The publication time is recorded once and is not reset by a later
+ *   hide or show.
+ * - `hide`: remove from public view immediately, keeping approval and the
+ *   publication record.
+ * - `show`: return previously published material to public view.
+ */
+export async function setGalleryPublication(
+  db: Db,
+  user: SessionUser | null | undefined,
+  input: { contributionId: unknown; state: unknown; version: unknown },
+): Promise<{ state: "published" | "hidden"; version: number; publishedAt: string | null }> {
+  const reviewer = assertReviewer(user);
+  const contributionId = clampText(input.contributionId, "Contribution", 36, 36);
+  const current = await db.collection(CONTRIBUTIONS).findOne({ contributionId });
+  if (!current) throw new CollaborationError("That contribution is no longer available.", 404);
+  if (current.profile === "consultation") {
+    throw new CollaborationError("Written consultation responses are not published individually.");
+  }
+  if (current.status !== "approved" || current.contentClearedAt) {
+    throw new CollaborationError("Only an approved contribution can appear on the gallery.");
+  }
+  if (Number(input.version) !== Number(current.version)) {
+    throw new CollaborationError("This contribution changed since you opened it. Refresh and try again.", 409);
+  }
+  const state = input.state;
+  if (state !== "publish" && state !== "hide" && state !== "show") {
+    throw new CollaborationError("Choose whether to publish, hide or show this story.");
+  }
+  if ((state === "publish" || state === "show") && (!Array.isArray(current.channels) || !current.channels.includes("website"))) {
+    throw new CollaborationError("The contributor did not allow website publication.");
+  }
+  if ((state === "hide" || state === "show") && !current.galleryPublishedAt) {
+    throw new CollaborationError("This story has not been published to the gallery.");
+  }
+  if (state === "publish" && current.galleryPublishedAt && !current.galleryHiddenAt) {
+    throw new CollaborationError("This story is already in the public gallery.");
+  }
+
+  const publishedAt = current.galleryPublishedAt ? new Date(current.galleryPublishedAt) : new Date();
+  await runInTransaction(db, async (session) => {
+    const written = await db.collection(CONTRIBUTIONS).updateOne(
+      { contributionId, version: current.version },
+      {
+        $set: {
+          ...(state === "hide" ? { galleryHiddenAt: new Date() } : {}),
+          ...(state === "publish" && !current.galleryPublishedAt
+            ? { galleryPublishedAt: publishedAt }
+            : {}),
+          updatedAt: new Date(),
+        },
+        ...(state === "hide" ? {} : { $unset: { galleryHiddenAt: "" } }),
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    if (!written.matchedCount) {
+      throw new CollaborationError("This contribution changed while you were reviewing it. Refresh and try again.", 409);
+    }
+    await appendEvent(
+      db,
+      {
+        contributionId,
+        action:
+          state === "publish" ? "publish_to_gallery" : state === "hide" ? "hide_from_gallery" : "show_in_gallery",
+        actorId: reviewer.memberId,
+      },
+      session,
+    );
+  });
+  return {
+    state: state === "hide" ? "hidden" : "published",
+    version: Number(current.version) + 1,
+    publishedAt: publishedAt.toISOString(),
+  };
+}
+
+/** Private media is readable only by a reviewer, never by a public route. */
+export async function readContributionMedia(
+  db: Db,
+  user: SessionUser | null | undefined,
+  mediaId: string,
+): Promise<{ bytes: Buffer; mimeType: string; filename: string }> {
+  assertReviewer(user);
+  if (!/^[a-f0-9]{24}$/i.test(mediaId)) {
+    throw new CollaborationError("That photo is not available.", 404);
+  }
+  const row = await db.collection(MEDIA).findOne({ mediaId });
+  if (!row) throw new CollaborationError("That photo is not available.", 404);
+  // MongoDB returns a BSON Binary, while the in-memory preview keeps a Buffer.
+  // Normalise both; Buffer.from(Binary) silently yields zero bytes.
+  const stored = row.bytes;
+  const bytes = Buffer.isBuffer(stored)
+    ? stored
+    : stored instanceof Binary
+      ? Buffer.from(stored.buffer)
+      : Buffer.from(stored ?? []);
+  if (!bytes.length) throw new CollaborationError("That photo is not available.", 404);
+  return {
+    bytes,
+    mimeType: String(row.mimeType),
+    filename: String(row.originalFilename ?? "photo"),
+  };
+}
+
+/**
+ * Hand-off for the website team. Approved contributions only, with the
+ * contributor's permissions attached. Contact details and internal notes are
+ * deliberately excluded: the website team does not need them.
+ */
+export async function exportApproved(
+  db: Db,
+  user: SessionUser | null | undefined,
+): Promise<Record<string, unknown>> {
+  assertReviewer(user);
+  const rows = await db
+    .collection(CONTRIBUTIONS)
+    .find({ status: "approved" })
+    .sort({ updatedAt: 1 })
+    .toArray();
+  return {
+    consentVersion: COLLABORATION_CONSENT_VERSION,
+    exportedAt: new Date().toISOString(),
+    contributions: rows.map((row) => ({
+      contributionId: row.contributionId,
+      initiative: row.initiativeSlug,
+      name: row.attribution === "named" ? row.displayName : "",
+      attribution: row.attribution,
+      answers: row.answers ?? {},
+      caption: row.caption ?? "",
+      channels: row.channels ?? [],
+      allowEdits: row.allowEdits === true,
+      allowAiEdits: row.allowAiEdits === true,
+      media: (row.media ?? []).map((entry: any) => ({
+        mediaId: entry.mediaId,
+        mimeType: entry.mimeType,
+        byteSize: entry.byteSize,
+        download: `/api/admin/collaboration/media/${entry.mediaId}`,
+      })),
+      approvedAt: new Date(row.updatedAt).toISOString(),
+      publicationHistory: row.publicationHistory ?? [],
+    })),
+  };
+}

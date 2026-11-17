@@ -1,0 +1,28 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import ManageContribution from '../../components/collaboration/ManageContribution';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+---
+
+<SiteLayout
+  title="Manage your contribution · Engage"
+  description="Correct or withdraw a contribution you sent to a Fusion invitation."
+  canonical="/collaborate/manage/"
+  noIndex
+>
+  <div class="page-wrap section-space manage-page">
+    <header class="page-intro">
+      <p class="text-sm font-semibold uppercase tracking-widest">Your contribution</p>
+      <h1>Manage what you sent</h1>
+      <p>Correct your words, remove your story from the public gallery, or withdraw it entirely.</p>
+    </header>
+    <ManageContribution client:load />
+    <noscript><p>Please enable JavaScript to manage your contribution.</p></noscript>
+  </div>
+</SiteLayout>
+
+<style>
+  .manage-page { max-width: 46rem; }
+</style>

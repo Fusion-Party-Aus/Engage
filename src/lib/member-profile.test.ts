@@ -899,3 +899,77 @@ describe("CRM profile identifier seam", () => {
     assert.equal(await resolveMemberProfileRoute(db, bobId, env), null);
   });
 });
+
+describe("published stories linked to an account", () => {
+  async function linkStory(
+    memberId: string,
+    overrides: Record<string, unknown> = {},
+  ): Promise<void> {
+    const base: Record<string, unknown> = {
+      contributionId: "submission-reference-1",
+      storyId: "public-story-1",
+      initiativeSlug: "help-us-tell-fusions-story",
+      initiativeTitle: "Help us tell Fusion's story",
+      status: "approved",
+      profile: "story",
+      channels: ["website"],
+      galleryPublishedAt: new Date(Date.UTC(2026, 10, 12)),
+      claimedByMemberId: memberId,
+      claimedAt: new Date(Date.UTC(2026, 10, 12)),
+      answers: { meaning: "Fusion treated our local campaign as something worth turning up for." },
+      questions: [{ key: "meaning", label: "What does Fusion mean to you?" }],
+      media: [{ mediaId: "a".repeat(24), mimeType: "image/png", byteSize: 1, originalFilename: "p.png" }],
+      email: "ada@example.org",
+      internalNotes: "Never show this note",
+      manageTokenHash: "secret",
+    };
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value === undefined) delete base[key];
+      else base[key] = value;
+    }
+    await db.collection("collaboration_contributions").insertOne(base);
+  }
+
+  it("lists a linked, published story with a link to its gallery anchor", async () => {
+    const seeded = await seed();
+    const memberId = seeded.ada.toHexString();
+    await linkStory(memberId);
+    const page = await getMemberProfilePage(db, memberId, { pageSize: 10 });
+    assert.ok(page);
+    assert.equal(page.publishedStories.length, 1);
+    const story = page.publishedStories[0]!;
+    assert.equal(story.initiativeTitle, "Help us tell Fusion's story");
+    assert.equal(story.excerpt, "Fusion treated our local campaign as something worth turning up for.");
+    assert.equal(story.mediaCount, 1);
+    assert.equal(
+      story.href,
+      "/collaborate/help-us-tell-fusions-story/stories/#public-story-1",
+    );
+    const serialised = JSON.stringify(page);
+    assert.equal(serialised.includes("Never show this note"), false);
+    assert.equal(serialised.includes("manageTokenHash"), false);
+    assert.equal(serialised.includes("ada@example.org"), false);
+  });
+
+  it("never lists a linked story that is not public, or belongs to someone else", async () => {
+    const seeded = await seed();
+    const adaId = seeded.ada.toHexString();
+    const cases = [
+      { contributionId: "hidden", storyId: "hidden", galleryHiddenAt: new Date() },
+      { contributionId: "unpublished", storyId: "unpublished", galleryPublishedAt: undefined },
+      { contributionId: "social", storyId: "social", channels: ["social"] },
+      { contributionId: "consultation", storyId: "consultation", profile: "consultation" },
+      { contributionId: "declined", storyId: "declined", status: "declined" },
+      { contributionId: "withdrawn", storyId: "withdrawn", status: "withdrawn" },
+      { contributionId: "cleared", storyId: "cleared", contentClearedAt: new Date() },
+      { contributionId: "other-member", storyId: "other-member", claimedByMemberId: seeded.bob.toHexString() },
+      { contributionId: "unclaimed", storyId: "unclaimed", claimedByMemberId: undefined },
+    ];
+    for (const change of cases) {
+      await linkStory(adaId, change);
+    }
+    const page = await getMemberProfilePage(db, adaId, { pageSize: 10 });
+    assert.ok(page);
+    assert.deepEqual(page.publishedStories, []);
+  });
+});

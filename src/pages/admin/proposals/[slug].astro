@@ -47,6 +47,8 @@ import { policyCanonicalPath } from '../../../lib/policy-registry.ts';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../../lib/activity-timeline.ts';
 import PortableText from '../../../components/PortableText.astro';
 import ActivityTimeline from '../../../components/blocks/timeline-3';
+import AmendmentSuggestions from '../../../components/proposal/AmendmentSuggestions.astro';
+import { competingTargets, wordingSnapshot } from '../../../lib/amendment-suggestions.ts';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Input } from '../../../components/ui/input';
@@ -107,6 +109,18 @@ for (const amendment of amendmentRows) {
   const current = amendment.revisionHistory.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
 }
+const latestWording = revisions[0]?.snapshot ? wordingSnapshot(revisions[0].snapshot) : null;
+const amendmentOrdinal = new Map(amendmentRows.map((row: any, index: number) => [row.amendmentId, index + 1]));
+for (const amendment of amendmentRows as any[]) {
+  amendment.competingWith = (amendmentRows as any[])
+    .filter(
+      (other: any) =>
+        other.amendmentId !== amendment.amendmentId &&
+        !['rejected', 'withdrawn'].includes(String(other.status)) &&
+        competingTargets(amendment.suggestions, other.suggestions).length > 0,
+    )
+    .map((other: any) => `Amendment #${amendmentOrdinal.get(other.amendmentId)}`);
+}
 const [ballotResult, ballotRow, rawPolicy, relatedProposals, branches, visibleOtherProposals, quorumRecord] = proposal
   ? await Promise.all([
       db.collection('ballot_results').findOne(proposalBallotResultFilter(proposal.proposalId)),
@@ -135,7 +149,7 @@ const branchNameFor = (branchId?: string) =>
   branchId ? String(branches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
 
 const unresolvedAmendments = amendmentRows.filter((amendment: any) =>
-  ['proposed', 'conflict', 'stale', 'ready', 'endorsed', 'voting'].includes(String(amendment.status)),
+  ['proposed', 'conflict', 'stale', 'ready', 'endorsed', 'voting', 'applying'].includes(String(amendment.status)),
 ).length;
 const unrespondedComments = comments.filter((comment) => !comment.feedback).length;
 
@@ -1149,6 +1163,19 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         {amendment.conflicts?.length ? ` · overlapping fields: ${amendment.conflicts.join(', ')}` : ''}
                       </p>
 
+                      {Array.isArray(amendment.suggestions) && amendment.suggestions.length && latestWording && (
+                        <AmendmentSuggestions
+                          suggestions={amendment.suggestions}
+                          base={wordingSnapshot(
+                            amendment.revisionHistory.find((row: any) => row.revisionId === amendment.baseRevisionId)?.snapshot ??
+                            revisions[0]?.snapshot ??
+                            {},
+                          )}
+                          latest={latestWording}
+                          competing={amendment.competingWith ?? []}
+                        />
+                      )}
+
                       {['proposed', 'stale', 'conflict'].includes(amendment.status) && canManageProposal && (
                         <details class="admin-subform-disclosure">
                           <summary>Resolve or review amendment</summary>
@@ -1183,7 +1210,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </details>
                       )}
 
-                      {['proposed', 'ready'].includes(amendment.status) && proposal.stage === 'decide' && proposal.ballotRevisionId === amendment.baseRevisionId && canManageBallot && (
+                      {amendment.status === 'ready' && proposal.stage === 'decide' && proposal.ballotRevisionId === amendment.baseRevisionId && canManageBallot && (
                         <form class="amendment-open-form grid gap-2 pt-2" data-amendment-id={amendment.amendmentId}>
                           <div class="admin-actions">
                             <Button variant="outline" size="sm" type="submit">Open amendment endorsement ballot</Button>
@@ -1226,10 +1253,30 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                         </form>
                       )}
 
-                      {amendment.status === 'accepted' && canManageBallot && (
+                      {amendment.status === 'accepted' && amendment.applicationBlockedReason && canManageProposal && (
+                        <div class="grid gap-3 pt-2">
+                          <p class="admin-inline-note" role="status">{amendment.applicationBlockedReason}</p>
+                          <form class="amendment-resolve-form grid gap-3" data-amendment-id={amendment.amendmentId}>
+                            <input type="hidden" name="outcome" value="withdrawn" />
+                            <Field label="Reason for withdrawal" htmlFor={`amendment-withdraw-${amendment.amendmentId}`}>
+                              <Textarea id={`amendment-withdraw-${amendment.amendmentId}`} name="reason" rows={2} required maxLength={1000} />
+                            </Field>
+                            <div class="admin-actions">
+                              <Button variant="outline" size="sm" type="submit">Withdraw blocked amendment</Button>
+                              <span class="admin-status" role="status" aria-live="polite"></span>
+                            </div>
+                          </form>
+                        </div>
+                      )}
+
+                      {['accepted', 'applying'].includes(amendment.status) && !amendment.applicationBlockedReason && canManageBallot && (
                         <form class="amendment-apply-form grid gap-2 pt-2" data-amendment-id={amendment.amendmentId}>
                           <div class="admin-actions">
-                            <Button variant="outline" size="sm" type="submit">Apply amendment as new proposal revision</Button>
+                            <Button variant="outline" size="sm" type="submit">
+                              {amendment.status === 'applying'
+                                ? 'Retry incomplete application'
+                                : 'Apply amendment as new proposal revision'}
+                            </Button>
                             <span class="admin-status" role="status" aria-live="polite"></span>
                           </div>
                         </form>

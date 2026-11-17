@@ -192,6 +192,14 @@ Rules:
 - A one-off layout (grid, strip, rail) may use page CSS. A one-off control (button, field, pill, table) may not.
 - Pages that bypass these rules are defects. Migrate them when touched; never copy them as precedent.
 
+### UI SDK
+
+`@ui-sdk/react` and `@ui-sdk/core` provide unstyled behaviours. They complement the shadcn primitives; they do not replace the Horizon control layer.
+
+- Before using ui-sdk, follow the ui-sdk skill if it is installed, and read `node_modules/@ui-sdk/react/docs/llms.txt`.
+- To build a new component, search `node_modules/@ui-sdk/react/docs/core.md` by heading, then read `rendering.md` next to it.
+- Import ui-sdk's default styles once through `src/styles/global.css`. Do not add a second global stylesheet import.
+
 **Audit check.** For every changed file, run:
 
 ```sh
@@ -324,6 +332,17 @@ Prefer the simplest maintainable implementation that satisfies the requirements.
 - Remove dead code when safely replacing functionality.
 - Avoid adding dependencies for functionality adequately supported by the existing stack.
 - Do not silently increase operational complexity to solve a minor interface problem.
+
+### Configure, don't hard-code
+
+A new feature is expected to be extensible and configurable without a code change. Treat that as the default, not an enhancement to add later.
+
+- Put the things an editor or administrator will reasonably want to change into stored configuration: wording, questions and prompts, available options, ordering, thresholds the product owns, and the open/paused/closed state of a public invitation.
+- Read that configuration at the boundary and validate it there. A configuration change must never require a deploy, and a redeploy must never overwrite an administrator's edit (seed insert-only).
+- Keep in code only what must pass review to change: permission keys, consent and privacy vocabulary, security bounds and upload limits, statuses that carry audit or publication meaning, and anything a governance decision authorises.
+- When a value is deliberately fixed in code, say why in one line next to it, and record the decision in the feature's documentation.
+- A feature that ships with its copy, questions or options hard-coded, when an editor would predictably need to change them, is incomplete.
+- Do not build a generic form or workflow builder to satisfy this rule. Configuration is a small, typed, reviewed schema, not a programming language.
 
 ### Module boundaries (no god modules)
 

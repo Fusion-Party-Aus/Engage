@@ -164,8 +164,11 @@ describe("platform settings", () => {
     assert.equal(res.status, 200);
     const payload = (await res.json()) as any;
     assert.equal(payload.config.repoUrl, "https://github.com/example/operations");
-    const event = (await listSiteConfigEvents(db))[0]!;
-    assert.equal(event.section, "operations");
+    // Several events can share a millisecond; select by content, not position.
+    const event = (await listSiteConfigEvents(db)).find(
+      (entry) => entry.section === "operations" && entry.changedFields.join() === "repoUrl",
+    );
+    assert.ok(event);
     assert.deepEqual(event.changedFields, ["repoUrl"]);
   });
 });

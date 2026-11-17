@@ -1,9 +1,9 @@
 ---
 import AdminLayout from '../../../layouts/AdminLayout.astro';
-import { ArrowRight, LifeBuoy } from 'lucide-react';
+import { LifeBuoy } from 'lucide-react';
 import { getSessionUser } from '../../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
-import { listSense, senseDestinations } from '../../../lib/sense-box.ts';
+import { listSense, senseDestinations, senseReviewScope, SenseError } from '../../../lib/sense-box.ts';
 import { SENSE_TOPICS, SENSE_STATUSES } from '../../../lib/sense-box-options.ts';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
@@ -21,12 +21,23 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
 const env = runtimeEnv(Astro.locals);
 const user = await getSessionUser(Astro.request, env);
 if (!user) return Astro.redirect('/member/');
-if (!user.isAdmin && !user.branchAdminIds?.length) return Astro.rewrite('/403/');
+const reviewScope = senseReviewScope(user);
+if (!reviewScope.national && !reviewScope.branchIds.length) return Astro.rewrite('/403/');
 
 const db = await getDatabase(env);
-const inbox = await listSense(db, user, Object.fromEntries(Astro.url.searchParams));
+let inbox;
+let filterError = '';
+try {
+  inbox = await listSense(db, user, Object.fromEntries(Astro.url.searchParams));
+} catch (error) {
+  if (!(error instanceof SenseError)) throw error;
+  inbox = { items: [], total: 0, page: 1, topics: {} };
+  filterError = error.message;
+}
 const destinations = await senseDestinations(db);
-const branches = user.isAdmin ? destinations : destinations.filter((branch) => user.branchAdminIds?.includes(branch.branchId));
+const branches = reviewScope.national
+  ? destinations
+  : destinations.filter((branch) => reviewScope.branchIds.includes(branch.branchId));
 
 const pageHref = (page: number) => {
   const params = new URLSearchParams(Object.fromEntries(Astro.url.searchParams));
@@ -82,6 +93,7 @@ const statusTone = (status: string) =>
     </Card>
 
     <p class="text-sm text-muted-foreground m-0">{inbox.total} {inbox.total === 1 ? 'submission' : 'submissions'}</p>
+    {filterError && <p role="alert" class="text-sm text-destructive m-0">{filterError}</p>}
 
     {inbox.items.length ? (
       <Card class="gap-0">
@@ -101,10 +113,16 @@ const statusTone = (status: string) =>
                   <time datetime={new Date(item.createdAt).toISOString()}>{new Date(item.createdAt).toLocaleDateString('en-AU')}</time>
                   <Badge variant="outline">{SENSE_TOPICS[item.topic]}</Badge>
                   <Badge variant={statusTone(item.status)}>{SENSE_STATUSES[item.status]}</Badge>
+                  <Badge variant={item.visibility === 'published' ? 'success' : 'muted'}>{item.visibility === 'published' ? 'Published' : 'Private'}</Badge>
+                  {!item.publicationConsent && <Badge variant="warning">No publication consent</Badge>}
                 </div>
                 <div>
                   <h2 class="text-xl m-0">{item.title}</h2>
                   <p class="mt-1 mb-0 whitespace-pre-wrap break-words">{item.detail}</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <Button href={`/admin/sense-box/${item.submissionId}/`} size="sm" variant="outline">Open workspace</Button>
+                  {item.commentCount ? <span class="text-sm text-muted-foreground">{item.commentCount} public {item.commentCount === 1 ? 'comment' : 'comments'}</span> : null}
                 </div>
                 <form data-review data-id={item.submissionId} data-branch={item.branchId} data-version={item.version} class="flex flex-wrap items-end gap-3">
                   <Field label="Status" htmlFor={`sense-item-status-${item.submissionId}`}>
@@ -138,10 +156,6 @@ const statusTone = (status: string) =>
       {inbox.page > 1 && <Button href={pageHref(inbox.page - 1)} variant="outline" size="sm">Previous</Button>}
       {inbox.page * 30 < inbox.total && <Button href={pageHref(inbox.page + 1)} variant="outline" size="sm">Next</Button>}
     </nav>
-
-    <div>
-      <Button href="/proposals/new/" variant="outline" size="sm">Develop a formal proposal<ArrowRight /></Button>
-    </div>
   </div>
 </AdminLayout>
 

@@ -236,6 +236,26 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
         </div>
       </header>
 
+      {data.publishedStories.length > 0 && (
+        <section class="profile-stories" aria-labelledby="profile-stories-heading">
+          <h2 id="profile-stories-heading">Published stories</h2>
+          <ul class="profile-story-list">
+            {data.publishedStories.map((story) => (
+              <li>
+                <a class="profile-story-link" href={story.href}>{story.initiativeTitle}</a>
+                {story.excerpt && <p class="profile-story-excerpt">{story.excerpt}</p>}
+                <p class="profile-story-meta">
+                  {story.publishedAt.toLocaleDateString('en-AU')}
+                  {story.mediaCount > 0
+                    ? ` · ${story.mediaCount} ${story.mediaCount === 1 ? 'photo' : 'photos'}`
+                    : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <nav class="profile-tabs" aria-label="Contribution history">
         {(['comments', 'proposals', 'amendments'] as const).map((tab) => (
           <a
@@ -498,6 +518,38 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
     font-size: 1.15rem;
     font-weight: 700;
     color: var(--horizon-purple-deep);
+  }
+
+  .profile-stories {
+    margin: 2rem 0 0;
+    border-top: 3px solid var(--horizon-accent);
+    padding-top: 1rem;
+  }
+  .profile-stories h2 {
+    font-size: 1.35rem;
+    margin: 0 0 0.75rem;
+  }
+  .profile-story-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1rem;
+  }
+  .profile-story-list li {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .profile-story-link {
+    font-weight: 600;
+  }
+  .profile-story-excerpt,
+  .profile-story-meta {
+    margin: 0;
+    color: var(--horizon-muted);
+  }
+  .profile-story-meta {
+    font-size: 0.875rem;
   }
 
   .profile-tabs {

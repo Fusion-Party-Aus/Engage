@@ -151,11 +151,13 @@ Effective permissions are the union of these sources. National grants satisfy br
 
 A **matter** is the generic governance item. In the data model it is a `proposals` document. `ProposalRecord` is the storage type; "matter" is the extensible domain concept.
 
+A collaboration matter is the exception: an invitation for public stories and photographs, stored in `collaboration_initiatives`, which never appears in `proposals` and supports no governance capability. See [public collaboration matters](../product/collaboration-matters.md).
+
 A matter has:
 
 - identity: `proposalId` (`PROP-*` for seeded/generated proposals, `GOV-*` for governance resolutions), `slug`;
 - content: `title`, `summary`, `outcomes`, `details`, attachment, provenance;
-- type: `kind` — `policy` or `resolution`;
+- type: `kind` — `policy`, `resolution`, or the non-governance `collaboration`; see below for the storage difference;
 - stage: `propose`, `deliberate`, `decide`, `implement`, `archived`;
 - governance coordinates: `originatingBranchId`, `governanceAuthorityBranchId`, `jurisdictionBranchId`, `scope`, `publicationScope`;
 - ballot binding: `ballotRevisionId`, `ballotClosesAt`;
@@ -167,16 +169,16 @@ A matter has:
 
 The matter registry (`src/lib/matters.ts`) declares what a type can do:
 
-| Capability | Policy | Resolution |
-|---|---|---|
-| Deliberation | Yes | Yes |
-| Amendments | Yes | Yes |
-| Ballots | Yes | Yes |
-| Ratification | Yes | **No** |
-| Policy publication | Yes | **No** |
-| Supersession | Yes | Yes |
+| Capability | Policy | Resolution | Collaboration |
+|---|---|---|---|
+| Deliberation | Yes | Yes | **No** |
+| Amendments | Yes | Yes | **No** |
+| Ballots | Yes | Yes | **No** |
+| Ratification | Yes | **No** | **No** |
+| Policy publication | Yes | **No** | **No** |
+| Supersession | Yes | Yes | **No** |
 
-Both types share the five stages and the standard transition table. A resolution can be deliberated, amended, voted and implemented, but it can never enter the Policy Registry. This is the core distinction between **policy proposals** and **governance resolutions**.
+Both governance types share the five stages and the standard transition table. A collaboration matter has no lifecycle stages at all: it is an invitation with an open, paused or closed state, reviewed privately. A resolution can be deliberated, amended, voted and implemented, but it can never enter the Policy Registry. This is the core distinction between **policy proposals** and **governance resolutions**.
 
 Legacy data is normalised at trust boundaries: missing or `proposal` type falls back to `resolution` for `GOV-*` IDs, otherwise `policy`; the alias `governance` maps to `resolution`; unknown non-empty types are rejected.
 
@@ -261,7 +263,12 @@ stateDiagram-v2
   voting --> not_endorsed: close ballot
   voting --> inconclusive: close ballot
   endorsed --> accepted: formal approval
+  accepted --> applying: claim for application
+  applying --> applied: proposal revision written
+  applying --> applying: retry after recovery window
+  applying --> accepted: refused or write failed
   accepted --> applied: apply as new proposal revision
+  accepted --> withdrawn: approved but no longer applicable
   rejected --> [*]
   withdrawn --> [*]
   applied --> [*]
@@ -271,11 +278,13 @@ Key rules:
 
 - An amendment may be created only while the matter is in Propose or Deliberate.
 - It must name a base revision of that matter.
+- A member may submit whole-field replacements or block-anchored suggestions. A suggestion quotes the exact title, summary paragraph, commitment or rationale paragraph it changes; the server reconstructs the whole-field `changes` used by resolution, the ballot and apply. An addition also captures the blocks either side of its insertion point, so a later revision cannot silently move it. Block anchors improve reconciliation and inline display but never change the ballot binding or adoption rules.
 - `stale` means the base is no longer latest; `conflict` means an edited field has since changed.
 - Resolution rebases onto the latest revision and records a new amendment revision.
 - An amendment ballot can be opened only while the matter ballot is in Decide and the amendment's base equals the matter's ballot revision.
 - The amendment ballot result is `endorsed`, `not-endorsed` or `inconclusive`. It is supplied by an officer, not computed from the tally.
 - Formal acceptance (`accepted`) is a separate act from endorsement.
+- Applying an accepted amendment claims the amendment (`applying`) before writing the proposal, then finalises `applied` with the produced revision. The base revision is checked before the claim. A failed write, stale base or intervening revision releases the claim; an interrupted application can be retried after a recovery window and is idempotent. Recovery uses the recorded operation identity, replaces the lease token only after expiry, and reconciles an already-written expected revision without applying it again. If an accepted amendment's base moved, it is blocked for application and may be withdrawn with a reason; it cannot be re-resolved to ready.
 - Applying an accepted amendment creates a new proposal revision and requires the proposal to still be in Propose or Deliberate.
 
 ## Decision records

@@ -340,7 +340,7 @@ A system actor, `system:lifecycle-scheduler`, moves a matter from Deliberate to 
 
 It does not require or grant `ballots.bind`. A human advancing early still needs `ballots.bind` and matching authority; that gate is unchanged (D5).
 
-**Blocking amendments.** The blocking set is defined by exclusion and fails closed: `rejected`, `withdrawn`, `applied`, `not-endorsed` and `inconclusive` are the only non-blocking statuses. Everything else — `proposed`, `stale`, `conflict`, `ready`, `voting`, `endorsed`, `accepted`, or an unrecognised value — blocks the schedule and is reported with its amendment IDs. A `ready` or `accepted` amendment has been approved but not yet applied, so advancing would bind wording members have not deliberated on.
+**Blocking amendments.** The blocking set is defined by exclusion and fails closed: `rejected`, `withdrawn`, `applied`, `not-endorsed` and `inconclusive` are the only non-blocking statuses. Everything else — `proposed`, `stale`, `conflict`, `ready`, `voting`, `endorsed`, `accepted`, `applying`, or an unrecognised value — blocks the schedule and is reported with its amendment IDs. A `ready`, `accepted` or `applying` amendment has been approved but not yet applied, so advancing would bind wording members have not deliberated on.
 
 ### Idempotency and concurrency
 
@@ -499,7 +499,7 @@ A workflow state can be reversed. A protected act cannot: later corrections are 
 | Result recorded while the ballot is open | Refused with `BALLOT_NOT_CLOSED`; record the outcome after the ballot closes |
 | Recorded votes are not bound to the frozen wording | Refused with `BALLOT_TALLY_UNBOUND_VOTES`; the binding must be reviewed first |
 | Matter returned to Deliberate after a ballot, wording edited, then returned to Decide | Existing `ballotRevisionId` is retained; a zero-vote ballot is rebound to the new revision on re-entry, a voted ballot is refused rather than silently rebound |
-| Amendment base no longer latest | Amendment becomes `stale`; applying requires a current base |
+| Amendment base no longer latest | Amendment becomes `stale` before acceptance; an accepted application refuses before claiming and stays available for review |
 | Two amendments change the same field | Both can be `ready`; no inter-amendment conflict detection; both block the scheduler |
 | Ratifying authority differs from the ballot result's authority | Not cross-checked |
 | Superseded policy's successor is unpublished | Public page may link to a policy that is not visible |

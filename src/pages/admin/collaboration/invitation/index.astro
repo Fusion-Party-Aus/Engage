@@ -1,0 +1,118 @@
+---
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { Badge } from '../../../../components/ui/badge';
+import { Button } from '../../../../components/ui/button';
+import Card from '../../../../components/admin/Card.astro';
+import CardContent from '../../../../components/admin/CardContent.astro';
+import CardDescription from '../../../../components/admin/CardDescription.astro';
+import CardHeader from '../../../../components/admin/CardHeader.astro';
+import CardTitle from '../../../../components/admin/CardTitle.astro';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../../../../components/ui/table';
+import { getSessionUser } from '../../../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../../../lib/db.ts';
+import { listInitiatives } from '../../../../lib/collaboration.ts';
+import { INITIATIVE_STATUSES, isPublicInitiativeStatus } from '../../../../lib/collaboration-options.ts';
+import { hasPermission } from '../../../../lib/rbac.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user) return Astro.redirect('/member/');
+if (!hasPermission(user, 'collaboration.manage')) return Astro.rewrite('/403/');
+
+const initiatives = await listInitiatives(await getDatabase(env));
+
+const tone = (status: string) =>
+  status === 'open' ? 'success'
+  : status === 'paused' ? 'warning'
+  : status === 'draft' ? 'outline'
+  : 'muted';
+---
+
+<AdminLayout
+  title="Invitations"
+  description="Create and manage public invitations for stories and photographs."
+  section="stories"
+  isAdmin={user.isAdmin}
+  isBranchAdmin={Boolean(user.isBranchAdmin)}
+>
+  <div class="admin-stack">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="m-0 text-sm text-muted-foreground">
+        {initiatives.length} {initiatives.length === 1 ? 'invitation' : 'invitations'}
+      </p>
+      <Button href="/admin/collaboration/invitation/new/" size="sm">New invitation</Button>
+    </div>
+
+    {initiatives.length ? (
+      <Card class="gap-0">
+        <CardHeader>
+          <CardTitle class="text-base">All invitations</CardTitle>
+          <CardDescription>
+            A draft is private. Opening it publishes the page and starts accepting contributions.
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Invitation</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Contributions</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead><span class="sr-only">Actions</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {initiatives.map(({ initiative, contributions, awaitingReview }) => (
+                <TableRow>
+                  <TableCell>
+                    <div class="grid gap-1">
+                      <span class="font-semibold">{initiative.title}</span>
+                      <span class="text-muted-foreground">/collaborate/{initiative.slug}/</span>
+                    </div>
+                  </TableCell>
+                  <TableCell><Badge variant={tone(initiative.status)}>{INITIATIVE_STATUSES[initiative.status]}</Badge></TableCell>
+                  <TableCell>
+                    {contributions}
+                    {awaitingReview > 0 && (
+                      <span class="text-muted-foreground"> · {awaitingReview} to review</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{new Date(initiative.updatedAt).toLocaleDateString('en-AU')}</TableCell>
+                  <TableCell>
+                    <div class="flex flex-wrap justify-end gap-2">
+                      {isPublicInitiativeStatus(initiative.status) && (
+                        <Button href={`/collaborate/${initiative.slug}/`} size="sm" variant="outline">View</Button>
+                      )}
+                      <Button href={`/admin/collaboration/invitation/${initiative.slug}/`} size="sm" variant="outline">Edit</Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    ) : (
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-base">No invitations yet</CardTitle>
+          <CardDescription>Create one to ask people for stories or photographs. It stays a private draft until you open it.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button href="/admin/collaboration/invitation/new/" size="sm">New invitation</Button>
+        </CardContent>
+      </Card>
+    )}
+  </div>
+</AdminLayout>

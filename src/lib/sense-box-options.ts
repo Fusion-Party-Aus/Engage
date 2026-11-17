@@ -8,9 +8,10 @@ export const SENSE_TOPICS = {
   community: 'Community & inclusion',
   other: 'Something else',
 } as const;
-export const SENSE_STATUSES = { new:'New', reviewed:'Reviewed', developing:'Exploring for a proposal', archived:'Archived' } as const;
+export const SENSE_STATUSES = { new:'New', reviewed:'Reviewed', developing:'Developing a proposal', archived:'Archived' } as const;
 export type SenseTopic = keyof typeof SENSE_TOPICS;
 export type SenseStatus = keyof typeof SENSE_STATUSES;
+export type SenseVisibility = 'private' | 'published';
 export interface SenseItem {
   submissionId: string;
   branchId: string;
@@ -21,10 +22,59 @@ export interface SenseItem {
   status: SenseStatus;
   createdAt: string;
   version: number;
+  visibility: SenseVisibility;
+  publishedAt?: string;
+  linkedProposalIds: string[];
+  commentCount?: number;
+  /** True only when the contributor consented to review-then-publication. */
+  publicationConsent: boolean;
 }
 export interface SenseInbox {
   items: SenseItem[];
   total: number;
   page: number;
   topics: Record<string, number>;
+}
+export interface SenseComment {
+  commentId: string;
+  authorName: string;
+  body: string;
+  visibility: 'public' | 'internal';
+  createdAt: string;
+  /** Preformatted on the server so hydration is stable. */
+  createdAtLabel: string;
+  deleted: boolean;
+  isMine: boolean;
+}
+export interface SenseLinkedProposal {
+  slug: string;
+  title: string;
+  stage: string;
+}
+export interface SensePublicItem {
+  submissionId: string;
+  branchId: string;
+  title: string;
+  detail: string;
+  locality: string;
+  topic: SenseTopic;
+  publishedAt: string;
+  commentCount: number;
+  linkedProposals?: SenseLinkedProposal[];
+}
+export interface SenseSubmissionDetail extends SenseItem {
+  publishedAt?: string;
+  linkedProposals?: (SenseLinkedProposal & { proposalId?: string })[];
+  comments: SenseComment[];
+}
+export type SenseReceiptStage = 'received' | 'reviewing' | 'published' | 'closed';
+export interface SenseReceipt {
+  submissionId: string;
+  branchId: string;
+  title: string;
+  topic: SenseTopic;
+  createdAt: string;
+  stage: SenseReceiptStage;
+  publicationConsent: boolean;
+  publishedAt?: string;
 }

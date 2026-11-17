@@ -365,14 +365,15 @@ export function createMemoryDb(): Db {
         !(cond instanceof RegExp)
       ) {
         if ("$in" in cond && Array.isArray(cond.$in)) {
-          if (
-            !cond.$in.some((item: any) =>
-              item instanceof RegExp
-                ? item.test(String(val ?? ""))
-                : String(item) === String(val),
-            )
-          )
-            return false;
+          const matches = (item: any, candidate: any) =>
+            item instanceof RegExp
+              ? item.test(String(candidate ?? ""))
+              : String(item) === String(candidate);
+          // A document field may itself be an array (for example `channels`).
+          const found = Array.isArray(val)
+            ? val.some((entry) => cond.$in.some((item: any) => matches(item, entry)))
+            : cond.$in.some((item: any) => matches(item, val));
+          if (!found) return false;
           continue;
         }
         if ("$exists" in cond) {
@@ -380,7 +381,12 @@ export function createMemoryDb(): Db {
           continue;
         }
         if ("$nin" in cond) {
-          if (cond.$nin.includes(val)) return false;
+          if (
+            Array.isArray(val)
+              ? val.some((entry) => cond.$nin.includes(entry))
+              : cond.$nin.includes(val)
+          )
+            return false;
           continue;
         }
         if ("$ne" in cond) {
@@ -484,18 +490,48 @@ export function createMemoryDb(): Db {
             $setOnInsert?: Record<string, any>;
             $inc?: Record<string, number>;
             $unset?: Record<string, any>;
+            $addToSet?: Record<string, any>;
+            $pull?: Record<string, any>;
           },
           options?: { upsert?: boolean },
         ) => {
           const idx = store.findIndex((doc) => matchesFilter(doc, filter));
-          if (idx >= 0) {
-            if (update.$set) Object.assign(store[idx]!, update.$set);
-            // Atomic in MongoDB; the in-memory preview only needs the semantics.
+          const applySetOperators = (doc: Record<string, any>) => {
+            if (update.$set) Object.assign(doc, update.$set);
             for (const [field, amount] of Object.entries(update.$inc ?? {})) {
-              store[idx]![field] = Number(store[idx]![field] ?? 0) + amount;
+              doc[field] = Number(doc[field] ?? 0) + amount;
             }
-            for (const field of Object.keys(update.$unset || {})) delete store[idx]![field];
-            return { matchedCount: 1, modifiedCount: 1, acknowledged: true };
+            for (const [field, value] of Object.entries(update.$addToSet ?? {})) {
+              const values =
+                value && typeof value === "object" && Array.isArray(value.$each)
+                  ? value.$each
+                  : [value];
+              const current = Array.isArray(doc[field]) ? [...doc[field]] : [];
+              for (const item of values) {
+                if (!current.some((entry) => JSON.stringify(entry) === JSON.stringify(item))) {
+                  current.push(item);
+                }
+              }
+              doc[field] = current;
+            }
+            for (const [field, value] of Object.entries(update.$pull ?? {})) {
+              if (Array.isArray(doc[field])) {
+                doc[field] = doc[field].filter(
+                  (entry: unknown) => JSON.stringify(entry) !== JSON.stringify(value),
+                );
+              }
+            }
+            for (const field of Object.keys(update.$unset || {})) delete doc[field];
+          };
+          if (idx >= 0) {
+            const before = JSON.stringify(store[idx]);
+            applySetOperators(store[idx]!);
+            const modified = JSON.stringify(store[idx]) !== before;
+            return {
+              matchedCount: 1,
+              modifiedCount: modified ? 1 : 0,
+              acknowledged: true,
+            };
           }
           if (options?.upsert) {
             const _id = new ObjectId();
@@ -509,10 +545,7 @@ export function createMemoryDb(): Db {
                 doc[k] = v;
             }
             if (update.$setOnInsert) Object.assign(doc, update.$setOnInsert);
-            if (update.$set) Object.assign(doc, update.$set);
-            for (const [field, amount] of Object.entries(update.$inc ?? {})) {
-              doc[field] = Number(doc[field] ?? 0) + amount;
-            }
+            applySetOperators(doc);
             store.push(doc);
             return {
               matchedCount: 0,
