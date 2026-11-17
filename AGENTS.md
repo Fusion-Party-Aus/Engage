@@ -325,6 +325,17 @@ Prefer the simplest maintainable implementation that satisfies the requirements.
 - Avoid adding dependencies for functionality adequately supported by the existing stack.
 - Do not silently increase operational complexity to solve a minor interface problem.
 
+### Configure, don't hard-code
+
+A new feature is expected to be extensible and configurable without a code change. Treat that as the default, not an enhancement to add later.
+
+- Put the things an editor or administrator will reasonably want to change into stored configuration: wording, questions and prompts, available options, ordering, thresholds the product owns, and the open/paused/closed state of a public invitation.
+- Read that configuration at the boundary and validate it there. A configuration change must never require a deploy, and a redeploy must never overwrite an administrator's edit (seed insert-only).
+- Keep in code only what must pass review to change: permission keys, consent and privacy vocabulary, security bounds and upload limits, statuses that carry audit or publication meaning, and anything a governance decision authorises.
+- When a value is deliberately fixed in code, say why in one line next to it, and record the decision in the feature's documentation.
+- A feature that ships with its copy, questions or options hard-coded, when an editor would predictably need to change them, is incomplete.
+- Do not build a generic form or workflow builder to satisfy this rule. Configuration is a small, typed, reviewed schema, not a programming language.
+
 ## 8. Git & Changelog Discipline
 
 Every meaningful slice of work must be committed to Git using clear Conventional Commits.
