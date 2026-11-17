@@ -86,6 +86,11 @@ export default function ContributionReviewer({ contributionId, version, status, 
       <Field label="Internal notes" htmlFor={`notes-${contributionId}`} hint="Not shown to the contributor.">
         <Textarea id={`notes-${contributionId}`} rows={2} value={notes} maxLength={2000} onChange={(event) => setNotes(event.currentTarget.value)} />
       </Field>
+      {current === "withdrawn" && (
+        <p className="m-0 text-sm text-muted-foreground">
+          Withdrawing removes the story text, name, contact address and photographs. The review record stays.
+        </p>
+      )}
       <div>
         <Button
           type="button"

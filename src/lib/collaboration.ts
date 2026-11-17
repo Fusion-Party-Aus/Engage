@@ -46,6 +46,19 @@ const CONTRIBUTIONS = "collaboration_contributions";
 const MEDIA = "collaboration_media";
 const EVENTS = "collaboration_events";
 
+/**
+ * Retention defaults. They are obligations, not editorial settings: changing
+ * one shortens or lengthens how long personal material is kept.
+ */
+export const RETENTION = {
+  /** Declined material is cleared after this many days. */
+  declinedDays: 90,
+  /** A withdrawal made before automatic clearing existed is swept after this. */
+  withdrawnDays: 30,
+  /** An approved contribution's contact address is cleared after this many days. */
+  approvedContactDays: 365,
+} as const;
+
 export interface ContributionMediaDescriptor {
   mediaId: string;
   mimeType: string;
@@ -78,6 +91,7 @@ export interface ContributionRecordView {
   media: ContributionMediaDescriptor[];
   version: number;
   consentVersion: string;
+  contentClearedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -482,6 +496,94 @@ export async function submitContribution(
   return { contributionId, shareable: channels.length > 0 };
 }
 
+/**
+ * Remove the contributor's words, name, contact address and photographs, and
+ * keep only the review record. Irreversible by design.
+ */
+async function clearContributionContent(
+  db: Db,
+  contributionId: string,
+  reason: "withdrawn" | "declined" | "retention",
+  options: { keepContact?: boolean } = {},
+): Promise<void> {
+  await db.collection(MEDIA).deleteMany({ contributionId });
+  await db.collection(CONTRIBUTIONS).updateOne(
+    { contributionId },
+    {
+      $set: {
+        answers: {},
+        caption: "",
+        displayName: "",
+        contributorMessage: "",
+        internalNotes: "",
+        media: [],
+        hasMedia: false,
+        ...(options.keepContact ? {} : { email: "", contactAllowed: false }),
+        contentClearedAt: new Date(),
+        contentClearedReason: reason,
+        updatedAt: new Date(),
+      },
+    },
+  );
+}
+
+/**
+ * Retention sweep, dry-run by default. Withdrawals clear immediately at the
+ * moment of review; this catches declined material after the retention window,
+ * legacy withdrawals, and stale contact addresses.
+ */
+export async function purgeExpiredContent(
+  db: Db,
+  options: { now?: Date; apply?: boolean } = {},
+): Promise<{
+  declined: number;
+  withdrawn: number;
+  contactAddresses: number;
+  applied: boolean;
+}> {
+  const now = options.now ?? new Date();
+  const day = 86_400_000;
+  const before = (days: number) => new Date(now.getTime() - days * day);
+  const declined = await db
+    .collection(CONTRIBUTIONS)
+    .find({ status: "declined", contentClearedAt: { $exists: false }, updatedAt: { $lt: before(RETENTION.declinedDays) } })
+    .project({ contributionId: 1 })
+    .toArray();
+  const withdrawn = await db
+    .collection(CONTRIBUTIONS)
+    .find({ status: "withdrawn", contentClearedAt: { $exists: false }, updatedAt: { $lt: before(RETENTION.withdrawnDays) } })
+    .project({ contributionId: 1 })
+    .toArray();
+  const contacts = await db
+    .collection(CONTRIBUTIONS)
+    .find({ status: "approved", email: { $ne: "" }, updatedAt: { $lt: before(RETENTION.approvedContactDays) } })
+    .project({ contributionId: 1 })
+    .toArray();
+
+  if (options.apply) {
+    for (const row of declined) {
+      await clearContributionContent(db, String(row.contributionId), "declined");
+    }
+    for (const row of withdrawn) {
+      await clearContributionContent(db, String(row.contributionId), "withdrawn");
+    }
+    for (const row of contacts) {
+      await db
+        .collection(CONTRIBUTIONS)
+        .updateOne(
+          { contributionId: row.contributionId },
+          { $set: { email: "", contactAllowed: false, updatedAt: new Date() } },
+        );
+    }
+  }
+  return {
+    declined: declined.length,
+    withdrawn: withdrawn.length,
+    contactAddresses: contacts.length,
+    applied: options.apply === true,
+  };
+}
+
 export async function listContributions(
   db: Db,
   user: SessionUser | null | undefined,
@@ -554,6 +656,7 @@ function toContributionView(row: Record<string, any>): ContributionRecordView {
     })),
     version: Number(row.version ?? 0),
     consentVersion: String(row.consentVersion ?? ""),
+    contentClearedAt: row.contentClearedAt ? new Date(row.contentClearedAt).toISOString() : null,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
   };
@@ -698,6 +801,11 @@ export async function reviewContribution(
     fromStatus,
     toStatus: nextStatus,
   });
+  // A withdrawal removes the material at once. The status and audit event are
+  // the only record that remains.
+  if (nextStatus === "withdrawn" && fromStatus !== "withdrawn") {
+    await clearContributionContent(db, contributionId, "withdrawn");
+  }
   return { status: nextStatus, version: Number(current.version) + 1 };
 }
 

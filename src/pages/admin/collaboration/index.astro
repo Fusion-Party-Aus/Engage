@@ -120,6 +120,11 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
                 </div>
               </CardHeader>
               <CardContent class="grid gap-4">
+                {item.contentClearedAt ? (
+                  <p class="m-0 text-sm text-muted-foreground">
+                    Content removed on {new Date(item.contentClearedAt).toLocaleDateString('en-AU')}. Only the review record remains.
+                  </p>
+                ) : (
                 <dl class="m-0 grid gap-3">
                   {Object.entries(item.answers).map(([key, answer]) => (
                     <div>
@@ -134,6 +139,7 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
                     </div>
                   )}
                 </dl>
+                )}
 
                 {item.media.length > 0 && (
                   <div class="flex flex-wrap gap-3">
@@ -160,7 +166,7 @@ const page = Number(Astro.url.searchParams.get('page') ?? 1);
 
                 <div class="grid gap-1 text-sm text-muted-foreground">
                   <p class="m-0">
-                    {consentSummary({
+                    Consent recorded: {consentSummary({
                       channels: item.channels,
                       attribution: item.attribution,
                       allowEdits: item.allowEdits,

@@ -113,7 +113,14 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
           <Field
             label="Add photos"
             htmlFor="photos"
-            hint={`Optional. Up to ${MEDIA_LIMITS.files} JPEG or PNG photos, ${MEDIA_LIMITS.fileBytes / (1024 * 1024)} MB each.`}
+            hint={
+              <>
+                Optional. Up to {MEDIA_LIMITS.files} JPEG or PNG photos, {MEDIA_LIMITS.fileBytes / (1024 * 1024)} MB each.
+                <span className="block">
+                  If other people are recognisable, ask them first. Please don’t send photos of children.
+                </span>
+              </>
+            }
           >
             <Input
               id="photos"
@@ -235,8 +242,8 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
         <label className="flex items-start gap-3 text-sm">
           <Checkbox name="consent" required className="mt-0.5 size-5" />
           <span>
-            This is my own story and my own photos, and I have the right to share them. I’ve read the{' '}
-            <a href="/privacy/">privacy policy</a>.
+            This is my own story and my own photos, I have the right to share them, and I have permission from
+            anyone who can be recognised in a photo. I’ve read the <a href="/privacy/">privacy policy</a>.
           </span>
         </label>
         <Turnstile siteKey={turnstileSiteKey} action="collaborate" />
