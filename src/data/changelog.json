@@ -9,6 +9,15 @@
     "details": "Extend the browser journey to the mobile administrator workspace and add a stylesheet smoke check across the home, proposal list, Sense Box inbox and administrator proposal workspace, including visible keyboard focus."
   },
   {
+    "hash": "017f71b",
+    "date": "2026-11-17",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "store",
+    "summary": "Import domain modules directly and delete the barrel (#119) (#155)",
+    "details": "* refactor(store): import domain modules directly and delete the barrel (#119) Migrate every page, component and test importer from the deprecated src/lib/store.ts barrel to the owning domain module, then remove the barrel. The architecture test now fails if the barrel returns, if any source file imports it, or if a production lib module imports a page/component directory. * docs(architecture): document domain modules after barrel removal (#119) * chore(changelog): refresh snapshot for barrel removal (#119)"
+  },
+  {
     "hash": "baccd1e",
     "date": "2026-11-17",
     "type": "docs",
@@ -24,6 +33,24 @@
     "scope": "sense-box,amendments",
     "summary": "Close review privacy and integrity gaps",
     "details": "Legacy priorities collected under the private-review promise can no longer be published, and private source text is never prefilled into a proposal. A private lead requires an explicit independent-writing acknowledgement and is rejected if it reproduces the source. Submission now returns a capability status link so a contributor can follow the outcome without an account, and the verified-membership discussion rule is stated explicitly. Amendment suggestions now apply multiple additions and mixed edits without index drift, refuse ambiguous duplicate-text rebases, validate final title/summary lengths at the submission and resolution boundary, and block applying a competing amendment after one has already applied. Proposal creation claims a Sense Box source before insert and checks the atomic update, with concurrency coverage. Adds the Sense Box and amendment browser journey to CI, covering failed submission recovery, publication, public and internal discussion, stale administrator data, multiple additions, keyboard activation and mobile layouts."
+  },
+  {
+    "hash": "6311c68",
+    "date": "2026-11-17",
+    "type": "refactor",
+    "category": "improvement",
+    "scope": "lib",
+    "summary": "Delete unclaimed read model and dead settings getters (#153)",
+    "details": "Remove buildAuthorizedMatterBriefing, which had no production caller: reporting, PDF and decision-record reads go through decision-record.ts, and the module's only consumer was its own test. Remove six exported settings getters that no production module called; the *State functions and DEFAULT_* constants remain the interface. No route, page, permission, DTO or settings behaviour changes. Update the architecture overview and hardening notes so they stop describing the deleted module. Refs #152"
+  },
+  {
+    "hash": "ad8deae",
+    "date": "2026-11-17",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "db",
+    "summary": "Cut fresh database initialisation cost (#136) (#151)",
+    "details": "* perf(db): cut fresh database initialisation cost (#136) A fresh test database spent ~1.25 s in `initializeDatabase`, called 18 times per suite (~22 s). Index creation dominated: 92 `createIndex` calls, each a journal commit on a newly created collection. - Group the index catalogue by collection and send one `createIndexes` command per collection (46 commands). Keys, names, uniqueness, partial filters, TTL and `expireAfterSeconds` are unchanged; a failed grouped command falls back to per-index creation so one legacy conflict cannot block the rest, as before. - Bulk-write the 78 baseline policies instead of one upsert per record. - Split startup into `ensureDatabaseIndexes` (new `src/lib/db-indexes.ts`) and `seedBaselineContent`. `initializeDatabase` still runs both, so production startup and `getDatabase` are unchanged. Mongo tests that seed their own content use the schema half; notification-outbox keeps the full path and asserts the seeded register and indexes. - The in-memory preview implements `createIndexes` and `bulkWrite`. Verified on the local replica set: index phase 1.44 s -> 0.76 s and total 1.27 s -> 0.95 s over six interleaved pairs (shared host, so absolute wall time varied). A fresh database has the same 47 collections and 139 indexes, and the same 78 proposals and revisions, before and after. Full suite (833 tests) passed twice; each run left only `admin`, `config`, `engage` and `local`. * chore(changelog): record database initialisation change (#136) * fix(settings): tie-break site settings events by insertion order * chore(changelog): record the site event ordering fix"
   },
   {
     "hash": "e43cad0",
@@ -663,30 +690,5 @@
     "scope": "admin",
     "summary": "Add durable database migrations and standard branch seed",
     "details": "Add Admin -> Migrations for national administrators. The page previews each additive migration, shows the last recorded run and any error, and applies Standard branches or Branch participation individually or in order. Every run is recorded in data_migrations with run count, timestamps, actor and result. Standard branches is an idempotent seed for Fusion National, VIC, NSW, QLD, WA, SA, TAS, ACT and NT with National as parent; existing branches are never renamed, re-parented or un-recognised. Branch participation remains blocked until the National branch exists. The command-line seed now uses the same service, and the participation migration remains available for deployment automation."
-  },
-  {
-    "hash": "b980369",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record branch participation and verification"
-  },
-  {
-    "hash": "a727732",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Separate branch following from verified membership",
-    "details": "Members choose the branches they follow during onboarding and in My Engage. Authorised administrators verify followers as members in a focused Branch governance workspace. Branch subscriptions are now Engage-owned preferences, while verified organisational membership stays in branch_memberships with source, verification and audit metadata. National governance is included for every verified account and never removed by branch preferences. Existing members without branch connections receive national scope silently and a one-time state branch invitation. Eligibility is decided in one service used by proposal pages, ballot submission, pending-vote promotion and digests. Followers can discover branch activity but cannot vote. Revocation requires a reason and preserves historical votes and the person's following preference. The migration backfills legacy membership metadata, adds subscriptions without duplicating them, assigns open proposals without branch context to national governance, and leaves branch-owned and archived records untouched. The Underground CRM boundary is implemented through applyExternalMembership: external membership facts can update organisational membership but never branch subscriptions, and local administrators cannot silently override CRM-sourced records. Tests cover national defaults, follow/unfollow idempotency, source integrity, permissions, migration, parent/child eligibility and new proposal defaults."
-  },
-  {
-    "hash": "ba482d0",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the member engagement admin repair"
   }
 ]
