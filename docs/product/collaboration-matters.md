@@ -80,7 +80,7 @@ The attestation is a promise, not a check. Reviewers apply [story and photograph
 
 On success the contributor receives a link of the form `/collaborate/manage/#<token>`. The token is the only authority: no account is needed, and it reaches no other contribution.
 
-- The token is derived from the submission's request reference and a deployment secret, so an idempotent retry receives the same link.
+- The token is derived from the submission's request reference and a deployment signing secret, but it is returned only in the response that creates the contribution. Replaying an existing submission returns no token: identical content is not proof of ownership. If the first response is lost, the contributor uses the correction address instead. Rotating `RATE_LIMIT_SECRET`, `BETTER_AUTH_SECRET` or `SESSION_SECRET` invalidates every outstanding management link; contributors must then use the correction address. Coordinate rotation with the operations owner.
 - Only a SHA-256 hash of the token is stored. The raw token appears once, in the URL fragment, so it is never sent to the server in a URL, logged, or leaked through a referrer.
 - Opening the link shows what they sent, its status, whether it is public, and a masked reply address.
 - **Save corrections** updates the words and caption, returns the contribution to `needs_follow_up`, and removes it from the gallery until a reviewer approves and publishes it again.

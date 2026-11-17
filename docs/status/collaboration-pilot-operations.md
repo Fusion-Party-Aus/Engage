@@ -29,6 +29,10 @@ The legal/privacy review is a separate obligation and is not one of these fields
 - Start takedown requests for material already distributed outside Engage, and explain plainly what cannot be recalled.
 - Record the date, the action and the outcome. A reviewer can find a contribution by its short reference in the queue search.
 
+## Secret rotation
+
+Management links are derived from the deployment signing secret. Rotating `RATE_LIMIT_SECRET`, `BETTER_AUTH_SECRET` or `SESSION_SECRET` invalidates every outstanding contributor link. Before rotating, tell the primary owner so correction requests can be handled by email until contributors receive new links.
+
 ## What the backup does
 
 - Has the same access and authority as the primary.
@@ -43,7 +47,7 @@ The legal/privacy review is a separate obligation and is not one of these fields
 
 ## What the retention sweep owner does
 
-- Run `npm run collaboration:retention` without flags, read what it would clear, then run it with `--apply`.
+- Run `npm run collaboration:retention`, read what it would clear, then run `npm run collaboration:retention -- --apply`. The `--` separator is required for npm to pass the flag to the script.
 - Record the date, the counts and any failure where the team will see it.
 - Escalate a failed sweep rather than retrying blindly.
 
