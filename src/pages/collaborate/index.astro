@@ -1,0 +1,53 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { Button } from '../../components/ui/button';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { listOpenInitiatives } from '../../lib/collaboration.ts';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const initiatives = await listOpenInitiatives(await getDatabase(runtimeEnv(Astro.locals)));
+---
+
+<SiteLayout
+  title="Share your story · Engage"
+  description="Tell Fusion what brought you here, in your own words. Contribute a story or a photograph without joining or creating an account."
+  canonical="/collaborate/"
+>
+  <div class="page-wrap section-space collaborate-index">
+    <header class="page-intro">
+      <p class="text-sm font-semibold uppercase tracking-widest">Stories</p>
+      <h1>Add your part</h1>
+      <p>Fusion is made of people, not slogans. These invitations collect real stories and photographs for Fusion's public work. No account or party membership needed.</p>
+    </header>
+
+    {initiatives.length ? (
+      <ul class="collaborate-list">
+        {initiatives.map((initiative) => (
+          <li>
+            <h2><a href={`/collaborate/${initiative.slug}/`}>{initiative.title}</a></h2>
+            <p>{initiative.summary}</p>
+            <Button href={`/collaborate/${initiative.slug}/`} variant="outline" size="sm">Take part</Button>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <div class="collaborate-empty">
+        <h2>Nothing open right now</h2>
+        <p>There is no invitation collecting stories today. You can still read and discuss what members are deciding.</p>
+        <Button href="/proposals/">Browse proposals</Button>
+      </div>
+    )}
+  </div>
+</SiteLayout>
+
+<style>
+  .collaborate-index { max-width: 54rem; }
+  .collaborate-list { list-style: none; margin: 2.5rem 0 0; padding: 0; display: grid; gap: 2.5rem; }
+  .collaborate-list li { border-top: 3px solid var(--horizon-accent); padding-top: 1.25rem; }
+  .collaborate-list h2 { margin: 0 0 0.5rem; font-size: clamp(1.5rem, 3vw, 2rem); }
+  .collaborate-list p { margin: 0 0 1.25rem; color: var(--horizon-muted); max-width: 42rem; }
+  .collaborate-empty { margin-top: 2.5rem; display: grid; gap: 1rem; justify-items: start; }
+  .collaborate-empty h2 { margin: 0; }
+</style>
