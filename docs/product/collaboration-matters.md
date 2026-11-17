@@ -16,6 +16,7 @@ This page records the model, the consent rules, the data handling and what is de
 - Every contribution lands in a private review queue at `/admin/collaboration/`. A reviewer records `new`, `needs follow-up`, `approved`, `declined` or `withdrawn`.
 - Approval is not publication. Where an approved contribution is actually used is recorded separately, per permitted channel, with a reference.
 - An approved story with website consent can be **published** to a public gallery at `/collaborate/<slug>/stories/`. Approval and publication are separate: approving for editorial use never makes a story public. A reviewer can hide a published story, or show it again, without changing its approval.
+- A contributor keeps a private link to correct, hide or withdraw their own contribution without an account.
 - Approved material is also handed to the website team by downloading a JSON export. There is no CMS integration yet.
 
 An Engage account and Fusion party membership are separate things, and neither is required here. A contribution creates no account, no membership and no branch affiliation. A contributor who later creates an account is offered an optional next step, not a condition of contributing.
@@ -75,6 +76,18 @@ Server-side enforcement lives in `submitContribution` and `reviewContribution` (
 
 The attestation is a promise, not a check. Reviewers apply [story and photograph contribution safeguards](../guides/story-contribution-safeguards.md), which cover photographer credit, other identifiable people, minors, AI edits and mistaken publication.
 
+## The contributor's own link
+
+On success the contributor receives a link of the form `/collaborate/manage/#<token>`. The token is the only authority: no account is needed, and it reaches no other contribution.
+
+- The token is derived from the submission's request reference and a deployment secret, so an idempotent retry receives the same link.
+- Only a SHA-256 hash of the token is stored. The raw token appears once, in the URL fragment, so it is never sent to the server in a URL, logged, or leaked through a referrer.
+- Opening the link shows what they sent, its status, whether it is public, and a masked reply address.
+- **Save corrections** updates the words and caption, returns the contribution to `needs_follow_up`, and removes it from the gallery until a reviewer approves and publishes it again.
+- **Remove from public gallery** hides a published story without changing its approval.
+- **Withdraw completely** deletes the stored words, name, reply address and photographs immediately and records the contributor's action in the audit trail. The link stops working.
+- A lost link can only be recovered by emailing the invitation's correction address. There is no name or email lookup, because that would let one person reach another's contribution.
+
 ## Aggregate interest counts
 
 Each invitation records four events so an editor can see where people stop:
@@ -88,7 +101,7 @@ Each invitation records four events so an editor can see where people stop:
 
 A row holds the invitation, a UTC day, the stage, a count and an expiry. Nothing else. There is no cookie, session, IP address, identifier or typed content, so the numbers measure events, not unique people, and cannot be linked to anyone. Rows expire after about 13 months, and the public event endpoint is rate limited to 30 events a minute per hashed address.
 
-The invitation editor shows the last 30 days: arrivals, starts, sends, account steps, and three conversion percentages. Treat these as a rough drop-off signal. Script blockers and bots mean arrivals are undercounted and occasionally inflated; and an account step is not a registration.
+The invitation editor shows the last 30 days: arrivals, starts, sends, account steps, and three ratios. The ratios are events divided by events, not unique-visitor conversion, so they can exceed 100% when a client event is missed or repeated. The panel labels them "of arrivals" and "of starts" rather than as visitor rates. Treat them as a rough drop-off signal: script blockers and bots mean arrivals are undercounted and occasionally inflated, and an account step is not a registration.
 
 ## Data handling
 
@@ -108,7 +121,8 @@ Photographs:
 - Bytes are stored in a separate collection. Reviewers read them through `/api/admin/collaboration/media/<mediaId>`, which requires `collaboration.review`. A published story's photographs are also served from `/api/collaboration/media/<mediaId>`, which re-checks approval, explicit publication, website consent, profile and hidden state on every request and is not cached.
 - The list read never selects image bytes.
 - The public gallery route re-checks approval, website consent, profile and hidden state on every request, so no published copy survives withdrawal.
-- Withdrawal deletes the stored story text, name, reply address and photographs immediately, keeping only the review record and its date. It cannot recall a copy someone downloaded, screenshotted, reposted or printed before the withdrawal; the safeguards describe how those are chased.
+- Withdrawal by a reviewer or by the contributor's own link deletes the stored story text, name, reply address and photographs immediately, keeping only the review record and its date.
+- Reply-address retention runs from the approval date (`approvedAt`), not from the last time a reviewer touched the record. Legacy approved records without it fall back to their last update once. It cannot recall a copy someone downloaded, screenshotted, reposted or printed before the withdrawal; the safeguards describe how those are chased.
 - Declined material is cleared 90 days after the decision, and an approved reply address is cleared after 12 months. `npm run collaboration:retention` reports what is due and `--apply` performs it.
 
 Abuse protection:
@@ -164,3 +178,4 @@ Review contributions at `/admin/collaboration/`, record uses, and download the a
 - Rendered journeys on 17 November 2026, in a production build against MongoDB: a guest submits a story with a photograph (201) and sees the success screen with a reference; a private-only response is accepted as consultation input; a second invitation is created as a draft (public page 404), opened (200) and archived (404); review notes survive a reload and a later status change; the private media route returns 401 without a reviewer session; desktop and 390 px mobile layouts have no horizontal overflow and no console or request errors.
 - Gallery journeys: approving a website story leaves it out of the gallery; publishing it shows the chosen credit and photograph; hiding removes it and its media route returns 404; showing brings both back with the original publication date; withdrawal removes it permanently. Written consultation responses never appear. Screenshots and the environment note are in [gallery evidence](../status/evidence/collaboration-gallery/README.md).
 - Funnel journeys: a page arrival, first form interaction and successful submission each increment their stage once; the editor's 30-day panel shows the counts and conversions; the stored row contains only invitation, day, stage, count and expiry.
+- Contributor management journey: the success screen offers a private link whose token stays in the URL fragment; the link shows the contribution and status; removing from the gallery takes effect immediately; a correction returns the story to review and off the gallery; withdrawal deletes the material and invalidates the link. No request URL contained the token during the check.

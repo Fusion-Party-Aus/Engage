@@ -61,7 +61,7 @@ Before approving, confirm:
 
 1. The contributor supplied the material and holds the rights described above.
 2. Every recognisable person has agreed, or the material is declined.
-3. No minor is identifiable unless the guardian rule is satisfied.
+3. No child is identifiable at all. There is no guardian exception in this pilot.
 4. The selected channels, credit choice, ordinary-edit permission and AI-edit permission match the intended use.
 5. The caption and answers are the contributor's, not rewritten into a testimonial.
 6. The contribution is not presented as proof of party membership, endorsement or a policy position.
@@ -113,7 +113,7 @@ Removal commitments, adopted 17 November 2026:
 
 Hiding is quick and reversible. Permanent withdrawal and deletion follow verification, and cannot recall a copy someone already downloaded, reposted or printed. Never promise more than that.
 
-The commitments only hold if someone owns the inbox. The correction address needs a named owner and a named backup, recorded in the pilot's operating notes.
+The commitments only hold if someone owns the inbox. The correction address needs a named owner, a named backup, an escalation path and a named retention-sweep operator. Record all four in [collaboration pilot operations](../status/collaboration-pilot-operations.md). They are currently unassigned.
 
 ## Decisions still needed
 

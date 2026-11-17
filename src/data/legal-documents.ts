@@ -83,7 +83,7 @@ export const privacyPolicy: LegalDocument = {
   shortTitle: "Privacy Policy",
   description:
     "How Fusion Party Australia collects, uses, shares and retains personal information in Engage.",
-  version: "1.4 (story contributions and aggregate counts; publication pending)",
+  version: "1.5 (story contributions, management links and aggregate counts; publication pending)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -191,7 +191,7 @@ export const privacyPolicy: LegalDocument = {
         { type: "subheading", text: "Story and photograph contributions" },
         {
           type: "paragraph",
-          text: `You can send a story, photographs, or both to a public invitation without an account and without being a party member. We collect what you write, the photographs and caption you attach, the name you ask us to use, any email address you give us so we can reply, and the permissions you choose for publication channels, credit, ordinary editing and AI-assisted editing. We ask you to confirm that you are 18 or over; we do not collect dates of birth or identity documents. We do not publish photographs that show identifiable children. We record the version of the consent you accepted and the time. If a reviewer approves the material, we also record the decision, the actor, the time, and where approved material is used. Photographs are stripped of location, device and other metadata before they are stored.`,
+          text: `You can send a story, photographs, or both to a public invitation without an account and without being a party member. We collect what you write, the photographs and caption you attach, the name you ask us to use, any email address you give us so we can reply, and the permissions you choose for publication channels, credit, ordinary editing and AI-assisted editing. We ask you to confirm that you are 18 or over; we do not collect dates of birth or identity documents. We do not publish photographs that show identifiable children. After you send, we give you a private management link. Its code is stored only as a hash, and it lets you correct your words, remove your story from the gallery or withdraw it without an account. We record the version of the consent you accepted and the time. If a reviewer approves the material, we also record the decision, the actor, the time, and where approved material is used. Photographs are stripped of location, device and other metadata before they are stored.`,
         },
         { type: "subheading", text: "Aggregate interest counts" },
         {
@@ -420,7 +420,7 @@ export const privacyPolicy: LegalDocument = {
             },
             {
               term: "Story contributions",
-              description: `A withdrawal deletes the story text, name, reply address and photographs when the withdrawal is recorded; only the review record and its date remain. Declined material is deleted 90 days after the decision. Approved material is kept while it may be in use, and its reply address is deleted after 12 months. An administrator runs the retention sweep; it is dry-run by default and records what it would remove.`,
+              description: `A withdrawal deletes the story text, name, reply address and photographs when the withdrawal is recorded; only the review record and its date remain. Declined material is deleted 90 days after the decision. Approved material is kept while it may be in use, and its reply address is deleted 12 months after approval, measured from the approval date rather than later reviewer activity. An administrator runs the retention sweep; it is dry-run by default and records what it would remove.`,
             },
             {
               term: "Proposals and revisions",

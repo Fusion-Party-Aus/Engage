@@ -229,17 +229,17 @@ Digest and CRM verification endpoints exist, but no scheduler is configured. No 
 
 **Implemented (17 November 2026, #143):** a public collaboration matter (`/collaborate/<slug>/`) accepts stories and photographs from people with no account, with granular consent, private review, metadata-stripped media, a reviewer-only export and no automatic publication. See [public collaboration matters](../product/collaboration-matters.md).
 
-**Retention and safeguards (implemented same day):** withdrawal deletes story text, name, reply address and photographs immediately and keeps only the review record. Declined material is cleared after 90 days, approved reply addresses after 12 months, via `npm run collaboration:retention` (dry-run by default, `--apply` to act). An operational draft covering photographer credit, other identifiable people, minors, AI edits and mistaken publication is in [story and photograph safeguards](../guides/story-contribution-safeguards.md).
+**Retention and safeguards (implemented same day):** withdrawal deletes story text, name, reply address and photographs immediately and keeps only the review record. Declined material is cleared after 90 days, approved reply addresses 12 months after approval, via `npm run collaboration:retention` (dry-run by default, `--apply` to act). Each clear is conditional on the record still being in the expected state. A contributor can also correct, hide or withdraw with a private link; a lost link is recovered by email. An operational draft covering photographer credit, other identifiable people, minors, AI edits and mistaken publication is in [story and photograph safeguards](../guides/story-contribution-safeguards.md).
 
 **Pilot rules adopted 17 November 2026:** adults only with a simple 18+ attestation; no publication of identifiable children, even with guardian permission; hide disputed material within 1 business day, resolve within 5 business days, and be explicit that copies distributed outside Engage cannot be recalled.
 
 **Still open before public launch:**
 
 - the privacy policy now describes this purpose and the aggregate counts (version 1.4) but remains owner-authorised with legal review outstanding;
-- the correction inbox needs a named owner and backup, and the monthly retention sweep needs an owner and a place for its output;
+- the correction inbox, escalation path and monthly retention sweep have no named owner or backup; see [collaboration pilot operations](collaboration-pilot-operations.md);
 - the credit format is not decided, and a single caption may not describe several individual photographs well enough;
 - there is no derivative-approval step for an AI-edited photograph, and the production-image policy for edited photographs is undecided;
-- withdrawal is requested by email to the invitation's correction address, actioned by a reviewer; there is no self-service path and no automated receipt;
+
 - invitation interest counts are aggregate events, not people, and an account step is not a registration; there is no per-channel or per-source attribution;
 - no contributor email is sent automatically;
 - the public gallery is a simple list with no moderation queue for reported content, no paging beyond 60 stories and no Horizon CMS integration;
