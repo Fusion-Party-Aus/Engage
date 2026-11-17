@@ -114,7 +114,7 @@ Removal commitments, adopted 17 November 2026:
 
 Hiding is quick and reversible. Permanent withdrawal and deletion follow verification, and cannot recall a copy someone already downloaded, reposted or printed. Never promise more than that.
 
-The commitments only hold if someone owns the inbox. The correction address needs a named owner, a named backup, an escalation path and a named retention-sweep operator. Record all four in [collaboration pilot operations](../status/collaboration-pilot-operations.md). They are currently unassigned.
+The commitments only hold if someone owns the inbox. The correction address needs a named owner, a named backup, an escalation path and a named retention-sweep operator. The address is the operations default unless an invitation overrides it. Record all four in [collaboration pilot operations](../status/collaboration-pilot-operations.md). They are currently unassigned.
 
 ## Decisions still needed
 
