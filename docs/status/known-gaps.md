@@ -277,6 +277,12 @@ The identifiable-ballot boundary is national administrator or a delegated nation
 
 **Evidence:** `CommentRecord.upvotes`/`downvotes`, `voteOnComment`, `toCommentDto`, `src/lib/comment-thread.ts` (`commentConfidence`, `compareComments`), `src/lib/comment-replies.test.ts` and the discussion browser harness.
 
+### 29. Sense Box priority linking is one-to-one
+
+A priority currently stores at most one `linkedProposalId`, and developing a proposal from a priority claims that single link. The product discussion has referred to one priority informing multiple proposals; that is not implemented.
+
+**Direction:** confirm the intended cardinality. If one-to-many stands, migrate to a linked-proposal array, update the public and administrator views, and keep linkage idempotent rather than claiming a single source.
+
 ## Governance decisions
 
 The maintainer answered the RFC 0001 questionnaire on 14 November 2026. The

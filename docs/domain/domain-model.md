@@ -261,6 +261,9 @@ stateDiagram-v2
   voting --> not_endorsed: close ballot
   voting --> inconclusive: close ballot
   endorsed --> accepted: formal approval
+  accepted --> applying: claim for application
+  applying --> applied: proposal revision written
+  applying --> applying: retry after recovery window
   accepted --> applied: apply as new proposal revision
   rejected --> [*]
   withdrawn --> [*]
@@ -277,6 +280,7 @@ Key rules:
 - An amendment ballot can be opened only while the matter ballot is in Decide and the amendment's base equals the matter's ballot revision.
 - The amendment ballot result is `endorsed`, `not-endorsed` or `inconclusive`. It is supplied by an officer, not computed from the tally.
 - Formal acceptance (`accepted`) is a separate act from endorsement.
+- Applying an accepted amendment claims the amendment (`applying`) before writing the proposal, then finalises `applied` with the produced revision. A failed write releases the claim; an interrupted application can be retried after a recovery window and is idempotent.
 - Applying an accepted amendment creates a new proposal revision and requires the proposal to still be in Propose or Deliberate.
 
 ## Decision records

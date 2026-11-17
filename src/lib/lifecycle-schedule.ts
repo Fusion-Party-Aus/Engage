@@ -64,7 +64,7 @@ export function defaultBallotClosesAtFrom(now: Date): Date {
  *
  * The blocking set is defined by exclusion and fails closed: any status not
  * listed here — including `proposed`, `stale`, `conflict`, `ready`, `voting`,
- * `endorsed`, `accepted` and any unknown value — blocks the schedule.
+ * `endorsed`, `accepted`, `applying` and any unknown value — blocks the schedule.
  *
  * Rationale: `proposed`/`stale`/`conflict` are explicitly unresolved;
  * `ready` and `accepted` have been approved for application but not yet applied;
