@@ -3,14 +3,15 @@ import SiteLayout from '../../layouts/SiteLayout.astro';
 import ContributionForm from '../../components/collaboration/ContributionForm';
 import { Button } from '../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { getInitiative } from '../../lib/collaboration.ts';
+import { getPublicInitiative } from '../../lib/collaboration.ts';
 import { turnstileEnforced } from '../../lib/turnstile.ts';
 
 export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
 
 const env = runtimeEnv(Astro.locals);
-const initiative = await getInitiative(await getDatabase(env), String(Astro.params.slug ?? ''));
+// Draft and archived invitations have no public page.
+const initiative = await getPublicInitiative(await getDatabase(env), String(Astro.params.slug ?? ''));
 if (!initiative) Astro.response.status = 404;
 ---
 
@@ -22,7 +23,7 @@ if (!initiative) Astro.response.status = 404;
   {initiative ? (
     <div class="page-wrap section-space collaborate-page">
       <header class="page-intro">
-        <p class="text-sm font-semibold uppercase tracking-widest">Stories</p>
+        <p class="text-sm font-semibold uppercase tracking-widest">Take part</p>
         <h1>{initiative.title}</h1>
         <p>{initiative.summary}</p>
       </header>
@@ -36,6 +37,7 @@ if (!initiative) Astro.response.status = 404;
                 client:load
                 initiativeSlug={initiative.slug}
                 questions={initiative.questions}
+                profile={initiative.profile}
                 turnstileSiteKey={turnstileEnforced(env) ? (env.PUBLIC_TURNSTILE_SITE_KEY ?? '') : ''}
               />
               <noscript><p>Please enable JavaScript to send a contribution.</p></noscript>
@@ -57,7 +59,9 @@ if (!initiative) Astro.response.status = 404;
           <h2>What happens next</h2>
           <ul>
             <li>A person reads every contribution. Nothing is published automatically.</li>
-            <li>We only use your words or photos in the places you tick.</li>
+            <li>
+              We only use your words{initiative.profile === 'story' ? ' or photos' : ''} in the places you tick.
+            </li>
             <li>If we want to check something, we will reply only if you asked us to.</li>
             <li>
               You can ask us to correct or remove it at any time: email{' '}
@@ -66,9 +70,12 @@ if (!initiative) Astro.response.status = 404;
           </ul>
           <h2>What we will not do</h2>
           <ul>
-            <li>Publish a photo of you without your permission.</li>
+            {initiative.profile === 'story' && <li>Publish a photo of you without your permission.</li>}
             <li>Invent events, attendance or endorsements.</li>
-            <li>Treat your story as a policy position or as proof of party membership.</li>
+            <li>
+              Treat your {initiative.profile === 'story' ? 'story' : 'response'} as a policy position or as proof
+              of party membership.
+            </li>
           </ul>
           <p class="text-sm text-muted-foreground">
             Your email, if you give one, stays private and is used only to reply about this contribution. Read the{' '}
@@ -80,7 +87,7 @@ if (!initiative) Astro.response.status = 404;
   ) : (
     <div class="page-wrap section-space">
       <header class="page-intro">
-        <p class="text-sm font-semibold uppercase tracking-widest">Stories</p>
+        <p class="text-sm font-semibold uppercase tracking-widest">Take part</p>
         <h1>This invitation isn't here</h1>
         <p>The link may be old, or the invitation may have closed.</p>
       </header>

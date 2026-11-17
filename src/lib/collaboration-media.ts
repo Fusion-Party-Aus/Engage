@@ -127,11 +127,29 @@ export function prepareImage(bytes: Buffer): StoredImage {
   };
 }
 
-/** Reject a submission before reading its body when the declared size is too big. */
+/**
+ * Reject an upload before its body is buffered.
+ *
+ * A multipart request must declare its length. Without one, the application
+ * cannot bound what it is about to read into memory, so the request is refused
+ * rather than parsed. Browsers always send `Content-Length` for a form post.
+ * The trusted proxy should also enforce the same ceiling, because a client can
+ * understate the header.
+ */
 export function assertUploadSize(contentLengthHeader: string | null): void {
-  if (!contentLengthHeader) return;
+  if (!contentLengthHeader) {
+    throw new MediaError(
+      "Couldn't read the upload. Reload the page and try again.",
+      411,
+    );
+  }
   const declared = Number(contentLengthHeader);
-  if (!Number.isFinite(declared) || declared <= 0) return;
+  if (!Number.isFinite(declared) || declared <= 0) {
+    throw new MediaError(
+      "Couldn't read the upload. Reload the page and try again.",
+      411,
+    );
+  }
   if (declared <= MEDIA_LIMITS.totalBytes + 256 * 1024) return;
   throw new MediaError(
     `Photos must total ${MEDIA_LIMITS.totalBytes / (1024 * 1024)} MB or less.`,

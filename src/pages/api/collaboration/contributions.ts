@@ -76,7 +76,10 @@ export const POST: APIRoute = async (context) => {
       },
       files,
     );
-    return Response.json({ saved: true, shareable: result.shareable }, { status: 201, headers });
+    return Response.json(
+      { saved: true, shareable: result.shareable, reference: result.contributionId },
+      { status: 201, headers },
+    );
   } catch (error) {
     if (error instanceof CollaborationError || error instanceof MediaError) {
       return Response.json({ error: error.message }, { status: error.status, headers });

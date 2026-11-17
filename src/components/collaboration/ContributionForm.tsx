@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '../ui/field';
@@ -13,12 +13,14 @@ import {
   MEDIA_LIMITS,
   PUBLICATION_CHANNELS,
   type Attribution,
+  type ContributionProfile,
   type ContributionQuestion,
 } from '../../lib/collaboration-options';
 
 interface Props {
   initiativeSlug: string;
   questions: readonly ContributionQuestion[];
+  profile: ContributionProfile;
   turnstileSiteKey?: string;
 }
 
@@ -26,14 +28,24 @@ interface Props {
  * Guest contribution form. No account is required and no input is lost when a
  * submission fails: the fields stay mounted, only the error is added.
  */
-export default function ContributionForm({ initiativeSlug, questions, turnstileSiteKey = '' }: Props) {
+export default function ContributionForm({
+  initiativeSlug,
+  questions,
+  profile,
+  turnstileSiteKey = '',
+}: Props) {
+  const story = profile === 'story';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [saved, setSaved] = useState<null | { shareable: boolean }>(null);
+  const [saved, setSaved] = useState<null | { shareable: boolean; reference: string }>(null);
   const [attribution, setAttribution] = useState<Attribution>('named');
   const [contact, setContact] = useState(false);
-  const [fileCount, setFileCount] = useState(0);
+  const [aiEdits, setAiEdits] = useState(false);
+  const [previews, setPreviews] = useState<Array<{ name: string; url: string }>>([]);
   const requestId = useRef('');
+
+  // Object URLs are revoked when the selection changes or the form unmounts.
+  useEffect(() => () => previews.forEach((preview) => URL.revokeObjectURL(preview.url)), [previews]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,7 +65,7 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Couldn’t send your contribution. Try again.');
-      setSaved({ shareable: result.shareable === true });
+      setSaved({ shareable: result.shareable === true, reference: String(result.reference ?? '') });
     } catch (caught) {
       // A failed POST may have spent the single-use Turnstile token.
       window.dispatchEvent(new Event('engage:turnstile-reset'));
@@ -78,12 +90,19 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
           </p>
         )}
         <p className="m-0 text-sm text-muted-foreground">
-          You don’t need an account to contribute. If you’d like one later, it’s separate from party
-          membership.
+          You don’t need an account. If you ask us to correct or remove this, quote reference{' '}
+          <strong className="font-mono text-foreground">{saved.reference.slice(0, 8)}</strong>.
         </p>
+        <div className="grid gap-2">
+          <p className="m-0 font-semibold">You’ve already contributed. Want to see what else you can shape?</p>
+          <p className="m-0 text-sm text-muted-foreground">
+            Engage is where people discuss ideas, improve proposals and decide together. An account is free and
+            separate from joining Fusion.
+          </p>
+        </div>
         <div className="flex flex-wrap gap-3">
-          <Button href="/proposals/">See what members are deciding</Button>
-          <Button href="/how-it-works/" variant="outline">How Engage works</Button>
+          <Button href="/proposals/">Explore Engage</Button>
+          <Button href="/member/" variant="outline">Create an account</Button>
         </div>
       </div>
     );
@@ -92,8 +111,12 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
   return (
     <form onSubmit={submit} className="grid gap-8">
       <FieldSet>
-        <FieldLegend>Your story</FieldLegend>
-        <FieldDescription>Answer as many as you like. A few honest sentences, a photo, or both is plenty.</FieldDescription>
+        <FieldLegend>{story ? 'Your story' : 'Your response'}</FieldLegend>
+        <FieldDescription>
+          {story
+            ? 'Answer as many as you like. A few honest sentences, a photo, or both is plenty.'
+            : 'Answer as many as you like. A few sentences is plenty.'}
+        </FieldDescription>
         <FieldGroup>
           {questions.map((question, index) => (
             <Field
@@ -110,6 +133,7 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
               />
             </Field>
           ))}
+          {story && (
           <Field
             label="Add photos"
             htmlFor="photos"
@@ -128,11 +152,33 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
               type="file"
               multiple
               accept="image/jpeg,image/png"
-              onChange={(event) => setFileCount(event.currentTarget.files?.length ?? 0)}
+              onChange={(event) =>
+                setPreviews(
+                  Array.from(event.currentTarget.files ?? []).map((file) => ({
+                    name: file.name,
+                    url: URL.createObjectURL(file),
+                  })),
+                )
+              }
               aria-describedby="photos-help"
             />
           </Field>
-          {fileCount > 0 && (
+          )}
+          {previews.length > 0 && (
+            <ul className="m-0 flex list-none flex-wrap gap-3 p-0">
+              {previews.map((preview) => (
+                <li key={preview.url} className="grid gap-1">
+                  <img
+                    src={preview.url}
+                    alt={`Preview of ${preview.name}`}
+                    className="size-28 rounded-md border object-cover"
+                  />
+                  <span className="max-w-28 truncate text-xs text-muted-foreground">{preview.name}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {story && previews.length > 0 && (
             <Field label="Photo caption" htmlFor="caption" hint="Optional. Who, where, when. Skip anything you’d rather not share.">
               <Input id="caption" name="caption" maxLength={MEDIA_LIMITS.caption} />
             </Field>
@@ -144,7 +190,7 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
         <FieldLegend>How we may use it</FieldLegend>
         <FieldGroup>
           <Field>
-            <FieldLabel>May we publish this?</FieldLabel>
+            <FieldLabel>{story ? 'May we publish this?' : 'May we publish your response?'}</FieldLabel>
             <FieldDescription>
               Tick every place it could appear. Leave all unticked to keep it private; we can still
               learn from it.
@@ -160,6 +206,7 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
             <FieldDescription>Nothing is published unless you tick a channel and our team approves it.</FieldDescription>
           </Field>
 
+          {story && (
           <Field>
             <FieldLabel id="attribution-label">How should we credit you?</FieldLabel>
             <ToggleGroup
@@ -175,10 +222,15 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
+            <FieldDescription>
+              A photo can still identify you even when we don’t print your name. We only publish a photo you
+              allow.
+            </FieldDescription>
             <input type="hidden" name="attribution" value={attribution} readOnly />
           </Field>
+          )}
 
-          {attribution === 'named' && (
+          {story && attribution === 'named' && (
             <Field label="Your name" htmlFor="display-name" hint="Only used where the contribution appears.">
               <Input
                 id="display-name"
@@ -190,6 +242,8 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
             </Field>
           )}
 
+          {story && (
+          <>
           <label className="flex items-start gap-3 text-sm">
             <Checkbox name="allowEdits" className="mt-0.5 size-5" />
             <span>
@@ -199,15 +253,23 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
           </label>
 
           <label className="flex items-start gap-3 text-sm">
-            <Checkbox name="allowAiEdits" className="mt-0.5 size-5" />
+            <Checkbox
+              name="allowAiEdits"
+              className="mt-0.5 size-5"
+              checked={aiEdits}
+              disabled={!contact}
+              onChange={(event) => setAiEdits(event.currentTarget.checked)}
+            />
             <span>
               You may use AI-assisted edits on my photos.
               <span className="block text-muted-foreground">
-                Optional, off by default. For example adding Fusion branding. We’ll show you the result before
-                it is used.
+                Optional, off by default. For example adding Fusion branding. We show you the result before it
+                is used, so this needs a reply address.
               </span>
             </span>
           </label>
+          </>
+          )}
         </FieldGroup>
       </FieldSet>
 
@@ -219,7 +281,10 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
               name="contactAllowed"
               className="mt-0.5 size-5"
               checked={contact}
-              onChange={(event) => setContact(event.currentTarget.checked)}
+              onChange={(event) => {
+                setContact(event.currentTarget.checked);
+                if (!event.currentTarget.checked) setAiEdits(false);
+              }}
             />
             <span>
               Yes, contact me about this contribution.
@@ -242,8 +307,10 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
         <label className="flex items-start gap-3 text-sm">
           <Checkbox name="consent" required className="mt-0.5 size-5" />
           <span>
-            This is my own story and my own photos, I have the right to share them, and I have permission from
-            anyone who can be recognised in a photo. I’ve read the <a href="/privacy/">privacy policy</a>.
+            {story
+              ? 'This is my own story and my own photos, I have the right to share them, and I have permission from anyone who can be recognised in a photo.'
+              : 'This is my own response and I have the right to share it.'}{' '}
+            I’ve read the <a href="/privacy/">privacy policy</a>.
           </span>
         </label>
         <Turnstile siteKey={turnstileSiteKey} action="collaborate" />
@@ -254,7 +321,7 @@ export default function ContributionForm({ initiativeSlug, questions, turnstileS
         )}
         <div>
           <Button type="submit" size="lg" disabled={busy}>
-            {busy ? 'Sending…' : 'Send my story'}
+            {busy ? 'Sending…' : story ? 'Send my story' : 'Send my response'}
           </Button>
         </div>
       </div>
