@@ -73,6 +73,7 @@ const ownerAuthorisedApproval: LegalApproval = {
     "Confirm the retention schedule for story contributions (withdrawal immediate; declined 90 days; approved reply address 12 months) and the review of approved material still in use.",
     "Confirm whether a separate consent step or notice is needed when an existing member contributes a story while signed in.",
     "Confirm that aggregate invitation counts (arrival, start, submission, account step), with no identifiers and 13-month retention, are consistent with the analytics disclosure.",
+    "Confirm that optional account linking of a contribution (member identifier, time and consent version, removable by the contributor) is adequately described.",
     "After publication approval, activate the legal acceptance gate by setting both documents to published status and enabling LEGAL_ACCEPTANCE_ENABLED.",
   ],
 };
@@ -83,7 +84,7 @@ export const privacyPolicy: LegalDocument = {
   shortTitle: "Privacy Policy",
   description:
     "How Fusion Party Australia collects, uses, shares and retains personal information in Engage.",
-  version: "1.5 (story contributions, management links and aggregate counts; publication pending)",
+  version: "1.6 (story contributions, management links, account linking and aggregate counts; publication pending)",
   status: "Owner authorised · publication pending",
   publicationStatus: "owner-authorised",
   effectiveDate: "To be set by the release owner on publication",
@@ -191,7 +192,7 @@ export const privacyPolicy: LegalDocument = {
         { type: "subheading", text: "Story and photograph contributions" },
         {
           type: "paragraph",
-          text: `You can send a story, photographs, or both to a public invitation without an account and without being a party member. We collect what you write, the photographs and caption you attach, the name you ask us to use, any email address you give us so we can reply, and the permissions you choose for publication channels, credit, ordinary editing and AI-assisted editing. We ask you to confirm that you are 18 or over; we do not collect dates of birth or identity documents. We do not publish photographs that show identifiable children. After you send, we give you a private management link. Its code is stored only as a hash, and it lets you correct your words, remove your story from the gallery or withdraw it without an account. We record the version of the consent you accepted and the time. If a reviewer approves the material, we also record the decision, the actor, the time, and where approved material is used. Photographs are stripped of location, device and other metadata before they are stored.`,
+          text: `You can send a story, photographs, or both to a public invitation without an account and without being a party member. We collect what you write, the photographs and caption you attach, the name you ask us to use, any email address you give us so we can reply, and the permissions you choose for publication channels, credit, ordinary editing and AI-assisted editing. We ask you to confirm that you are 18 or over; we do not collect dates of birth or identity documents. We do not publish photographs that show identifiable children. After you send, we give you a private management link. Its code is stored only as a hash, and it lets you correct your words, remove your story from the gallery or withdraw it without an account. If you are signed in, you may optionally link the contribution to your account. We then record your member identifier, the time and the consent version. Linking does not change publication, approval or who may manage the contribution, and you can unlink it from the same page. We record the version of the consent you accepted and the time. If a reviewer approves the material, we also record the decision, the actor, the time, and where approved material is used. Photographs are stripped of location, device and other metadata before they are stored.`,
         },
         { type: "subheading", text: "Aggregate interest counts" },
         {

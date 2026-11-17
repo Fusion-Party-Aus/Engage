@@ -16,7 +16,7 @@ This page records the model, the consent rules, the data handling and what is de
 - Every contribution lands in a private review queue at `/admin/collaboration/`. A reviewer records `new`, `needs follow-up`, `approved`, `declined` or `withdrawn`.
 - Approval is not publication. Where an approved contribution is actually used is recorded separately, per permitted channel, with a reference.
 - An approved story with website consent can be **published** to a public gallery at `/collaborate/<slug>/stories/`. Approval and publication are separate: approving for editorial use never makes a story public. A reviewer can hide a published story, or show it again, without changing its approval.
-- A contributor keeps a private link to correct, hide or withdraw their own contribution without an account.
+- A contributor keeps a private link to correct, hide or withdraw their own contribution without an account. If they are signed in, they can optionally link the contribution to their Engage account.
 - Approved material is also handed to the website team by downloading a JSON export. There is no CMS integration yet.
 
 An Engage account and Fusion party membership are separate things, and neither is required here. A contribution creates no account, no membership and no branch affiliation. A contributor who later creates an account is offered an optional next step, not a condition of contributing.
@@ -87,6 +87,17 @@ On success the contributor receives a link of the form `/collaborate/manage/#<to
 - **Remove from public gallery** hides a published story without changing its approval.
 - **Withdraw completely** deletes the stored words, name, reply address and photographs immediately and records the contributor's action in the audit trail. The link stops working.
 - A lost link can only be recovered by emailing the invitation's correction address. There is no name or email lookup, because that would let one person reach another's contribution.
+
+## Optional account link
+
+A signed-in member who holds a contribution's private link can choose to link it to their Engage account. This is never a condition of contributing and never a condition of managing the contribution.
+
+- The link is offered only after the token proves access. The member must tick an explicit consent box.
+- Stored: the member identifier, the time and the consent version (`claim-2026-11-17`). An audit event records the link.
+- Claiming changes neither publication nor approval, and creates no administrative permission. The private link remains the only authority to correct or withdraw.
+- The contributor can unlink from the same page; that is audited too.
+- A contribution can be linked to one account. A second account is refused.
+- Linked contributions do not yet appear on the member's public profile. That is a separate step, not implied by the link.
 
 ## Aggregate interest counts
 
@@ -160,7 +171,6 @@ Review contributions at `/admin/collaboration/`, record uses, and download the a
 
 ## What is not built
 
-- Claiming a contribution after creating an account. Contribution never requires one.
 - Self-service withdrawal. A contributor keeps an eight-character reference and emails the correction address; reviewers can find the record by that reference.
 - An approval step for a specific AI-edited derivative, and the production-image policy decision behind it. The application records permission; it does not perform or approve edits.
 - Horizon CMS integration. Hand-off is a manual export.
@@ -178,4 +188,4 @@ Review contributions at `/admin/collaboration/`, record uses, and download the a
 - Rendered journeys on 17 November 2026, in a production build against MongoDB: a guest submits a story with a photograph (201) and sees the success screen with a reference; a private-only response is accepted as consultation input; a second invitation is created as a draft (public page 404), opened (200) and archived (404); review notes survive a reload and a later status change; the private media route returns 401 without a reviewer session; desktop and 390 px mobile layouts have no horizontal overflow and no console or request errors.
 - Gallery journeys: approving a website story leaves it out of the gallery; publishing it shows the chosen credit and photograph; hiding removes it and its media route returns 404; showing brings both back with the original publication date; withdrawal removes it permanently. Written consultation responses never appear. Screenshots and the environment note are in [gallery evidence](../status/evidence/collaboration-gallery/README.md).
 - Funnel journeys: a page arrival, first form interaction and successful submission each increment their stage once; the editor's 30-day panel shows the counts and conversions; the stored row contains only invitation, day, stage, count and expiry.
-- Contributor management journey: the success screen offers a private link whose token stays in the URL fragment; the link shows the contribution and status; removing from the gallery takes effect immediately; a correction returns the story to review and off the gallery; withdrawal deletes the material and invalidates the link. No request URL contained the token during the check.
+- Contributor management journey: a signed-in member can optionally link the contribution after ticking consent, the link survives a reload and shows in the review queue, unlinking removes it, and claiming changes neither publication nor management authority. The success screen offers a private link whose token stays in the URL fragment; the link shows the contribution and status; removing from the gallery takes effect immediately; a correction returns the story to review and off the gallery; withdrawal deletes the material and invalidates the link. No request URL contained the token during the check.

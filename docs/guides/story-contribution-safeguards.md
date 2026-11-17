@@ -96,6 +96,7 @@ Approving a story does not publish it. An approved story appears on the invitati
 Implemented:
 
 - Marking a contribution `withdrawn` deletes the story text, name, reply address and photographs immediately. The review record and its date remain.
+- A contributor can do the same from their private link, without an account. Linking the contribution to a signed-in account is optional and does not transfer management authority; the private link remains the only way to correct or withdraw it.
 - Declined material is cleared 90 days after the decision.
 - An approved contribution's reply address is cleared after 12 months. The story stays while it may be in use.
 - `npm run collaboration:retention` reports what would be cleared. `--apply` performs it. Run it monthly and record the output.

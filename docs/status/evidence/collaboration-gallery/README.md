@@ -14,6 +14,7 @@ These screenshots show the public gallery, the explicit publication step and the
 | `funnel-panel.jpg` | The editor's 30-day interest panel: arrivals, starts, sends and account steps with conversion percentages, and the note that no identities or typed content are recorded. |
 | `manage-page.jpg` | A contributor's private management link, after hiding the story from the gallery. It shows the status, the correction fields and the separate withdrawal action. |
 | `manage-withdrawn.jpg` | The same link after withdrawal: the material is gone, the link has stopped working, and the page is explicit that copies outside Engage cannot be recalled. |
+| `manage-linked.jpg` | A signed-in contributor after optionally linking the contribution to their Engage account, with the unlink action available. |
 
 Verified in the same run: the public media route returned 200 while published and 404 once hidden or withdrawn; the image alt text read "Photograph 1 of 1 shared by Gallery Person"; the console and request log contained no errors from the gallery or interest endpoints.
 
