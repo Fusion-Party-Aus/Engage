@@ -1,6 +1,8 @@
 # Engage
 
-Fusion Party Australia's participatory governance platform: proposals, deliberation, formal ballots and the published policy record.
+Fusion's home for participation — a place where anyone can discover what we're doing, connect with people who share their interests, contribute ideas and expertise, participate in discussions and decisions, and find meaningful ways to help.
+
+Whether someone has five minutes to share an opinion or five hours to volunteer, Engage should make it easy to get involved, understand what happens next, and build lasting connections along the way. Membership can open additional responsibilities and democratic rights, but it shouldn't be the prerequisite for every meaningful contribution.
 
 `https://engage.fusionparty.org.au/`
 

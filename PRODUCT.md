@@ -8,17 +8,25 @@ web
 
 ## Users
 
-Engage serves people who are new to Fusion governance, members who want to follow or shape proposals, eligible voters, proposal authors, branch officers, national officers, and public readers looking for Fusion's official positions. A future application may read authoritative policy through the public API.
+Engage serves anyone who wants to discover what Fusion is doing, connect with people who share their interests, contribute ideas and expertise, or find meaningful ways to help—whether they have five minutes to share an opinion or five hours to volunteer—alongside members who shape proposals, eligible voters, proposal authors, branch officers, national officers, and public readers looking for Fusion's official positions.
 
-A visitor should understand the product without knowing parliamentary procedure. A member should be able to find relevant activity and know whether they can act. Officers need precise decision records and controls within their delegated authority.
+A visitor should understand how to get involved and what happens next without knowing parliamentary procedure. Membership can open additional responsibilities and democratic rights, but it shouldn't be the prerequisite for every meaningful contribution. A member should be able to find relevant activity and know whether they can act. Officers need precise decision records and controls within their delegated authority.
 
 ## Product Purpose
 
-Engage is Fusion Party Australia's place to explore ideas, discuss proposed changes, vote when eligible, and read formally adopted policy. Participation is optional. Its success is a clear path from an idea to a recorded decision and, where authorised, a published policy whose exact wording and authority can be audited.
+Engage is Fusion's home for participation.
+
+A place where anyone can discover what we're doing, connect with people who share their interests, contribute ideas and expertise, participate in discussions and decisions, and find meaningful ways to help.
+
+Whether someone has five minutes to share an opinion or five hours to volunteer, Engage should make it easy to get involved, understand what happens next, and build lasting connections along the way.
+
+Membership can open additional responsibilities and democratic rights, but it shouldn't be the prerequisite for every meaningful contribution.
+
+Its success is making participation approachable and connected while maintaining a clear, auditable path from ideas and contributions to recorded decisions and, where authorised, published policy.
 
 ## Positioning
 
-Engage connects public exploration and member participation to a rigorous governance record. Proposal votes, amendment votes, formal ratification and publication are distinct actions. A successful vote alone does not make policy official.
+Engage connects open public participation, collaboration, and community connection to a rigorous governance record. Proposal votes, amendment votes, formal ratification and publication remain distinct actions, and a successful vote alone does not make policy official.
 
 ## Operating Context
 

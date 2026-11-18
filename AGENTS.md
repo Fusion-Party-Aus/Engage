@@ -2,7 +2,7 @@
 
 These rules apply to all agents and maintainers working on Engage.
 
-**Engage is a member participation platform, not a developer console.** Every change must preserve governance correctness, deliver an intuitive user experience, and maintain engineering quality.
+**Engage is Fusion's home for participation, not a developer console.** Anyone should be able to discover what we're doing, connect with people who share their interests, contribute ideas and expertise, participate in discussions and decisions, and find meaningful ways to help; membership opens additional responsibilities and democratic rights rather than gating every meaningful contribution. Every change must preserve governance correctness, deliver an intuitive user experience, and maintain engineering quality.
 
 A feature is not finished simply because its API works, its tests pass, or its controls appear on screen.
 

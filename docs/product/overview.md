@@ -4,13 +4,19 @@
 
 ## Definition
 
-> Fusion Engage is Fusion Party Australia's participatory governance platform. Members propose ideas, deliberate on policy and organisational matters, participate in formal decisions when eligible, and follow those decisions through to their recorded outcomes. Where authority permits, the same record becomes published party policy.
+> Engage is Fusion's home for participation.
+>
+> A place where anyone can discover what we're doing, connect with people who share their interests, contribute ideas and expertise, participate in discussions and decisions, and find meaningful ways to help.
+>
+> Whether someone has five minutes to share an opinion or five hours to volunteer, Engage should make it easy to get involved, understand what happens next, and build lasting connections along the way.
+>
+> Membership can open additional responsibilities and democratic rights, but it shouldn't be the prerequisite for every meaningful contribution.
 
-Engage is reachable at `https://engage.fusionparty.org.au/`. It is a product for members and officers of one political party, not a generic civic-tech platform and not an internal developer console.
+Engage is reachable at `https://engage.fusionparty.org.au/`. It serves anyone who wants to engage with Fusion Party Australia's work—from public contributors and volunteers to party members and authorised officers—while keeping formal governance rights and accountability explicit. It is not a generic civic-tech platform and not an internal developer console.
 
 Three ideas hold the product together:
 
-1. **Participation is optional and staged.** A visitor can read. A member can discuss. An eligible member can vote. An authorised officer can record and publish the decision.
+1. **Participation is open and staged.** Anyone can discover what Fusion is doing, share priorities, or contribute stories and expertise without a membership prerequisite. Membership and verification open additional democratic rights and responsibilities—such as formal deliberation, proposing matters, and voting when eligible—and authorised officers record and publish formal decisions.
 2. **A vote is not a decision.** A ballot is one input. A formal decision is a separate recorded act, and publication is a third act. The interface must never collapse them.
 3. **Wording is evidence.** A ballot is bound to an immutable revision. Editing the text after votes exist does not reinterpret the votes; it requires a new revision and an explicit governance path.
 
@@ -30,7 +36,7 @@ Engage addresses these by combining deliberation, formal ballots, a policy regis
 
 | User | What they need | What they can do today |
 |---|---|---|
-| **Public reader** | Understand what Fusion is considering and what it has adopted, without an account. | Read public proposals, published policy, branch directory, how-it-works and changelog. |
+| **Public visitor / contributor** | Understand what Fusion is doing, share priorities or stories, and see how to get involved without an account. | Read public proposals, published policy, branch directory, how-it-works and changelog; submit priorities to the Sense Box; contribute stories and photographs to open collaboration invitations. |
 | **New or unverified member** | Join, understand eligibility, and participate as soon as they are verified. | Sign in by email link, Google or passkey; see verification status; save a vote preference while pending; follow branches. |
 | **Verified member** | Find relevant activity, deliberate, and vote when eligible. | Create proposals, comment, reply, upvote or downvote comments, submit amendments, vote in national ballots, join a branch, manage notifications. |
 | **Branch member** | Participate in the branch they belong to. | Vote in that branch's ballots; follow any branch for updates. |
@@ -118,7 +124,7 @@ A member commenting "I support this" has not voted. A proposal with 90% supporti
 
 - **Be the membership system of record.** UndergroundCRM is authoritative for person records, party membership and electorate facts. Engage stores the verification outcome and its own participation facts.
 - **Be the party's identity provider.** Authentication is local Better Auth. Fusion Core / Fusion Auth is a future proposal, not a dependency.
-- **Be a general-purpose forum, social network or messaging product.** Deliberation exists to improve governance matters.
+- **Be an unmoderated social feed or generic messaging replacement.** Connection and discussion on Engage serve shared participation, collaboration, and governance.
 - **Be a survey or sentiment tool.** The Sense Box collects public concerns, but it is not a ballot and creates no decision. Organisers review every submission; only an explicit publication action makes a priority and its discussion publicly readable.
 - **Promise a reply.** The form collects no contact details. A submitted priority receives a private status link, and the contributor can return to it or to the public discussion. Joining the discussion requires a verified Engage account; this is deliberate so that public discussion remains accountable and moderated.
 - **Treat a priority as a lead, not a single motion.** One published or private priority can inform several proposals. Links are recorded as provenance and do not publish the priority.
@@ -139,6 +145,7 @@ The authoritative list, with evidence, is [status/capability-matrix.md](../statu
 
 Engage succeeds when:
 
+- anyone—whether they have five minutes to share an opinion or five hours to volunteer—can see how to get involved, understand what happens next, and connect with others around shared interests;
 - a member can find the activity relevant to them and knows whether they can act;
 - an eligible voter can vote once, change their mind while the ballot is open, and see the exact wording they voted on;
 - an officer can complete a governance act without understanding MongoDB;
