@@ -328,13 +328,13 @@ test(
       // Verify outstandingBallots & listMemberActivityStream recognise encrypted votes
       Object.assign(process.env, rotatedEnv);
       const { listProposals } = await import("./proposals-store.ts");
-      const { outstandingBallots } = await import("./engagement-email.ts");
+      const { outstandingBallots } = await import("./electorate.ts");
       const { listMemberActivityStream } = await import("./member-activity.ts");
       const proposalsForCheck = await listProposals(db, { user: memberA });
       const openDecide = proposalsForCheck.filter(
         (p) => p.stage === "decide" && p.proposalId === "PROP-ENC-1",
       );
-      const remaining = await outstandingBallots(db, memberA, openDecide);
+      const remaining = await outstandingBallots(db, memberA, { proposals: openDecide });
       assert.equal(
         remaining.length,
         0,

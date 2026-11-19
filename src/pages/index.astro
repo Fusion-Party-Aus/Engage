@@ -18,8 +18,7 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../lib/db.ts';
-import { loadBallotCryptoConfig } from '../lib/ballot-crypto.ts';
-import { listOutstandingDecisions } from '../lib/voting-store.ts';
+import { openMatterBallots } from '../lib/electorate.ts';
 import { listProposals } from '../lib/proposals-store.ts';
 import { attachPublicTallies, publicTallyLabel } from '../lib/public-proposals.ts';
 import { findMemberVotes, proposalBallotId } from '../lib/vote-storage.ts';
@@ -42,22 +41,12 @@ const [proposalSummaries, publishedPolicyCount] = await Promise.all([
 const proposals = await attachPublicTallies(db, proposalSummaries);
 const highlightProposals = proposals.filter((proposal) => proposal.tallyState !== 'pending');
 const votes = proposals.filter((p) => p.stage === 'decide' && !ballotExpired(p));
-const myVoteRows = user?.canParticipate
-  ? await findMemberVotes(
-      db,
-      user.memberId,
-      votes.map((p) => proposalBallotId(p.proposalId)),
-      loadBallotCryptoConfig(env),
-    )
+const eligibleOpenBallots = user?.canParticipate
+  ? await openMatterBallots(db, user, { proposals })
   : [];
-const mine = user?.canParticipate
-  ? await listOutstandingDecisions(db, user.memberId, user, proposals, myVoteRows)
-  : [];
-const openProposalIds = new Set(votes.map((p) => p.proposalId));
-const completedOpenVotesCount = new Set(
-  myVoteRows.map((v: any) => String(v.proposalId ?? '')).filter((id) => openProposalIds.has(id)),
-).size;
-const totalEligibleOpenVotesCount = completedOpenVotesCount + mine.length;
+const mine = eligibleOpenBallots.filter((ballot) => !ballot.voted);
+const completedOpenVotesCount = eligibleOpenBallots.length - mine.length;
+const totalEligibleOpenVotesCount = eligibleOpenBallots.length;
 const homeProgressPct =
   totalEligibleOpenVotesCount > 0
     ? Math.round((completedOpenVotesCount / totalEligibleOpenVotesCount) * 100)

@@ -2,16 +2,15 @@ import { recordLifecycle } from "./member-lifecycle.ts";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { Db } from "mongodb";
 import type { PlatformEnv, ProposalSummaryView, SessionUser } from "./types.ts";
-import { ballotDeadlineLabel, ballotExpired, closesWithinSevenDays } from "./ballot-deadline.ts";
+import { ballotDeadlineLabel, closesWithinSevenDays } from "./ballot-deadline.ts";
+import { outstandingBallots } from "./electorate.ts";
 import {
   escapeEmailHtml,
   renderDigestEmail,
 } from "./email-templates.ts";
 import { listMembers } from "./members-store.ts";
-import { canViewProposal } from "./proposal-helpers.ts";
 import { listProposals } from "./proposals-store.ts";
 import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
-import { findMemberVotes, proposalBallotId } from "./vote-storage.ts";
 
 export { escapeEmailHtml };
 import { digestEnabled, ensureDigestCohort } from "./digest-preferences.ts";
@@ -46,57 +45,21 @@ export function renderDigest(name: string, ballots: DigestBallot[], origin: stri
   return renderDigestEmail(name, ballots, origin, unsubscribeUrl, existingDefault);
 }
 
-export type OutstandingBallot = Omit<DigestBallot,'closesAt'> & {closesAt?:Date};
 export async function digestBallots(db:Db,user:SessionUser,proposals:ProposalSummaryView[],now=new Date()):Promise<DigestBallot[]> {
-  return (await outstandingBallots(db,user,proposals,now))
-    .filter((b):b is DigestBallot=>Boolean(b.closesAt && closesWithinSevenDays({ballotClosesAt:b.closesAt},now)));
-}
-
-/** The same visibility, verified membership and recognised branch electorate boundaries as voting. */
-export async function outstandingBallots(db: Db, user: SessionUser, proposals: ProposalSummaryView[], now = new Date()): Promise<OutstandingBallot[]> {
-  if (!user.canParticipate) return [];
-  const [memberships, branches, amendments] = await Promise.all([
-    db.collection("branch_memberships").find({memberId:user.memberId, status:"active"}).project({branchId:1}).toArray(),
-    db.collection("branches").find({recognised:true}).project({branchId:1, kind:1}).toArray(),
-    db.collection("amendments").find({status:"voting"}).project({amendmentId:1, proposalId:1, title:1, ballotClosesAt:1, ballotRevisionId:1, ballotAmendmentRevisionId:1, currentRevisionId:1, baseRevisionId:1}).toArray(),
-  ]);
-  const ballotIds = [
-    ...proposals.filter((p) => p.stage === "decide").map((p) => proposalBallotId(p.proposalId)),
-    ...amendments.map((a) => `amendment:${a.amendmentId}`),
-  ];
-  const votes = await findMemberVotes(
-    db,
-    user.memberId,
-    ballotIds,
-    loadBallotCryptoConfig(process.env),
-  );
-  const memberBranches = new Set(memberships.map(m=>m.branchId));
-  const recognised = new Set(branches.map(b=>b.branchId));
-  const nationalBranches = new Set(
-    branches.filter((b: any) => b.kind === "national").map((b: any) => String(b.branchId)),
-  );
-  const viewer = {...user, activeBranchIds:[...memberBranches] as string[]};
-  const result: OutstandingBallot[] = [];
-  for (const p of proposals) {
-    if (p.stage !== "decide" || ballotExpired(p,now) || !p.ballotRevisionId || !canViewProposal(p, viewer)) continue;
-    if (p.jurisdictionBranchId && !recognised.has(p.jurisdictionBranchId)) continue;
-    // National governance is included for every verified Engage account; it
-    // does not require a separate national branch membership record.
-    if (
-      p.jurisdictionBranchId &&
-      !nationalBranches.has(p.jurisdictionBranchId) &&
-      !memberBranches.has(p.jurisdictionBranchId)
-    ) continue;
-    if (!votes.some(v=>v.ballotId === proposalBallotId(p.proposalId) && v.revisionId === p.ballotRevisionId)) {
-      result.push({key:`proposal:${p.proposalId}:${p.ballotRevisionId}:${p.ballotClosesAt ? new Date(p.ballotClosesAt).toISOString() : "open"}`, proposalId:p.proposalId, title:p.title, href:`/proposals/${encodeURIComponent(p.slug)}/#proposal-vote`, closesAt:p.ballotClosesAt ? new Date(p.ballotClosesAt) : undefined});
-    }
-    for (const a of amendments.filter(a=>a.proposalId === p.proposalId && a.ballotRevisionId === p.ballotRevisionId && a.baseRevisionId === p.ballotRevisionId && a.currentRevisionId === a.ballotAmendmentRevisionId)) {
-      const closesAt = a.ballotClosesAt || p.ballotClosesAt;
-      if (!a.ballotAmendmentRevisionId || ballotExpired({ballotClosesAt:closesAt}, now) || votes.some(v=>v.ballotId === `amendment:${a.amendmentId}` && v.revisionId === a.ballotRevisionId && v.amendmentRevisionId === a.ballotAmendmentRevisionId)) continue;
-      result.push({key:`amendment:${a.amendmentId}:${a.ballotAmendmentRevisionId}:${closesAt ? new Date(closesAt).toISOString() : "open"}`, proposalId:p.proposalId, title:`Amendment: ${a.title || p.title}`, href:`/proposals/${encodeURIComponent(p.slug)}/#deliberation`, closesAt:closesAt ? new Date(closesAt) : undefined});
-    }
-  }
-  return result.sort((a,b)=>(a.closesAt?.getTime() ?? Infinity)-(b.closesAt?.getTime() ?? Infinity));
+  const ballots = await outstandingBallots(db, user, {
+    proposals,
+    now,
+    cryptoConfig: loadBallotCryptoConfig(process.env),
+  });
+  return ballots
+    .filter((ballot) => Boolean(ballot.closesAt && closesWithinSevenDays({ballotClosesAt:ballot.closesAt},now)))
+    .map((ballot) => ({
+      key: ballot.key,
+      title: ballot.title,
+      href: ballot.href,
+      closesAt: ballot.closesAt!,
+      proposalId: ballot.proposalId,
+    }));
 }
 
 /** A scheduler invokes this in bounded batches. Never retries an ambiguous external send automatically. */

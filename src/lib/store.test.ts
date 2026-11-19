@@ -4,7 +4,6 @@ import { createMemoryDb, getDatabase } from "./db.ts";
 import { addComment, deleteComment, toggleUpvoteComment } from "./comments-store.ts";
 import {
   castVote,
-  listOutstandingDecisions,
   listUserActivity,
   promotePendingVotePreferences,
   savePendingVotePreference,
@@ -16,6 +15,7 @@ import {
   saveProposal,
 } from "./proposals-store.ts";
 import { getDefaultProvenanceLabel, normalizeKind } from "./proposal-helpers.ts";
+import { outstandingMatterBallots } from "./electorate.ts";
 import { listMembers, saveMember } from "./members-store.ts";
 import type { SessionUser } from "./types.ts";
 import { PATCH } from "../pages/api/proposals/[proposalId].ts";
@@ -226,7 +226,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
         choice: "approve",
       });
     assert.deepEqual(
-      (await listOutstandingDecisions(db, memberUser.memberId)).map(
+      (await outstandingMatterBallots(db, memberUser)).map(
         (item) => item.proposalId,
       ),
       ["open-unvoted"],
@@ -262,7 +262,7 @@ describe("Engage Decidim/Loomio Lifecycle & CRUD Store", () => {
     ]) await db.collection("branch_memberships").insertOne(membership);
 
     assert.deepEqual(
-      (await listOutstandingDecisions(db, memberUser.memberId, memberUser))
+      (await outstandingMatterBallots(db, memberUser))
         .map((item) => item.proposalId)
         .sort(),
       ["my-branch", "national"],

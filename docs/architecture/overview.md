@@ -54,7 +54,7 @@ All pages are server-rendered on request. No route sets `prerender = true`; 79 r
 | Astro components | `src/components/**/*.astro` |
 | shadcn primitives | `src/components/ui/**` |
 | Admin Astro wrappers | `src/components/admin/**`, `admin-kit.tsx` |
-| Domain services | `src/lib/proposals-store.ts`, `proposal-helpers.ts`, `comments-store.ts`, `contribution-feedback.ts`, `voting-store.ts`, `members-store.ts`, `ballots.ts`, `branch-participation.ts`, `membership-verification.ts`, `notifications.ts`, `engagement-email.ts` |
+| Domain services | `src/lib/proposals-store.ts`, `proposal-helpers.ts`, `comments-store.ts`, `contribution-feedback.ts`, `voting-store.ts`, `members-store.ts`, `ballots.ts`, `branch-participation.ts`, `electorate.ts`, `membership-verification.ts`, `notifications.ts`, `engagement-email.ts` |
 | Governance model | `src/lib/matters.ts`, `proposal-revision.ts`, `ballot-binding.ts`, `governance-relationships.ts` |
 | Authorisation | `src/lib/auth.ts`, `rbac.ts`, `roles-store.ts` |
 | Persistence | `src/lib/db.ts`, `vote-storage.ts`, `proposal-register.ts`, `migrations.ts` |

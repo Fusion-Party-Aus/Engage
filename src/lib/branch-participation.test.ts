@@ -17,7 +17,8 @@ import {
   setBranchFollowing,
   verifyBranchMember,
 } from "./branch-participation.ts";
-import { castVote, listOutstandingDecisions } from "./voting-store.ts";
+import { castVote } from "./voting-store.ts";
+import { outstandingMatterBallots } from "./electorate.ts";
 import { listProposals, saveProposal } from "./proposals-store.ts";
 import { PROPOSAL_VOTES, findMemberVotes, proposalBallotId } from "./vote-storage.ts";
 import { loadBallotCryptoConfig } from "./ballot-crypto.ts";
@@ -255,12 +256,8 @@ describe("branch participation: following and verified membership", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    const outstanding = await listOutstandingDecisions(
-      db,
-      user.memberId,
-      user,
-    );
-    const reused = await listOutstandingDecisions(db, user.memberId, user, await listProposals(db, { user }));
+    const outstanding = await outstandingMatterBallots(db, user);
+    const reused = await outstandingMatterBallots(db, user, { proposals: await listProposals(db, { user }) });
     assert.deepEqual(reused.map((item) => item.proposalId), outstanding.map((item) => item.proposalId), 'reusing discovery data preserves electorate filtering');
     const discovery = await listProposals(db, { user });
     const prefetchedVotes = await findMemberVotes(
@@ -269,13 +266,10 @@ describe("branch participation: following and verified membership", () => {
       discovery.map((item) => proposalBallotId(item.proposalId)),
       loadBallotCryptoConfig(process.env),
     );
-    const reusedVotes = await listOutstandingDecisions(
-      db,
-      user.memberId,
-      user,
-      discovery,
-      prefetchedVotes,
-    );
+    const reusedVotes = await outstandingMatterBallots(db, user, {
+      proposals: discovery,
+      votes: prefetchedVotes,
+    });
     assert.deepEqual(
       reusedVotes.map((item) => item.proposalId),
       outstanding.map((item) => item.proposalId),

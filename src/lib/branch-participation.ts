@@ -594,6 +594,17 @@ export async function isFollowingBranch(
 }
 
 /**
+ * Pre-loaded facts for a list read. Omitted fields are queried, so the single
+ * proposal call keeps its current behaviour; a list supplies all three and pays
+ * for one query per collection instead of one per proposal.
+ */
+export interface ProposalEligibilityFacts {
+  branch?: { name?: unknown; kind?: unknown; recognised?: unknown } | null;
+  isMember?: boolean;
+  isFollowing?: boolean;
+}
+
+/**
  * A single eligibility decision used by proposal lists, proposal details,
  * digest emails and ballot submission. Followers discover branch activity but
  * never gain the ballot; only an active verified membership qualifies.
@@ -605,6 +616,7 @@ export async function getProposalEligibility(
     "jurisdictionBranchId" | "governanceAuthorityBranchId"
   >,
   user: SessionUser | null,
+  facts: ProposalEligibilityFacts = {},
 ): Promise<ParticipationEligibility> {
   const branchId = proposal.jurisdictionBranchId;
   if (!branchId) {
@@ -633,7 +645,10 @@ export async function getProposalEligibility(
     };
   }
 
-  const branch = await db.collection("branches").findOne({ branchId });
+  const branch =
+    facts.branch !== undefined
+      ? facts.branch
+      : await db.collection("branches").findOne({ branchId });
   const branchName = branch ? String(branch.name) : "this branch";
   if (!branch || branch.recognised !== true) {
     return {
@@ -682,9 +697,13 @@ export async function getProposalEligibility(
     };
   }
 
-  const membership = await db
-    .collection(BRANCH_MEMBERSHIPS)
-    .findOne({ memberId: user.memberId, branchId, status: "active" });
+  const membership =
+    facts.isMember ??
+    Boolean(
+      await db
+        .collection(BRANCH_MEMBERSHIPS)
+        .findOne({ memberId: user.memberId, branchId, status: "active" }),
+    );
   if (membership) {
     return {
       eligible: true,
@@ -696,9 +715,13 @@ export async function getProposalEligibility(
     };
   }
 
-  const following = await db
-    .collection(BRANCH_SUBSCRIPTIONS)
-    .findOne({ memberId: user.memberId, branchId, status: "following" });
+  const following =
+    facts.isFollowing ??
+    Boolean(
+      await db
+        .collection(BRANCH_SUBSCRIPTIONS)
+        .findOne({ memberId: user.memberId, branchId, status: "following" }),
+    );
   if (following) {
     return {
       eligible: false,

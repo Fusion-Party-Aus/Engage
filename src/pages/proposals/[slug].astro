@@ -37,7 +37,7 @@ import {
   normalizeProposalDoc,
 } from '../../lib/proposal-helpers.ts';
 import { getProposalDetail } from '../../lib/proposals-store.ts';
-import { listOutstandingDecisions } from '../../lib/voting-store.ts';
+import { outstandingMatterBallots } from '../../lib/electorate.ts';
 import { getProposalEligibility } from '../../lib/branch-participation.ts';
 import { hasPermission } from '../../lib/rbac.ts';
 import { commentUpvotePercent, compareComments } from '../../lib/comment-thread.ts';
@@ -91,7 +91,7 @@ const [
         .then((rows) => rows.filter((row: any) => canViewProposal(normalizeProposalDoc(row), user)).slice(0, 4)),
       db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray(),
       user?.canParticipate && proposal.stage === 'decide'
-        ? listOutstandingDecisions(db, user.memberId, user)
+        ? outstandingMatterBallots(db, user)
         : Promise.resolve([]),
       getProposalEligibility(db, proposal, user),
       [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)).length

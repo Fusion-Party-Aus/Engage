@@ -18,7 +18,7 @@ import {
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { loadBallotCryptoConfig } from '../../lib/ballot-crypto.ts';
-import { listOutstandingDecisions } from '../../lib/voting-store.ts';
+import { outstandingMatterBallots } from '../../lib/electorate.ts';
 import {
   PUBLIC_PROPOSAL_PAGE_SIZE,
   buildPublicProposalPage,
@@ -75,7 +75,7 @@ const memberVotesPromise = user
 const [myVotesRaw, myOutstandingVotes, joinedComments] = await Promise.all([
   memberVotesPromise,
   user?.canParticipate
-    ? listOutstandingDecisions(db, user.memberId, user, candidateSummaries, memberVotesPromise)
+    ? outstandingMatterBallots(db, user, { proposals: candidateSummaries, votes: memberVotesPromise })
     : Promise.resolve([]),
   user
     ? db.collection('comments').find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray()
