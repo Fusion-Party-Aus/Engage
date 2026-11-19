@@ -1,11 +1,38 @@
 [
   {
-    "hash": "c0e85d1",
+    "hash": "6823fab",
+    "date": "2026-11-20",
+    "type": "test",
+    "category": "ops",
+    "scope": "design",
+    "summary": "Document theme coverage and add browser checks",
+    "details": "Record all 44 page routes, preserved workflows, image provenance, measured payloads and local verification limits. Add before-and-after synthetic screenshots and portable visual and keyboard checks, including administrator focus handling and motion preferences. Refs #162."
+  },
+  {
+    "hash": "cd176bb",
+    "date": "2026-11-20",
+    "type": "feat",
+    "category": "feature",
+    "scope": "ballot",
+    "summary": "Review choices before recording or updating votes",
+    "details": "Use equal ballot choices, an explicit review step, guarded submission and server-confirmed receipts. Preserve pending preferences, recorded reasons and uncertain-response recovery. Remove private query parameters from shared proposal links and cover the flow with isolated desktop and mobile browser checks. Refs #162. Voting API, eligibility, binding, storage and certification contracts remain unchanged."
+  },
+  {
+    "hash": "85a3da8",
+    "date": "2026-11-20",
+    "type": "feat",
+    "category": "feature",
+    "scope": "design",
+    "summary": "Bring Australian community design across Engage",
+    "details": "Apply the white Community Mosaic theme to public, member and administrator surfaces with official Fusion logos, responsive Australian illustrations and contextual help. Improve spacing, field contrast, text resizing and keyboard navigation while preserving existing data and authority contracts. Refs #162."
+  },
+  {
+    "hash": "59453ad",
     "date": "2026-11-18",
     "type": "docs",
     "category": "docs",
     "scope": "product",
-    "summary": "Define Engage as Fusion's home for participation"
+    "summary": "Define Engage as Fusion's home for participation (#164)"
   },
   {
     "hash": "c44e0d5",
@@ -662,31 +689,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record branch participation and verification"
-  },
-  {
-    "hash": "a727732",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Separate branch following from verified membership",
-    "details": "Members choose the branches they follow during onboarding and in My Engage. Authorised administrators verify followers as members in a focused Branch governance workspace. Branch subscriptions are now Engage-owned preferences, while verified organisational membership stays in branch_memberships with source, verification and audit metadata. National governance is included for every verified account and never removed by branch preferences. Existing members without branch connections receive national scope silently and a one-time state branch invitation. Eligibility is decided in one service used by proposal pages, ballot submission, pending-vote promotion and digests. Followers can discover branch activity but cannot vote. Revocation requires a reason and preserves historical votes and the person's following preference. The migration backfills legacy membership metadata, adds subscriptions without duplicating them, assigns open proposals without branch context to national governance, and leaves branch-owned and archived records untouched. The Underground CRM boundary is implemented through applyExternalMembership: external membership facts can update organisational membership but never branch subscriptions, and local administrators cannot silently override CRM-sourced records. Tests cover national defaults, follow/unfollow idempotency, source integrity, permissions, migration, parent/child eligibility and new proposal defaults."
-  },
-  {
-    "hash": "ba482d0",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the member engagement admin repair"
-  },
-  {
-    "hash": "34166c8",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Repair proxy test sends and clarify admin delivery reporting",
-    "details": "Use JSON and the configured public origin to prevent the reverse proxy from rejecting admin test email before provider submission. Separate explicit provider rejection from uncertain sends, expose safe self-only receipts, and keep test bounces isolated from member preferences. Replace raw engagement reporting with responsive cards, period controls, a read-only audience preview and expandable diagnostics. Historical ballot opportunity coverage remains explicitly unavailable. Validation: 144 tests passed, 15 optional tests skipped; Astro check and build passed; mocked-provider HTTP and DOM interaction checks passed. Browser screenshots and authenticated production delivery remain blocked and are documented."
   }
 ]
