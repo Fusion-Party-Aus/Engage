@@ -1,0 +1,112 @@
+{
+  "generated_at": "2026-11-20",
+  "method": "Built-in image generation; responsive WebP encoding only",
+  "status": "Illustrative artwork, not photographs of real members or events",
+  "assets": [
+    {
+      "id": "community-hero",
+      "files": [
+        "public/images/community-hero.webp",
+        "public/images/community-hero-800.webp",
+        "public/images/community-hero-480.webp"
+      ],
+      "widths": [
+        1536,
+        800,
+        480
+      ],
+      "subject": "Eight fictional adults in an imagined Australian scene near Parliament House, Canberra",
+      "provenance": "Generated for this project at the user's direction. No third-party photograph or real member likeness supplied.",
+      "consent": "Fictional people; no assertion of actual membership, testimony or endorsement.",
+      "licensing_note": "Generated output; no third-party stock-photo licence asserted. Retain provenance and illustration disclosure.",
+      "prompt": "Use case: illustration-story. Asset type: a wide photographic-style illustration for the white-background Fusion Engage Australian community participation website. Create a warm, candid, high-quality group portrait of exactly eight fictional Australian adults: four women and four men, ranging from about 25 to 70, with a natural mix of everyday casual, trades and professional clothing. Broad Australian community representation without caricatures. Subjects grouped shoulder to shoulder, faces all visible, relaxed friendly expressions, genuine skin texture, natural hands. Scene: an Australian park with gum trees and the distinctive modern Australian Parliament House in Canberra subtly visible in the distance (low grassy roof, central flag mast, NOT a US capitol dome). Include only plausible Australian vegetation and warm daylight. Cinematic but bright and welcoming, natural photographic colour with subtle purple/pink/aqua accents in clothing. Composition: landscape 3:2, people in the centre and lower two-thirds, sufficient sky and trees above for wide desktop crop; no heads cut off. This is an editorial illustration of imagined people, not a real event or endorsement. No text, no logo, no slogans, no voting choice, no signs, no placards, no watermarks, no UI. Keep the scene credible, not an obvious AI fantasy collage.",
+      "intended_uses": [
+        "Public homepage cover",
+        "Signed-in homepage welcome",
+        "Member dashboard welcome"
+      ],
+      "alternative_text": "Illustration of eight Australian adults of different ages together among gum trees near Parliament House in Canberra.",
+      "visible_disclosure": "Illustration · fictional people",
+      "attribution_requirements": "No third-party source attribution specified; keep the fictional-person disclosure and this provenance register.",
+      "model_release": "Not applicable to fictional generated subjects; do not describe them as real Fusion members or testimonials.",
+      "accessibility": "Informative illustration with descriptive alt text; do not use as a ballot-choice cue. Intrinsic dimensions reserve space.",
+      "variants": [
+        {
+          "file": "public/images/community-hero.webp",
+          "format": "WebP",
+          "width": 1536,
+          "height": 1024,
+          "bytes": 222950
+        },
+        {
+          "file": "public/images/community-hero-800.webp",
+          "format": "WebP",
+          "width": 800,
+          "height": 533,
+          "bytes": 84504
+        },
+        {
+          "file": "public/images/community-hero-480.webp",
+          "format": "WebP",
+          "width": 480,
+          "height": 320,
+          "bytes": 36254
+        }
+      ]
+    },
+    {
+      "id": "australian-community",
+      "files": [
+        "public/images/australian-community.webp",
+        "public/images/australian-community-800.webp",
+        "public/images/australian-community-480.webp"
+      ],
+      "widths": [
+        1536,
+        800,
+        480
+      ],
+      "subject": "Fictional adult neighbours outside an imagined regional Australian community hall",
+      "provenance": "Generated for this project at the user's direction. No third-party photograph or real member likeness supplied.",
+      "consent": "Fictional people; no assertion of actual membership, testimony or endorsement.",
+      "licensing_note": "Generated output; no third-party stock-photo licence asserted. Retain provenance and illustration disclosure.",
+      "prompt": "Use case: illustration-story. Asset type: Australian community participation website image, landscape 3:2. A bright, detailed photographic-style illustration of a small intergenerational group of fictional adult neighbours chatting around an outdoor timber table beside an Australian community hall. Include four or five adults with varied everyday clothing and natural expressions, an older woman, middle-aged tradesperson, younger adult and middle-aged woman; everyone is adult. Background of eucalyptus trees, verandah, subtle regional town buildings and a few bicycles. The atmosphere is relaxed, inclusive and practical, people listening and sharing ideas; no apparent named political party meeting or real event. Warm natural Australian morning light, white and sunlit palette with restrained pink/purple/aqua clothing accents, professional editorial composition with room around people. No text, no branding, no documents with readable text, no signs, no logos, no voting symbols or ballot choices. Authentic Australian visual language without stereotypes. No US imagery, no monuments, no children.",
+      "intended_uses": [
+        "Homepage contribution section",
+        "Sense Box discovery",
+        "Collaboration discovery",
+        "Branches discovery",
+        "How it works",
+        "Member sign-in"
+      ],
+      "alternative_text": "Illustration of Australian neighbours sharing ideas around a table outside a regional community hall.",
+      "visible_disclosure": "Illustration · fictional people",
+      "attribution_requirements": "No third-party source attribution specified; keep the fictional-person disclosure and this provenance register.",
+      "model_release": "Not applicable to fictional generated subjects; do not describe them as real Fusion members or testimonials.",
+      "accessibility": "Informative illustration with descriptive alt text; do not use as a ballot-choice cue. Intrinsic dimensions reserve space.",
+      "variants": [
+        {
+          "file": "public/images/australian-community.webp",
+          "format": "WebP",
+          "width": 1536,
+          "height": 1024,
+          "bytes": 240770
+        },
+        {
+          "file": "public/images/australian-community-800.webp",
+          "format": "WebP",
+          "width": 800,
+          "height": 533,
+          "bytes": 98930
+        },
+        {
+          "file": "public/images/australian-community-480.webp",
+          "format": "WebP",
+          "width": 480,
+          "height": 320,
+          "bytes": 43620
+        }
+      ]
+    }
+  ]
+}
