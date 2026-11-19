@@ -2,6 +2,8 @@
 import { ballotExpired } from '../lib/ballot-deadline.ts';
 import ProposalHighlights from '../components/ProposalHighlights.astro';
 import SiteLayout from '../layouts/SiteLayout.astro';
+import CommunityImage from '../components/site/CommunityImage.astro';
+import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
@@ -103,955 +105,201 @@ const stageVariant = (s: ProposalStage) => {
 ---
 <SiteLayout
   title="Engage · Fusion Party Australia"
-  description="Help shape Fusion's policies. Put forward an idea, join the discussion, and vote when you're eligible."
+  description="Fusion's home for participation. Share what matters, develop ideas together, and take part in decisions when eligible."
   canonical="/"
 >
-  {user ? (
-    <div class="page-wrap section-space member-home-workspace">
-      <header class="member-welcome-bar">
-        <div class="member-welcome-bar__copy">
-          <h1>Welcome back{user.name ? `, ${user.name.split(' ')[0]}` : ''}.</h1>
-          <p>Share an idea, join a discussion, or vote on the decisions open to you.</p>
-        </div>
-        <div class="member-welcome-bar__actions">
-          <Button href={primaryCtaHref}>
-            <Plus className="size-4" aria-hidden="true" />
-            {primaryCtaLabel}
+  <div class="page-wrap community-home">
+    <section class="home-cover" aria-labelledby="home-heading">
+      <div class="home-cover__copy">
+        <p class="home-eyebrow">{user ? 'Your Engage' : "Fusion’s home for participation"}</p>
+        <h1 id="home-heading">{user
+          ? `Welcome back${user.name ? `, ${user.name.split(' ')[0]}` : ''}.`
+          : <>Our communities.<br /><span>Our ideas.</span><br />Our future.</>}
+        </h1>
+        <p class="home-cover__lead">{user
+          ? 'Find the discussions and decisions that matter to you. Start with your next step below.'
+          : 'Bring your perspective. Share what matters where you live, develop ideas with others, and help shape what Fusion does next.'}</p>
+        <div class="home-cover__actions">
+          <Button href={user ? user.canParticipate ? '/proposals/?stage=decide&focus=needs-vote' : '/member/' : '/sense-box/'} size="lg">
+            {user ? <Vote className="size-4" aria-hidden="true" /> : <MessageSquare className="size-4" aria-hidden="true" />}
+            {user ? user.canParticipate ? 'Find my next ballot' : 'Check account status' : 'Share what matters'}
+            <ArrowRight className="size-4" aria-hidden="true" />
           </Button>
-          <Button href="/proposals/" variant="outline">Browse all proposals</Button>
-          <Button href="/member/" variant="ghost">My Engage →</Button>
+          <Button href="/proposals/" size="lg" variant="outline">Explore proposals</Button>
         </div>
-      </header>
-
-      {!user.canParticipate && (
-        <Alert variant="warning">
-          <AlertTitle>Check your membership status</AlertTitle>
-          <AlertDescription>
-            You can read public proposals now. To contribute or vote, you need a verified Fusion membership and must be eligible for the ballot. <a href="/member/">View account status →</a>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <!-- 4-Cell Member Strip -->
-      <div class="home-pipeline-strip" aria-label="Your Engage at a glance">
-        <a href={primaryCtaHref} class="home-pipeline-cell is-highlight">
-          <span class="home-pipeline-cell__label"><Plus className="size-3.5" aria-hidden="true" />Have an idea?</span>
-          <div class="home-pipeline-cell__bottom">
-            <strong class="home-pipeline-cell__value">{primaryCtaLabel}</strong>
-            <span class="home-pipeline-cell__hint">Put it forward</span>
-          </div>
-        </a>
-        <a href="/proposals/?stage=decide" class="home-pipeline-cell">
-          <span class="home-pipeline-cell__label"><Vote className="size-3.5" aria-hidden="true" />Votes for you</span>
-          <div class="home-pipeline-cell__bottom">
-            <strong class="home-pipeline-cell__value tabular">{mine.length}</strong>
-            <span class="home-pipeline-cell__hint tabular">
-              {totalEligibleOpenVotesCount > 0 ? `${completedOpenVotesCount}/${totalEligibleOpenVotesCount} done` : `${votes.length} open total`}
-            </span>
-          </div>
-          {totalEligibleOpenVotesCount > 0 && (
-            <div class="home-mini-progress" aria-hidden="true">
-              <span style={`width: ${homeProgressPct}%`}></span>
-            </div>
-          )}
-        </a>
-        <a href="/proposals/?stage=deliberate" class="home-pipeline-cell">
-          <span class="home-pipeline-cell__label"><MessageSquare className="size-3.5" aria-hidden="true" />In discussion</span>
-          <div class="home-pipeline-cell__bottom">
-            <strong class="home-pipeline-cell__value tabular">{discussions.length}</strong>
-            <span class="home-pipeline-cell__hint">Join the discussion</span>
-          </div>
-        </a>
-        <a href={user.activeBranchIds?.[0] ? `/proposals/?branch=${encodeURIComponent(user.activeBranchIds[0])}` : '/branches/'} class="home-pipeline-cell">
-          <span class="home-pipeline-cell__label"><Layers className="size-3.5" aria-hidden="true" />Branch activity</span>
-          <div class="home-pipeline-cell__bottom">
-            <strong class="home-pipeline-cell__value tabular">{branch.length}</strong>
-            <span class="home-pipeline-cell__hint">In your branches</span>
-          </div>
-        </a>
+        <p class="home-cover__note">{user
+          ? 'Your eligibility is checked for each ballot. You can change a recorded vote while voting remains open.'
+          : 'Everyone can explore and share a local priority. Verified membership opens formal participation and voting rights where eligible.'}</p>
       </div>
+      <div class="home-cover__visual"><CommunityImage scene="hero" priority sizes="(min-width: 801px) 50vw, 100vw" /></div>
+    </section>
 
-      <ProposalHighlights proposals={highlightProposals} />
-      <div class="home-workspace-grid">
-        <div class="home-workspace-main">
-          <!-- Open Votes Queue -->
-          <section class="home-block" aria-labelledby="your-votes">
-            <div class="home-block__head">
-              <div>
-                <h2 id="your-votes">Open ballots for you</h2>
-                <p>
-                  {totalEligibleOpenVotesCount > 0
-                    ? `${completedOpenVotesCount} of ${totalEligibleOpenVotesCount} ballots voted on (${homeProgressPct}%). You can change your vote while a ballot is open.`
-                    : 'Read the wording of each proposal before you vote.'}
-                </p>
-              </div>
-              <a href="/proposals/?stage=decide" class="home-block__link">All {votes.length} open votes →</a>
-            </div>
-            {mine.length ? (
-              <div class="home-issue-list">
-                {mine.slice(0, 5).map((p) => (
-                  <article class="home-issue-row">
-                    <div class="home-issue-row__main">
-                      <div class="home-issue-row__meta">
-                        <span class="tabular home-issue-id">{p.proposalId}</span>
-                        <Badge variant="info">Open vote</Badge>
-                        <span class="home-topic-chip">{p.space}</span>
-                      </div>
-                      <h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3>
-                      <p>{p.summary}</p>
-                    </div>
-                    <Button href={`/proposals/${p.slug}/#proposal-vote`} size="sm" variant="outline">
-                      Read &amp; vote →
-                    </Button>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div class="home-empty-note">
-                <p>There are no ballots awaiting your vote. Check your account status if you expected to see one.</p>
-                <div class="home-empty-actions">
-                  {discussions.length > 0 && (
-                    <a href="#discussions">Join {discussions.length} open {discussions.length === 1 ? 'deliberation' : 'deliberations'} →</a>
-                  )}
-                  {user.canParticipate ? (
-                    <a href={primaryCtaHref}>{primaryCtaLabel} →</a>
-                  ) : (
-                    <a href="/member/">View account status →</a>
-                  )}
-                  <a href="/sense-box/">Raise a local priority in Sense Box →</a>
-                </div>
-              </div>
-            )}
-          </section>
+    {user && !user.canParticipate && (
+      <Alert variant="warning">
+        <AlertTitle>Check your membership status</AlertTitle>
+        <AlertDescription>You can explore public activity and share a local priority. Formal participation depends on verification and ballot eligibility. <a href="/member/">View account status</a>.</AlertDescription>
+      </Alert>
+    )}
 
-          <!-- Open Deliberations -->
-          <section class="home-block" aria-labelledby="discussions">
-            <div class="home-block__head">
-              <div>
-                <h2 id="discussions">Help shape these ideas</h2>
-                <p>Say what you support, raise a concern, or suggest how the wording could improve.</p>
-              </div>
-              <a href="/proposals/?stage=deliberate" class="home-block__link">All {discussions.length} discussions →</a>
-            </div>
-            <div class="home-issue-list">
-              {discussions.slice(0, 4).map((p) => (
-                <article class="home-issue-row">
-                  <div class="home-issue-row__main">
-                    <div class="home-issue-row__meta">
-                      <span class="tabular home-issue-id">{p.proposalId}</span>
-                      <Badge variant="secondary">2. Deliberate</Badge>
-                      <span class="home-topic-chip">{p.space}</span>
-                      <span class="tabular home-stat-inline">{p.commentCount} discussion posts</span>
-                    </div>
-                    <h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3>
-                    <p>{p.summary}</p>
-                  </div>
-                  <Button href={`/proposals/${p.slug}/#deliberation`} size="sm" variant="ghost">
-                    Contribute →
-                  </Button>
-                </article>
-              ))}
-            </div>
-          </section>
-        </div>
-
-        <aside class="home-workspace-rail" aria-label="Quick navigation and governance guide">
-          <div class="rail-box is-featured">
-            <h2>What would you like to change?</h2>
-            <p>Explain the change you want Fusion to support and why it matters. Other members can help develop the idea.</p>
-            <Button href={primaryCtaHref} className="w-full justify-center">
-              <Plus className="size-4" aria-hidden="true" />
-              {primaryCtaLabel}
-            </Button>
-          </div>
-
-          <div class="rail-box">
-            <h2>How it works</h2>
-            <ol class="rail-steps">
-              <li><strong>1. Propose:</strong> Explain your idea and why it matters.</li>
-              <li><strong>2. Deliberate:</strong> A seconder brings the idea into discussion. Members debate it and propose amendments.</li>
-              <li><strong>3. Decide:</strong> Eligible members vote on the proposal. The wording stays fixed while voting is open.</li>
-              <li><strong>4. Implement:</strong> The result is recorded. Successful policy proposals can then be ratified and published.</li>
-            </ol>
-            <a href="/how-it-works/" class="rail-link">How it works →</a>
-          </div>
-
-          <div class="rail-box">
-            <h2>Keep up with Fusion</h2>
-            <ul class="rail-nav-list">
-              <li><a href="/member/">My Engage →</a></li>
-              <li><a href="/sense-box/">Sense Box · Local priorities →</a></li>
-              <li><a href="/branches/">Branches &amp; state sites →</a></li>
-              <li><a href="/policies/">Official policy registry →</a></li>
-            </ul>
-          </div>
-        </aside>
-      </div>
-    </div>
-  ) : (
-    <>
-      <section class="visitor-hero">
-        <div class="page-wrap visitor-hero__grid">
-          <div class="visitor-hero__content">
-            <h1>Help shape what Fusion does next.</h1>
-            <p>
-              Bring an idea, help improve a policy, or vote on what Fusion should do next. You can read public proposals and discussions without an account. Verified members can contribute and vote where eligible.
-            </p>
-            <div class="visitor-hero__actions">
-              <Button href={primaryCtaHref} size="lg" className="hero-star-btn">
-                <Plus className="size-4" aria-hidden="true" />
-                {primaryCtaLabel}
-              </Button>
-              <Button href="/proposals/" size="lg" variant="outline" className="hero-outline-btn">
-                Browse {proposals.length} proposals
-              </Button>
-              <Button href="/how-it-works/" size="lg" variant="ghost" className="hero-ghost-btn">
-                How it works →
-              </Button>
-            </div>
-          </div>
-          <div class="visitor-hero__visual">
-            <img
-              src="/melbourne-station.webp"
-              alt="People moving through a sunlit Melbourne train station"
-              width="640"
-              height="460"
-            />
-          </div>
+    {user ? (
+      <section class="home-status-grid" aria-label="Your participation at a glance">
+        <Card className="home-status-card"><CardContent className="grid gap-2 p-5">
+          <Vote className="size-5" aria-hidden="true" /><span>Awaiting your vote</span><strong>{mine.length}</strong>
+          <Button href="/proposals/?stage=decide&focus=needs-vote" variant="link" className="justify-start p-0">View my ballots <ArrowRight aria-hidden="true" /></Button>
+        </CardContent></Card>
+        <Card className="home-status-card"><CardContent className="grid gap-2 p-5">
+          <CheckCircle2 className="size-5" aria-hidden="true" /><span>Open ballots completed</span><strong>{completedOpenVotesCount}<small> / {totalEligibleOpenVotesCount}</small></strong>
+          {totalEligibleOpenVotesCount > 0 && <progress value={completedOpenVotesCount} max={totalEligibleOpenVotesCount} aria-label="Your eligible open ballots completed" />}
+          <p>You may update your choice while a ballot is open.</p>
+        </CardContent></Card>
+        <Card className="home-status-card"><CardContent className="grid gap-2 p-5">
+          <MessageSquare className="size-5" aria-hidden="true" /><span>In discussion</span><strong>{discussions.length}</strong>
+          <Button href="/proposals/?stage=deliberate" variant="link" className="justify-start p-0">Join a discussion <ArrowRight aria-hidden="true" /></Button>
+        </CardContent></Card>
+        <Card className="home-status-card"><CardContent className="grid gap-2 p-5">
+          <Layers className="size-5" aria-hidden="true" /><span>In your branches</span><strong>{branch.length}</strong>
+          <Button href={user.activeBranchIds?.[0] ? `/proposals/?branch=${encodeURIComponent(user.activeBranchIds[0])}` : '/branches/'} variant="link" className="justify-start p-0">Explore branch activity <ArrowRight aria-hidden="true" /></Button>
+        </CardContent></Card>
+      </section>
+    ) : (
+      <section class="home-paths" aria-labelledby="start-heading">
+        <div class="home-section-heading"><div><p class="home-eyebrow">A place for your perspective</p><h2 id="start-heading">Choose how to take part</h2></div><Button href="/how-it-works/" variant="link">New here? Start with the guide <ArrowRight aria-hidden="true" /></Button></div>
+        <div class="home-path-grid">
+          <Card className="home-path-card home-path-card--pink"><CardContent className="grid gap-4 p-6">
+            <MessageSquare className="home-path-icon" aria-hidden="true" /><h3>Share a local priority</h3><p>Tell Fusion what matters in your community. No account or party membership needed.</p><Button href="/sense-box/" variant="outline" className="justify-self-start">Open Sense Box <ArrowRight aria-hidden="true" /></Button>
+          </CardContent></Card>
+          <Card className="home-path-card home-path-card--aqua"><CardContent className="grid gap-4 p-6">
+            <Compass className="home-path-icon" aria-hidden="true" /><h3>Add your experience</h3><p>Find open invitations to share a story, photograph or perspective, with clear choices about publication.</p><Button href="/collaborate/" variant="outline" className="justify-self-start">Explore invitations <ArrowRight aria-hidden="true" /></Button>
+          </CardContent></Card>
+          <Card className="home-path-card"><CardContent className="grid gap-4 p-6">
+            <Vote className="home-path-icon" aria-hidden="true" /><h3>Develop ideas together</h3><p>Read proposals and discussions. Verified members can contribute and vote when eligible.</p><Button href="/proposals/" variant="outline" className="justify-self-start">Browse proposals <ArrowRight aria-hidden="true" /></Button>
+          </CardContent></Card>
         </div>
       </section>
+    )}
 
-      <div class="page-wrap section-space visitor-workspace">
-        <!-- 4-Stage Governance Pipeline Strip -->
-        <section aria-labelledby="pipeline-heading" class="pipeline-overview">
-          <div class="pipeline-overview__head">
-            <div>
-              <h2 id="pipeline-heading">How an idea becomes policy</h2>
-              <p>Follow an idea through discussion, voting and, if adopted, publication.</p>
-            </div>
-            <a href="/how-it-works/" class="home-block__link">Read the guide →</a>
+    <div class="home-workspace">
+      <div class="home-workspace__main">
+        <section aria-labelledby="ballots-heading" class="home-section">
+          <div class="home-section-heading">
+            <div><p class="home-eyebrow">{user ? 'Your next step' : 'Explore the conversation'}</p><h2 id="ballots-heading">{user ? 'Open ballots for you' : 'Ideas taking shape'}</h2><p>{user ? 'Read the exact proposal wording before choosing how to vote.' : 'Discover current proposals, discussions and open ballots.'}</p></div>
+            <Button href={user ? '/proposals/?stage=decide' : '/proposals/'} variant="link">View all <ArrowRight aria-hidden="true" /></Button>
           </div>
-
-          <div class="home-pipeline-strip">
-            <a href={primaryCtaHref} class="home-pipeline-cell is-highlight">
-              <span class="home-pipeline-cell__label"><Plus className="size-3.5" aria-hidden="true" />Stage 1 · Propose</span>
-              <div class="home-pipeline-cell__bottom">
-                <strong class="home-pipeline-cell__value">{primaryCtaLabel}</strong>
-                <span class="home-pipeline-cell__hint tabular">{ideas.length} draft ideas</span>
-              </div>
-              <p class="home-pipeline-cell__desc">Explain what you want to change and why. Another eligible member can second your proposal to start deliberation.</p>
-            </a>
-
-            <a href="/proposals/?stage=deliberate" class="home-pipeline-cell">
-              <span class="home-pipeline-cell__label"><MessageSquare className="size-3.5" aria-hidden="true" />Stage 2 · Deliberate</span>
-              <div class="home-pipeline-cell__bottom">
-                <strong class="home-pipeline-cell__value tabular">{discussions.length} active</strong>
-                <span class="home-pipeline-cell__hint">In discussion</span>
-              </div>
-              <p class="home-pipeline-cell__desc">Discuss the idea, test the arguments, and propose amendments to improve the wording.</p>
-            </a>
-
-            <a href="/proposals/?stage=decide" class="home-pipeline-cell">
-              <span class="home-pipeline-cell__label"><Gavel className="size-3.5" aria-hidden="true" />Stage 3 · Decide</span>
-              <div class="home-pipeline-cell__bottom">
-                <strong class="home-pipeline-cell__value tabular">{votes.length} open</strong>
-                <span class="home-pipeline-cell__hint">Member ballots</span>
-              </div>
-              <p class="home-pipeline-cell__desc">Eligible members vote on the exact wording shown on the ballot.</p>
-            </a>
-
-            <a href="/policies/" class="home-pipeline-cell">
-              <span class="home-pipeline-cell__label"><BookOpen className="size-3.5" aria-hidden="true" />Stage 4 · Implement</span>
-              <div class="home-pipeline-cell__bottom">
-                <strong class="home-pipeline-cell__value tabular">{implementing.length} in Implement</strong>
-                <span class="home-pipeline-cell__hint">{registryAvailable ? `${publishedPolicyCount} published` : 'Policy registry'}</span>
-              </div>
-              <p class="home-pipeline-cell__desc">Members decide the policy. Officers certify the process and publish the adopted wording.</p>
-            </a>
-          </div>
+          {user ? (
+            mine.length ? <div class="home-proposal-grid">{mine.slice(0, 6).map((p) => (
+              <Card className="home-proposal-card"><CardContent className="grid gap-4 p-6">
+                <div class="home-card-meta"><Badge variant="info">Open ballot</Badge><span>{p.space}</span></div>
+                <h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3><p>{p.summary}</p>
+                <Button href={`/proposals/${p.slug}/#proposal-vote`} variant="outline" className="justify-self-start mt-auto">Read and vote <ArrowRight aria-hidden="true" /></Button>
+              </CardContent></Card>
+            ))}</div> : <Card><CardContent className="grid justify-items-start gap-3 p-6"><CheckCircle2 className="size-7" aria-hidden="true" /><h3>No ballots awaiting your vote</h3><p>Check your account status if you expected a ballot, or explore the discussions taking shape.</p><div class="home-inline-actions"><Button href="/member/" variant="outline">Account status</Button><Button href="/proposals/?stage=deliberate" variant="ghost">Join a discussion</Button></div></CardContent></Card>
+          ) : (
+            featuredProposals.length ? <div class="home-proposal-grid">{featuredProposals.map((p) => (
+              <Card className="home-proposal-card"><CardContent className="grid gap-4 p-6">
+                <div class="home-card-meta"><Badge variant={stageVariant(p.stage)}>{stageLabel(p.stage)}</Badge><span>{p.space}</span></div>
+                <h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3><p>{p.summary}</p>
+                <p class="home-card-count">{p.commentCount} discussion {p.commentCount === 1 ? 'post' : 'posts'} · {publicTallyLabel(p) ?? `${p.votes.total} votes`}</p>
+                <Button href={`/proposals/${p.slug}/`} variant="outline" className="justify-self-start mt-auto">{p.stage === 'decide' ? 'Read the ballot' : 'Explore the idea'} <ArrowRight aria-hidden="true" /></Button>
+              </CardContent></Card>
+            ))}</div> : <Card><CardContent className="grid justify-items-start gap-3 p-6"><h3>No public proposals yet</h3><p>You can still share a concern or an idea for your community.</p><Button href="/sense-box/">Share a local priority</Button></CardContent></Card>
+          )}
         </section>
 
-        <!-- 2-Column Live Register Preview + Public/Member Access Summary -->
-        <ProposalHighlights proposals={highlightProposals} />
-      <div class="home-workspace-grid">
-          <section class="home-workspace-main" aria-labelledby="active-proposals-heading">
-            <div class="home-block__head">
-              <div>
-                <h2 id="active-proposals-heading">Active proposals &amp; open ballots</h2>
-                <p>See what’s being discussed, read the contributions, and follow how the wording has changed.</p>
-              </div>
-              <Button href="/proposals/" variant="outline" size="sm">
-                View all {proposals.length} proposals <ArrowRight className="size-3.5" aria-hidden="true" />
-              </Button>
-            </div>
-
-            <div class="home-issue-list">
-              {featuredProposals.map((item) => (
-                <article class="home-issue-row">
-                  <div class="home-issue-row__main">
-                    <div class="home-issue-row__meta">
-                      <span class="tabular home-issue-id">{item.proposalId}</span>
-                      <Badge variant={stageVariant(item.stage)}>{stageLabel(item.stage)}</Badge>
-                      <a class="home-topic-chip" href={`/proposals/?space=${encodeURIComponent(item.space)}`}>{item.space}</a>
-                      <span class="tabular home-stat-inline">
-                        {item.commentCount} {item.commentCount === 1 ? 'discussion post' : 'discussion posts'} · {publicTallyLabel(item)
-                          ? <a href={`/proposals/${item.slug}/`}>{publicTallyLabel(item)}</a>
-                          : <>{item.votes.total} {item.votes.total === 1 ? 'vote' : 'votes'}</>}
-                      </span>
-                    </div>
-                    <h3><a href={`/proposals/${item.slug}/`}>{item.title}</a></h3>
-                    <p>{item.summary}</p>
-                  </div>
-                  <a class="home-issue-cta" href={`/proposals/${item.slug}/`}>
-                    {item.stage === 'decide' ? 'Read the ballot →' : 'Read the proposal →'}
-                  </a>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <aside class="home-workspace-rail" aria-label="Public access and membership summary">
-            <div class="rail-box is-featured">
-              <h2>Have an idea for Fusion?</h2>
-              <p>Suggest a policy or a change to how Fusion works. Explain your idea so other members can discuss it.</p>
-              <Button href={primaryCtaHref} className="w-full justify-center">
-                <Plus className="size-4" aria-hidden="true" />
-                {primaryCtaLabel}
-              </Button>
-              <Button href="/member/" variant="outline" size="sm" className="w-full justify-center">
-                Member sign in
-              </Button>
-              <p class="rail-sense-note">
-                Want to flag a local issue without drafting a proposal? <a href="/sense-box/">Share it in Sense Box →</a>
-              </p>
-            </div>
-
-            <div class="rail-box">
-              <h2>Who can take part?</h2>
-              <ul class="access-summary-list">
-                <li>
-                  <Compass className="size-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
-                  <div>
-                    <strong>Anyone can read</strong>
-                    <span>Public proposals, their discussions and voting totals, published policies, and the branch directory.</span>
-                  </div>
-                </li>
-                <li>
-                  <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
-                  <div>
-                    <strong>Verified members</strong>
-                    <span>Put forward ideas, join discussions, endorse contributions, and propose amendments. Voting also depends on your eligibility for each ballot.</span>
-                  </div>
-                </li>
-              </ul>
-              <a href="/how-it-works/#access-matrix" class="rail-link">More about taking part →</a>
-            </div>
-          </aside>
-        </div>
+        {user && <section id="discussions" class="home-section" aria-labelledby="discussions-heading">
+          <div class="home-section-heading"><div><p class="home-eyebrow">Build on each other’s ideas</p><h2 id="discussions-heading">In discussion now</h2></div><Button href="/proposals/?stage=deliberate" variant="link">All discussions <ArrowRight aria-hidden="true" /></Button></div>
+          {discussions.length ? <div class="home-discussion-list">{discussions.slice(0, 4).map((p) => <Card><CardContent className="home-discussion-row p-5"><div><Badge variant="secondary">In discussion</Badge><h3><a href={`/proposals/${p.slug}/`}>{p.title}</a></h3><p>{p.commentCount} discussion {p.commentCount === 1 ? 'post' : 'posts'} · {p.space}</p></div><Button href={`/proposals/${p.slug}/#deliberation`} variant="ghost">Contribute <ArrowRight aria-hidden="true" /></Button></CardContent></Card>)}</div> : <p>No proposals are in deliberation right now. <a href="/proposals/">Explore all proposals</a>.</p>}
+        </section>}
       </div>
-    </>
-  )}
+
+      <aside class="home-rail" aria-label="Participation guide and useful links">
+        <Card className="home-rail-card"><CardContent className="grid gap-4 p-6"><Plus className="size-6" aria-hidden="true" /><h2>Have an idea?</h2><p>Explain the change you want Fusion to support. Other members can help develop it.</p><Button href={primaryCtaHref}>{primaryCtaLabel} <ArrowRight aria-hidden="true" /></Button><p>Prefer to share a local concern? <a href="/sense-box/">Use Sense Box</a>.</p></CardContent></Card>
+        <Card><CardContent className="grid gap-4 p-6"><BookOpen className="size-6" aria-hidden="true" /><h2>Follow the outcome</h2><p>A proposal, a ballot result and published policy are different records. Explore the wording Fusion has formally adopted.</p><Button href="/policies/" variant="outline">Policy registry <ArrowRight aria-hidden="true" /></Button>{registryAvailable && <p>{publishedPolicyCount} published {publishedPolicyCount === 1 ? 'record' : 'records'}</p>}</CardContent></Card>
+        <div class="home-rail-links"><h2>Make yourself at home</h2><a href="/member/">{user ? 'My Engage and account settings' : 'Member sign in'}</a><a href="/branches/">Find your branch</a><a href="/collaborate/">Open invitations</a><a href="/how-it-works/">How participation works</a></div>
+      </aside>
+    </div>
+
+    <section class="home-journey" aria-labelledby="journey-heading">
+      <div class="home-section-heading"><div><p class="home-eyebrow">A clear path from idea to outcome</p><h2 id="journey-heading">Understand each step</h2></div><Button href="/how-it-works/" variant="outline">Read the full guide <ArrowRight aria-hidden="true" /></Button></div>
+      <ol class="home-journey-grid">
+        <li><span class="home-step-number">01</span><Plus aria-hidden="true" /><h3>Propose</h3><p>Describe an idea and why it matters. An eligible seconder starts deliberation.</p><a href={primaryCtaHref}>Explore proposing</a></li>
+        <li><span class="home-step-number">02</span><MessageSquare aria-hidden="true" /><h3>Discuss</h3><p>Listen, contribute and suggest amendments to improve the wording.</p><a href="/proposals/?stage=deliberate">Find discussions</a></li>
+        <li><span class="home-step-number">03</span><Vote aria-hidden="true" /><h3>Vote</h3><p>Eligible members vote on the exact, fixed wording of an open ballot.</p><a href="/proposals/?stage=decide">Explore open ballots</a></li>
+        <li><span class="home-step-number">04</span><BookOpen aria-hidden="true" /><h3>Follow through</h3><p>Officers record outcomes. Policy ratification and publication are separate formal acts.</p><a href="/policies/">Read published policy</a></li>
+      </ol>
+    </section>
+
+    <section class="home-community" aria-labelledby="community-heading"><CommunityImage sizes="(min-width: 801px) 50vw, 100vw" /><div><p class="home-eyebrow">Local perspectives. Shared possibilities.</p><h2 id="community-heading">There’s more than one way to contribute.</h2><p>A concern from your neighbourhood. A skill you can share. A thoughtful question. Find a way to take part that works for you.</p><div class="home-inline-actions"><Button href="/collaborate/">Explore invitations <ArrowRight aria-hidden="true" /></Button><Button href="/branches/" variant="outline">Find your branch</Button></div></div></section>
+
+    <details class="home-highlights"><summary>Explore participation highlights</summary><ProposalHighlights proposals={highlightProposals} /></details>
+  </div>
 </SiteLayout>
 
 <style>
-  .visitor-hero {
-    background:
-      radial-gradient(ellipse at 65% 0%, #6335a0 0%, transparent 55%),
-      #260b59;
-    color: #ffffff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-  }
-
-  .visitor-hero__grid {
-    display: grid;
-    grid-template-columns: 1.15fr 0.85fr;
-    align-items: center;
-    gap: 2rem;
-    min-height: 26rem;
-  }
-
-  .visitor-hero__content {
-    padding: clamp(2.5rem, 5vw, 4.25rem) 0;
-    display: grid;
-    gap: 1rem;
-  }
-
-  .visitor-hero__badge {
-    display: inline-flex;
-    width: fit-content;
-    padding: 0.28rem 0.7rem;
-    border-radius: 999px;
-    background: rgba(5, 212, 229, 0.14);
-    border: 1px solid rgba(5, 212, 229, 0.42);
-    color: #8cf3fc;
-    font-size: 0.78rem;
-    font-weight: 600;
-  }
-
-  .visitor-hero__content h1 {
-    margin: 0;
-    color: #ffffff;
-    font-family: 'Newsreader', Georgia, serif;
-    font-size: clamp(2.5rem, 4.5vw, 4rem);
-    font-weight: 600;
-    line-height: 1.04;
-    letter-spacing: -0.025em;
-    max-width: 15ch;
-  }
-
-  .visitor-hero__content p {
-    margin: 0;
-    color: #dfd6f2;
-    font-size: 1.05rem;
-    line-height: 1.55;
-    max-width: 56ch;
-  }
-
-  .visitor-hero__actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.65rem;
-    margin-top: 0.5rem;
-  }
-
-  .visitor-hero__actions :global(.hero-star-btn) {
-    background: #05d4e5;
-    color: #19073d;
-    font-weight: 700;
-  }
-
-  .visitor-hero__actions :global(.hero-star-btn:hover) {
-    background: #5ce7f2;
-    color: #19073d;
-  }
-
-  .visitor-hero__actions :global(.hero-outline-btn) {
-    border-color: rgba(255, 255, 255, 0.45);
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.06);
-  }
-
-  .visitor-hero__actions :global(.hero-outline-btn:hover) {
-    background: #ffffff;
-    color: #240a59;
-  }
-
-  .visitor-hero__actions :global(.hero-ghost-btn) {
-    color: #dfd6f2;
-  }
-
-  .visitor-hero__actions :global(.hero-ghost-btn:hover) {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
-  }
-
-  .visitor-hero__visual {
-    height: 100%;
-    display: flex;
-    align-items: stretch;
-  }
-
-  .visitor-hero__visual img {
-    width: 100%;
-    height: 100%;
-    max-height: 26rem;
-    object-fit: cover;
-    border-radius: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-  }
-
-  .visitor-workspace,
-  .member-home-workspace {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    padding-top: 1.75rem;
-    padding-bottom: 3.5rem;
-  }
-
-  .member-welcome-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 1rem 1.5rem;
-    padding-bottom: 1.15rem;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-
-  .member-welcome-bar__copy h1 {
-    margin: 0 0 0.25rem;
-    font-family: 'Newsreader', Georgia, serif;
-    font-size: clamp(2rem, 3.2vw, 2.6rem);
-    line-height: 1.08;
-    color: var(--horizon-ink);
-  }
-
-  .member-welcome-bar__copy p {
-    margin: 0;
-    font-size: 0.96rem;
-    color: var(--horizon-muted);
-  }
-
-  .member-welcome-bar__actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.55rem;
-  }
-
-  .pipeline-overview {
-    display: grid;
-    gap: 0.85rem;
-  }
-
-  .pipeline-overview__head,
-  .home-block__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 0.75rem 1.25rem;
-  }
-
-  .pipeline-overview__head h2,
-  .home-block__head h2 {
-    margin: 0;
-    font-family: 'Newsreader', Georgia, serif;
-    font-size: clamp(1.45rem, 2.2vw, 1.8rem);
-    font-weight: 600;
-    color: var(--horizon-ink);
-  }
-
-  .pipeline-overview__head p,
-  .home-block__head p {
-    margin: 0.2rem 0 0;
-    font-size: 0.88rem;
-    color: var(--horizon-muted);
-  }
-
-  .home-block__link {
-    font-size: 0.84rem;
-    font-weight: 700;
-    color: var(--horizon-purple-deep);
-    text-decoration: none;
-    white-space: nowrap;
-  }
-
-  .home-block__link:hover {
-    text-decoration: underline;
-  }
-
-  /* 4-Cell Pipeline Strip */
-  .home-pipeline-strip {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.7rem;
-    background: #ffffff;
-    overflow: hidden;
-  }
-
-  .home-pipeline-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-    padding: 1rem 1.15rem;
-    border-right: 1px solid var(--horizon-line);
-    color: inherit;
-    text-decoration: none;
-    transition: background-color 120ms ease;
-  }
-
-  .home-pipeline-cell:last-child {
-    border-right: 0;
-  }
-
-  .home-pipeline-cell:hover {
-    background: var(--horizon-surface);
-  }
-
-  .home-pipeline-cell.is-highlight {
-    background: var(--horizon-lavender-soft);
-  }
-
-  .home-pipeline-cell.is-highlight:hover {
-    background: var(--horizon-lavender);
-  }
-
-  .home-pipeline-cell__label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.38rem;
-    font-size: 0.76rem;
-    font-weight: 700;
-    color: var(--horizon-purple-deep);
-  }
-
-  .home-pipeline-cell__bottom {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-
-  .home-pipeline-cell__value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--horizon-ink);
-  }
-
-  .home-pipeline-cell__hint {
-    font-size: 0.74rem;
-    color: var(--horizon-muted);
-  }
-
-  .home-mini-progress {
-    height: 0.32rem;
-    border-radius: 999px;
-    background: var(--horizon-line);
-    overflow: hidden;
-    margin-top: 0.1rem;
-  }
-
-  .home-mini-progress > span {
-    display: block;
-    height: 100%;
-    border-radius: 999px;
-    background: var(--horizon-purple);
-  }
-
-  .home-pipeline-cell__desc {
-    margin: 0;
-    font-size: 0.78rem;
-    line-height: 1.45;
-    color: var(--horizon-muted);
-  }
-
-  /* 2-Column Workspace Grid */
-  .home-workspace-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 20rem;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
-    background: #ffffff;
-    overflow: hidden;
-    align-items: start;
-  }
-
-  .home-workspace-main {
-    min-width: 0;
-    border-right: 1px solid var(--horizon-line);
-    padding: 1.25rem;
-    display: grid;
-    gap: 1.75rem;
-  }
-
-  .home-block {
-    display: grid;
-    gap: 0.85rem;
-  }
-
-  .home-block + .home-block {
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--horizon-line);
-  }
-
-  .home-issue-list {
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.6rem;
-    overflow: hidden;
-  }
-
-  .home-issue-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.85rem 1rem;
-    border-bottom: 1px solid var(--horizon-line);
-    background: #ffffff;
-  }
-
-  .home-issue-row:last-child {
-    border-bottom: 0;
-  }
-
-  .home-issue-row:hover {
-    background: #fafbff;
-  }
-
-  .home-issue-row__main {
-    min-width: 0;
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .home-issue-row__meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.74rem;
-  }
-
-  .home-issue-id {
-    font-weight: 700;
-    color: var(--horizon-muted);
-  }
-
-  .home-topic-chip {
-    padding: 0.08rem 0.42rem;
-    border-radius: 0.28rem;
-    background: var(--horizon-surface);
-    border: 1px solid var(--horizon-line);
-    color: var(--horizon-ink);
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .home-stat-inline {
-    color: var(--horizon-muted);
-  }
-
-  .home-issue-row h3 {
-    margin: 0;
-    font-size: 0.96rem;
-    font-weight: 700;
-    line-height: 1.3;
-  }
-
-  .home-issue-row h3 a {
-    color: var(--horizon-ink);
-    text-decoration: none;
-  }
-
-  .home-issue-row h3 a:hover {
-    color: var(--horizon-purple);
-    text-decoration: underline;
-  }
-
-  .home-issue-row p {
-    margin: 0;
-    font-size: 0.83rem;
-    line-height: 1.45;
-    color: var(--horizon-muted);
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .home-issue-cta {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--horizon-purple-deep);
-    text-decoration: none;
-    white-space: nowrap;
-  }
-
-  .home-issue-cta:hover {
-    text-decoration: underline;
-  }
-
-  .home-empty-note {
-    margin: 0;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    background: var(--horizon-surface);
-    border: 1px solid var(--horizon-line);
-    font-size: 0.85rem;
-    color: var(--horizon-muted);
-  }
-
-  .home-empty-note p {
-    margin: 0;
-  }
-
-  .home-empty-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem 1.25rem;
-    margin-top: 0.65rem;
-  }
-
-  .home-empty-actions a,
-  .rail-sense-note a {
-    font-weight: 600;
-    color: var(--horizon-purple);
-    text-decoration: none;
-  }
-
-  .home-empty-actions a:hover,
-  .rail-sense-note a:hover {
-    text-decoration: underline;
-  }
-
-  .rail-sense-note {
-    margin: 0.75rem 0 0;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--horizon-line);
-    font-size: 0.8rem;
-    line-height: 1.45;
-    color: var(--horizon-muted);
-  }
-
-  /* Right Rail */
-  .home-workspace-rail {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .rail-box {
-    padding: 1.15rem;
-    border-bottom: 1px solid var(--horizon-line);
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .rail-box:last-child {
-    border-bottom: 0;
-  }
-
-  .rail-box.is-featured {
-    background: var(--horizon-lavender-soft);
-  }
-
-  .rail-box h2 {
-    margin: 0;
-    font-family: Outfit, sans-serif;
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: var(--horizon-ink);
-  }
-
-  .rail-box p {
-    margin: 0;
-    font-size: 0.82rem;
-    line-height: 1.5;
-    color: var(--horizon-muted);
-  }
-
-  .rail-steps {
-    margin: 0;
-    padding-left: 1.1rem;
-    display: grid;
-    gap: 0.35rem;
-    font-size: 0.8rem;
-    line-height: 1.45;
-    color: var(--horizon-muted);
-  }
-
-  .rail-steps strong {
-    color: var(--horizon-ink);
-  }
-
-  .access-summary-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .access-summary-list li {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.55rem;
-    font-size: 0.8rem;
-    line-height: 1.45;
-  }
-
-  .access-summary-list strong {
-    display: block;
-    color: var(--horizon-ink);
-  }
-
-  .access-summary-list span {
-    color: var(--horizon-muted);
-  }
-
-  .rail-link {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--horizon-purple-deep);
-    text-decoration: none;
-  }
-
-  .rail-link:hover {
-    text-decoration: underline;
-  }
-
-  .rail-nav-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .rail-nav-list a {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--horizon-purple-deep);
-    text-decoration: none;
-  }
-
-  .rail-nav-list a:hover {
-    text-decoration: underline;
-  }
-
-  @media (max-width: 1024px) {
-    .home-workspace-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .home-workspace-main {
-      border-right: 0;
-      border-bottom: 1px solid var(--horizon-line);
-    }
-
-    .home-pipeline-strip {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .home-pipeline-cell:nth-child(2) {
-      border-right: 0;
-    }
-
-    .home-pipeline-cell:nth-child(1),
-    .home-pipeline-cell:nth-child(2) {
-      border-bottom: 1px solid var(--horizon-line);
-    }
-  }
-
-  @media (max-width: 760px) {
-    .visitor-hero__grid {
-      grid-template-columns: 1fr;
-    }
-
-    .visitor-hero__visual img {
-      max-height: 15rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .home-pipeline-strip {
-      grid-template-columns: 1fr;
-    }
-
-    .home-pipeline-cell {
-      border-right: 0;
-      border-bottom: 1px solid var(--horizon-line);
-    }
-
-    .home-pipeline-cell:last-child {
-      border-bottom: 0;
-    }
-
-    .home-issue-row {
-      grid-template-columns: 1fr;
-    }
-  }
+  .community-home { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(2.5rem, 6vw, 5rem); padding-block: 1.5rem 4rem; }
+  .home-cover { position: relative; display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.2fr); align-items: center; gap: clamp(1.5rem, 3vw, 3rem); padding: clamp(1.5rem, 3vw, 3rem); background: linear-gradient(120deg, var(--horizon-lavender-soft), var(--horizon-white) 58%, var(--horizon-voting-bg)); border-radius: 2rem; overflow: hidden; }
+  .home-cover::after { content: ''; position: absolute; height: .5rem; left: 0; bottom: 0; right: 0; background: linear-gradient(90deg, var(--horizon-purple), var(--horizon-magenta), var(--horizon-pink), var(--horizon-accent)); }
+  .home-cover__copy { display: grid; gap: 1.25rem; min-width: 0; }
+  .home-eyebrow { font-size: .75rem; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; color: var(--horizon-purple); margin: 0; }
+  .home-cover h1 { font-family: var(--font-outfit); margin: 0; font-size: clamp(2.6rem, 4.5vw, 4.5rem); font-weight: 750; line-height: 1.02; letter-spacing: -.045em; color: var(--horizon-purple); text-wrap: balance; overflow-wrap: anywhere; }
+  .home-cover h1 span { color: var(--horizon-magenta); }
+  .home-cover__lead { margin: 0; font-size: clamp(1.05rem, 1.5vw, 1.2rem); max-width: 46ch; line-height: 1.65; color: var(--horizon-muted); }
+  .home-cover__actions, .home-inline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+  .home-cover__actions :global([data-slot='button']) { max-width: 100%; }
+  .home-cover__note { font-size: .85rem; color: var(--horizon-muted); line-height: 1.55; margin: 0; max-width: 55ch; }
+  .home-cover__visual { min-width: 0; }
+  .home-status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+  :global(.home-status-card) { border-top: 3px solid var(--horizon-accent); }
+  :global(.home-status-card strong) { font-size: 2.1rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  :global(.home-status-card strong small) { font-size: 1rem; font-weight: 500; color: var(--horizon-muted); }
+  :global(.home-status-card p) { font-size: .8rem; margin: 0; color: var(--horizon-muted); }
+  progress { width: 100%; height: .5rem; accent-color: var(--horizon-magenta); }
+  .home-paths, .home-section, .home-journey { display: grid; gap: 1.5rem; }
+  .home-section-heading { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: end; gap: 1rem; }
+  .home-section-heading :global([data-slot='button']) { max-width: 100%; white-space: normal; height: auto; min-height: 2.75rem; }
+  h2 { font-family: var(--font-outfit); font-size: clamp(1.65rem, 2.4vw, 2.25rem); line-height: 1.15; letter-spacing: -.025em; font-weight: 700; color: var(--horizon-purple); margin: .4rem 0 0; }
+  .home-section-heading p:not(.home-eyebrow) { margin: .6rem 0 0; color: var(--horizon-muted); }
+  .home-path-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
+  :global(.home-path-card) { border-top: 4px solid var(--horizon-purple); background: var(--horizon-lavender-soft); }
+  :global(.home-path-card--pink) { border-top-color: var(--horizon-magenta); }
+  :global(.home-path-card--aqua) { border-top-color: var(--horizon-accent); }
+  :global(.home-path-icon) { width: 2rem; height: 2rem; color: var(--horizon-purple); }
+  :global(.home-path-card h3), :global(.home-proposal-card h3), :global(.home-discussion-row h3) { font-family: var(--font-outfit); font-size: 1.25rem; font-weight: 700; line-height: 1.25; color: var(--horizon-purple); margin: 0; }
+  :global(.home-path-card p), :global(.home-proposal-card p), :global(.home-discussion-row p) { color: var(--horizon-muted); line-height: 1.6; margin: 0; }
+  .home-workspace { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(16rem, 1fr); gap: 2rem; align-items: start; }
+  .home-workspace__main { display: grid; gap: 3rem; min-width: 0; }
+  .home-proposal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+  :global(.home-proposal-card) { border-radius: 1.2rem; overflow: hidden; }
+  :global(.home-proposal-card [data-slot='card-content']) { height: 100%; align-content: start; grid-template-rows: auto auto 1fr auto auto; }
+  :global(.home-proposal-card h3 a) { text-decoration: none; }
+  :global(.home-proposal-card h3 a:hover) { text-decoration: underline; text-underline-offset: .18em; }
+  .home-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .8rem; color: var(--horizon-muted); }
+  :global(p.home-card-count) { font-size: .8rem; }
+  .home-rail { display: grid; gap: 1.25rem; }
+  .home-rail :global(h2) { font-size: 1.35rem; margin: 0; }
+  .home-rail :global(p) { margin: 0; line-height: 1.6; font-size: .95rem; color: var(--horizon-muted); }
+  :global(.home-rail-card) { background: linear-gradient(135deg, var(--horizon-lavender-soft), var(--horizon-white)); border-top: 4px solid var(--horizon-magenta); }
+  .home-rail-links { display: grid; gap: 1rem; padding: 1.5rem; }
+  .home-rail-links a { text-underline-offset: .2em; }
+  .home-discussion-list { display: grid; gap: .8rem; }
+  :global(.home-discussion-row) { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  :global(.home-discussion-row h3) { margin: .6rem 0; }
+  :global(.home-discussion-row p) { font-size: .85rem; }
+  .home-journey-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); list-style: none; padding: 0; margin: 0; gap: 1.5rem; }
+  .home-journey-grid li { display: grid; gap: .8rem; align-content: start; border-top: 3px solid var(--horizon-purple); padding-top: 1.5rem; }
+  .home-journey-grid li:nth-child(2) { border-color: var(--horizon-magenta); }
+  .home-journey-grid li:nth-child(3), .home-journey-grid li:nth-child(4) { border-color: var(--horizon-accent); }
+  .home-step-number { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--horizon-muted); }
+  .home-journey-grid :global(svg) { height: 1.6rem; width: 1.6rem; color: var(--horizon-purple); }
+  .home-journey-grid h3 { font-family: var(--font-outfit); font-size: 1.3rem; font-weight: 700; margin: 0; }
+  .home-journey-grid p { font-size: .95rem; color: var(--horizon-muted); line-height: 1.65; margin: 0; }
+  .home-journey-grid a { font-size: .9rem; text-underline-offset: .2em; }
+  .home-community { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; gap: clamp(1.5rem, 4vw, 4rem); }
+  .home-community > div { display: grid; gap: 1.25rem; }
+  .home-community h2 { font-size: clamp(2rem, 3.4vw, 3rem); text-wrap: balance; margin: 0; }
+  .home-community p:not(.home-eyebrow) { color: var(--horizon-muted); line-height: 1.65; font-size: 1.05rem; margin: 0; }
+  .home-highlights { border-top: 1px solid var(--horizon-line); padding-top: 1.25rem; }
+  .home-highlights summary { cursor: pointer; font-weight: 600; width: fit-content; }
+  @media (max-width: 1050px) { .home-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .home-workspace { grid-template-columns: minmax(0, 1fr); } .home-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); } .home-rail-links { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); } .home-rail-links h2 { grid-column: 1 / -1; } }
+  @media (max-width: 800px) { .home-cover { grid-template-columns: 1fr; } .home-cover h1 { font-size: clamp(2.4rem, 8vw, 3.8rem); } .home-path-grid { grid-template-columns: 1fr; } .home-journey-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .home-community { grid-template-columns: 1fr; } }
+  @media (max-width: 540px) { .community-home { padding-top: .75rem; gap: 2.75rem; } .home-cover { padding: 1.25rem; border-radius: 1.25rem; } .home-proposal-grid, .home-status-grid, .home-rail, .home-journey-grid { grid-template-columns: 1fr; } .home-rail-links { grid-template-columns: 1fr; } :global(.home-discussion-row) { flex-direction: column; align-items: start; } .home-cover__actions :global([data-slot='button']) { white-space: normal; height: auto; min-height: 2.75rem; } }
 </style>
-

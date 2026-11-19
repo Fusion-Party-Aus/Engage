@@ -101,15 +101,15 @@ function MemberPreview({ name, status, branches, stats }: Pick<MemberSettingsPro
     : 'Fusion National only';
 
   return (
-    <Card className="h-full gap-0 shadow-none">
-      <CardHeader className="px-5 pt-5">
+    <Card className="h-full gap-0 overflow-hidden bg-[var(--horizon-lavender-soft)] shadow-none">
+      <CardHeader className="border-t-4 border-[var(--horizon-magenta)] px-6 pt-6">
         <Badge variant="secondary">Member record</Badge>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col items-start justify-center px-(--card-spacing) py-8">
-        <Avatar className="size-20">
-          <AvatarFallback className="font-heading text-xl">{initials(name) || 'FM'}</AvatarFallback>
+        <Avatar className="size-20 ring-4 ring-background">
+          <AvatarFallback className="bg-[var(--horizon-purple)] font-[var(--font-outfit)] text-xl font-semibold text-[var(--horizon-white)]">{initials(name) || 'FM'}</AvatarFallback>
         </Avatar>
-        <p className="mt-4 font-heading text-xl font-medium text-balance">{name}</p>
+        <p className="mt-4 max-w-full break-words font-[var(--font-outfit)] text-2xl font-semibold text-balance">{name}</p>
         <p className="mt-1 text-sm text-pretty text-muted-foreground">{branchLabel}</p>
         <div className="mt-3 flex items-center gap-1.5 text-xs">
           <StatusIndicator color={copy.color} pulse={false} />
@@ -760,8 +760,8 @@ export default function MemberSettings(props: MemberSettingsProps) {
   const [name, setName] = useState(props.name);
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <div className="grid w-full gap-4 lg:grid-cols-2 xl:grid-cols-[.8fr_1.2fr]">
+    <div className="flex w-full flex-col gap-6">
+      <div className="grid w-full gap-6 lg:grid-cols-2 xl:grid-cols-[.8fr_1.2fr]">
         <MemberPreview branches={props.branches} name={name} stats={props.stats} status={props.status} />
         <ProfileSection email={props.email} name={name} onSaved={setName} />
       </div>

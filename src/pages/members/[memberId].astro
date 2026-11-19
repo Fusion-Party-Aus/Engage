@@ -418,9 +418,12 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
 
   .profile-hero {
     display: grid;
-    gap: 1rem;
-    padding-bottom: 1.25rem;
-    border-bottom: 1px solid var(--horizon-line);
+    gap: 1.5rem;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid var(--horizon-line);
+    border-top: 4px solid var(--horizon-violet);
+    border-radius: var(--horizon-radius);
+    background: var(--horizon-gradient-soft);
   }
 
   .profile-identity {
@@ -436,7 +439,7 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
   }
 
   .profile-avatar__fallback {
-    font-family: 'Newsreader', Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: 1.35rem;
     font-weight: 600;
   }
@@ -448,7 +451,7 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
 
   .profile-identity h1 {
     margin: 0;
-    font-family: 'Newsreader', Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: clamp(1.85rem, 3vw, 2.35rem);
     font-weight: 600;
     line-height: 1.1;
@@ -494,10 +497,10 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
   .profile-stat {
     display: grid;
     gap: 0.15rem;
-    padding: 0.65rem 0.8rem;
+    padding: 0.85rem 1rem;
     border: 1px solid var(--horizon-line);
     border-radius: 0.7rem;
-    background: var(--horizon-lavender-soft);
+    background: var(--horizon-white);
     color: inherit;
     text-decoration: none;
     transition: border-color 140ms ease, background 140ms ease;
@@ -588,7 +591,7 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
     bottom: -1px;
     left: 0;
     height: 2px;
-    background: var(--horizon-purple);
+    background: var(--horizon-magenta);
   }
 
   .profile-tab__count {
@@ -608,7 +611,7 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
   }
 
   .profile-item {
-    padding: 1rem 0;
+    padding: 1.4rem 0;
     border-bottom: 1px solid var(--horizon-line);
   }
 
@@ -627,7 +630,7 @@ const pageTitle = profile ? `${profile.name} · Engage` : 'Profile not found · 
 
   .profile-item h3 {
     margin: 0.45rem 0 0;
-    font-family: 'Newsreader', Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: 1.15rem;
     font-weight: 600;
     line-height: 1.3;

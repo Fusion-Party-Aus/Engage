@@ -37,7 +37,7 @@ const { title } = Astro.props;
     <header class="error-shell__header">
       <div class="page-wrap error-shell__header-inner">
         <a class="error-shell__brand" href="/" aria-label="Engage home">
-          <img src="/fusion_horizon_logo_light.svg" alt="" width="32" height="32" />
+          <img src="/fusion_horizon_logo.svg" alt="" width="40" height="40" />
           <span>Engage</span>
         </a>
       </div>
@@ -63,21 +63,22 @@ const { title } = Astro.props;
 
   .error-shell__header {
     border-bottom: 1px solid var(--horizon-line);
+    border-top: 4px solid var(--horizon-magenta);
   }
 
   .error-shell__header-inner {
     display: flex;
     align-items: center;
-    min-height: 4.25rem;
+    min-height: 5rem;
   }
 
   .error-shell__brand {
     display: inline-flex;
     align-items: center;
     gap: 0.6rem;
-    color: var(--horizon-purple);
+    color: var(--horizon-magenta);
     text-decoration: none;
-    font: 600 1.15rem/1 Outfit, sans-serif;
+    font: 700 1.5rem/1 var(--font-outfit);
   }
 
   .error-shell__brand:focus-visible {
@@ -89,6 +90,7 @@ const { title } = Astro.props;
   .error-shell__footer {
     border-top: 1px solid var(--horizon-line);
     padding-block: 1.25rem;
+    background: var(--horizon-gradient-soft);
   }
 
   .error-shell__footer p {

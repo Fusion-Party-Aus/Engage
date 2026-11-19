@@ -215,6 +215,10 @@ const tocSections = [
   .legal-header {
     max-width: 62rem;
     margin-bottom: clamp(2rem, 4vw, 3.5rem);
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    border-top: 4px solid var(--horizon-violet);
+    border-radius: var(--horizon-radius);
+    background: var(--horizon-lavender-soft);
   }
 
   .legal-header__badges {
@@ -272,7 +276,7 @@ const tocSections = [
   .legal-draft-notice {
     max-width: 62rem;
     padding: 1rem 1.15rem;
-    border: 1px solid #ebd49f;
+    border: 1px solid color-mix(in srgb, var(--horizon-warn-ink) 25%, var(--horizon-warn-bg));
     border-left: 4px solid var(--horizon-warn-ink);
     border-radius: 0.45rem;
     background: var(--horizon-warn-bg);
@@ -295,7 +299,7 @@ const tocSections = [
 
   .legal-sidebar {
     position: sticky;
-    top: 1.5rem;
+    top: 6rem;
   }
 
   .legal-toc {
@@ -398,7 +402,7 @@ const tocSections = [
   .legal-section {
     padding-top: 0.5rem;
     margin-bottom: 2.25rem;
-    scroll-margin-top: 1.5rem;
+    scroll-margin-top: 6rem;
   }
 
   .legal-section h2 {
@@ -408,14 +412,14 @@ const tocSections = [
     margin: 0 0 1rem;
     padding-top: 1.25rem;
     border-top: 1px solid var(--horizon-line);
-    font: 600 clamp(1.45rem, 2.4vw, 1.9rem) / 1.15 Newsreader, Georgia, serif;
+    font: 700 clamp(1.45rem, 2.4vw, 1.9rem) / 1.2 var(--font-outfit);
     color: var(--horizon-purple-deep);
   }
 
   .legal-section__number {
     flex: 0 0 auto;
-    color: #8e77c4;
-    font-family: Outfit, sans-serif;
+    color: var(--horizon-violet);
+    font-family: var(--font-outfit);
     font-size: 0.95rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -481,7 +485,7 @@ const tocSections = [
   }
 
   .legal-callout--warning {
-    border-color: #ebd49f;
+    border-color: color-mix(in srgb, var(--horizon-warn-ink) 25%, var(--horizon-warn-bg));
     border-left-color: var(--horizon-warn-ink);
     background: var(--horizon-warn-bg);
   }

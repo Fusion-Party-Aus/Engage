@@ -4,6 +4,8 @@ import { memberNextAction, recordLifecycle } from '../../lib/member-lifecycle.ts
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import LegalAcceptanceGate from '../../components/legal/LegalAcceptanceGate.astro';
 import { Badge } from '../../components/ui/badge';
+import Card from '../../components/admin/Card.astro';
+import CommunityImage from '../../components/site/CommunityImage.astro';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Alert, AlertDescription } from '../../components/ui/alert';
@@ -20,6 +22,10 @@ import CatchUpDigest from '../../components/member/CatchUpDigest.astro';
 import GovernanceLog from '../../components/member/GovernanceLog.astro';
 import {
   ArrowRight,
+  Bell,
+  Vote,
+  MessageCircle,
+  HandHeart,
   Compass,
   Fingerprint,
   KeyRound,
@@ -296,7 +302,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           ) : (
             <div class="signin-methods">
               {/* Primary Card: Email Link + Instant Passkey / Google */}
-              <section class="signin-card signin-card--primary" aria-labelledby="primary-signin-heading">
+              <Card class="signin-card signin-card--primary" aria-labelledby="primary-signin-heading">
                 <div class="signin-card__header">
                   <div>
                     <h2 id="primary-signin-heading">Member sign-in</h2>
@@ -394,10 +400,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                     </div>
                   </form>
                 )}
-              </section>
+              </Card>
 
               {devLoginAvailable && (
-                <section class="signin-card signin-card--dev" aria-labelledby="dev-signin-heading">
+                <Card class="signin-card signin-card--dev" aria-labelledby="dev-signin-heading">
                   <div class="signin-card__header">
                     <div>
                       <h2 id="dev-signin-heading">Local development sign-in</h2>
@@ -418,7 +424,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                       <p id="dev-status" class="form-status" role="status" aria-live="polite"></p>
                     </div>
                   </form>
-                </section>
+                </Card>
               )}
 
               <p class="signin-legal">
@@ -431,7 +437,8 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 
         <!-- Right Onboarding Preview Rail: What happens when you sign in -->
         <aside class="signin-onboarding-rail" aria-label="How member onboarding works">
-          <div class="onboarding-preview-card">
+          <Card class="onboarding-preview-card">
+            <div class="signin-community-image"><CommunityImage scene="community" sizes="(min-width: 981px) 480px, 100vw" /></div>
             <div class="onboarding-preview-card__head">
               <span class="onboarding-preview-kicker">
                 <Sparkles className="size-3.5" aria-hidden="true" />
@@ -460,7 +467,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 <span class="onboarding-roadmap__num tabular">3</span>
                 <div>
                   <strong>Check your membership</strong>
-                  <p>Your Fusion membership must be verified before you can contribute. Branch ballots also require membership of that branch.</p>
+                  <p>Formal ballots require verified membership. Branch ballots also require membership of that branch. You can explore public participation opportunities while verification is pending.</p>
                 </div>
               </li>
               <li class="onboarding-roadmap__step">
@@ -485,7 +492,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                 <Button href="/how-it-works/" variant="ghost" size="sm">How it works →</Button>
               </div>
             </div>
-          </div>
+          </Card>
         </aside>
       </div>
     ) : (
@@ -502,7 +509,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               ))}
             </div>
             <p class="member-identity">
-              {user.name || user.email} · {user.email}
+              {user.name ? `${user.name} · ` : ''}{user.email}
             </p>
           </div>
 
@@ -545,17 +552,21 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           </Alert>
         )}
 
-        <section class="lifecycle-card" aria-labelledby="lifecycle-heading">
-          <h2 id="lifecycle-heading">{nextAction?.title}</h2>
-          <p>{nextAction?.detail}</p>
-          <Button href={nextAction?.href}>{nextAction?.title} <ArrowRight className="size-4" aria-hidden="true" /></Button>
-          <div class="engage-bookmark">
-            <label for="engage-url">Save this address for next time</label>
-            <Input id="engage-url" readOnly defaultValue={persistentEngageUrl} />
-            <Button type="button" id="copy-engage-url" variant="outline" size="sm">Copy address</Button>
-            <p id="copy-engage-status" role="status" aria-live="polite"></p>
+        {memberView === 'overview' && (
+        <Card class="member-welcome" role="region" aria-labelledby="member-welcome-heading">
+          <div class="member-welcome__copy">
+            <Badge variant="outline">Your community. Your voice.</Badge>
+            <h2 id="member-welcome-heading">Welcome back{user.name ? `, ${user.name.split(' ')[0]}` : ''}.</h2>
+            <p>Make space for the ideas that matter to you. Catch up, join a discussion or take part in a decision.</p>
+            <div class="member-welcome__next">
+              <strong>{nextAction?.title}</strong>
+              <p>{nextAction?.detail}</p>
+            </div>
+            <Button href={nextAction?.href} size="lg">{nextAction?.title}<ArrowRight className="size-4" aria-hidden="true" /></Button>
           </div>
-        </section>
+          <div class="member-welcome__image"><CommunityImage scene="hero" priority sizes="(min-width: 1200px) 620px, (min-width: 761px) 50vw, 100vw" /></div>
+        </Card>
+        )}
         <LegalAcceptanceGate />
 
         <!-- Guided Member Onboarding & Activation Flow -->
@@ -592,36 +603,40 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           )}
         </div>
 
-        <!-- Top 4-Cell Hairline Metric Strip -->
-        <div class="member-stat-strip" aria-label="Your participation summary">
-          <a href="#awaiting-heading" class="member-stat">
+        <!-- Existing participation measures and task shortcuts -->
+        <div class="member-stat-strip overview-only" aria-label="Your participation summary">
+          <Button href="#awaiting-heading" variant="ghost" className="member-stat member-stat--vote">
+            <Vote className="member-stat__icon" aria-hidden="true" />
             <span class="member-stat__label">Open votes for you</span>
             <div class="member-stat__bottom">
               <strong class="member-stat__value tabular">{awaitingDecision.length}</strong>
               <span class="member-stat__hint">Eligible unvoted ballots</span>
             </div>
-          </a>
-          <a href="#opportunities-heading" class="member-stat">
+          </Button>
+          <Button href="#opportunities-heading" variant="ghost" className="member-stat member-stat--discussion">
+            <MessageCircle className="member-stat__icon" aria-hidden="true" />
             <span class="member-stat__label">Open for deliberation</span>
             <div class="member-stat__bottom">
               <strong class="member-stat__value tabular">{deliberationOpportunities.length}</strong>
               <span class="member-stat__hint">Active discussions</span>
             </div>
-          </a>
-          <a href="#catchup-heading" class="member-stat">
+          </Button>
+          <Button href="#catchup-heading" variant="ghost" className="member-stat member-stat--updates">
+            <Bell className="member-stat__icon" aria-hidden="true" />
             <span class="member-stat__label">Updates waiting</span>
             <div class="member-stat__bottom">
               <strong class="member-stat__value tabular">{catchUpTotal}</strong>
               <span class="member-stat__hint">{hasCatchUpCursor ? 'Since last cleared' : 'Last 7 days'}</span>
             </div>
-          </a>
-          <a href="/member/?view=activity#activity-heading" class="member-stat">
+          </Button>
+          <Button href="/member/?view=activity#activity-heading" variant="ghost" className="member-stat member-stat--activity">
+            <HandHeart className="member-stat__icon" aria-hidden="true" />
             <span class="member-stat__label">Your contributions</span>
             <div class="member-stat__bottom">
               <strong class="member-stat__value tabular">{(activity?.votes.length ?? 0) + (activity?.comments.length ?? 0) + (activity?.proposals.length ?? 0)}</strong>
               <span class="member-stat__hint tabular">{activity?.votes.length ?? 0} votes · {activity?.comments.length ?? 0} comments</span>
             </div>
-          </a>
+          </Button>
         </div>
 
         <!-- Underline Workspace Tabs -->
@@ -649,7 +664,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         </nav>
 
         <div class="notifications-only grid gap-6">
-          <section class="member-panel" aria-labelledby="responses-notifications-heading">
+          <Card class="member-panel member-panel--padded" role="region" aria-labelledby="responses-notifications-heading">
             <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
                 <h2 id="responses-notifications-heading">Responses to your contributions</h2>
@@ -679,7 +694,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             ) : (
               <p class="text-sm text-muted-foreground m-0">No responses recorded on your contributions yet.</p>
             )}
-          </section>
+          </Card>
 
           <CatchUpDigest
             groups={catchUpGroups}
@@ -704,10 +719,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
         <div class="overview-only member-overview-grid">
           <!-- Left Column: Actionable Queues -->
           <div class="member-col-main">
-            <section class="member-panel" aria-labelledby="closing-soon-heading">
+            <Card class="member-panel member-panel--padded member-panel--time" role="region" aria-labelledby="closing-soon-heading">
               <h2 id="closing-soon-heading">Closing within seven days</h2>
               {closingSoon.length ? <ul>{closingSoon.map(b=><li><a href={b.href}>{b.title}</a><p><time datetime={new Date(b.closesAt).toISOString()} data-ballot-deadline data-prefix="Closes">Closes {ballotDeadlineLabel(b.closesAt)}</time></p></li>)}</ul> : <p>You have no unvoted eligible ballots closing within seven days.</p>}
-            </section>
+            </Card>
             <!-- 1. Open Ballots Queue -->
             <div id="outstanding-ballots" tabindex="-1"></div>
             <AttentionQueue
@@ -718,16 +733,16 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               totalEligibleCount={totalEligibleOpenBallotsCount}
             />
 
-            {outstandingAmendments.length > 0 && <section class="member-panel" aria-labelledby="amendment-ballots-heading">
+            {outstandingAmendments.length > 0 && <Card class="member-panel member-panel--padded" role="region" aria-labelledby="amendment-ballots-heading">
               <h2 id="amendment-ballots-heading">Amendment ballots awaiting your vote</h2>
               <ul>{outstandingAmendments.map(b=><li><a href={b.href}>{b.title}</a><p>{b.closesAt ? <time datetime={new Date(b.closesAt).toISOString()} data-ballot-deadline data-prefix="Closes">Closes {ballotDeadlineLabel(b.closesAt)}</time> : 'No closing date set'}</p></li>)}</ul>
-            </section>}
-            <section class="member-panel" aria-label="Decisions you took part in">
+            </Card>}
+            <Card class="member-panel member-panel--padded" role="region" aria-label="Decisions you took part in">
               <h2>After your participation</h2>
               <p>Follow what happened to proposals you authored, discussed or voted on.</p>
               {lifecycleItems.length ? <ul>{lifecycleItems.map(p=><li><a href={`/proposals/${p.slug}/`}>{p.title}</a> — {p.stage === 'implement' ? 'Implementation · inspect the recorded decision' : p.stage === 'archived' ? 'Archived' : 'Voting closed · inspect the recorded decision'}</li>)}</ul> : <p>Closed ballots and implementation updates will appear here.</p>}
-            </section>
-            <section class="member-panel" aria-labelledby="my-branches-heading">
+            </Card>
+            <Card class="member-panel" aria-labelledby="my-branches-heading">
               <div class="member-panel__head">
                 <div>
                   <div class="member-panel__title-row">
@@ -743,7 +758,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                   <li class="opportunity-row">
                     <div class="opportunity-row__body">
                       <div class="opportunity-row__meta">
-                        <span class="opportunity-space">{branch.name}</span>
+                        <Badge variant="outline">{branch.name}</Badge>
                         {branch.verified ? (
                           <Badge variant="success">{branch.branchRole === 'administrator' ? 'Branch administrator' : 'Member'}</Badge>
                         ) : branch.included ? (
@@ -767,10 +782,10 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                   </li>
                 ))}
               </ul>
-            </section>
-            <section class="member-panel"><h2>Stay in the loop</h2><p>Manage Engage digests, account notifications and general communications.</p><a href="/member/?view=notifications">Notification preferences →</a></section>
+            </Card>
+            <Card class="member-panel member-panel--padded"><h2>Stay in the loop</h2><p>Choose how you hear about updates and responses.</p><Button href="/member/?view=notifications" variant="outline" size="sm">Notification preferences<ArrowRight className="size-4" aria-hidden="true" /></Button></Card>
             <!-- 2. Relevant Participation Opportunities (Deliberation & Amendments) -->
-            <section class="member-panel" aria-labelledby="opportunities-heading">
+            <Card class="member-panel" aria-labelledby="opportunities-heading">
               <div class="member-panel__head">
                 <div>
                   <div class="member-panel__title-row">
@@ -792,7 +807,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                         <div class="opportunity-row__body">
                           <div class="opportunity-row__meta">
                             <span class="tabular opportunity-id">{item.proposalId}</span>
-                            <span class="opportunity-space">{item.space}</span>
+                            <Badge variant="outline">{item.space}</Badge>
                             <span class="tabular opportunity-count">{item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}</span>
                           </div>
                           <a class="opportunity-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
@@ -812,11 +827,11 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                   )}
                 </>
               )}
-            </section>
+            </Card>
 
             <!-- 3. Branch Activity & Authored Ideas (if applicable) -->
             {branchActivity.length > 0 && (
-              <section class="member-panel" aria-labelledby="branch-activity-heading">
+              <Card class="member-panel" aria-labelledby="branch-activity-heading">
                 <div class="member-panel__head">
                   <div>
                     <h2 id="branch-activity-heading">Activity in your branches</h2>
@@ -853,11 +868,11 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                     </div>
                   ))}
                 </div>
-              </section>
+              </Card>
             )}
 
             {activity?.proposals && activity.proposals.length > 0 && (
-              <section class="member-panel" aria-labelledby="proposals-heading">
+              <Card class="member-panel" aria-labelledby="proposals-heading">
                 <div class="member-panel__head">
                   <div>
                     <h2 id="proposals-heading">Ideas you put forward ({activity.proposals.length})</h2>
@@ -869,7 +884,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                     <li class="opportunity-row">
                       <div class="opportunity-row__body">
                         <div class="opportunity-row__meta">
-                          <span class="opportunity-space">{p.space}</span>
+                          <Badge variant="outline">{p.space}</Badge>
                           <Badge variant="outline">
                             {p.stage === 'decide' ? 'Open vote' : p.stage === 'deliberate' ? 'In discussion' : p.stage === 'implement' ? 'Implement' : 'New idea'}
                           </Badge>
@@ -880,7 +895,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                     </li>
                   ))}
                 </ul>
-              </section>
+              </Card>
             )}
           </div>
 
@@ -903,7 +918,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           <div class="member-overview-grid">
             <div class="member-col-main">
               {activity && (
-                <div class="member-timeline-card">
+                <Card class="member-timeline-card">
                   <ActivityTimeline
                     client:visible
                     groups={memberTimeline}
@@ -923,12 +938,12 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
                     searchable
                     emptyMessage="Your votes, contributions, and ideas will appear here as you participate."
                   />
-                </div>
+                </Card>
               )}
             </div>
 
             <div class="member-col-rail">
-              <GovernanceLog items={governanceChanges} />
+              <GovernanceLog items={governanceChanges} idPrefix="activity-governance-log" />
               <CatchUpDigest
                 groups={catchUpGroups}
                 total={catchUpTotal}
@@ -941,7 +956,17 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
           </div>
         </div>
 
-        <p class="my-6"><a href="/sense-box/">Share a local concern in Sense Box →</a></p>
+        <div class="member-footnotes">
+          <Button href="/sense-box/" variant="ghost">Share a local concern in Sense Box<ArrowRight className="size-4" aria-hidden="true" /></Button>
+          <details class="engage-bookmark">
+            <summary>Save your Engage address for next time</summary>
+            <div class="engage-bookmark__body">
+              <Field htmlFor="engage-url" label="Your Engage address"><Input id="engage-url" readOnly defaultValue={persistentEngageUrl} /></Field>
+              <Button type="button" id="copy-engage-url" variant="outline" size="sm">Copy address</Button>
+              <p id="copy-engage-status" role="status" aria-live="polite"></p>
+            </div>
+          </details>
+        </div>
         <!-- VIEW 3: MY BRANCHES -->
         <div class="branches-only">
           <BranchMemberships client:visible branches={branchChoices} verified={user.status === "verified"} />
@@ -1336,7 +1361,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 <style>
   .member-page {
     max-width: 84rem;
-    padding-top: 1.5rem;
+    padding-top: 2rem;
     padding-bottom: 3.5rem;
   }
 
@@ -1385,7 +1410,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
     justify-content: space-between;
     gap: 0.75rem 1rem;
     padding: 0.9rem 1.15rem;
-    border-radius: 0.75rem;
+    border-radius: 1rem;
     background: var(--horizon-lavender-soft);
     border: 1px solid var(--horizon-line);
   }
@@ -1433,7 +1458,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
   .signin-hero h1 {
     margin: 0;
     font-family: 'Newsreader', Georgia, serif;
-    font-size: clamp(2.4rem, 5vw, 4.1rem);
+    font-size: clamp(2.4rem, 5vw, 3.7rem);
     line-height: 1.04;
     letter-spacing: -0.025em;
     color: var(--horizon-purple-deep);
@@ -1456,7 +1481,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
     padding: 1.5rem;
     background: var(--horizon-white);
     border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
+    border-radius: 1rem;
     display: grid;
     gap: 1.25rem;
   }
@@ -1580,7 +1605,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 
   .signin-name-disclosure {
     padding: 0.85rem 1rem;
-    border-radius: 0.75rem;
+    border-radius: 1rem;
     background: var(--horizon-lavender-soft);
     border: 1px solid var(--horizon-line);
   }
@@ -1691,7 +1716,7 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 
   .onboarding-preview-card {
     border: 1px solid var(--horizon-line);
-    border-radius: 0.75rem;
+    border-radius: 1rem;
     background: var(--horizon-white);
     overflow: hidden;
   }
@@ -1822,382 +1847,99 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
     }
   }
 
-  /* Member Workspace Header */
-  .member-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 1rem 1.5rem;
-    margin-bottom: 1.15rem;
+  /* Member workspace: existing data, clearer tasks and Australian imagery. */
+  .member-header { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem 1.5rem;margin-bottom:1.75rem; }
+  .member-header__main { min-width:0; }
+  .member-header__title-row { display:flex;flex-wrap:wrap;align-items:center;gap:.65rem;margin-bottom:.5rem; }
+  .member-header h1 { margin:0;font-family:var(--font-outfit);font-size:clamp(1.9rem,3vw,2.6rem);font-weight:750;line-height:1.15;letter-spacing:-.025em;color:var(--horizon-purple-deep); }
+  .member-identity { margin:0;color:var(--horizon-muted);font-size:.92rem;overflow-wrap:anywhere; }
+  .member-header__actions { display:flex;flex-wrap:wrap;align-items:center;gap:.65rem; }
+  .status-banner { margin-bottom:1.25rem; }
+
+  .member-welcome { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:0;overflow:hidden;border-radius:1.5rem;margin-bottom:1.75rem;box-shadow:var(--horizon-shadow-soft);background:var(--horizon-lavender-soft); }
+  .member-welcome__copy { position:relative;display:grid;min-width:0;align-content:center;justify-items:start;gap:1.1rem;padding:clamp(1.5rem,3vw,3rem); }
+  .member-welcome__copy::before { content:'';position:absolute;inset:0 auto 0 0;width:5px;background:var(--horizon-gradient-brand); }
+  .member-welcome h2 { margin:0;max-width:100%;overflow-wrap:anywhere;color:var(--horizon-purple-deep);font-family:var(--font-outfit);font-size:clamp(2rem,3.7vw,3.2rem);font-weight:750;line-height:1.08;letter-spacing:-.035em; }
+  .member-welcome__copy > p { margin:0;max-width:45ch;font-size:1.02rem;line-height:1.65;color:var(--horizon-muted); }
+  .member-welcome__next { padding-top:.35rem; }
+  .member-welcome__next strong { color:var(--horizon-purple-deep);font-size:1rem; }
+  .member-welcome__next p { margin:.3rem 0 0;max-width:48ch;color:var(--horizon-muted);font-size:.94rem;line-height:1.55; }
+  .member-welcome__image { position:relative;min-width:0;min-height:23rem;margin:0; }
+  .member-welcome__image :global(.community-image) { height:100%;border-radius:0; }
+  .member-welcome__image :global(img) { width:100%;height:100%;min-height:23rem;object-fit:cover;object-position:center; }
+  .signin-community-image { width:100%;height:13rem;overflow:hidden; }
+  .signin-community-image :global(.community-image) { height:100%;border-radius:0; }
+  .signin-community-image :global(img) { height:100%;object-fit:cover; }
+
+  .member-stat-strip { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;margin:1.75rem 0; }
+  .member-stat-strip :global(.member-stat) { position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:start;justify-content:stretch;height:auto;min-height:8rem;padding:1.2rem;text-align:left;white-space:normal;border:1px solid var(--horizon-line);border-radius:1rem;background:var(--horizon-white);color:var(--horizon-purple-deep);overflow:hidden; }
+  .member-stat-strip :global(.member-stat)::before { content:'';position:absolute;inset:0 0 auto;height:4px;background:var(--horizon-purple); }
+  .member-stat-strip :global(.member-stat--vote)::before { background:var(--horizon-aqua); }
+  .member-stat-strip :global(.member-stat--discussion)::before { background:var(--horizon-magenta); }
+  .member-stat-strip :global(.member-stat--updates)::before { background:var(--horizon-blue); }
+  .member-stat-strip :global(.member-stat:hover) { background:var(--horizon-lavender-soft); }
+  .member-stat-strip :global(.member-stat__icon) { grid-column:2;grid-row:1;width:1.2rem;height:1.2rem;color:var(--horizon-purple); }
+  .member-stat__label { grid-column:1;grid-row:1;min-width:0;overflow-wrap:anywhere;align-self:center;font-size:.85rem;font-weight:600;line-height:1.4; }
+  .member-stat__bottom { grid-column:1/-1;display:flex;min-width:0;max-width:100%;align-items:baseline;justify-content:space-between;gap:.75rem; }
+  .member-stat__value { color:var(--horizon-purple-deep);font-size:1.9rem;font-weight:750;line-height:1.1;letter-spacing:-.025em; }
+  .member-stat__hint { min-width:0;max-width:min(12ch,100%);overflow-wrap:anywhere;color:var(--horizon-muted);font-size:.75rem;text-align:right;font-weight:400;line-height:1.4; }
+
+  .member-tabs { display:flex;flex-wrap:wrap;gap:.3rem .65rem;margin:0 0 1.75rem;padding-bottom:.65rem;border-bottom:1px solid var(--horizon-line); }
+  .member-tab { display:inline-flex;align-items:center;gap:.45rem;min-height:2.9rem;padding:.6rem .85rem;border-radius:.65rem;color:var(--horizon-muted);font-size:.92rem;font-weight:600;text-decoration:none; }
+  .member-tab:hover { background:var(--horizon-lavender-soft);color:var(--horizon-purple-deep); }
+  .member-tab[aria-current="page"] { background:var(--horizon-lavender);color:var(--horizon-purple-deep);box-shadow:inset 0 -3px var(--horizon-magenta); }
+  .member-tab__count { padding:.1rem .45rem;border-radius:999px;background:var(--horizon-white);font-size:.75rem;color:var(--horizon-purple-deep); }
+
+  .member-overview-grid { display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);align-items:start;gap:1.75rem; }
+  .member-col-main,.member-col-rail { min-width:0;display:grid;gap:1.75rem; }
+  .member-panel { gap:0;overflow:hidden;border-radius:1.1rem; }
+  .member-panel--padded { gap:.8rem;padding:1.5rem; }
+  .member-panel--padded h2 { margin:0;font-family:var(--font-outfit);font-size:1.15rem;font-weight:700;line-height:1.35; }
+  .member-panel--padded p { margin:0;color:var(--horizon-muted);font-size:.94rem;line-height:1.6; }
+  .member-panel--padded ul { margin:0;padding-left:1.1rem;display:grid;gap:1rem;font-size:.94rem; }
+  .member-panel--padded > :global(a[data-slot="button"]) { align-self:start; }
+  .member-panel--time { border-left:4px solid var(--horizon-blue);background:var(--horizon-blue-soft); }
+  .member-panel__head { display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:.85rem;padding:1.4rem 1.5rem;border-bottom:1px solid var(--horizon-line);background:var(--horizon-lavender-soft); }
+  .member-panel__title-row { display:flex;flex-wrap:wrap;align-items:center;gap:.65rem; }
+  .member-panel__head h2 { margin:0;font-family:var(--font-outfit);font-size:1.15rem;font-weight:700;line-height:1.35;color:var(--horizon-purple-deep); }
+  .member-panel__head p { margin:.4rem 0 0;font-size:.92rem;line-height:1.55;color:var(--horizon-muted);max-width:58ch; }
+  .member-panel__empty { margin:0;padding:1.4rem 1.5rem;font-size:.94rem;color:var(--horizon-muted); }
+  .opportunity-list { list-style:none;margin:0;padding:0; }
+  .opportunity-row { display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.2rem 1.5rem;border-bottom:1px solid var(--horizon-line); }
+  .opportunity-row:last-child { border-bottom:0; }
+  .opportunity-row:hover { background:var(--horizon-lavender-soft); }
+  .opportunity-row__body { min-width:0;display:grid;gap:.45rem; }
+  .opportunity-row__meta { display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;font-size:.78rem; }
+  .opportunity-id { font-weight:600;color:var(--horizon-muted); }
+  .opportunity-count { color:var(--horizon-muted); }
+  .opportunity-title { color:var(--horizon-purple-deep);font-size:1rem;font-weight:600;line-height:1.5;text-decoration:none; }
+  .opportunity-title:hover { text-decoration:underline;text-underline-offset:.18em; }
+  .member-panel__footer { padding:1rem 1.5rem;background:var(--horizon-lavender-soft);border-top:1px solid var(--horizon-line);font-size:.88rem;font-weight:600; }
+  .member-panel__footer a { color:var(--horizon-purple);text-underline-offset:.2em; }
+  .branch-group + .branch-group { border-top:1px solid var(--horizon-line); }
+  .branch-group__head { display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.65rem;padding:1rem 1.5rem;background:var(--horizon-lavender-soft);border-bottom:1px solid var(--horizon-line); }
+  .branch-group__head h3 { margin:0;font-family:var(--font-outfit);font-size:.95rem;font-weight:700;color:var(--horizon-purple-deep); }
+  .branch-group__head a { font-size:.83rem;color:var(--horizon-purple);text-underline-offset:.2em; }
+  .member-timeline-card { padding:1.5rem;border-radius:1.1rem; }
+  .account-settings { margin-top:.75rem; }
+  .member-footnotes { display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:1rem;margin:2rem 0; }
+  .member-footnotes > :global([data-slot='button']) { max-width:100%;white-space:normal;height:auto;min-height:2.5rem; }
+  .engage-bookmark { max-width:35rem;flex:1 1 20rem; }
+  .engage-bookmark summary { padding:.75rem 0;min-height:2.75rem;color:var(--horizon-purple);font-size:.9rem;cursor:pointer; }
+  .engage-bookmark__body { display:grid;gap:.75rem;padding:.75rem 0; }
+  .engage-bookmark__body p { margin:0;font-size:.9rem; }
+
+  @media (max-width:1080px) { .member-overview-grid { grid-template-columns:1fr; } .member-welcome { grid-template-columns:1fr 1fr; } }
+  @media (max-width:760px) {
+    .member-welcome { grid-template-columns:1fr; }
+    .member-welcome__image,.member-welcome__image :global(img) { min-height:0;height:15rem; }
+    .member-stat-strip { grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem; }
+    .member-stat-strip :global(.member-stat) { padding:1rem; }
+    .member-stat__bottom { align-items:flex-start;flex-direction:column;gap:.35rem; }
+    .member-stat__hint { max-width:100%;text-align:left; }
+    .member-tabs { gap:.25rem; }
+    .member-tab { padding:.6rem .65rem;font-size:.85rem; }
+    .member-panel__head,.opportunity-row,.branch-group__head { padding-inline:1.1rem; }
+    .opportunity-row { flex-wrap:wrap; }
   }
-
-  .member-header__main {
-    min-width: 0;
-  }
-
-  .member-header__title-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.55rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .member-header h1 {
-    margin: 0;
-    font-family: 'Newsreader', Georgia, serif;
-    font-size: clamp(1.85rem, 2.8vw, 2.4rem);
-    line-height: 1.12;
-    letter-spacing: -0.02em;
-    color: var(--horizon-ink);
-  }
-
-  .member-identity {
-    margin: 0;
-    color: var(--horizon-muted);
-    font-size: 0.9rem;
-  }
-
-  .member-header__actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .status-banner {
-    margin-bottom: 1rem;
-  }
-
-  /* Top 4-Stat Hairline Strip */
-  .member-stat-strip {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    background: #ffffff;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.65rem;
-    overflow: hidden;
-    margin-bottom: 1.15rem;
-  }
-
-  .member-stat {
-    display: grid;
-    gap: 0.35rem;
-    padding: 0.85rem 1.1rem;
-    border-right: 1px solid var(--horizon-line);
-    color: inherit;
-    text-decoration: none;
-    transition: background-color 120ms ease;
-  }
-
-  .member-stat:last-child {
-    border-right: 0;
-  }
-
-  .member-stat:hover {
-    background: var(--horizon-surface);
-  }
-
-  .member-stat__label {
-    font-size: 0.78rem;
-    font-weight: 500;
-    color: var(--horizon-muted);
-  }
-
-  .member-stat__bottom {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-
-  .member-stat__value {
-    color: var(--horizon-ink);
-    font-size: 1.45rem;
-    font-weight: 700;
-    letter-spacing: -0.025em;
-    line-height: 1.1;
-  }
-
-  .member-stat__hint {
-    color: var(--horizon-muted);
-    font-size: 0.75rem;
-    text-align: right;
-  }
-
-  /* Underline Tabs */
-  .member-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem 1.4rem;
-    margin: 0 0 1.25rem;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-
-  .member-tab {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    min-height: 2.6rem;
-    padding: 0.5rem 0.1rem;
-    color: var(--horizon-muted);
-    font-size: 0.88rem;
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .member-tab:hover {
-    color: var(--horizon-ink);
-  }
-
-  .member-tab[aria-current="page"] {
-    color: var(--horizon-ink);
-  }
-
-  .member-tab[aria-current="page"]::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    bottom: -1px;
-    left: 0;
-    height: 2px;
-    background: var(--horizon-ink);
-  }
-
-  .member-tab__count {
-    padding: 0.05rem 0.4rem;
-    border-radius: 999px;
-    background: var(--horizon-surface);
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: var(--horizon-muted);
-  }
-
-  /* 2-Column Dashboard Grid */
-  .member-overview-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-    align-items: start;
-    gap: 1.25rem;
-  }
-
-  .member-col-main,
-  .member-col-rail {
-    min-width: 0;
-    display: grid;
-    gap: 1.25rem;
-  }
-
-  /* Participation Opportunities & Branch Panels */
-  .member-panel {
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.65rem;
-    background: #ffffff;
-    overflow: hidden;
-  }
-
-  .member-panel__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 1rem 1.25rem 0.85rem;
-    border-bottom: 1px solid var(--horizon-line);
-    background: var(--horizon-surface);
-  }
-
-  .member-panel__title-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .member-panel__head h2 {
-    margin: 0;
-    font-family: 'Newsreader', Georgia, serif;
-    font-size: 1.3rem;
-    line-height: 1.2;
-    color: var(--horizon-ink);
-  }
-
-  .member-panel__head p {
-    margin: 0.25rem 0 0;
-    font-size: 0.84rem;
-    color: var(--horizon-muted);
-    max-width: 58ch;
-  }
-
-  .member-panel__empty {
-    margin: 0;
-    padding: 1.15rem 1.25rem;
-    font-size: 0.86rem;
-    color: var(--horizon-muted);
-  }
-
-  .opportunity-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .opportunity-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.85rem;
-    padding: 0.75rem 1.25rem;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-
-  .opportunity-row:last-child {
-    border-bottom: 0;
-  }
-
-  .opportunity-row:hover {
-    background: #fafbff;
-  }
-
-  .opportunity-row__body {
-    min-width: 0;
-    display: grid;
-    gap: 0.18rem;
-  }
-
-  .opportunity-row__meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.75rem;
-  }
-
-  .opportunity-id {
-    font-weight: 700;
-    color: var(--horizon-muted);
-  }
-
-  .opportunity-space {
-    padding: 0.08rem 0.42rem;
-    border-radius: 0.28rem;
-    background: var(--horizon-surface);
-    border: 1px solid var(--horizon-line);
-    color: var(--horizon-ink);
-    font-weight: 600;
-  }
-
-  .opportunity-count {
-    color: var(--horizon-muted);
-  }
-
-  .opportunity-title {
-    color: var(--horizon-ink);
-    font-size: 0.92rem;
-    font-weight: 600;
-    line-height: 1.35;
-    text-decoration: none;
-  }
-
-  .opportunity-title:hover {
-    color: var(--horizon-purple);
-    text-decoration: underline;
-  }
-
-  .member-panel__footer {
-    padding: 0.65rem 1.25rem;
-    background: var(--horizon-surface);
-    border-top: 1px solid var(--horizon-line);
-    font-size: 0.82rem;
-    font-weight: 600;
-  }
-
-  .member-panel__footer a {
-    color: var(--horizon-ink);
-    text-decoration: none;
-  }
-
-  .member-panel__footer a:hover {
-    color: var(--horizon-purple);
-    text-decoration: underline;
-  }
-
-  .branch-group + .branch-group {
-    border-top: 1px solid var(--horizon-line);
-  }
-
-  .branch-group__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.75rem 1.25rem 0.5rem;
-    background: #fafbff;
-    border-bottom: 1px solid var(--horizon-line);
-  }
-
-  .branch-group__head h3 {
-    margin: 0;
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: var(--horizon-ink);
-  }
-
-  .branch-group__head a {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--horizon-purple);
-    text-decoration: none;
-  }
-
-  .member-timeline-card {
-    padding: 1.25rem;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.65rem;
-    background: #ffffff;
-  }
-
-  .account-settings {
-    margin-top: 0.5rem;
-  }
-
-  @media (max-width: 1080px) {
-    .member-overview-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 760px) {
-    .member-stat-strip {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .member-stat:nth-child(2) {
-      border-right: 0;
-    }
-
-    .member-stat:nth-child(-n + 2) {
-      border-bottom: 1px solid var(--horizon-line);
-    }
-
-    .member-panel__head,
-    .opportunity-row,
-    .branch-group__head {
-      padding-inline: 1rem;
-    }
-  }
-</style>
-
-
-
-<style>
-.lifecycle-card {padding:1.5rem;border:1px solid var(--border,#d9cfe6);border-radius:1rem;margin-block:1.5rem;background:var(--card,#fff);color:var(--foreground,#271047)}
-.lifecycle-card h2 {font-family:Newsreader,Georgia,serif;font-size:2rem;line-height:1.2}
-.lifecycle-card p {margin-block:.75rem}
-.engage-bookmark {margin-top:1.5rem;display:flex;flex-wrap:wrap;gap:.75rem;align-items:center}
-.engage-bookmark label {flex-basis:100%}
-.engage-bookmark input {min-width:0;width:100%;max-width:30rem;padding:.75rem;border:1px solid #89769e;border-radius:.4rem;background:transparent}
-.engage-bookmark button {padding:.75rem 1rem;border:1px solid #89769e;border-radius:.4rem}
 </style>

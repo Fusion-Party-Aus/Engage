@@ -2,13 +2,14 @@
 import { BookOpen, FilePenLine, Gavel } from 'lucide-react';
 import type { MemberCatchUpItem } from '../../lib/member-activity.ts';
 import { Badge } from '../ui/badge';
-import { Card } from '../ui/card';
+import Card from '../admin/Card.astro';
 
 interface Props {
   items: MemberCatchUpItem[];
+  idPrefix?: string;
 }
 
-const { items } = Astro.props;
+const { items, idPrefix = 'governance-log' } = Astro.props;
 const icons = {
   amendment: FilePenLine,
   decision: Gavel,
@@ -30,10 +31,10 @@ const badgeVariant = (badge?: string) => {
 };
 ---
 
-<Card className="governance-log" aria-labelledby="governance-log-heading">
+<Card class="governance-log" aria-labelledby={`${idPrefix}-heading`}>
   <div class="log-head">
     <div>
-      <h2 id="governance-log-heading">Decisions &amp; wording changes</h2>
+      <h2 id={`${idPrefix}-heading`}>Decisions &amp; wording changes</h2>
       <p class="log-lead">Follow recorded outcomes, amendments and policy publication on proposals you’re involved in.</p>
     </div>
     <Badge variant="muted">{items.length}</Badge>
@@ -69,6 +70,8 @@ const badgeVariant = (badge?: string) => {
 <style>
   .governance-log {
     padding: 0;
+    gap: 0;
+    border-radius: 1.1rem;
     overflow: hidden;
   }
 
@@ -78,9 +81,9 @@ const badgeVariant = (badge?: string) => {
     align-items: flex-start;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 1rem 1.25rem 0.85rem;
+    padding: 1.4rem 1.5rem;
     border-bottom: 1px solid var(--horizon-line);
-    background: var(--horizon-surface);
+    background: var(--horizon-blue-soft);
   }
 
   .log-head > div {
@@ -90,16 +93,17 @@ const badgeVariant = (badge?: string) => {
   .log-head h2 {
     margin: 0;
     color: var(--horizon-ink);
-    font-family: 'Newsreader', Georgia, serif;
-    font-size: 1.3rem;
+    font-family: var(--font-outfit);
+    font-size: 1.15rem;
+    font-weight: 700;
     line-height: 1.2;
   }
 
   .log-lead {
     margin: 0.25rem 0 0;
     color: var(--horizon-muted);
-    font-size: 0.84rem;
-    line-height: 1.45;
+    font-size: 0.92rem;
+    line-height: 1.6;
   }
 
   .log-empty {
@@ -158,7 +162,7 @@ const badgeVariant = (badge?: string) => {
     gap: 0.3rem;
     color: var(--horizon-muted);
     font-size: 0.88rem;
-    line-height: 1.45;
+    line-height: 1.6;
   }
 
   .log-line strong {

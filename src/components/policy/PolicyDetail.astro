@@ -1,5 +1,6 @@
 ---
 import PortableText from '../PortableText.astro';
+import CivicIntro from '../site/CivicIntro.astro';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -49,7 +50,7 @@ const formatDate = (value: unknown) => value ? new Date(String(value)).toLocaleD
     {branchSlug && <a href={`/policies/${encodeURIComponent(branchSlug)}/`}>{branch?.name ?? 'Branch'}</a>}
   </nav>
 
-  <header class="policy-detail__header">
+  <CivicIntro eyebrow="Policy record" tone="aqua">
     <div class="policy-detail__status">
       <Badge variant={policyStatusVariant(String(policy.publicationStatus))}>{policyStatusLabel(String(policy.publicationStatus))}</Badge>
       {pillar && <span>{pillar}</span>}
@@ -83,7 +84,7 @@ const formatDate = (value: unknown) => value ? new Date(String(value)).toLocaleD
         <span>Repealed {formatDate(policy.repealedAt) ? `on ${formatDate(policy.repealedAt)}` : ''}. It no longer applies.</span>
       </div>
     ) : null}
-  </header>
+  </CivicIntro>
 
   {imported && (
     <p class="policy-origin">
@@ -198,13 +199,11 @@ const formatDate = (value: unknown) => value ? new Date(String(value)).toLocaleD
 </div>
 
 <style>
-  .policy-detail { display:grid; gap:1.25rem; max-width:58rem; }
+  .policy-detail { display:grid; gap:1.5rem; max-width:62rem; }
   .policy-breadcrumb { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; color:var(--horizon-muted); font-size:.88rem; }
   .policy-breadcrumb a { color:var(--horizon-muted); text-decoration:none; }
   .policy-breadcrumb a:hover { color:var(--horizon-purple); text-decoration:underline; text-underline-offset:.18em; }
-  .policy-detail__header { border-bottom:1px solid var(--horizon-line); padding-bottom:1.5rem; }
   .policy-detail__status { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; color:var(--horizon-muted); font-size:.9rem; }
-  .policy-detail h1 { margin:.6rem 0 .8rem; font:600 clamp(2rem,5vw,3.5rem)/1.1 Newsreader,Georgia,serif; color:var(--horizon-purple); overflow-wrap:anywhere; }
   .policy-summary { max-width:48rem; font-size:1.15rem; line-height:1.6; }
   .policy-facts { display:flex; flex-wrap:wrap; gap:1rem 2rem; margin-top:1.5rem; }
   .policy-facts span { display:grid; gap:.25rem; }

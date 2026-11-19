@@ -1,5 +1,6 @@
 ---
 import SiteLayout from '../../../layouts/SiteLayout.astro';
+import CivicIntro from '../../../components/site/CivicIntro.astro';
 import PortableText from '../../../components/PortableText.astro';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
@@ -190,8 +191,7 @@ const ruleLabel = (basis: string | null) =>
           </a>
         </nav>
 
-        <header class="grid gap-3">
-          <p class="text-sm font-semibold text-muted-foreground">Decision record</p>
+        <CivicIntro eyebrow="Decision record" tone="aqua">
           <h1 class="font-heading text-3xl leading-tight text-foreground sm:text-4xl">{record.matter.title}</h1>
           <div class="flex flex-wrap items-center gap-2">
             <Badge variant="outline">{record.matter.matterType === 'resolution' ? 'Governance resolution' : 'Policy proposal'}</Badge>
@@ -202,7 +202,7 @@ const ruleLabel = (basis: string | null) =>
               </Badge>
             )}
           </div>
-        </header>
+        </CivicIntro>
       </div>
 
       <!-- Outcome -->

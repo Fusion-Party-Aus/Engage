@@ -1,0 +1,34 @@
+---
+interface Props {
+  scene?: 'hero' | 'community';
+  priority?: boolean;
+  sizes?: string;
+  caption?: boolean;
+}
+
+const { scene = 'community', priority = false, sizes = '(min-width: 900px) 50vw, 100vw', caption = true } = Astro.props;
+const name = scene === 'hero' ? 'community-hero' : 'australian-community';
+const alt = scene === 'hero'
+  ? 'Illustration of eight Australian adults of different ages together among gum trees near Parliament House in Canberra.'
+  : 'Illustration of Australian neighbours sharing ideas around a table outside a regional community hall.';
+---
+<figure class="community-image">
+  <img
+    src={`/images/${name}-800.webp`}
+    srcset={`/images/${name}-480.webp 480w, /images/${name}-800.webp 800w, /images/${name}.webp 1536w`}
+    sizes={sizes}
+    width="1536"
+    height="1024"
+    alt={alt}
+    loading={priority ? 'eager' : 'lazy'}
+    fetchpriority={priority ? 'high' : 'auto'}
+    decoding="async"
+  />
+  {caption && <figcaption>Illustration · fictional people</figcaption>}
+</figure>
+<style>
+  .community-image { margin: 0; position: relative; min-width: 0; overflow: hidden; border-radius: 1.5rem; }
+  img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; }
+  figcaption { position: absolute; right: .75rem; bottom: .75rem; max-width: calc(100% - 1.5rem); padding: .3rem .6rem; border-radius: .5rem; color: var(--horizon-purple-deep); background: var(--horizon-white); font-size: .7rem; line-height: 1.35; }
+  @media (prefers-reduced-transparency: reduce) { figcaption { background: var(--horizon-white); } }
+</style>

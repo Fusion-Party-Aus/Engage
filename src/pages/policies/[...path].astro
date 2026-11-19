@@ -1,5 +1,6 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import CivicIntro from '../../components/site/CivicIntro.astro';
 import PolicyDetail from '../../components/policy/PolicyDetail.astro';
 import PolicyRegistry from '../../components/policy/PolicyRegistry.astro';
 import { Button } from '../../components/ui/button';
@@ -154,10 +155,9 @@ const sourceHref = branch?.websiteHref
     canonical={basePath}
   >
     <div class="page-wrap section-space policy-page">
-      <Button href="/policies/" variant="ghost" size="sm">← All policy</Button>
+      <Button href="/policies/" variant="ghost" size="sm" className="mb-5">← All policy</Button>
 
-      <header class="policy-intro">
-        <p class="policy-intro__eyebrow">{branchLabel}</p>
+      <CivicIntro eyebrow={branchLabel} tone="aqua">
         <h1>{showHistory ? 'Past policy records' : 'Policy'}</h1>
         <p>{showHistory
           ? `Withdrawn, superseded and repealed ${branchLabel} records. They are not current policy.`
@@ -168,7 +168,7 @@ const sourceHref = branch?.websiteHref
           <Button href={tabHref(false)} variant={!showHistory ? 'default' : 'ghost'} size="sm">Current policy <span class="tabular">{currentCount}</span></Button>
           <Button href={tabHref(true)} variant={showHistory ? 'default' : 'ghost'} size="sm">Past records <span class="tabular">{pastCount}</span></Button>
         </nav>
-      </header>
+      </CivicIntro>
 
       <PolicyRegistry
         sections={sections}
@@ -206,10 +206,6 @@ const sourceHref = branch?.websiteHref
 
 <style>
   .policy-page { max-width:84rem; }
-  .policy-intro { max-width:64rem; margin:1rem 0 2rem; }
-  .policy-intro__eyebrow { margin:0; color:var(--horizon-muted); font-size:.8rem; font-weight:650; letter-spacing:.06em; text-transform:uppercase; }
-  .policy-intro h1 { margin:.3rem 0 .65rem; font:700 clamp(2.1rem,3.5vw,3.2rem)/1.1 Outfit,sans-serif; color:var(--horizon-purple); }
-  .policy-intro > p:not(.policy-intro__eyebrow) { color:var(--horizon-muted); line-height:1.65; max-width:70ch; }
   .registry-tabs { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.5rem; }
   .registry-tabs :global(.tabular) { margin-left:.4rem; opacity:.7; font-size:.82em; }
   .registry-footnote { display:flex; flex-wrap:wrap; gap:.5rem .8rem; margin:2.5rem 0 0; color:var(--horizon-muted); font-size:.85rem; }
