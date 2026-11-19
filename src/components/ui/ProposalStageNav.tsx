@@ -1,4 +1,6 @@
-import { buttonVariants } from './button';
+import { Compass, Lightbulb, MessageCircle, Vote, Flag } from 'lucide-react';
+import { Button } from './button';
+import { Badge } from './badge';
 import { cn } from '@/lib/utils';
 
 type Stage = 'all' | 'propose' | 'deliberate' | 'decide' | 'implement';
@@ -16,6 +18,14 @@ const options: Array<[Stage, string]> = [
   ['implement', 'Implement'],
 ];
 
+const cues = {
+  all: { icon: Compass, colour: 'text-[var(--horizon-purple)]' },
+  propose: { icon: Lightbulb, colour: 'text-[var(--horizon-violet)]' },
+  deliberate: { icon: MessageCircle, colour: 'text-[var(--horizon-magenta)]' },
+  decide: { icon: Vote, colour: 'text-[var(--horizon-voting-ink)]' },
+  implement: { icon: Flag, colour: 'text-[var(--horizon-focus)]' },
+};
+
 const hrefFor = (stage: Stage, space: string) => {
   const params = new URLSearchParams();
   if (stage !== 'all') params.set('stage', stage);
@@ -25,18 +35,22 @@ const hrefFor = (stage: Stage, space: string) => {
 
 export default function ProposalStageNav({ active, space, counts }: Props) {
   return (
-    <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-2" aria-label="Filter proposals by stage">
-      {options.map(([stage, label]) => (
-        <a
+    <nav className="flex flex-wrap items-center gap-2 border-b border-border pb-4" aria-label="Filter proposals by stage">
+      {options.map(([stage, label]) => {
+        const { icon: Icon, colour } = cues[stage];
+        return <Button
           key={stage}
-          className={cn(buttonVariants({ variant: active === stage ? 'secondary' : 'ghost', size: 'sm' }), 'gap-2')}
+          variant={active === stage ? 'secondary' : 'ghost'}
+          size="sm"
+          className={cn('min-h-11 gap-2 rounded-full', active === stage && 'ring-1 ring-[var(--horizon-purple)]')}
           href={hrefFor(stage, space)}
           aria-current={active === stage ? 'page' : undefined}
         >
+          <Icon className={cn('size-4', colour)} aria-hidden="true" />
           {label}
-          <span className="rounded-full bg-background/70 px-1.5 py-0.5 text-[.7rem] font-bold tabular-nums">{counts[stage]}</span>
-        </a>
-      ))}
+          <Badge variant="outline" className="bg-background text-xs tabular-nums">{counts[stage]}</Badge>
+        </Button>;
+      })}
     </nav>
   );
 }

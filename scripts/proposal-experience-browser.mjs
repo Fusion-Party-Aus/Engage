@@ -53,11 +53,14 @@ if(version==='after') {
 await page.locator('astro-island[component-url*="ProposalBallot"]:not([ssr])').waitFor();
 await page.getByRole('radio',{name:'Approve',exact:true}).click();
 if(version==='after') {
- await page.route('**/api/votes',route=>route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:"Couldn't save vote. Try again."})}),{times:1});
+ await page.route('**/api/votes',route=>route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:"Couldn't save vote. Try again."})}),{times:1});
+ await page.getByRole('button',{name:'Review vote',exact:true}).click();
  await page.getByRole('button',{name:'Record vote',exact:true}).click();
  await page.getByRole('alert').filter({hasText:"Couldn't save vote"}).waitFor();
+ await page.getByRole('button',{name:'Edit choice',exact:true}).click();
  assert.equal(await page.getByRole('radio',{name:'Approve',exact:true}).getAttribute('aria-checked'),'true');
 }
+if(version==='after') await page.getByRole('button',{name:'Review vote',exact:true}).click();
 await page.getByRole('button',{name:'Record vote',exact:true}).click();
 await page.getByText(version==='after'?'Vote saved: Approve':'Vote recorded (Approve).',{exact:true}).waitFor();
 if(version==='after') {
@@ -66,7 +69,9 @@ if(version==='after') {
 }
 await page.locator('#proposal-vote').evaluate(e=>window.scrollTo(0,e.getBoundingClientRect().top+scrollY-125));await shot('ballot-after');
 await go(link+'#proposal-vote');await shot('ballot-review');
-await page.getByRole('radio',{name:'Reject',exact:true}).click();await page.getByRole('button',{name:'Update vote',exact:true}).click();
+await page.getByRole('radio',{name:'Reject',exact:true}).click();
+if(version==='after') await page.getByRole('button',{name:'Review update',exact:true}).click();
+await page.getByRole('button',{name:'Update vote',exact:true}).click();
 await page.getByText(version==='after'?'Vote saved: Reject':'Vote recorded (Reject).',{exact:true}).waitFor();
 const saved=await context.request.get(origin+'/api/proposals/'+link.split('/')[2]);assert.equal((await saved.json()).myVote,'reject');
 results.push({version,device,errors,voteSaved:true,voteUpdated:true});assert.deepEqual(errors,[]);

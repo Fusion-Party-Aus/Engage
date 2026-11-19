@@ -30,10 +30,11 @@ try {
   await page.screenshot({path:path.join(output,`signin-${device}.png`),fullPage:true});
   await context.addCookies([{name:'engage_dev_user',value:'member',url:origin}]);
   await page.goto(origin+'/member/',{waitUntil:'networkidle'});
+  await page.locator('.engage-bookmark > summary').click();
   await page.locator('#copy-engage-url').click();
   await page.locator('#copy-engage-status').filter({hasText:'Engage URL copied.'}).waitFor();
   assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),origin+'/member/');
-  assert.ok(await page.locator('.lifecycle-card').evaluate(el=>el.scrollWidth<=el.clientWidth+1),'Lifecycle card overflows viewport');
+  assert.ok(await page.locator('.member-welcome').evaluate(el=>el.scrollWidth<=el.clientWidth+1),'Member welcome overflows viewport');
   await page.screenshot({path:path.join(output,`my-engage-${device}.png`),fullPage:true});
   await page.goto(origin+'/member/?view=notifications',{waitUntil:'networkidle'});
   await page.getByRole('heading',{name:'Notifications',exact:true}).waitFor();

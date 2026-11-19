@@ -227,7 +227,8 @@ try {
   });
 
   await memberPage.locator('[data-choice="approve"]').click();
-  await memberPage.getByRole("button", { name: "Record vote" }).click();
+  await memberPage.getByRole("button", { name: "Review vote", exact: true }).click();
+  await memberPage.getByRole("button", { name: "Record vote", exact: true }).click();
   await memberPage.getByText("Recorded: Approve").waitFor();
   let vote = await db.collection("proposal_votes").findOne({
     proposalId,
@@ -236,7 +237,8 @@ try {
   assert.equal(vote.choice, "approve");
 
   await memberPage.locator('[data-choice="reject"]').click();
-  await memberPage.getByRole("button", { name: "Update vote" }).click();
+  await memberPage.getByRole("button", { name: "Review update", exact: true }).click();
+  await memberPage.getByRole("button", { name: "Update vote", exact: true }).click();
   await memberPage.getByText("Recorded: Reject").waitFor();
   // Wait for the mutation to persist before reading the database.
   for (let attempt = 0; attempt < 40; attempt++) {
