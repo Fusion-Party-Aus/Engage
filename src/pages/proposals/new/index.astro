@@ -1,4 +1,5 @@
 ---
+import CivicIntro from '../../../components/site/CivicIntro.astro';
 import SiteLayout from '../../../layouts/SiteLayout.astro';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
@@ -154,7 +155,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
 >
   <div class="page-wrap section-space compose-page">
     <Button href="/proposals/" variant="ghost" size="sm">← Browse proposals</Button>
-    <header class="compose-header">
+    <CivicIntro eyebrow="Develop an idea" tone="purple">
       <div class="compose-header__top">
         <h1>{isPolicyChange ? 'Propose a change to this policy' : 'Suggest an idea'}</h1>
         <Badge variant="info">{isPolicyChange ? 'Policy change' : 'New proposal'}</Badge>
@@ -162,7 +163,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
       <p>{isPolicyChange
         ? 'Members can propose changes to existing Fusion policies, including removing them entirely.'
         : 'Explain what you want Fusion to do and why. Another verified member must second your proposal before it moves into discussion.'}</p>
-    </header>
+    </CivicIntro>
 
     {isPolicyChange && (
       <section class="policy-change-context" aria-label="Current policy">
@@ -657,7 +658,7 @@ const signInReturnTo = `${Astro.url.pathname}${Astro.url.search}`;
 
   h1 {
     margin: 0;
-    font: 600 clamp(2.1rem, 4vw, 2.8rem)/1.08 Newsreader, Georgia, serif;
+    font: 600 clamp(2.1rem, 4vw, 2.8rem)/1.08 var(--font-outfit);
   }
 
   .compose-header p {

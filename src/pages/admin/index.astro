@@ -297,7 +297,7 @@ const attentionCount = attentionGroups.reduce((total, group) => total + group.co
               {attentionGroups.length ? (
                 <ul class="divide-y m-0 list-none p-0">
                   {attentionGroups.map((group) => (
-                    <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                    <li class="flex flex-col items-start justify-between gap-3 px-5 py-4 sm:flex-row sm:items-center">
                       <div class="grid min-w-0 flex-1 gap-1">
                         <div class="flex flex-wrap items-center gap-2 text-sm">
                           <Badge variant={group.tone}>

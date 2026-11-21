@@ -1,5 +1,6 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import CivicIntro from '../../components/site/CivicIntro.astro';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
@@ -146,10 +147,9 @@ const formatDateHeading = (isoDate: string) => {
   canonical="/changelog/"
 >
   <div class="page-wrap section-space changelog-page">
-    <header class="changelog-hero">
+    <CivicIntro eyebrow="Changes to Engage">
       <div class="changelog-hero__top">
         <div>
-          <span class="changelog-eyebrow">Changes to Engage</span>
           <h1>Changelog</h1>
           <p class="changelog-lead">
             Read recent changes to Engage, from new features to fixes and improvements. The source repository holds the full development history.
@@ -178,18 +178,19 @@ const formatDateHeading = (isoDate: string) => {
           const isCurrent = activeCategory === tab.id;
           const href = tab.id === 'all' ? '/changelog/' : `/changelog/?category=${tab.id}`;
           return (
-            <a
+            <Button
               href={href}
-              class:list={['changelog-tab', { 'is-active': isCurrent }]}
+              variant={isCurrent ? 'secondary' : 'outline'}
+              size="sm"
               aria-current={isCurrent ? 'page' : undefined}
             >
               <span>{tab.label}</span>
               <span class="changelog-tab__count tabular">{tab.count}</span>
-            </a>
+            </Button>
           );
         })}
       </nav>
-    </header>
+    </CivicIntro>
 
     {groupedByDate.size === 0 ? (
       <div class="changelog-empty">
@@ -244,15 +245,6 @@ const formatDateHeading = (isoDate: string) => {
     padding-bottom: 4rem;
   }
 
-  .changelog-hero {
-    background: #ffffff;
-    border: 1px solid var(--horizon-line);
-    border-radius: 1rem;
-    padding: clamp(1.35rem, 2.5vw, 2rem);
-    margin-bottom: 1.5rem;
-    box-shadow: 0 2px 10px rgba(29, 10, 73, 0.03);
-  }
-
   .changelog-hero__top {
     display: flex;
     flex-wrap: wrap;
@@ -260,19 +252,6 @@ const formatDateHeading = (isoDate: string) => {
     justify-content: space-between;
     gap: 1rem 1.5rem;
     margin-bottom: 1.25rem;
-  }
-
-  .changelog-eyebrow {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--horizon-purple);
-    margin-bottom: 0.3rem;
-  }
-
-  .changelog-hero h1 {
-    margin: 0 0 0.5rem;
-    font-size: clamp(2rem, 3.5vw, 2.65rem);
   }
 
   .changelog-lead {
@@ -297,31 +276,6 @@ const formatDateHeading = (isoDate: string) => {
     border-top: 1px solid var(--horizon-line);
   }
 
-  .changelog-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.38rem 0.75rem;
-    border-radius: 999px;
-    border: 1px solid var(--horizon-line);
-    background: #faf9fd;
-    color: var(--horizon-muted);
-    font-size: 0.82rem;
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .changelog-tab:hover {
-    color: var(--horizon-purple-deep);
-    border-color: #b7a2df;
-  }
-
-  .changelog-tab.is-active {
-    background: var(--horizon-purple);
-    border-color: var(--horizon-purple);
-    color: #ffffff;
-  }
-
   .changelog-tab__count {
     font-size: 0.74rem;
     opacity: 0.85;
@@ -329,14 +283,12 @@ const formatDateHeading = (isoDate: string) => {
 
   .changelog-timeline {
     display: grid;
-    gap: 1.5rem;
+    gap: 2rem;
   }
 
   .changelog-day {
-    background: #ffffff;
-    border: 1px solid var(--horizon-line);
-    border-radius: 1rem;
-    padding: clamp(1.15rem, 2vw, 1.65rem);
+    border-top: 3px solid var(--horizon-aqua);
+    padding: clamp(1.15rem, 2vw, 1.65rem) 0;
   }
 
   .changelog-day__header {
@@ -375,8 +327,7 @@ const formatDateHeading = (isoDate: string) => {
     gap: 0.85rem;
     padding: 0.7rem 0.85rem;
     border-radius: 0.7rem;
-    background: #faf9fd;
-    border: 1px solid var(--horizon-line);
+    background: var(--horizon-lavender-soft);
   }
 
   .changelog-item__meta {
@@ -424,7 +375,7 @@ const formatDateHeading = (isoDate: string) => {
 
   .changelog-empty {
     padding: 2rem;
-    background: #ffffff;
+    background: var(--horizon-lavender-soft);
     border: 1px solid var(--horizon-line);
     border-radius: 1rem;
     text-align: center;

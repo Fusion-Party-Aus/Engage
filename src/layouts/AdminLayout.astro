@@ -1,6 +1,8 @@
 ---
 import SiteLayout from './SiteLayout.astro';
+import PageHelp from '../components/site/PageHelp.astro';
 import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
 import {
   BarChart3,
   BookOpen,
@@ -125,9 +127,9 @@ const roleLabel = roleLabels.join(' · ') || 'Moderator';
     <aside id="admin-sidebar" class="admin-sidebar" aria-label="Administration navigation">
       <div class="admin-sidebar__header">
         <a href="/admin/" class="admin-brand">
-          <span class="admin-brand__mark" aria-hidden="true"><ShieldCheck className="size-5" /></span>
+          <span class="admin-brand__mark" aria-hidden="true"><img src="/fusion_horizon_logo_light.svg" alt="" width="40" height="40" /></span>
           <span class="admin-brand__text">
-            <strong>Engage</strong>
+            <strong>Fusion <span>Engage</span></strong>
             <small>Administration</small>
           </span>
         </a>
@@ -224,12 +226,13 @@ const roleLabel = roleLabels.join(' · ') || 'Moderator';
           </nav>
         </div>
         <div class="admin-topbar__right">
-          <span class="admin-role">{roleLabel}</span>
-          <a href="/member/" class="admin-avatar-link" aria-label="Open member account">{initials}</a>
+          <Badge variant="outline" className="admin-role">{roleLabel}</Badge>
+          <Button href="/member/" variant="secondary" size="icon" className="admin-avatar-link" aria-label="Open member account">{initials}</Button>
         </div>
       </header>
 
       <div class="admin-content">
+        <PageHelp path={Astro.url.pathname} compact />
         {!hideIntro && (
           <header class="admin-intro">
             <h1>{title}</h1>
@@ -244,6 +247,7 @@ const roleLabel = roleLabels.join(' · ') || 'Moderator';
   <script>
     const shell = document.querySelector<HTMLElement>('[data-admin-shell]');
     const trigger = document.querySelector<HTMLButtonElement>('[data-sidebar-toggle]');
+    const sidebar = document.querySelector<HTMLElement>('#admin-sidebar');
     const scrim = document.querySelector<HTMLElement>('[data-sidebar-scrim]');
     const closeButton = document.querySelector<HTMLButtonElement>('[data-sidebar-close]');
     const desktop = window.matchMedia('(min-width: 1024px)');
@@ -252,16 +256,19 @@ const roleLabel = roleLabels.join(' · ') || 'Moderator';
       document.body.classList.toggle('admin-nav-open', locked);
     };
 
-    const closeMobile = () => {
+    const closeMobile = (restoreFocus = false) => {
       if (!shell || !trigger) return;
+      const wasOpen = shell.dataset.sidebarOpen === 'true';
       shell.dataset.sidebarOpen = 'false';
       trigger.setAttribute('aria-expanded', 'false');
       if (scrim) scrim.hidden = true;
       setBodyLock(false);
+      if (restoreFocus && wasOpen) trigger.focus();
     };
 
     const sync = () => {
       if (!shell || !trigger) return;
+      const focusInSidebar = sidebar?.contains(document.activeElement);
       if (desktop.matches) {
         const collapsed = localStorage.getItem('admin-sidebar-collapsed') === 'true';
         shell.dataset.sidebarCollapsed = String(collapsed);
@@ -269,9 +276,11 @@ const roleLabel = roleLabels.join(' · ') || 'Moderator';
         trigger.setAttribute('aria-expanded', String(!collapsed));
         if (scrim) scrim.hidden = true;
         setBodyLock(false);
+        if (document.activeElement === closeButton) trigger.focus();
       } else {
         shell.dataset.sidebarCollapsed = 'false';
         closeMobile();
+        if (focusInSidebar) trigger.focus();
       }
     };
 
@@ -284,17 +293,47 @@ const roleLabel = roleLabels.join(' · ') || 'Moderator';
         trigger.setAttribute('aria-expanded', String(!collapsed));
       } else {
         const open = shell.dataset.sidebarOpen !== 'true';
-        shell.dataset.sidebarOpen = String(open);
-        trigger.setAttribute('aria-expanded', String(open));
-        if (scrim) scrim.hidden = !open;
-        setBodyLock(open);
+        if (open) {
+          shell.dataset.sidebarOpen = 'true';
+          trigger.setAttribute('aria-expanded', 'true');
+          if (scrim) scrim.hidden = false;
+          setBodyLock(true);
+          closeButton?.focus();
+        } else {
+          closeMobile(true);
+        }
       }
     });
 
-    closeButton?.addEventListener('click', closeMobile);
-    scrim?.addEventListener('click', closeMobile);
+    closeButton?.addEventListener('click', () => closeMobile(true));
+    scrim?.addEventListener('click', () => closeMobile(true));
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeMobile();
+      if (desktop.matches || shell?.dataset.sidebarOpen !== 'true') return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMobile(true);
+        return;
+      }
+      if (event.key !== 'Tab' || !sidebar) return;
+      const focusable = [...sidebar.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
+      )].filter((element) => {
+        if (element.tabIndex < 0 || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden' || element.closest('[hidden], [inert]')) return false;
+        for (let parent = element.parentElement; parent && parent !== sidebar; parent = parent.parentElement) {
+          if (parent instanceof HTMLDetailsElement && !parent.open && !parent.querySelector(':scope > summary')?.contains(element)) return false;
+        }
+        return true;
+      });
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && (document.activeElement === first || !sidebar.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !sidebar.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     });
     desktop.addEventListener('change', sync);
     sync();

@@ -1,4 +1,5 @@
 ---
+import CivicIntro from '../../components/site/CivicIntro.astro';
 import { getSessionUser } from '../../lib/auth.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { STANDARD_BRANCHES } from '../../lib/migrations.ts';
@@ -40,11 +41,10 @@ const pageHref = (page: number) => {
 ---
 <SiteLayout title="Sense Box · Engage" description="Share a concern, suggestion or local priority with Fusion. Read and discuss priorities published by your branch." canonical="/sense-box/">
   <div class="page-wrap section-space sense-page">
-    <header class="page-intro">
-      <p class="text-sm font-semibold uppercase tracking-widest">Sense Box</p>
+    <CivicIntro eyebrow="Sense Box" tone="pink" image>
       <h1>What matters where you live?</h1>
       <p>Share a concern, suggestion or idea with Fusion. You can contribute without being a member. Organisers review every submission before deciding whether to publish it.</p>
-    </header>
+    </CivicIntro>
     <div class="sense-layout">
       <section aria-label="Share your priority">
         {branches.length

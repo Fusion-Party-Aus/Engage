@@ -1,0 +1,137 @@
+---
+import { ChevronDown, CircleHelp } from 'lucide-react';
+
+interface Props {
+  path: string;
+  compact?: boolean;
+}
+
+const { path, compact = false } = Astro.props;
+const routePath = path.endsWith('/') ? path : `${path}/`;
+
+// These explanations describe existing workflows and authority boundaries.
+// They are reviewed UI guidance, not configurable governance rules.
+const guides = [
+  { prefix: '/admin/ballots', label: 'Ballots & decisions', text: 'Check the matter, bound wording and closing state before taking action. A tally, a certified result and published policy are separate records.' },
+  { prefix: '/admin/proposals', label: 'Proposal administration', text: 'Use the controls available to your role to review wording, amendments and the decision record. Check the originating branch, jurisdiction and authority before a formal action.' },
+  { prefix: '/admin/policies', label: 'Policy administration', text: 'Review the approved wording and its decision record. Ratifying, publishing, withdrawing and superseding policy are separate recorded actions.' },
+  { prefix: '/admin/members', label: 'Member administration', text: 'Find the member and check their membership and branch status before acting. Signing in and being eligible to vote are different states.' },
+  { prefix: '/admin/roles', label: 'Roles & permissions', text: 'Check the person, permission and branch scope before saving a change. Administrative access does not create voting eligibility.' },
+  { prefix: '/admin/branches', label: 'Branch administration', text: 'Review branch details, membership and assigned responsibilities. Following a branch and membership of that branch have different purposes.' },
+  { prefix: '/admin/sense-box', label: 'Sense Box review', text: 'Review the priority and its publication consent. Private submissions and internal notes must remain private unless an authorised publication action makes the permitted content public.' },
+  { prefix: '/admin/collaboration', label: 'Collaboration review', text: 'Review contributions, image permissions and publication consent. Approval and publication are distinct steps; preserve the contributor’s correction and withdrawal choices.' },
+  { prefix: '/admin/responsibilities', label: 'Your responsibilities', text: 'Start with the work assigned to your role. Open the relevant matter to check its current state and the actions you are authorised to take.' },
+  { prefix: '/admin/reports', label: 'Reports', text: 'Choose the relevant scope and filters, then review the records before exporting. Reports do not replace the formal decision or published policy record.' },
+  { prefix: '/admin/engagement', label: 'Member engagement', text: 'Review participation and delivery status within your permitted scope. Communication preferences and suppression rules still apply to every message.' },
+  { prefix: '/admin/migrations', label: 'Data maintenance', text: 'Read the operation’s description and affected records carefully. These tools can change stored data and require the appropriate operational authority.' },
+  { prefix: '/admin/settings', label: 'Platform settings', text: 'Review the setting and its current value before saving. Check the resulting status and use the available recovery guidance if an operation fails.' },
+  { prefix: '/admin', label: 'Administration', text: 'Start with the work that needs attention, then open its workspace. Available actions depend on your assigned permissions and branch scope.' },
+  { prefix: '/proposals/new', label: 'Share a proposal', text: 'Describe the change you want Fusion to consider and why it matters. Check the wording and scope before submitting; formal participation requires the appropriate verified membership.' },
+  { prefix: '/proposals/', label: 'Proposals & ballots', text: 'Check the proposal’s current stage, read the wording and use the next action available to you. Discussion is separate from a formal vote; a successful ballot does not itself publish policy.' },
+  { prefix: '/sense-box/status', label: 'Your submission', text: 'Keep your private status link so you can return to this update. Sharing the link may give another person access to the information shown here.' },
+  { prefix: '/sense-box', label: 'Share a priority', text: 'Share an issue that matters to your community, or read a published priority. The form explains what is private and what you may agree to publish. A priority is a contribution, not a formal ballot.' },
+  { prefix: '/collaborate/manage', label: 'Manage a contribution', text: 'Use your private management link to review the options for your contribution. Check the effect of a correction, visibility change or withdrawal before confirming it.' },
+  { prefix: '/collaborate', label: 'Contribute & collaborate', text: 'Explore open invitations and read what each one asks for. Check the privacy, image permissions and publication choices before contributing.' },
+  { prefix: '/members/', label: 'Community contributions', text: 'Explore the contributions this member has made publicly visible. Profile activity and comment scores do not determine voting rights or formal decisions.' },
+  { prefix: '/member', label: 'My Engage', text: 'Find ballots open to you, catch up on activity and manage your account. Check membership verification and branch eligibility before voting; follow a branch for updates or join it where eligible.' },
+  { prefix: '/policies', label: 'Official policy', text: 'Browse published policy and its adoption record. Check whether a record is current, withdrawn or superseded; proposals and ballot results are shown separately.' },
+  { prefix: '/branches', label: 'Find your community', text: 'Explore Fusion’s branches and state sites. Following a branch brings updates; formal branch participation depends on the relevant membership and eligibility.' },
+  { prefix: '/how-it-works', label: 'Participation guide', text: 'Start with the activity you want to take part in. The guide explains public contributions, member participation and the steps around a formal decision.' },
+  { prefix: '/privacy', label: 'Privacy', text: 'Read how information is handled and the choices available to you. Check the privacy explanation on a contribution form before submitting personal information.' },
+  { prefix: '/terms', label: 'Terms', text: 'Read the terms that apply to using Engage. Participation and voting rights remain subject to the rules explained at each relevant action.' },
+  { prefix: '/changelog', label: 'What’s changed', text: 'See the improvements recorded in Engage’s development history. A software change does not by itself change the party’s governance rules.' },
+] as const;
+
+const guide = routePath.startsWith('/proposals/') && routePath.endsWith('/record/') ? {
+  label: 'Decision record',
+  text: 'Follow the exact wording, amendment outcomes, ballot result and publication record. A recorded result and an official policy publication are separate acts; unavailable evidence is identified in the record.',
+} : guides.find((item) => routePath.startsWith(item.prefix)) ?? {
+  label: 'Fusion’s home for participation',
+  text: 'Explore ideas, share a local priority or contribute to an open invitation. Members can join formal discussions and vote when eligible. Choose an activity to see what happens next.',
+};
+---
+
+<aside class:list={['page-help', { 'page-help--compact': compact }]} aria-label="Page guidance">
+  <div class="page-help__inner">
+    <p class="page-help__location"><span aria-hidden="true"></span>{guide.label}</p>
+    <details class="page-help__disclosure">
+      <summary>
+        <CircleHelp className="page-help__icon" aria-hidden="true" />
+        <span>Help with this page</span>
+        <ChevronDown className="page-help__chevron" aria-hidden="true" />
+      </summary>
+      <div class="page-help__content">
+        <p>{guide.text}</p>
+        <a href="/how-it-works/">Read the participation guide →</a>
+      </div>
+    </details>
+  </div>
+</aside>
+
+<style>
+  .page-help {
+    border-bottom: 1px solid var(--horizon-line);
+    background: var(--section-surface);
+  }
+  .page-help__inner {
+    display: flex;
+    width: min(var(--content-width), calc(100% - 3rem));
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-inline: auto;
+    padding-block: 0.55rem;
+  }
+  .page-help__location {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0;
+    padding-block: 0.35rem;
+    color: var(--horizon-muted);
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  .page-help__location > span {
+    width: 0.45rem;
+    height: 0.45rem;
+    flex: 0 0 0.45rem;
+    border-radius: 50%;
+    background: var(--section-accent);
+  }
+  .page-help__disclosure { flex: 0 1 38rem; min-width: 0; }
+  .page-help__disclosure summary {
+    display: flex;
+    width: fit-content;
+    min-height: 2rem;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    margin-left: auto;
+    border-radius: 0.35rem;
+    color: var(--horizon-purple);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    list-style: none;
+  }
+  .page-help__disclosure summary::-webkit-details-marker { display: none; }
+  .page-help__disclosure summary:hover { color: var(--horizon-magenta); }
+  .page-help__icon, .page-help__chevron { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+  .page-help__disclosure[open] .page-help__chevron { transform: rotate(180deg); }
+  .page-help__content { padding: 0.6rem 0 0.45rem; color: var(--horizon-muted); font-size: 0.88rem; line-height: 1.65; }
+  .page-help__content p { margin: 0 0 0.4rem; }
+  .page-help__content a { color: var(--horizon-purple); font-weight: 600; }
+  .page-help--compact { margin-bottom: 1.5rem; border: 1px solid var(--horizon-line); border-radius: 0.85rem; }
+  .page-help--compact .page-help__inner { width: auto; margin-inline: 1rem; }
+  @media (max-width: 760px) {
+    .page-help__inner { width: calc(100% - 2rem); gap: 0.6rem; }
+    .page-help__location { font-size: 0.74rem; }
+    .page-help__disclosure { flex: 0 1 auto; }
+    .page-help__disclosure summary { font-size: 0.74rem; }
+    .page-help__disclosure[open] { flex-basis: 100%; }
+    .page-help__inner:has(.page-help__disclosure[open]) { flex-wrap: wrap; }
+    .page-help__disclosure[open] summary { margin-left: 0; }
+  }
+</style>

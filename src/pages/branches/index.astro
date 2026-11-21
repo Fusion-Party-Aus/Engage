@@ -1,4 +1,5 @@
 ---
+import CivicIntro from '../../components/site/CivicIntro.astro';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -31,10 +32,10 @@ const branchLinks = (branch: any) => ({
 ---
 <SiteLayout title="Branches · Engage" description="Find your Fusion branch, read its proposals and explore its published policies." canonical="/branches/">
   <div class="page-wrap section-space branch-directory">
-    <header class="page-intro">
+    <CivicIntro eyebrow="Connect with your community" tone="aqua" image>
       <h1>Find your branch</h1>
       <p>Find what your branch is discussing and the policies it has adopted. You can follow a branch for updates; voting in its ballots requires membership.</p>
-    </header>
+    </CivicIntro>
 
     {relevant.length > 0 && (
       <section class="branch-group" aria-labelledby="your-branches-heading">

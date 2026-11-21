@@ -1,4 +1,5 @@
 ---
+import CivicIntro from '../../components/site/CivicIntro.astro';
 import { discoveryFocus } from '../../lib/proposal-discovery.ts';
 import { ballotDeadlineLabel, ballotExpired } from '../../lib/ballot-deadline.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
@@ -213,18 +214,17 @@ const hasActiveFilters =
   <div class="page-wrap section-space proposals-page">
     <div class="proposals-surface">
       <!-- Top Header -->
-      <header class="proposals-top">
-        <div class="proposals-top__heading">
-          <h1>Browse proposals</h1>
-          <span class="proposals-total tabular">{baseProposalCount} proposals</span>
-        </div>
+      <CivicIntro eyebrow="Explore ideas and decisions" tone="purple">
+        <h1>Browse proposals</h1>
+        <p>Find an idea to explore, a discussion to join or a ballot to read. The stage and your eligibility determine what you can do next.</p>
         <div class="proposals-top__actions">
+          <Badge variant="outline">{baseProposalCount} proposals</Badge>
           <Button href={siteConfig.primaryCtaHref || '/proposals/new/'} size="sm">
             <Plus className="size-4" aria-hidden="true" />
             {siteConfig.primaryCtaLabel || 'Suggest an idea'}
           </Button>
         </div>
-      </header>
+      </CivicIntro>
 
 
       <!-- Workflow Tabs & Personal Relevance Shortcuts -->
@@ -368,7 +368,7 @@ const hasActiveFilters =
           ) : <Button href="/proposals/" variant="outline" size="sm">Clear filters</Button>}
         </div>
       ) : (
-        <div class="proposal-list" role="list" id="proposal-list">
+        <ul class="proposal-list" id="proposal-list">
           {pageRows.map((item) => {
             const branchName = item.jurisdictionBranchId
               ? branches.find((branch) => branch.branchId === item.jurisdictionBranchId)?.name ?? null
@@ -390,11 +390,10 @@ const hasActiveFilters =
                     : 'Read idea →';
 
             return (
-              <article
+              <li
                 class="proposal-item"
                 data-stage={item.stage}
                 data-search={`${item.proposalId} ${item.title} ${item.space} ${item.summary}`.toLowerCase()}
-                role="listitem"
               >
                 <!-- Line 1: Topic Context (left) + Stage Pill (right) -->
                 <div class="proposal-item__eyebrow">
@@ -469,10 +468,10 @@ const hasActiveFilters =
                     {actionLabel}
                   </a>
                 </div>
-              </article>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
 
       <!-- Bottom Pagination Bar -->
@@ -557,21 +556,21 @@ const hasActiveFilters =
   .explore-proposals > div { display: flex; flex-wrap: wrap; gap: 1.5rem; padding: .75rem 0; }
 
   .proposals-page {
-    max-width: 68rem;
+    max-width: var(--content-width);
     padding-top: 1.5rem;
     padding-bottom: 4rem;
   }
 
   .proposals-surface {
-    background: #ffffff;
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.9rem;
-    padding: clamp(1.25rem, 3vw, 2.25rem);
-    box-shadow: 0 2px 8px rgba(29, 10, 73, 0.04);
+    background: var(--horizon-white);
+    border: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 1.35rem;
+    gap: 1.75rem;
   }
+
+  .proposals-top__actions { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
 
   /* Header */
   .proposals-top {
@@ -591,7 +590,7 @@ const hasActiveFilters =
 
   .proposals-top h1 {
     margin: 0;
-    font-family: 'Newsreader', Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: clamp(1.85rem, 3vw, 2.35rem);
     font-weight: 600;
     line-height: 1.1;
@@ -685,13 +684,13 @@ const hasActiveFilters =
     padding-left: 2.65rem;
     padding-right: 2.5rem;
     border-radius: 999px;
-    border-color: #cfc6e0;
+    border-color: var(--horizon-input-border);
     background: var(--horizon-lavender-soft);
     font-size: 0.94rem;
   }
 
   .search-row :global(.search-row__input:focus) {
-    background: #ffffff;
+    background: var(--horizon-white);
   }
 
   .search-row__clear {
@@ -722,7 +721,7 @@ const hasActiveFilters =
     height: 2.1rem;
     padding: 0 1.9rem 0 0.75rem;
     border-radius: 999px;
-    border: 1px solid var(--horizon-line);
+    border: 1px solid var(--horizon-input-border);
     background-color: var(--horizon-surface);
     font-size: 0.8rem;
     font-weight: 600;
@@ -732,7 +731,7 @@ const hasActiveFilters =
 
   .quiet-select-wrap :global(select:hover) {
     background-color: var(--horizon-lavender-soft);
-    border-color: #b7a2df;
+    border-color: var(--horizon-input-border);
   }
 
   .clear-filters-link {
@@ -767,6 +766,9 @@ const hasActiveFilters =
   .proposal-list {
     display: flex;
     flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
     border-top: 1px solid var(--horizon-line);
   }
 
@@ -817,7 +819,7 @@ const hasActiveFilters =
   /* Prominent Visual Anchor Title */
   .proposal-item__title {
     margin: 0.1rem 0 0;
-    font-family: Outfit, sans-serif;
+    font-family: var(--font-outfit);
     font-size: clamp(1.18rem, 1.8vw, 1.32rem);
     font-weight: 700;
     line-height: 1.28;
@@ -885,7 +887,7 @@ const hasActiveFilters =
   }
 
   .participation-dot {
-    color: #b4a7c9;
+    color: var(--horizon-muted);
   }
 
   .participation-personal {
@@ -928,7 +930,7 @@ const hasActiveFilters =
 
   .empty-register h2 {
     margin: 0;
-    font-family: 'Newsreader', Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: 1.4rem;
   }
 

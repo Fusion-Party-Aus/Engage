@@ -1,4 +1,5 @@
 ---
+import CivicIntro from '../../components/site/CivicIntro.astro';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { Button } from '../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
@@ -16,11 +17,10 @@ const initiatives = await listOpenInitiatives(await getDatabase(runtimeEnv(Astro
   canonical="/collaborate/"
 >
   <div class="page-wrap section-space collaborate-index">
-    <header class="page-intro">
-      <p class="text-sm font-semibold uppercase tracking-widest">Take part</p>
+    <CivicIntro eyebrow="Contribute your perspective" tone="pink" image>
       <h1>Add your part</h1>
       <p>Fusion is made of people, not slogans. These invitations collect real stories and photographs for Fusion's public work. No account or party membership needed.</p>
-    </header>
+    </CivicIntro>
 
     {initiatives.length ? (
       <ul class="collaborate-list">
@@ -43,7 +43,7 @@ const initiatives = await listOpenInitiatives(await getDatabase(runtimeEnv(Astro
 </SiteLayout>
 
 <style>
-  .collaborate-index { max-width: 54rem; }
+  .collaborate-index { max-width: var(--content-width); }
   .collaborate-list { list-style: none; margin: 2.5rem 0 0; padding: 0; display: grid; gap: 2.5rem; }
   .collaborate-list li { border-top: 3px solid var(--horizon-accent); padding-top: 1.25rem; }
   .collaborate-list h2 { margin: 0 0 0.5rem; font-size: clamp(1.5rem, 3vw, 2rem); }

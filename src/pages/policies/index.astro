@@ -1,4 +1,5 @@
 ---
+import CivicIntro from '../../components/site/CivicIntro.astro';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { Button } from '../../components/ui/button';
 import PolicyRegistry from '../../components/policy/PolicyRegistry.astro';
@@ -62,7 +63,7 @@ const scopeName = branchFilter
 ---
 <SiteLayout title="Official policy registry · Engage" description="Fusion Party Australia's official policy registry and publication record." canonical="/policies/">
   <div class="page-wrap section-space policy-page">
-    <header class="policy-intro">
+    <CivicIntro eyebrow="The official policy record" tone="aqua">
       <h1>{showHistory ? 'Past policy records' : 'Policy registry'}</h1>
       <p>{showHistory
         ? 'Withdrawn, superseded and repealed records. They remain public for the record but are not current policy.'
@@ -73,7 +74,7 @@ const scopeName = branchFilter
         <Button href={tabHref(false)} variant={!showHistory ? 'default' : 'ghost'} size="sm">Current policy <span class="tabular">{currentCount}</span></Button>
         <Button href={tabHref(true)} variant={showHistory ? 'default' : 'ghost'} size="sm">Past records <span class="tabular">{pastCount}</span></Button>
       </nav>
-    </header>
+    </CivicIntro>
 
     {hasRegistryRecords ? (
       <>

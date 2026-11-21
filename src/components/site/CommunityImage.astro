@@ -1,0 +1,30 @@
+---
+interface Props {
+  scene?: 'hero' | 'community';
+  priority?: boolean;
+  sizes?: string;
+}
+
+const { scene = 'community', priority = false, sizes = '(min-width: 900px) 50vw, 100vw' } = Astro.props;
+const name = scene === 'hero' ? 'community-hero' : 'australian-community';
+const alt = scene === 'hero'
+  ? 'Illustration of eight Australian adults of different ages together among gum trees near Parliament House in Canberra.'
+  : 'Illustration of Australian neighbours sharing ideas around a table outside a regional community hall.';
+---
+<figure class="community-image">
+  <img
+    src={`/images/${name}-800.webp`}
+    srcset={`/images/${name}-480.webp 480w, /images/${name}-800.webp 800w, /images/${name}.webp 1536w`}
+    sizes={sizes}
+    width="1536"
+    height="1024"
+    alt={alt}
+    loading={priority ? 'eager' : 'lazy'}
+    fetchpriority={priority ? 'high' : 'auto'}
+    decoding="async"
+  />
+</figure>
+<style>
+  .community-image { margin: 0; position: relative; min-width: 0; overflow: hidden; border-radius: 1.5rem; }
+  img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; }
+</style>

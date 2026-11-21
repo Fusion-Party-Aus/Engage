@@ -3,7 +3,7 @@ import { ArrowRight, BookOpen, FilePenLine, Gavel, MessageCircle } from 'lucide-
 import type { MemberCatchUpGroup, MemberCatchUpKind } from '../../lib/member-activity.ts';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Card } from '../ui/card';
+import Card from '../admin/Card.astro';
 
 interface Props {
   groups: MemberCatchUpGroup[];
@@ -34,7 +34,7 @@ const formatDate = (value: Date | string) =>
   });
 ---
 
-<Card className="catchup-card" aria-labelledby={headingId}>
+<Card class="catchup-card" aria-labelledby={headingId}>
   <div class="catchup-head">
     <div>
       <h2 id={headingId}>{hasCursor ? 'Unread updates' : 'Recent activity on proposals you follow'}</h2>
@@ -191,6 +191,8 @@ const formatDate = (value: Date | string) =>
 <style>
   .catchup-card {
     padding: 0;
+    gap: 0;
+    border-radius: 1.1rem;
     overflow: hidden;
   }
 
@@ -200,9 +202,9 @@ const formatDate = (value: Date | string) =>
     align-items: flex-start;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 1rem 1.25rem 0.85rem;
+    padding: 1.4rem 1.5rem;
     border-bottom: 1px solid var(--horizon-line);
-    background: var(--horizon-surface);
+    background: var(--horizon-rose-soft);
   }
 
   .catchup-head > div {
@@ -212,16 +214,17 @@ const formatDate = (value: Date | string) =>
   .catchup-head h2 {
     margin: 0;
     color: var(--horizon-ink);
-    font-family: 'Newsreader', Georgia, serif;
-    font-size: 1.3rem;
+    font-family: var(--font-outfit);
+    font-size: 1.15rem;
+    font-weight: 700;
     line-height: 1.2;
   }
 
   .catchup-lead {
     margin: 0.25rem 0 0;
     color: var(--horizon-muted);
-    font-size: 0.84rem;
-    line-height: 1.45;
+    font-size: 0.92rem;
+    line-height: 1.6;
   }
 
   .catchup-empty {
@@ -238,7 +241,7 @@ const formatDate = (value: Date | string) =>
   .catchup-empty span {
     display: block;
     margin-top: 0.2rem;
-    font-size: 0.86rem;
+    font-size: 0.94rem;
   }
 
   .catchup-groups {
@@ -330,8 +333,8 @@ const formatDate = (value: Date | string) =>
     gap: 0.3rem;
     margin: 0;
     color: var(--horizon-muted);
-    font-size: 0.86rem;
-    line-height: 1.45;
+    font-size: 0.94rem;
+    line-height: 1.6;
   }
 
   .catchup-item__line strong {

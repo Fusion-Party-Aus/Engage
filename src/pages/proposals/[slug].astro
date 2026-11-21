@@ -1766,7 +1766,7 @@ const initialsFor = (name: string) =>
 </script>
 
 <style>
-  .decision-content { background: #fff; border: 1px solid var(--horizon-line); border-radius: 1rem; padding: clamp(1.25rem, 2.2vw, 1.75rem); }
+  .decision-content { background: var(--horizon-white); border: 1px solid var(--horizon-line); border-radius: 1rem; padding: clamp(1.25rem, 2.2vw, 1.75rem); }
   .proposal-origin { margin: 0 0 1.25rem; padding: .6rem .85rem; border-left: 3px solid var(--horizon-accent); background: var(--horizon-lavender-soft); color: var(--horizon-muted); font-size: .9rem; }
   .proposal-workspace > .proposal-main, .proposal-workspace > .proposal-rail { display: contents; }
   .proposal-main > * { grid-column: 1; }
@@ -1852,7 +1852,7 @@ const initialsFor = (name: string) =>
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
-    background: #f4f1fb;
+    background: var(--horizon-lavender-soft);
     border: 1px solid var(--horizon-line);
     border-radius: 0.65rem;
     padding: 0.35rem 0.65rem;
@@ -1871,12 +1871,13 @@ const initialsFor = (name: string) =>
 
   /* Hero Header: Topic -> Title -> Summary -> Workflow -> Facts */
   .proposal-hero {
-    background: #ffffff;
+    background: linear-gradient(115deg, var(--horizon-lavender-soft), var(--horizon-white));
     border: 1px solid var(--horizon-line);
+    border-top: 4px solid var(--horizon-accent);
     border-radius: 1rem;
-    padding: clamp(1.35rem, 2.5vw, 2rem);
-    margin-bottom: 1rem;
-    box-shadow: 0 2px 10px rgba(29, 10, 73, 0.03);
+    padding: clamp(1.5rem, 3vw, 2.75rem);
+    margin-bottom: 1.75rem;
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--horizon-purple) 3%, transparent);
   }
 
   .proposal-hero__top {
@@ -1939,13 +1940,13 @@ const initialsFor = (name: string) =>
   }
 
   .personal-vote-chip.is-action {
-    background: #f0f9f7;
-    color: #0e6f64;
-    border: 1px solid rgba(14, 111, 100, 0.25);
+    background: var(--horizon-success-bg);
+    color: var(--horizon-success-ink);
+    border: 1px solid color-mix(in srgb, var(--horizon-success-ink) 25%, transparent);
   }
 
   .personal-vote-chip.is-action:hover {
-    background: #e1f4f0;
+    background: var(--horizon-success-bg);
   }
 
   .stage-badge {
@@ -1964,39 +1965,40 @@ const initialsFor = (name: string) =>
   }
 
   .stage-badge--decide {
-    background: #e8f5ff;
-    color: #0b5cab;
-    border: 1px solid rgba(11, 92, 171, 0.22);
+    background: var(--horizon-blue-soft);
+    color: var(--horizon-voting-ink);
+    border: 1px solid color-mix(in srgb, var(--horizon-voting-ink) 22%, transparent);
   }
 
   .stage-badge--deliberate {
-    background: #f2edfb;
+    background: var(--horizon-lavender);
     color: var(--horizon-purple);
-    border: 1px solid rgba(38, 11, 89, 0.16);
+    border: 1px solid color-mix(in srgb, var(--horizon-purple) 16%, transparent);
   }
 
   .stage-badge--propose {
     background: var(--horizon-warn-bg);
     color: var(--horizon-warn-ink);
-    border: 1px solid rgba(122, 79, 0, 0.2);
+    border: 1px solid color-mix(in srgb, var(--horizon-warn-ink) 20%, transparent);
   }
 
   .stage-badge--implement {
     background: var(--horizon-success-bg);
     color: var(--horizon-success-ink);
-    border: 1px solid rgba(20, 108, 67, 0.2);
+    border: 1px solid color-mix(in srgb, var(--horizon-success-ink) 20%, transparent);
   }
 
   .stage-badge--muted {
-    background: #f2eff8;
+    background: var(--horizon-lavender);
     color: var(--horizon-muted);
   }
 
   .proposal-hero__title {
+    text-wrap: balance;
     margin: 0 0 0.75rem;
-    font-family: 'Newsreader', Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: clamp(1.85rem, 3.2vw, 2.65rem);
-    font-weight: 650;
+    font-weight: 750;
     line-height: 1.14;
     letter-spacing: -0.02em;
     color: var(--horizon-purple-deep);
@@ -2006,7 +2008,7 @@ const initialsFor = (name: string) =>
     margin: 0 0 1.15rem;
     font-size: clamp(1.04rem, 1.35vw, 1.16rem);
     line-height: 1.6;
-    color: #2e2046;
+    color: var(--horizon-ink);
     max-width: 72ch;
   }
 
@@ -2020,18 +2022,18 @@ const initialsFor = (name: string) =>
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
     border-radius: 0.85rem;
-    border: 1.5px solid rgba(38, 11, 89, 0.25);
-    background: linear-gradient(135deg, #f5f1fd 0%, #eef8f7 100%);
+    border: 1.5px solid color-mix(in srgb, var(--horizon-purple) 25%, transparent);
+    background: linear-gradient(135deg, var(--horizon-lavender-soft) 0%, var(--horizon-voting-bg) 100%);
   }
 
   .next-action-bar.is-vote {
-    border-color: rgba(11, 92, 171, 0.32);
-    background: linear-gradient(135deg, #eef6ff 0%, #f4f1fd 100%);
+    border-color: color-mix(in srgb, var(--horizon-voting-ink) 32%, transparent);
+    background: linear-gradient(135deg, var(--horizon-blue-soft) 0%, #f4f1fd 100%);
   }
 
   .next-action-bar.is-complete {
-    border-color: rgba(20, 108, 67, 0.28);
-    background: #f1fbf6;
+    border-color: color-mix(in srgb, var(--horizon-success-ink) 28%, transparent);
+    background: var(--horizon-success-bg);
   }
 
   .next-action-bar__copy {
@@ -2082,8 +2084,8 @@ const initialsFor = (name: string) =>
 
   .next-action-btn.is-primary {
     background: var(--horizon-purple);
-    color: #ffffff;
-    box-shadow: 0 2px 8px rgba(38, 11, 89, 0.18);
+    color: var(--horizon-white);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--horizon-purple) 18%, transparent);
   }
 
   .next-action-btn.is-primary:hover {
@@ -2091,13 +2093,13 @@ const initialsFor = (name: string) =>
   }
 
   .next-action-btn.is-secondary {
-    background: #ffffff;
+    background: var(--horizon-white);
     color: var(--horizon-purple-deep);
     border: 1px solid var(--horizon-line-strong);
   }
 
   .next-action-btn.is-secondary:hover {
-    background: #faf9fd;
+    background: var(--horizon-lavender-soft);
     border-color: var(--horizon-purple);
   }
 
@@ -2108,7 +2110,7 @@ const initialsFor = (name: string) =>
     align-items: center;
     justify-content: space-between;
     gap: 0.85rem 1.5rem;
-    background: #f8f6fc;
+    background: var(--horizon-lavender-soft);
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
     padding: 0.75rem 1rem;
@@ -2145,7 +2147,7 @@ const initialsFor = (name: string) =>
     border-radius: 999px;
     font-size: 0.72rem;
     font-weight: 700;
-    background: rgba(38, 11, 89, 0.08);
+    background: color-mix(in srgb, var(--horizon-purple) 8%, transparent);
     color: var(--horizon-muted);
   }
 
@@ -2160,13 +2162,13 @@ const initialsFor = (name: string) =>
 
   .workflow-step.is-current {
     background: var(--horizon-purple);
-    color: #ffffff;
+    color: var(--horizon-white);
     font-weight: 600;
   }
 
   .workflow-step.is-current .workflow-step__num {
-    background: rgba(255, 255, 255, 0.22);
-    color: #ffffff;
+    background: color-mix(in srgb, var(--horizon-white) 22%, transparent);
+    color: var(--horizon-white);
   }
 
   .workflow-caption {
@@ -2288,7 +2290,7 @@ const initialsFor = (name: string) =>
     gap: 0.75rem;
     padding: 0.5rem 0.75rem;
     margin-bottom: 1.5rem;
-    background: rgba(255, 255, 255, 0.94);
+    background: color-mix(in srgb, var(--horizon-white) 94%, transparent);
     backdrop-filter: blur(10px);
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
@@ -2317,19 +2319,19 @@ const initialsFor = (name: string) =>
 
   .reading-nav__links a:hover {
     color: var(--horizon-purple-deep);
-    background: #f5f2fc;
+    background: var(--horizon-lavender-soft);
   }
 
   .reading-nav__links a[aria-current="location"] {
     color: var(--horizon-purple-deep);
-    background: #efeaf9;
+    background: var(--horizon-lavender);
   }
 
   .nav-count {
     font-size: 0.76rem;
     padding: 0.08rem 0.42rem;
     border-radius: 999px;
-    background: rgba(38, 11, 89, 0.08);
+    background: color-mix(in srgb, var(--horizon-purple) 8%, transparent);
     color: var(--horizon-purple);
   }
 
@@ -2339,7 +2341,7 @@ const initialsFor = (name: string) =>
     padding: 0.42rem 0.9rem;
     border-radius: 0.55rem;
     background: var(--horizon-purple);
-    color: #ffffff;
+    color: var(--horizon-white);
     font-size: 0.86rem;
     font-weight: 650;
     text-decoration: none;
@@ -2368,7 +2370,7 @@ const initialsFor = (name: string) =>
   /* Document Cards & Sections */
   .doc-card,
   .doc-section {
-    background: #ffffff;
+    background: var(--horizon-white);
     border: 1px solid var(--horizon-line);
     border-radius: 1rem;
     padding: clamp(1.25rem, 2.2vw, 1.75rem);
@@ -2393,7 +2395,7 @@ const initialsFor = (name: string) =>
 
   .doc-section__header h2 {
     margin: 0;
-    font-family: 'Newsreader', Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: clamp(1.35rem, 2vw, 1.6rem);
     font-weight: 650;
     color: var(--horizon-purple-deep);
@@ -2411,7 +2413,7 @@ const initialsFor = (name: string) =>
     align-items: center;
     padding: 0.2rem 0.6rem;
     border-radius: 999px;
-    background: #f4f1fb;
+    background: var(--horizon-lavender-soft);
     color: var(--horizon-purple);
     font-size: 0.8rem;
     font-weight: 650;
@@ -2422,7 +2424,7 @@ const initialsFor = (name: string) =>
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    background: #fcfbfe;
+    background: var(--horizon-lavender-soft);
   }
 
   .attachment-preview {
@@ -2431,7 +2433,7 @@ const initialsFor = (name: string) =>
     justify-content: center;
     max-height: 16rem;
     padding: 1rem;
-    background: #ffffff;
+    background: var(--horizon-white);
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
     overflow: hidden;
@@ -2472,8 +2474,8 @@ const initialsFor = (name: string) =>
 
   /* Implementation Banner */
   .implementation-banner {
-    background: #f5f9ff;
-    border-color: rgba(11, 92, 171, 0.24);
+    background: var(--horizon-blue-soft);
+    border-color: color-mix(in srgb, var(--horizon-voting-ink) 24%, transparent);
   }
 
   .implementation-banner__head {
@@ -2499,7 +2501,7 @@ const initialsFor = (name: string) =>
   .impl-edit-details {
     margin-top: 0.85rem;
     padding-top: 0.75rem;
-    border-top: 1px solid rgba(11, 92, 171, 0.16);
+    border-top: 1px solid color-mix(in srgb, var(--horizon-voting-ink) 16%, transparent);
   }
 
   .impl-edit-details summary {
@@ -2561,7 +2563,7 @@ const initialsFor = (name: string) =>
   .prose-content {
     font-size: 1rem;
     line-height: 1.7;
-    color: #26183c;
+    color: var(--horizon-ink);
     max-width: 70ch;
   }
 
@@ -2583,7 +2585,7 @@ const initialsFor = (name: string) =>
     border: 1px solid var(--horizon-line);
     border-radius: 0.85rem;
     padding: 1rem 1.15rem;
-    background: #fcfbfe;
+    background: var(--horizon-lavender-soft);
   }
 
   .amendment-card__head {
@@ -2670,13 +2672,13 @@ const initialsFor = (name: string) =>
     padding: 0.75rem;
     border-radius: 0.6rem;
     border: 1px solid var(--horizon-line);
-    background: #ffffff;
+    background: var(--horizon-white);
     overflow-x: auto;
   }
 
   .diff-pane--after {
-    background: #f4fbf8;
-    border-color: rgba(20, 108, 67, 0.22);
+    background: var(--horizon-success-bg);
+    border-color: color-mix(in srgb, var(--horizon-success-ink) 22%, transparent);
   }
 
   .diff-label {
@@ -2710,7 +2712,7 @@ const initialsFor = (name: string) =>
     gap: 0.75rem;
     padding: 0.75rem;
     border-radius: 0.6rem;
-    background: #ffffff;
+    background: var(--horizon-white);
     border: 1px solid var(--horizon-line);
   }
 
@@ -2735,7 +2737,7 @@ const initialsFor = (name: string) =>
     border: 1px dashed var(--horizon-line-strong);
     border-radius: 0.75rem;
     padding: 0.75rem 1rem;
-    background: #faf9fd;
+    background: var(--horizon-lavender-soft);
   }
 
   .amendment-compose summary {
@@ -2766,7 +2768,7 @@ const initialsFor = (name: string) =>
   .empty-box {
     padding: 1rem 1.15rem;
     border-radius: 0.75rem;
-    background: #faf9fd;
+    background: var(--horizon-lavender-soft);
     border: 1px solid var(--horizon-line);
   }
 
@@ -2840,7 +2842,7 @@ const initialsFor = (name: string) =>
     padding: 0.85rem 1rem;
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
-    background: #faf9fd;
+    background: var(--horizon-lavender-soft);
   }
 
   .revision-row__main {
@@ -2917,7 +2919,7 @@ const initialsFor = (name: string) =>
     padding: 0.85rem 1rem;
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
-    background: #faf9fd;
+    background: var(--horizon-lavender-soft);
   }
 
   .provenance-subblock h4 {
@@ -2955,16 +2957,16 @@ const initialsFor = (name: string) =>
   }
 
   .rail-card {
-    background: #ffffff;
+    background: var(--horizon-white);
     border: 1px solid var(--horizon-line);
     border-radius: 1rem;
     padding: 1.2rem 1.25rem;
-    box-shadow: 0 2px 10px rgba(29, 10, 73, 0.03);
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--horizon-purple) 3%, transparent);
   }
 
   .rail-ballot.is-open {
-    border-color: rgba(38, 11, 89, 0.28);
-    box-shadow: 0 6px 20px rgba(29, 10, 73, 0.07);
+    border-color: color-mix(in srgb, var(--horizon-purple) 28%, transparent);
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--horizon-purple) 7%, transparent);
   }
 
   .rail-card__head {
@@ -2986,7 +2988,7 @@ const initialsFor = (name: string) =>
   .rail-card__head h3,
   .rail-card__head h2 {
     margin: 0;
-    font-family: 'Newsreader', Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: 1.2rem;
     font-weight: 650;
     color: var(--horizon-purple-deep);
@@ -3008,7 +3010,7 @@ const initialsFor = (name: string) =>
     display: grid;
     gap: 0.5rem;
     padding: 0.75rem 0.85rem;
-    background: #faf9fd;
+    background: var(--horizon-lavender-soft);
     border: 1px solid var(--horizon-line);
     border-radius: 0.7rem;
   }
@@ -3040,7 +3042,7 @@ const initialsFor = (name: string) =>
     margin-bottom: 0.9rem;
     padding: 0.75rem 0.85rem;
     border-radius: 0.7rem;
-    background: #f5f2fc;
+    background: var(--horizon-lavender-soft);
     border: 1px solid var(--horizon-line);
   }
 
@@ -3085,7 +3087,7 @@ const initialsFor = (name: string) =>
     gap: 0.55rem;
     padding: 0.45rem 0.6rem;
     border-radius: 0.6rem;
-    background: #faf9fd;
+    background: var(--horizon-lavender-soft);
     border: 1px solid var(--horizon-line);
   }
 
@@ -3098,7 +3100,7 @@ const initialsFor = (name: string) =>
     border-radius: 999px;
     font-size: 0.72rem;
     font-weight: 700;
-    background: #ebe6f6;
+    background: var(--horizon-lavender);
     color: var(--horizon-muted);
   }
 
@@ -3109,7 +3111,7 @@ const initialsFor = (name: string) =>
 
   .decision-node.is-current .decision-node__marker {
     background: var(--horizon-purple);
-    color: #ffffff;
+    color: var(--horizon-white);
   }
 
   .decision-node__body {
@@ -3196,7 +3198,7 @@ const initialsFor = (name: string) =>
     display: inline-flex;
     padding: 0.08rem 0.42rem;
     border-radius: 0.35rem;
-    background: #f2eff8;
+    background: var(--horizon-lavender);
     color: var(--horizon-purple);
     font-size: 0.72rem;
     font-weight: 600;
@@ -3216,14 +3218,14 @@ const initialsFor = (name: string) =>
     padding: 0.65rem 0.75rem;
     border-radius: 0.65rem;
     border: 1px solid var(--horizon-line);
-    background: #faf9fd;
+    background: var(--horizon-lavender-soft);
     text-decoration: none;
     color: inherit;
     transition: border-color 0.15s ease, background 0.15s ease;
   }
 
   .related-item:hover {
-    background: #f3effb;
+    background: var(--horizon-lavender);
     border-color: var(--horizon-line-strong);
   }
 

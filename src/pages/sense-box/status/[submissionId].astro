@@ -1,5 +1,6 @@
 ---
 import SiteLayout from '../../../layouts/SiteLayout.astro';
+import CivicIntro from '../../../components/site/CivicIntro.astro';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
@@ -26,9 +27,9 @@ const signInHref = `/member/?returnTo=${encodeURIComponent(`/sense-box/status/${
 ---
 <SiteLayout title="Your Sense Box priority · Engage" description="Check what happened to a Sense Box priority." noIndex>
   <div class="page-wrap section-space sense-status">
-    <Button href="/sense-box/" variant="ghost" size="sm">← Sense Box</Button>
+    <Button href="/sense-box/" variant="ghost" size="sm" className="mb-5">← Sense Box</Button>
 
-    <header class="sense-status__head">
+    <CivicIntro eyebrow="Your priority" tone="pink">
       <div class="sense-status__meta">
         <span>{branchName}</span>
         <time datetime={receipt.createdAt}>Submitted {new Date(receipt.createdAt).toLocaleDateString('en-AU')}</time>
@@ -37,7 +38,7 @@ const signInHref = `/member/?returnTo=${encodeURIComponent(`/sense-box/status/${
       </div>
       <h1>{receipt.title}</h1>
       <p>{stage.copy}</p>
-    </header>
+    </CivicIntro>
 
     {!receipt.publicationConsent && (
       <div class="sense-status__note" role="status">
@@ -67,10 +68,7 @@ const signInHref = `/member/?returnTo=${encodeURIComponent(`/sense-box/status/${
 </SiteLayout>
 <style>
   .sense-status{max-width:52rem}
-  .sense-status__head{border-bottom:1px solid var(--horizon-line);padding-bottom:1.5rem;margin-bottom:2rem}
   .sense-status__meta{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;color:var(--horizon-muted);font-size:.9rem}
-  .sense-status__head h1{margin:.75rem 0 .5rem}
-  .sense-status__head p{margin:0;color:var(--horizon-muted);max-width:44rem}
   .sense-status__note{border-left:3px solid var(--horizon-warn-ink);background:var(--horizon-warn-bg);color:var(--horizon-warn-ink);padding:1rem 1.25rem;border-radius:.75rem;margin-bottom:2rem}
   .sense-status__note p{margin:.35rem 0 0}
   .sense-status__next{margin-top:2rem}

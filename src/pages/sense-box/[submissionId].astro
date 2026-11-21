@@ -1,6 +1,7 @@
 ---
 import { getSessionUser } from '../../lib/auth.ts';
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import CivicIntro from '../../components/site/CivicIntro.astro';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import SenseDiscussion from '../../components/sense/SenseDiscussion';
@@ -27,9 +28,9 @@ const commentLabel = user && !user.canParticipate ? 'Verify your membership to c
   canonical={`/sense-box/${priority.submissionId}/`}
 >
   <div class="page-wrap section-space sense-detail">
-    <Button href="/sense-box/#priorities" variant="ghost" size="sm">← All published priorities</Button>
+    <Button href="/sense-box/#priorities" variant="ghost" size="sm" className="mb-5">← All published priorities</Button>
 
-    <header class="sense-detail__head">
+    <CivicIntro eyebrow="Published priority" tone="pink">
       <div class="sense-detail__meta">
         <span>{branchName}</span>
         {priority.locality && <span>{priority.locality}</span>}
@@ -40,7 +41,7 @@ const commentLabel = user && !user.canParticipate ? 'Verify your membership to c
       <p class="sense-detail__note">
         This is informal community input. It is not a proposal, ballot or adopted Fusion policy.
       </p>
-    </header>
+    </CivicIntro>
 
     <div class="sense-detail__layout">
       <article class="sense-detail__body">
@@ -79,9 +80,7 @@ const commentLabel = user && !user.canParticipate ? 'Verify your membership to c
 </SiteLayout>
 <style>
   .sense-detail{max-width:68rem}
-  .sense-detail__head{margin:1.5rem 0 2.5rem;border-bottom:1px solid var(--horizon-line);padding-bottom:1.5rem}
   .sense-detail__meta{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;color:var(--horizon-muted);font-size:.9rem}
-  .sense-detail__head h1{margin:.75rem 0 .5rem;max-width:52rem}
   .sense-detail__note{margin:0;color:var(--horizon-muted);max-width:48rem}
   .sense-detail__layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:4rem}
   .sense-detail__body p{font-size:1.05rem;line-height:1.75}

@@ -77,7 +77,7 @@ const { code, label, title, description, actions = [], links = [] } = Astro.prop
     padding-top: clamp(3rem, 8vw, 5.5rem);
     padding-bottom: clamp(3rem, 8vw, 5rem);
     display: grid;
-    gap: 1rem;
+    gap: 1.25rem;
   }
 
   .error-page__status {
@@ -88,9 +88,9 @@ const { code, label, title, description, actions = [], links = [] } = Astro.prop
   }
 
   .error-page__code {
-    font: 600 clamp(2.1rem, 5vw, 2.9rem) / 1 Newsreader, Georgia, serif;
+    font: 700 clamp(2.1rem, 5vw, 2.9rem) / 1 var(--font-outfit);
     letter-spacing: -0.02em;
-    color: var(--horizon-purple);
+    color: var(--horizon-magenta);
   }
 
   .error-page__label {
@@ -103,7 +103,7 @@ const { code, label, title, description, actions = [], links = [] } = Astro.prop
 
   .error-page h1 {
     margin: 0;
-    font: 600 clamp(1.85rem, 4vw, 2.6rem) / 1.08 Newsreader, Georgia, serif;
+    font: 700 clamp(1.85rem, 4vw, 2.6rem) / 1.12 var(--font-outfit);
     letter-spacing: -0.02em;
     color: var(--horizon-ink);
   }

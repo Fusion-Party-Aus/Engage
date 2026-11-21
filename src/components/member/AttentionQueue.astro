@@ -1,6 +1,7 @@
 ---
 import { ballotDeadlineLabel } from '../../lib/ballot-deadline.ts';
-import { ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Vote } from 'lucide-react';
+import Card from '../admin/Card.astro';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 
@@ -33,11 +34,11 @@ const remaining = items.slice(6);
 const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalEligibleCount) * 100) : 0;
 ---
 
-<section class="member-attention" aria-labelledby="awaiting-heading">
+<Card class="member-attention" role="region" aria-labelledby="awaiting-heading">
   <div class="attention-head">
     <div class="attention-head__copy">
       <div class="attention-title-row">
-        <h2 id="awaiting-heading">Open ballots for you</h2>
+        <Vote className="size-5 text-[var(--horizon-voting-ink)]" aria-hidden="true" /><h2 id="awaiting-heading">Open ballots for you</h2>
         <Badge variant={items.length ? 'warning' : 'success'}>
           {items.length ? `${items.length} remaining` : 'None waiting'}
         </Badge>
@@ -79,8 +80,8 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
         <p>You are caught up on all eligible ballots.</p>
         <span>New decisions appear here when you are eligible and have not yet voted.</span>
         <div class="attention-empty__actions">
-          <a href="/proposals/?stage=deliberate">Join open discussions →</a>
-          <a href="/sense-box/">Raise a local priority in Sense Box →</a>
+          <Button href="/proposals/?stage=deliberate" variant="outline" size="sm">Join open discussions</Button>
+          <Button href="/sense-box/" variant="ghost" size="sm">Share a local priority</Button>
         </div>
       </div>
     </div>
@@ -92,8 +93,8 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
             <div class="attention-item__body">
               <div class="attention-item__meta">
                 <span class="tabular attention-id">{item.proposalId}</span>
-                <span class="attention-space">{item.space}</span>
-                {item.branchName && <span class="attention-branch">{item.branchName}</span>}
+                <Badge variant="outline">{item.space}</Badge>
+                {item.branchName && <Badge variant="outline">{item.branchName}</Badge>}
               </div>
               <a class="attention-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
               {item.ballotClosesAt && <p><time datetime={new Date(item.ballotClosesAt).toISOString()} data-ballot-deadline data-prefix="Closes">Closes {ballotDeadlineLabel(item.ballotClosesAt)}</time></p>}
@@ -115,8 +116,8 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
                 <div class="attention-item__body">
                   <div class="attention-item__meta">
                     <span class="tabular attention-id">{item.proposalId}</span>
-                    <span class="attention-space">{item.space}</span>
-                    {item.branchName && <span class="attention-branch">{item.branchName}</span>}
+                    <Badge variant="outline">{item.space}</Badge>
+                    {item.branchName && <Badge variant="outline">{item.branchName}</Badge>}
                   </div>
                   <a class="attention-title" href={`/proposals/${item.slug}/`}>{item.title}</a>
               {item.ballotClosesAt && <p><time datetime={new Date(item.ballotClosesAt).toISOString()} data-ballot-deadline data-prefix="Closes">Closes {ballotDeadlineLabel(item.ballotClosesAt)}</time></p>}
@@ -129,13 +130,12 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
       )}
     </>
   )}
-</section>
+</Card>
 
 <style>
   .member-attention {
-    border: 1px solid var(--horizon-line);
-    border-radius: 0.65rem;
-    background: var(--horizon-white);
+    gap: 0;
+    border-radius: 1.1rem;
     overflow: hidden;
   }
 
@@ -145,9 +145,9 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
     align-items: flex-start;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 1rem 1.25rem 0.85rem;
+    padding: 1.4rem 1.5rem;
     border-bottom: 1px solid var(--horizon-line);
-    background: var(--horizon-surface);
+    background: var(--horizon-blue-soft);
   }
 
   .attention-head__copy {
@@ -190,23 +190,25 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
 
   .attention-title-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.65rem;
   }
 
   .attention-head h2 {
     margin: 0;
     color: var(--horizon-ink);
-    font-family: 'Newsreader', Georgia, serif;
-    font-size: 1.3rem;
+    font-family: var(--font-outfit);
+    font-size: 1.15rem;
+    font-weight: 700;
     line-height: 1.2;
   }
 
   .attention-lead {
     margin: 0.25rem 0 0;
     color: var(--horizon-muted);
-    font-size: 0.84rem;
-    line-height: 1.45;
+    font-size: 0.94rem;
+    line-height: 1.6;
   }
 
   .attention-list {
@@ -221,7 +223,7 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
     align-items: center;
     justify-content: space-between;
     gap: 0.85rem;
-    padding: 0.75rem 1.25rem;
+    padding: 1.3rem 1.5rem;
     border-bottom: 1px solid var(--horizon-line);
   }
 
@@ -230,7 +232,7 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
   }
 
   .attention-item:hover {
-    background: #fafbff;
+    background: var(--horizon-lavender-soft);
   }
 
   .attention-list--compact .attention-item {
@@ -240,7 +242,7 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
   .attention-item__body {
     display: grid;
     min-width: 0;
-    gap: 0.18rem;
+    gap: 0.5rem;
   }
 
   .attention-item__meta {
@@ -256,19 +258,9 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
     color: var(--horizon-muted);
   }
 
-  .attention-space,
-  .attention-branch {
-    padding: 0.08rem 0.42rem;
-    border-radius: 0.28rem;
-    background: var(--horizon-surface);
-    border: 1px solid var(--horizon-line);
-    color: var(--horizon-ink);
-    font-weight: 600;
-  }
-
   .attention-title {
     color: var(--horizon-ink);
-    font-size: 0.92rem;
+    font-size: 1rem;
     font-weight: 600;
     line-height: 1.35;
     text-decoration: none;
@@ -285,9 +277,9 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 1.15rem 1.25rem;
+    padding: 1.5rem;
     color: var(--horizon-muted);
-    font-size: 0.88rem;
+    font-size: 0.94rem;
   }
 
   .attention-empty p {
@@ -336,7 +328,7 @@ const progressPct = totalEligibleCount > 0 ? Math.round((completedCount / totalE
     display: flex;
     align-items: center;
     min-height: 2.5rem;
-    padding: 0.55rem 1.25rem;
+    padding: 0.8rem 1.5rem;
     background: var(--horizon-surface);
     color: var(--horizon-ink);
     cursor: pointer;

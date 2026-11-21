@@ -1,5 +1,6 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
+import CivicIntro from '../../components/site/CivicIntro.astro';
 import ContributionForm from '../../components/collaboration/ContributionForm';
 import FunnelBeacon from '../../components/collaboration/FunnelBeacon';
 import { Button } from '../../components/ui/button';
@@ -32,11 +33,10 @@ if (!initiative) Astro.response.status = 404;
 >
   {initiative ? (
     <div class="page-wrap section-space collaborate-page">
-      <header class="page-intro">
-        <p class="text-sm font-semibold uppercase tracking-widest">Take part</p>
+      <CivicIntro eyebrow="Take part" tone="pink">
         <h1>{initiative.title}</h1>
         <p>{initiative.summary}</p>
-      </header>
+      </CivicIntro>
 
       <div class="collaborate-layout">
         <section aria-label="Share your story">
@@ -108,11 +108,10 @@ if (!initiative) Astro.response.status = 404;
     </div>
   ) : (
     <div class="page-wrap section-space">
-      <header class="page-intro">
-        <p class="text-sm font-semibold uppercase tracking-widest">Take part</p>
+      <CivicIntro eyebrow="Take part" tone="pink">
         <h1>This invitation isn't here</h1>
         <p>The link may be old, or the invitation may have closed.</p>
-      </header>
+      </CivicIntro>
       <Button href="/collaborate/">See open invitations</Button>
     </div>
   )}
@@ -120,10 +119,10 @@ if (!initiative) Astro.response.status = 404;
 
 <style>
   .collaborate-page { max-width: 68rem; }
-  .collaborate-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 4rem; margin-top: 2rem; }
+  .collaborate-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: clamp(2rem, 5vw, 4rem); margin-top: 2.5rem; }
   .collaborate-purpose { margin: 0 0 1.25rem; font-size: 1.05rem; }
   .collaborate-gallery-link { margin: 0 0 2rem; }
-  .collaborate-layout aside { border-top: 3px solid var(--horizon-accent); padding-top: 1.5rem; align-self: start; }
+  .collaborate-layout aside { border-top: 3px solid var(--horizon-magenta); padding-top: 1.5rem; align-self: start; }
   .collaborate-layout aside h2 { font-size: 1.35rem; margin: 0 0 0.75rem; }
   .collaborate-layout aside h2 + ul { margin-top: 0; }
   .collaborate-layout aside ul { margin: 0 0 1.75rem; padding-left: 1.1rem; display: grid; gap: 0.6rem; color: var(--horizon-muted); }

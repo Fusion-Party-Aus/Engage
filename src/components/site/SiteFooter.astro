@@ -66,17 +66,17 @@ const groups = [
     <div class="site-footer__grid">
       <div class="site-footer__brand">
         <a class="footer-brand" href="/" aria-label="Engage home">
-          <img src="/fusion_horizon_logo_light.svg" alt="" width="36" height="36" />
+          <img src="/fusion_horizon_logo_light.svg" alt="" width="44" height="44" />
           <span>
             <strong>{siteConfig?.siteName || 'Engage'}</strong>
             <small>{siteConfig?.organizationName || 'Fusion Party Australia'}</small>
           </span>
         </a>
         <p class="site-footer__tagline">
-          {siteConfig?.tagline || 'Explore ideas, join discussions, and vote on the decisions that shape Fusion.'}
+          {siteConfig?.tagline || 'Fusion’s home for participation.'}
         </p>
         <p class="site-footer__note">
-          Read what Fusion is discussing and deciding. Verified members can put forward ideas, join the discussion and vote where eligible.
+          Share a priority, contribute to a project or explore the ideas shaping Fusion. Membership opens additional responsibilities and voting rights where eligible.
         </p>
       </div>
 
@@ -104,7 +104,7 @@ const groups = [
 
     <div class="site-footer__states" aria-labelledby="footer-states-heading">
       <div class="site-footer__states-head">
-        <h2 id="footer-states-heading">State &amp; Territory Sites &amp; Facebook Pages</h2>
+        <h2 id="footer-states-heading">Across Australia</h2>
         <a href="/branches/">All branches &amp; electorates →</a>
       </div>
       <ul class="state-links-strip">
@@ -145,19 +145,16 @@ const groups = [
 <style>
   .site-footer {
     position: relative;
-    background:
-      radial-gradient(65% 120% at 12% -10%, rgba(124, 74, 209, 0.55), transparent 62%),
-      radial-gradient(50% 90% at 92% 0%, rgba(0, 201, 210, 0.16), transparent 66%),
-      #240a59;
-    color: #d9d0ea;
+    background: var(--horizon-gradient-soft);
+    color: var(--horizon-purple);
   }
 
   .site-footer::before {
     content: '';
     position: absolute;
     inset: 0 0 auto;
-    height: 3px;
-    background: linear-gradient(90deg, var(--horizon-accent), #7b4ad1 55%, transparent);
+    height: 4px;
+    background: var(--horizon-gradient-brand);
   }
 
   .site-footer__inner {
@@ -176,19 +173,19 @@ const groups = [
     display: inline-flex;
     align-items: center;
     gap: 0.7rem;
-    color: #fff;
+    color: var(--horizon-magenta);
     text-decoration: none;
   }
 
   .footer-brand img {
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 2.75rem;
+    height: 2.75rem;
     object-fit: contain;
   }
 
   .footer-brand strong {
     display: block;
-    font-size: 1.08rem;
+    font-size: 1.6rem;
     line-height: 1.1;
     letter-spacing: -0.01em;
   }
@@ -196,7 +193,7 @@ const groups = [
   .footer-brand small {
     display: block;
     margin-top: 0.18rem;
-    color: #b9a9d6;
+    color: var(--horizon-muted);
     font-size: 0.68rem;
     font-weight: 500;
     letter-spacing: 0.04em;
@@ -205,17 +202,17 @@ const groups = [
   .site-footer__tagline {
     max-width: 34ch;
     margin: 1.35rem 0 0.55rem;
-    color: #efe9ff;
-    font-size: 1rem;
+    color: var(--horizon-purple-deep);
+    font-size: 1.15rem;
     line-height: 1.55;
   }
 
   .site-footer__note {
     max-width: 42ch;
     margin: 0;
-    color: #b3a4cf;
-    font-size: 0.82rem;
-    line-height: 1.5;
+    color: var(--horizon-muted);
+    font-size: 0.9rem;
+    line-height: 1.65;
   }
 
   .site-footer__groups {
@@ -226,9 +223,9 @@ const groups = [
 
   .footer-group__title {
     margin: 0 0 0.85rem;
-    color: #fff;
+    color: var(--horizon-purple-deep);
     font-family: Outfit, sans-serif;
-    font-size: 0.78rem;
+    font-size: 0.9rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     line-height: 1.2;
@@ -243,13 +240,13 @@ const groups = [
   }
 
   .footer-group a {
-    color: #c5b9dd;
+    color: var(--horizon-muted);
     font-size: 0.86rem;
     text-decoration: none;
   }
 
   .footer-group a:hover {
-    color: #fff;
+    color: var(--horizon-magenta);
     text-decoration: underline;
     text-decoration-color: var(--horizon-accent);
     text-decoration-thickness: 2px;
@@ -258,7 +255,7 @@ const groups = [
   .site-footer__states {
     margin-top: 2.25rem;
     padding-top: 1.35rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    border-top: 1px solid var(--horizon-line);
     display: grid;
     gap: 0.75rem;
   }
@@ -273,7 +270,7 @@ const groups = [
 
   .site-footer__states-head h2 {
     margin: 0;
-    color: #ffffff;
+    color: var(--horizon-purple-deep);
     font-family: Outfit, sans-serif;
     font-size: 0.8rem;
     font-weight: 700;
@@ -281,13 +278,13 @@ const groups = [
   }
 
   .site-footer__states-head a {
-    color: #cfc3e4;
+    color: var(--horizon-purple);
     font-size: 0.8rem;
     text-decoration: none;
   }
 
   .site-footer__states-head a:hover {
-    color: #fff;
+    color: var(--horizon-magenta);
     text-decoration: underline;
   }
 
@@ -304,8 +301,8 @@ const groups = [
     display: inline-flex;
     align-items: center;
     border-radius: 0.45rem;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: var(--horizon-white);
+    border: 1px solid var(--horizon-line);
     overflow: hidden;
     font-size: 0.78rem;
   }
@@ -315,32 +312,32 @@ const groups = [
     align-items: center;
     gap: 0.35rem;
     padding: 0.32rem 0.6rem;
-    color: #ebe4fa;
+    color: var(--horizon-purple);
     text-decoration: none;
   }
 
   .state-link-chip__main strong {
-    color: #8cf3fc;
+    color: var(--horizon-magenta);
     font-weight: 700;
   }
 
   .state-link-chip__main:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+    background: var(--horizon-lavender);
+    color: var(--horizon-purple);
   }
 
   .state-link-chip__fb {
     padding: 0.32rem 0.5rem;
-    border-left: 1px solid rgba(255, 255, 255, 0.14);
-    color: #c5b9dd;
+    border-left: 1px solid var(--horizon-line);
+    color: var(--horizon-muted);
     font-weight: 600;
     text-decoration: none;
     font-size: 0.72rem;
   }
 
   .state-link-chip__fb:hover {
-    background: rgba(5, 212, 229, 0.2);
-    color: #fff;
+    background: var(--horizon-aqua-soft);
+    color: var(--horizon-purple);
   }
 
   .site-footer__bottom {
@@ -351,12 +348,12 @@ const groups = [
     gap: 1rem;
     margin-top: 1.5rem;
     padding-top: 1.15rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.16);
+    border-top: 1px solid var(--horizon-line);
   }
 
   .site-footer__bottom p {
     margin: 0;
-    color: #a99bc6;
+    color: var(--horizon-muted);
     font-size: 0.8rem;
   }
 
@@ -366,13 +363,13 @@ const groups = [
   }
 
   .site-footer__bottom a {
-    color: #cfc3e4;
+    color: var(--horizon-purple);
     font-size: 0.8rem;
     text-decoration: none;
   }
 
   .site-footer__bottom a:hover {
-    color: #fff;
+    color: var(--horizon-magenta);
     text-decoration: underline;
     text-decoration-color: var(--horizon-accent);
     text-decoration-thickness: 2px;

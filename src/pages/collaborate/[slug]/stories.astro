@@ -1,5 +1,6 @@
 ---
 import SiteLayout from '../../../layouts/SiteLayout.astro';
+import CivicIntro from '../../../components/site/CivicIntro.astro';
 import { Button } from '../../../components/ui/button';
 import { getDatabase, runtimeEnv } from '../../../lib/db.ts';
 import { getPublicInitiative, listPublishedContributions } from '../../../lib/collaboration.ts';
@@ -20,11 +21,10 @@ if (!initiative) Astro.response.status = 404;
 >
   {initiative ? (
     <div class="page-wrap section-space gallery-page">
-      <header class="page-intro">
-        <p class="text-sm font-semibold uppercase tracking-widest">Published stories</p>
+      <CivicIntro eyebrow="Published stories" tone="pink">
         <h1>{initiative.title}</h1>
         <p>These stories and photographs were shared with Fusion and approved for the website. Each person chose how they are credited.</p>
-      </header>
+      </CivicIntro>
 
       {stories.length ? (
         <ul class="gallery-list">
@@ -72,11 +72,10 @@ if (!initiative) Astro.response.status = 404;
     </div>
   ) : (
     <div class="page-wrap section-space">
-      <header class="page-intro">
-        <p class="text-sm font-semibold uppercase tracking-widest">Published stories</p>
+      <CivicIntro eyebrow="Published stories" tone="pink">
         <h1>These stories aren't here</h1>
         <p>The invitation may be closed or the link may be old.</p>
-      </header>
+      </CivicIntro>
       <Button href="/collaborate/">See open invitations</Button>
     </div>
   )}
@@ -85,9 +84,9 @@ if (!initiative) Astro.response.status = 404;
 <style>
   .gallery-page { max-width: 58rem; }
   .gallery-list { list-style: none; margin: 2.5rem 0 0; padding: 0; display: grid; gap: 3rem; }
-  .gallery-list li { border-top: 3px solid var(--horizon-accent); padding-top: 1.75rem; scroll-margin-top: 5rem; }
+  .gallery-list li { border-top: 3px solid var(--horizon-magenta); padding-top: 2rem; scroll-margin-top: 6rem; }
   .gallery-photos { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
-  .gallery-photos img { max-height: 26rem; max-width: 100%; border-radius: 0.5rem; object-fit: cover; }
+  .gallery-photos img { max-height: 26rem; max-width: 100%; border-radius: var(--horizon-radius); object-fit: cover; }
   .gallery-answer + .gallery-answer { margin-top: 1.25rem; }
   .gallery-answer h2 { font-size: 1.15rem; margin: 0 0 0.35rem; }
   .gallery-answer p { margin: 0; white-space: pre-wrap; }

@@ -792,7 +792,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
                 <div class="admin-tally" aria-label="Recorded ballot tally">
                   <div class="admin-tally__bar" aria-hidden="true">
                     <span style={`width:${pct(proposal.votes.approve)}%;background:var(--horizon-success-ink)`}></span>
-                    <span style={`width:${pct(proposal.votes.abstain)}%;background:#8a6100`}></span>
+                    <span style={`width:${pct(proposal.votes.abstain)}%;background:var(--horizon-warn-ink)`}></span>
                     <span style={`width:${pct(proposal.votes.reject)}%;background:var(--horizon-danger-ink)`}></span>
                   </div>
                   <div class="admin-tally__legend">
@@ -1892,7 +1892,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 
   .project-header h1 {
     margin: 0;
-    font-family: var(--font-newsreader), Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: clamp(1.75rem, 2.6vw, 2.35rem);
     font-weight: 600;
     line-height: 1.14;
@@ -2056,7 +2056,7 @@ const activityTimeline = buildActivityTimeline(activityEvents as ActivityTimelin
 
   .project-panel-head h2 {
     margin: 0;
-    font-family: var(--font-newsreader), Georgia, serif;
+    font-family: var(--font-outfit);
     font-size: 1.35rem;
     font-weight: 600;
     color: var(--horizon-ink);

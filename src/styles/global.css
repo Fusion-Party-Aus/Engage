@@ -16,13 +16,23 @@
   color-scheme: light;
   --horizon-purple: #32105a;
   --horizon-purple-deep: #271047;
-  --horizon-accent: #00c9d2;
+  --horizon-violet: #7b2cf4;
+  --horizon-magenta: #c01086;
+  --horizon-magenta-hover: #a50b72;
+  --horizon-pink: #f52da8;
+  --horizon-blue: #278ef5;
+  --horizon-aqua: #00c9d2;
+  --horizon-accent: var(--horizon-aqua);
   --horizon-accent-hover: #6de0e6;
   --horizon-accent-ink: #271047;
   --horizon-lavender: #f2eef9;
   --horizon-lavender-soft: #f8f5fc;
+  --horizon-rose-soft: #fdf0f8;
+  --horizon-blue-soft: #edf6fe;
+  --horizon-aqua-soft: #e7fafa;
   --horizon-line: #ded6e7;
   --horizon-line-strong: #c3b3d9;
+  --horizon-input-border: #8b7b9b;
   --horizon-ink: var(--horizon-purple-deep);
   --horizon-muted: #54465f;
   --horizon-white: #ffffff;
@@ -37,16 +47,23 @@
   --horizon-voting-ink: #09474c;
   --horizon-surface: #ffffff;
   --horizon-rule: #ded6e7;
-  --horizon-cyan: #00c9d2;
-  --content-width: 74rem;
-  --card-spacing: 1.25rem;
-  font-family: Outfit, sans-serif;
+  --horizon-cyan: var(--horizon-aqua);
+  --horizon-gradient-brand: linear-gradient(115deg, var(--horizon-violet), var(--horizon-magenta) 58%, var(--horizon-aqua));
+  --horizon-gradient-soft: linear-gradient(110deg, var(--horizon-lavender-soft), var(--horizon-rose-soft) 60%, var(--horizon-aqua-soft));
+  --horizon-shadow-soft: 0 8px 28px color-mix(in srgb, var(--horizon-purple) 7%, transparent);
+  --horizon-shadow-raised: 0 16px 42px color-mix(in srgb, var(--horizon-purple) 12%, transparent);
+  --horizon-radius: 1.25rem;
+  --section-accent: var(--horizon-violet);
+  --section-surface: var(--horizon-lavender-soft);
+  --content-width: 84rem;
+  --card-spacing: 1.5rem;
+  font-family: var(--font-outfit);
   color: var(--horizon-purple);
   background: var(--horizon-white);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   caret-color: var(--horizon-purple);
-  scrollbar-color: #9e8cb2 var(--horizon-lavender);
+  scrollbar-color: var(--horizon-line-strong) var(--horizon-lavender);
 }
 
 .typeset-notes {
@@ -134,6 +151,25 @@ body {
   margin: 0;
   min-width: 20rem;
   line-height: 1.6;
+  background: var(--horizon-white);
+  color: var(--horizon-purple-deep);
+}
+
+body[data-section='sense-box'],
+body[data-section='collaborate'] {
+  --section-accent: var(--horizon-magenta);
+  --section-surface: var(--horizon-rose-soft);
+}
+
+body[data-section='proposals'] {
+  --section-accent: var(--horizon-blue);
+  --section-surface: var(--horizon-blue-soft);
+}
+
+body[data-section='policies'],
+body[data-section='branches'] {
+  --section-accent: var(--horizon-aqua);
+  --section-surface: var(--horizon-aqua-soft);
 }
 
 @layer base {
@@ -175,7 +211,7 @@ time {
 
 .skip-link {
   position: absolute;
-  z-index: 30;
+  z-index: 45;
   top: 0.5rem;
   left: 0.5rem;
   transform: translateY(-180%);
@@ -200,7 +236,7 @@ main {
 }
 
 .section-space {
-  padding-block: clamp(3rem, 6vw, 5.25rem);
+  padding-block: clamp(2.5rem, 5vw, 4.5rem);
 }
 
 h1,
@@ -212,24 +248,24 @@ h3 {
 
 h1,
 h2 {
-  font-family: Newsreader, Georgia, serif;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-family: var(--font-outfit);
+  font-weight: 700;
+  letter-spacing: -0.035em;
   color: var(--horizon-purple-deep);
 }
 
 h1 {
-  font-size: clamp(2.4rem, 5vw, 4.1rem);
-  line-height: 1.04;
+  font-size: clamp(2.25rem, 4.5vw, 3.8rem);
+  line-height: 1.08;
 }
 
 h2 {
-  font-size: clamp(1.85rem, 3.4vw, 2.75rem);
-  line-height: 1.1;
+  font-size: clamp(1.65rem, 3vw, 2.45rem);
+  line-height: 1.16;
 }
 
 h3 {
-  font-family: Outfit, sans-serif;
+  font-family: var(--font-outfit);
   font-size: clamp(1.15rem, 1.7vw, 1.35rem);
   font-weight: 600;
   line-height: 1.3;
@@ -275,20 +311,12 @@ h3 {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
   }
 }
 
-/* Horizon application frame */
-:root { --content-width: 84rem; --horizon-purple:#260b59; --horizon-purple-deep:#1d0a49; --horizon-accent:#05d4e5; --horizon-lavender:#f3f1fb; --horizon-lavender-soft:#f8f7fd; --horizon-line:#dedcf0; }
-body { background:#f8f9ff; color:#21124c; }
-.page-wrap { width:min(var(--content-width),calc(100% - 3rem)); }
-.section-space { padding-block:clamp(2rem,4vw,3.5rem); }
-h1,h2,h3 { letter-spacing:-.025em; }
-
 .journey-visitor-hero h1,
-.member-home .journey-hero h1 { color:#fff; }
-@media(max-width:760px){ .page-wrap { width:calc(100% - 2rem); } }
+.member-home .journey-hero h1 { color:var(--horizon-white); }
 
 .member-page .status-banner{margin:1rem 0}
 .member-page[data-view="activity"] .overview-only,.member-page[data-view="activity"] .account-only,.member-page[data-view="activity"] .member-overview,.member-page[data-view="activity"] .status-banner{display:none}
@@ -298,28 +326,28 @@ h1,h2,h3 { letter-spacing:-.025em; }
 @theme inline {
   --font-sans: var(--font-outfit);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-newsreader);
-  --color-background: #ffffff;
+  --font-heading: var(--font-outfit);
+  --color-background: var(--horizon-white);
   --color-foreground: var(--horizon-purple);
-  --color-card: #ffffff;
+  --color-card: var(--horizon-white);
   --color-card-foreground: var(--horizon-purple);
-  --color-popover: #ffffff;
+  --color-popover: var(--horizon-white);
   --color-popover-foreground: var(--horizon-purple);
-  --color-primary: var(--horizon-accent);
-  --color-primary-foreground: var(--horizon-accent-ink);
+  --color-primary: var(--horizon-magenta);
+  --color-primary-foreground: var(--horizon-white);
   --color-secondary: var(--horizon-purple);
-  --color-secondary-foreground: #ffffff;
+  --color-secondary-foreground: var(--horizon-white);
   --color-muted: var(--horizon-lavender);
   --color-muted-foreground: var(--horizon-muted);
   --color-accent: var(--horizon-lavender);
   --color-accent-foreground: var(--horizon-purple);
   --color-border: var(--horizon-line);
-  --color-input: #9f93ae;
+  --color-input: var(--horizon-input-border);
   --color-ring: var(--horizon-focus);
   --color-destructive: var(--horizon-danger-bg);
   --color-destructive-foreground: var(--horizon-danger-ink);
   --radius-sm: .35rem;
   --radius-md: .5rem;
-  --radius-lg: .75rem;
-  --radius-xl: 1rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
 }

@@ -33,6 +33,7 @@ Documentation is not a substitute for the code. Where this set and the implement
 | Import an existing branch policy registry | [guides/branch-policy-import.md](guides/branch-policy-import.md) |
 | Make a change | [guides/contributing.md](guides/contributing.md) |
 | Act as an autonomous agent | [guides/agent-guide.md](guides/agent-guide.md) |
+| Maintain the Community Mosaic redesign | [design/community-mosaic-redesign.md](design/community-mosaic-redesign.md) |
 | Know what is actually shipped | [status/capability-matrix.md](status/capability-matrix.md) |
 | Know what is broken or undecided | [status/known-gaps.md](status/known-gaps.md) |
 | Know which governance rules the maintainer has approved | [governance/decision-register.md](governance/decision-register.md) |

@@ -1,0 +1,28 @@
+---
+import CommunityImage from './CommunityImage.astro';
+interface Props {
+  eyebrow: string;
+  tone?: 'purple' | 'pink' | 'aqua';
+  image?: boolean;
+}
+const { eyebrow, tone = 'purple', image = false } = Astro.props;
+---
+<header class:list={['civic-intro', `civic-intro--${tone}`, { 'civic-intro--image': image }]}>
+  <div class="civic-intro__copy">
+    <p class="civic-intro__eyebrow">{eyebrow}</p>
+    <slot />
+  </div>
+  {image && <div class="civic-intro__visual"><CommunityImage sizes="(min-width: 801px) 40vw, 100vw" /></div>}
+</header>
+<style>
+  .civic-intro { --section-accent: var(--horizon-purple); position: relative; display: grid; gap: 2rem; padding: clamp(1.5rem, 4vw, 3rem); margin-bottom: 2rem; border-radius: 1.5rem; background: linear-gradient(115deg, var(--horizon-lavender-soft), var(--horizon-white)); border: 1px solid var(--horizon-line); border-top: 4px solid var(--section-accent); }
+  .civic-intro--pink { --section-accent: var(--horizon-magenta); }
+  .civic-intro--aqua { --section-accent: var(--horizon-accent); }
+  .civic-intro--image { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: center; }
+  .civic-intro__copy { min-width: 0; display: grid; gap: 1rem; align-content: start; }
+  .civic-intro__eyebrow { margin: 0; color: var(--horizon-purple); text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; font-weight: 700; }
+  .civic-intro__copy :global(h1) { margin: 0; max-width: 24ch; font-family: var(--font-outfit); font-size: clamp(2rem, 4.6vw, 3.6rem); font-weight: 750; line-height: 1.08; letter-spacing: -.035em; color: var(--horizon-purple); text-wrap: balance; overflow-wrap: anywhere; }
+  .civic-intro__copy :global(p:not(.civic-intro__eyebrow)) { margin: 0; max-width: 64ch; line-height: 1.65; color: var(--horizon-muted); }
+  .civic-intro__visual { min-width: 0; }
+  @media (max-width: 800px) { .civic-intro--image { grid-template-columns: 1fr; } .civic-intro { padding: 1.5rem; } .civic-intro__visual { max-width: 38rem; } }
+</style>

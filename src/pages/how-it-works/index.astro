@@ -1,4 +1,5 @@
 ---
+import CommunityImage from '../../components/site/CommunityImage.astro';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -128,9 +129,9 @@ const governanceRules = [
           <Badge variant="info">Getting involved</Badge>
           <Badge variant="outline">From idea to decision</Badge>
         </div>
-        <h1>How Engage works.</h1>
+        <h1>Find your way into Engage.</h1>
         <p class="how-header__lead">
-          Engage is where Fusion members work on ideas and decide what the party should do. Bring a proposal, help improve someone else’s idea, or read the discussion before casting your vote.
+          Explore Fusion’s work, share a local priority or contribute to an open invitation. Verified members can develop proposals, join formal discussions and vote when eligible.
         </p>
         <div class="how-header__actions">
           <Button href={primaryCtaHref}>
@@ -147,6 +148,7 @@ const governanceRules = [
       </div>
 
       <aside class="how-summary-box" aria-label="At a glance">
+        <CommunityImage sizes="(min-width: 900px) 30vw, 100vw" />
         <h2>At a glance</h2>
         <ol>
           <li><strong>Read along:</strong> public proposals, discussions and ballot totals are available without an account.</li>
@@ -399,6 +401,10 @@ const governanceRules = [
   }
 
   .how-header {
+    padding: clamp(1.25rem, 3vw, 2.5rem);
+    background: linear-gradient(115deg, var(--horizon-lavender-soft), var(--horizon-white));
+    border-radius: 1.5rem;
+    border-top: 4px solid var(--horizon-accent);
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(19rem, 0.8fr);
     gap: 2rem;
@@ -418,7 +424,7 @@ const governanceRules = [
 
   .how-header h1 {
     margin: 0;
-    font: 600 clamp(2.4rem, 4.5vw, 3.6rem)/1.04 Newsreader, Georgia, serif;
+    font: 600 clamp(2.4rem, 4.5vw, 3.6rem)/1.04 var(--font-outfit);
     letter-spacing: -0.03em;
     color: var(--horizon-ink);
   }
@@ -450,7 +456,7 @@ const governanceRules = [
 
   .how-summary-box h2 {
     margin: 0;
-    font: 700 1rem/1.2 Outfit, sans-serif;
+    font: 700 1rem/1.2 var(--font-outfit);
     color: var(--horizon-purple-deep);
   }
 
@@ -479,7 +485,7 @@ const governanceRules = [
     padding: 0.55rem 1rem;
     border: 1px solid var(--horizon-line);
     border-radius: 0.6rem;
-    background: rgba(255, 255, 255, 0.95);
+    background: color-mix(in srgb, var(--horizon-white) 95%, transparent);
     backdrop-filter: blur(10px);
     font-size: 0.82rem;
     font-weight: 700;
@@ -529,7 +535,7 @@ const governanceRules = [
 
   .section-bar h2 {
     margin: 0;
-    font: 600 clamp(1.55rem, 2.6vw, 2.1rem)/1.12 Newsreader, Georgia, serif;
+    font: 600 clamp(1.55rem, 2.6vw, 2.1rem)/1.12 var(--font-outfit);
     color: var(--horizon-ink);
   }
 
@@ -547,7 +553,7 @@ const governanceRules = [
     grid-template-columns: repeat(4, minmax(0, 1fr));
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
-    background: #ffffff;
+    background: var(--horizon-white);
     overflow: hidden;
   }
 
@@ -571,7 +577,7 @@ const governanceRules = [
   }
 
   .walkthrough-step {
-    font: 600 1.4rem/1 Newsreader, Georgia, serif;
+    font: 600 1.4rem/1 var(--font-outfit);
     color: var(--horizon-purple);
   }
 
@@ -624,7 +630,7 @@ const governanceRules = [
     grid-template-columns: 1fr 1fr;
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
-    background: #ffffff;
+    background: var(--horizon-white);
     overflow: hidden;
   }
 
@@ -640,7 +646,7 @@ const governanceRules = [
   }
 
   .matrix-panel.is-member {
-    background: #faf9fe;
+    background: var(--horizon-lavender-soft);
   }
 
   .matrix-panel__head {
@@ -724,7 +730,7 @@ const governanceRules = [
   .source-list {
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
-    background: #ffffff;
+    background: var(--horizon-white);
     overflow: hidden;
   }
 
@@ -793,7 +799,7 @@ const governanceRules = [
     grid-template-columns: repeat(3, minmax(0, 1fr));
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
-    background: #ffffff;
+    background: var(--horizon-white);
     overflow: hidden;
   }
 
@@ -849,8 +855,8 @@ const governanceRules = [
     margin: 0;
     padding: 0.75rem;
     border-radius: 0.5rem;
-    background: #1d0a49;
-    color: #efe9ff;
+    background: var(--horizon-purple-deep);
+    color: var(--horizon-lavender);
     font-size: 0.74rem;
     line-height: 1.45;
     overflow-x: auto;
@@ -860,7 +866,7 @@ const governanceRules = [
   .rules-accordion {
     border: 1px solid var(--horizon-line);
     border-radius: 0.75rem;
-    background: #ffffff;
+    background: var(--horizon-white);
     overflow: hidden;
   }
 

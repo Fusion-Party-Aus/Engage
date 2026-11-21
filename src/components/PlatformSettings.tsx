@@ -257,7 +257,7 @@ function VisibilitySection({ config, save, onDirty, ask }: SectionProps) {
               </FieldRow>
             </div>
           </div>
-          <aside aria-label="Preview" className="grid content-start gap-3">
+          <section aria-label="Preview" className="grid content-start gap-3">
             <p className="text-xs font-semibold text-muted-foreground">Preview</p>
             <div className="overflow-hidden rounded-lg border">
               {isSiteLink(draft.defaultOgImage) ? (
@@ -275,7 +275,7 @@ function VisibilitySection({ config, save, onDirty, ask }: SectionProps) {
                 <span className="text-xs text-muted-foreground">No button shown</span>
               )}
             </div>
-          </aside>
+          </section>
         </div>
         <SaveBar dirty={s.dirty} saving={s.saving} feedback={s.feedback} onDiscard={s.discard} />
       </form>
@@ -407,14 +407,14 @@ function SocialSection({ config, save, onDirty, ask }: SectionProps) {
               </Button>
             </div>
           </div>
-          <aside aria-label="Footer preview" className="grid content-start gap-2">
+          <section aria-label="Footer preview" className="grid content-start gap-2">
             <p className="text-xs font-semibold text-muted-foreground">Footer preview</p>
             <ul className="grid gap-1.5 rounded-lg bg-[#240a59] p-4 text-sm text-[#c5b9dd]">
               {rows.filter((r) => r.label.trim()).map((r) => (
                 <li key={r._id} className="flex items-center gap-1.5"><Share2 aria-hidden className="size-3.5" />{r.label} <span className="sr-only">({PLATFORM_LABELS[r.platform ?? 'website']})</span></li>
               ))}
             </ul>
-          </aside>
+          </section>
         </div>
         <SaveBar dirty={s.dirty} saving={s.saving} feedback={s.feedback} onDiscard={s.discard} />
       </form>
