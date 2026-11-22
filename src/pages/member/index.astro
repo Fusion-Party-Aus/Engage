@@ -6,7 +6,7 @@ import LegalAcceptanceGate from '../../components/legal/LegalAcceptanceGate.astr
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
-import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { NativeSelect } from '../../components/ui/native-select';
@@ -288,6 +288,14 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
               Sign in to discuss ideas, propose changes and vote where eligible. Use the email address on your Fusion membership. If this is your first visit, we’ll also ask for your full name.
             </p>
           </header>
+
+          {/* Temporary incident notice. Remove after confirming recovery in production (#167). */}
+          <Alert variant="warning" role="status">
+            <AlertTitle>Email sign-in links are temporarily unavailable</AlertTitle>
+            <AlertDescription>
+              Use your saved Engage passkey or continue with Google using the email address on your Fusion membership.
+            </AlertDescription>
+          </Alert>
 
           {!emailAvailable && !googleAvailable && !devLoginAvailable && !passkeyAvailable ? (
             <Alert variant="warning">
