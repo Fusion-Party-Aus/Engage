@@ -1,11 +1,20 @@
 [
   {
-    "hash": "c0e85d1",
+    "hash": "8605200",
+    "date": "2026-11-23",
+    "type": "fix",
+    "category": "fix",
+    "scope": "auth",
+    "summary": "Show the email sign-in link outage on Engage",
+    "details": "Refs #167"
+  },
+  {
+    "hash": "59453ad",
     "date": "2026-11-18",
     "type": "docs",
     "category": "docs",
     "scope": "product",
-    "summary": "Define Engage as Fusion's home for participation"
+    "summary": "Define Engage as Fusion's home for participation (#164)"
   },
   {
     "hash": "c44e0d5",
@@ -679,14 +688,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Record the member engagement admin repair"
-  },
-  {
-    "hash": "34166c8",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "engagement",
-    "summary": "Repair proxy test sends and clarify admin delivery reporting",
-    "details": "Use JSON and the configured public origin to prevent the reverse proxy from rejecting admin test email before provider submission. Separate explicit provider rejection from uncertain sends, expose safe self-only receipts, and keep test bounces isolated from member preferences. Replace raw engagement reporting with responsive cards, period controls, a read-only audience preview and expandable diagnostics. Historical ballot opportunity coverage remains explicitly unavailable. Validation: 144 tests passed, 15 optional tests skipped; Astro check and build passed; mocked-provider HTTP and DOM interaction checks passed. Browser screenshots and authenticated production delivery remain blocked and are documented."
   }
 ]
