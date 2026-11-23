@@ -1,11 +1,37 @@
 [
   {
-    "hash": "8605200",
+    "hash": "37ed8bb",
+    "date": "2026-11-23",
+    "type": "fix",
+    "category": "fix",
+    "scope": "proposals",
+    "summary": "Preserve pending filters and empty-state actions",
+    "details": "Refs #169"
+  },
+  {
+    "hash": "0d81605",
+    "date": "2026-11-23",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Refresh proposal discovery snapshot (#169)"
+  },
+  {
+    "hash": "c0c3650",
+    "date": "2026-11-23",
+    "type": "fix",
+    "category": "fix",
+    "scope": "proposals",
+    "summary": "Update discovery results without reloading (#169)",
+    "details": "Refs #169"
+  },
+  {
+    "hash": "dfb2ba3",
     "date": "2026-11-23",
     "type": "fix",
     "category": "fix",
     "scope": "auth",
-    "summary": "Show the email sign-in link outage on Engage",
+    "summary": "Show the email sign-in link outage on Engage (#168)",
     "details": "Refs #167"
   },
   {
@@ -663,30 +689,5 @@
     "scope": "admin",
     "summary": "Add durable database migrations and standard branch seed",
     "details": "Add Admin -> Migrations for national administrators. The page previews each additive migration, shows the last recorded run and any error, and applies Standard branches or Branch participation individually or in order. Every run is recorded in data_migrations with run count, timestamps, actor and result. Standard branches is an idempotent seed for Fusion National, VIC, NSW, QLD, WA, SA, TAS, ACT and NT with National as parent; existing branches are never renamed, re-parented or un-recognised. Branch participation remains blocked until the National branch exists. The command-line seed now uses the same service, and the participation migration remains available for deployment automation."
-  },
-  {
-    "hash": "b980369",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record branch participation and verification"
-  },
-  {
-    "hash": "a727732",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "branches",
-    "summary": "Separate branch following from verified membership",
-    "details": "Members choose the branches they follow during onboarding and in My Engage. Authorised administrators verify followers as members in a focused Branch governance workspace. Branch subscriptions are now Engage-owned preferences, while verified organisational membership stays in branch_memberships with source, verification and audit metadata. National governance is included for every verified account and never removed by branch preferences. Existing members without branch connections receive national scope silently and a one-time state branch invitation. Eligibility is decided in one service used by proposal pages, ballot submission, pending-vote promotion and digests. Followers can discover branch activity but cannot vote. Revocation requires a reason and preserves historical votes and the person's following preference. The migration backfills legacy membership metadata, adds subscriptions without duplicating them, assigns open proposals without branch context to national governance, and leaves branch-owned and archived records untouched. The Underground CRM boundary is implemented through applyExternalMembership: external membership facts can update organisational membership but never branch subscriptions, and local administrators cannot silently override CRM-sourced records. Tests cover national defaults, follow/unfollow idempotency, source integrity, permissions, migration, parent/child eligibility and new proposal defaults."
-  },
-  {
-    "hash": "ba482d0",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record the member engagement admin repair"
   }
 ]

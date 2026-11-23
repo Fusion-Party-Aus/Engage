@@ -1,6 +1,7 @@
 ---
 import { discoveryFocus } from '../../lib/proposal-discovery.ts';
 import { ballotDeadlineLabel, ballotExpired } from '../../lib/ballot-deadline.ts';
+import ProposalListFragment from '../../components/ProposalListFragment.astro';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
@@ -39,7 +40,11 @@ const [db, user] = await Promise.all([
   getDatabase(env),
   getSessionUser(Astro.request, env),
 ]);
-const siteConfig = await getSiteConfig(db, env);
+// Use the same authenticated query and rendering for navigation and inline updates.
+const inline = Astro.request.headers.get('X-Engage-Proposal-List') === '1';
+const Layout = inline ? ProposalListFragment : SiteLayout;
+Astro.response.headers.append('Vary', 'X-Engage-Proposal-List');
+const siteConfig = inline ? null : await getSiteConfig(db, env);
 
 const initialQuery = (Astro.url.searchParams.get('q') ?? '').trim();
 const initialSpace = (Astro.url.searchParams.get('space') ?? Astro.url.searchParams.get('category') ?? 'all').trim();
@@ -105,6 +110,11 @@ const currentPage = page.page;
 
 const buildFilterUrl = (overrides: Record<string, string | null>) => {
   const params = new URLSearchParams(Astro.url.searchParams);
+  if (initialStage === 'decide' && !params.has('focus') && !params.has('needsVote')) {
+    params.set('focus', initialFocus);
+  }
+  if ('stage' in overrides) params.delete('status');
+  if ('space' in overrides) params.delete('category');
   for (const [k, v] of Object.entries(overrides)) {
     if (
       !v ||
@@ -200,30 +210,30 @@ const hasActiveFilters =
   initialBranch !== 'all' ||
   initialStage !== '' ||
   initialFocus !== 'all' ||
-  initialSort !== 'priority';
+  initialSort !== 'priority' || joinedOnly;
 
 ---
-<SiteLayout
+<Layout
   title="Browse proposals · Engage"
   description="Browse proposals across all stages: explore ideas, join discussions, see open votes, and follow decisions after the vote."
   canonical={canonicalHref}
   prevHref={prevHref}
   nextHref={nextHref}
 >
-  <div class="page-wrap section-space proposals-page">
+  <div class="page-wrap section-space proposals-page" data-proposal-discovery data-page={currentPage} data-focus={initialFocus}>
     <div class="proposals-surface">
       <!-- Top Header -->
       <header class="proposals-top">
         <div class="proposals-top__heading">
           <h1>Browse proposals</h1>
-          <span class="proposals-total tabular">{baseProposalCount} proposals</span>
+          <span class="proposals-total tabular" data-discovery-text="total">{baseProposalCount} proposals</span>
         </div>
-        <div class="proposals-top__actions">
-          <Button href={siteConfig.primaryCtaHref || '/proposals/new/'} size="sm">
+        {!inline && <div class="proposals-top__actions">
+          <Button href={siteConfig?.primaryCtaHref || '/proposals/new/'} size="sm">
             <Plus className="size-4" aria-hidden="true" />
-            {siteConfig.primaryCtaLabel || 'Suggest an idea'}
+            {siteConfig?.primaryCtaLabel || 'Suggest an idea'}
           </Button>
-        </div>
+        </div>}
       </header>
 
 
@@ -235,6 +245,7 @@ const hasActiveFilters =
               const isCurrent = tab.id === 'all' ? initialStage === '' : initialStage === tab.id;
               return (
                 <a
+                  data-discovery-link={`stage-${tab.id}`} data-no-prefetch
                   href={buildFilterUrl({ stage: tab.id, focus: null, needsVote: null, page: '1' })}
                   class:list={['workflow-tab', { 'is-active': isCurrent }]}
                   aria-current={isCurrent ? 'page' : undefined}
@@ -252,13 +263,13 @@ const hasActiveFilters =
 
       <!-- Search & Quiet Secondary Filters -->
       <form data-analytics-collection="proposals" data-analytics-results={visibleCount} id="proposals-filter-form" class="search-controls" role="search" method="get" action="/proposals/">
-        {initialStage !== '' && <input type="hidden" name="stage" value={initialStage} />}
+        <input type="hidden" name="stage" value={initialStage} />
 
-        <fieldset class="participation-filters">
+        <fieldset class="participation-filters" data-discovery-region="participation">
           <legend>For me</legend>
           <input type="hidden" name="focus" value={initialFocus === 'recent' ? 'recent' : 'all'} />
           {user?.canParticipate && initialStage === 'decide' && <label><Checkbox id="needs-my-vote" name="needsVote" value="1" defaultChecked={initialFocus === 'needs-vote'} data-auto-submit /> I haven’t voted yet <span class="tabular">{myOutstandingVotes.length}</span></label>}
-          {user?.canParticipate && initialStage !== 'decide' && <a class="personal-vote-link" href={buildFilterUrl({ stage: 'decide', focus: 'needs-vote', needsVote: null, page: '1' })}>I haven’t voted yet <span class="tabular">{myOutstandingVotes.length}</span></a>}
+          {user?.canParticipate && initialStage !== 'decide' && <a class="personal-vote-link" data-discovery-link="needs-vote" data-no-prefetch href={buildFilterUrl({ stage: 'decide', focus: 'needs-vote', needsVote: null, page: '1' })}>I haven’t voted yet <span class="tabular">{myOutstandingVotes.length}</span></a>}
           {user && <label><Checkbox id="joined-discussions" name="joined" value="1" defaultChecked={joinedOnly} data-auto-submit /> Discussions I’ve joined</label>}
         </fieldset>
         <div class="search-row">
@@ -273,11 +284,11 @@ const hasActiveFilters =
             autoComplete="off"
             className="search-row__input"
           />
-          {initialQuery && (
-            <a href={buildFilterUrl({ q: null, page: '1' })} class="search-row__clear" aria-label="Clear search">
-              <X className="size-4" aria-hidden="true" />
-            </a>
-          )}
+          <Button href={buildFilterUrl({ q: null, page: '1' })} variant="ghost" size="icon"
+            className="search-row__clear" data-discovery-link="clear-search" data-no-prefetch
+            hidden={!initialQuery} aria-label="Clear search">
+            <X className="size-4" aria-hidden="true" />
+          </Button>
         </div>
 
         <div class="secondary-filters-row">
@@ -292,6 +303,7 @@ const hasActiveFilters =
                 data-auto-submit
               >
                 <option value="all" selected={!initialSpace || initialSpace === 'all'}>All topics ({spaces.length})</option>
+                {initialSpace !== 'all' && initialSpace && !spaces.includes(initialSpace) && <option value={initialSpace} selected>{initialSpace}</option>}
                 {spaces.map((sp) => (
                   <option value={sp} selected={initialSpace === sp}>{sp}</option>
                 ))}
@@ -313,17 +325,16 @@ const hasActiveFilters =
               </NativeSelect>
             </div>
 
-            {hasActiveFilters && (
-              <a href="/proposals/" class="clear-filters-link">
-                <X className="size-3.5" aria-hidden="true" />
-                Clear filters
-              </a>
-            )}
+            <Button href="/proposals/" variant="ghost" size="sm" className="clear-filters-link"
+              hidden={!hasActiveFilters} data-discovery-link="clear-filters" data-no-prefetch>
+              <X className="size-3.5" aria-hidden="true" />
+              Clear filters
+            </Button>
           </div>
 
           <div class="results-and-sort">
             <span class="results-count tabular" id="live-results-count">
-              <span id="live-results-range">{rangeSummary}</span>
+              <span data-discovery-text="range">{rangeSummary}</span>
             </span>
 
             <div class="quiet-select-wrap">
@@ -344,9 +355,7 @@ const hasActiveFilters =
               </NativeSelect>
             </div>
 
-            <noscript>
-              <Button type="submit" size="sm" variant="outline">Apply</Button>
-            </noscript>
+            <Button type="submit" size="sm" variant="outline">Apply</Button>
           </div>
         </div>
       </form>
@@ -354,18 +363,24 @@ const hasActiveFilters =
       <details class="explore-proposals">
         <summary>Explore</summary>
         <div>
-          <a href={buildFilterUrl({ sort: 'divisive', page: '1' })}>Most divided</a>
-          <a href={buildFilterUrl({ sort: 'approved', page: '1' })}>Highest approval share</a>
-          <a href={buildFilterUrl({ sort: 'active', page: '1' })}>Most active</a>
+          <a data-discovery-link="sort-divisive" data-no-prefetch href={buildFilterUrl({ sort: 'divisive', page: '1' })}>Most divided</a>
+          <a data-discovery-link="sort-approved" data-no-prefetch href={buildFilterUrl({ sort: 'approved', page: '1' })}>Highest approval share</a>
+          <a data-discovery-link="sort-active" data-no-prefetch href={buildFilterUrl({ sort: 'active', page: '1' })}>Most active</a>
         </div>
       </details>
-      <!-- Spacious Proposal List -->
+      <p class="sr-only" role="status" data-discovery-status></p>
+      <div data-discovery-error hidden>
+        <p>Couldn’t load proposals.</p>
+        <Button variant="outline" size="sm" type="button" data-discovery-retry>Try again</Button>
+      </div>
+
+      <section class="proposal-results" tabindex="-1" aria-label="Proposal results" data-discovery-results>
       {visibleCount === 0 ? (
         <div class="empty-register">
           <h2>{initialFocus === 'needs-vote' && myOutstandingVotes.length === 0 ? "You're up to date" : 'No matching proposals'}</h2>
           {initialFocus === 'needs-vote' && myOutstandingVotes.length === 0 ? (
-            <Button href={buildFilterUrl({ stage: 'decide', focus: 'all', q: null, branch: null, space: null })} variant="outline" size="sm">Browse active ballots</Button>
-          ) : <Button href="/proposals/" variant="outline" size="sm">Clear filters</Button>}
+            <Button href={buildFilterUrl({ stage: 'decide', focus: 'all', needsVote: null, page: '1', q: null, branch: null, space: null })} variant="outline" size="sm" data-discovery-link data-no-prefetch>Browse active ballots</Button>
+          ) : <Button href="/proposals/" variant="outline" size="sm" data-discovery-link data-no-prefetch>Clear filters</Button>}
         </div>
       ) : (
         <div class="proposal-list" role="list" id="proposal-list">
@@ -392,15 +407,13 @@ const hasActiveFilters =
             return (
               <article
                 class="proposal-item"
-                data-stage={item.stage}
-                data-search={`${item.proposalId} ${item.title} ${item.space} ${item.summary}`.toLowerCase()}
                 role="listitem"
               >
                 <!-- Line 1: Topic Context (left) + Stage Pill (right) -->
                 <div class="proposal-item__eyebrow">
                   <div class="proposal-item__context">
                     <a
-                      class="proposal-item__space"
+                      class="proposal-item__space" data-discovery-link="topic" data-no-prefetch
                       href={buildFilterUrl({ space: item.space, page: '1' })}
                     >
                       {item.space}
@@ -477,12 +490,13 @@ const hasActiveFilters =
 
       <!-- Bottom Pagination Bar -->
       <footer class="proposals-bottom">
-        <p class="results-count tabular" role="status" aria-live="polite">{rangeSummary}</p>
+        <p class="results-count tabular">{rangeSummary}</p>
 
         {pageCount > 1 && (
           <nav class="pagination" aria-label="Proposal pages">
             <Button
-              href={pageUrl(currentPage - 1)}
+              href={pageUrl(Math.max(1, currentPage - 1))}
+              data-discovery-link="page" data-no-prefetch
               variant="outline"
               size="sm"
               aria-label="Previous page"
@@ -493,7 +507,8 @@ const hasActiveFilters =
             </Button>
             <span class="tabular" aria-current="page">Page {currentPage} of {pageCount}</span>
             <Button
-              href={pageUrl(currentPage + 1)}
+              href={pageUrl(Math.min(pageCount, currentPage + 1))}
+              data-discovery-link="page" data-no-prefetch
               variant="outline"
               size="sm"
               aria-label="Next page"
@@ -505,45 +520,15 @@ const hasActiveFilters =
           </nav>
         )}
       </footer>
+      </section>
     </div>
   </div>
-</SiteLayout>
+</Layout>
 
 <script>
-  const form = document.querySelector<HTMLFormElement>('#proposals-filter-form');
-  const searchInput = document.querySelector<HTMLInputElement>('#proposal-search');
-  const items = Array.from(document.querySelectorAll<HTMLElement>('.proposal-item'));
-  const liveCount = document.querySelector<HTMLElement>('#live-results-range');
-
-  // Auto-submit quiet dropdown filters on change
-  document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-auto-submit]').forEach((select) => {
-    select.addEventListener('change', () => {
-      form?.requestSubmit();
-    });
-  });
-
-  // Immediate client-side filtering on the current page, plus debounced URL sync
-  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-  searchInput?.addEventListener('input', () => {
-    const query = searchInput.value.trim().toLowerCase();
-    let matched = 0;
-    for (const item of items) {
-      const hay = item.dataset.search ?? '';
-      const show = !query || hay.includes(query);
-      item.hidden = !show;
-      if (show) matched += 1;
-    }
-    if (liveCount && query) {
-      liveCount.textContent = `Showing ${matched} matching on this page (press Enter to search all)`;
-    }
-
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      if (searchInput.value.trim() !== (new URLSearchParams(location.search).get('q') ?? '').trim()) {
-        form?.requestSubmit();
-      }
-    }, 550);
-  });
+  import { enhanceProposalDiscovery } from '../../scripts/proposal-discovery';
+  const discovery = document.querySelector<HTMLElement>('[data-proposal-discovery]');
+  if (discovery) enhanceProposalDiscovery(discovery);
 </script>
 
 <style>
@@ -694,7 +679,10 @@ const hasActiveFilters =
     background: #ffffff;
   }
 
-  .search-row__clear {
+  .proposal-results { display: grid; gap: 1.35rem; }
+  .proposals-page :global([hidden]) { display: none; }
+
+  .search-row :global(.search-row__clear) {
     position: absolute;
     right: 0.9rem;
     display: inline-flex;
@@ -735,7 +723,7 @@ const hasActiveFilters =
     border-color: #b7a2df;
   }
 
-  .clear-filters-link {
+  .quiet-filters :global(.clear-filters-link) {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
@@ -746,7 +734,7 @@ const hasActiveFilters =
     text-decoration: none;
   }
 
-  .clear-filters-link:hover {
+  .quiet-filters :global(.clear-filters-link:hover) {
     text-decoration: underline;
   }
 
