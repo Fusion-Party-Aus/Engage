@@ -8,6 +8,7 @@ import {
 } from "./rate-limit.ts";
 import { TURNSTILE_ACTIONS } from "./turnstile-actions.ts";
 import {
+  turnstileConfiguration,
   turnstileFailureResponse,
   verifyTurnstile,
   type TurnstileEnv,
@@ -96,7 +97,16 @@ export async function enforceAbuseProtection(
     env: input.env,
     expectedAction: turnstileActionFor(input.action),
   });
-  if (!verdict.ok) return turnstileFailureResponse(verdict);
+  if (!verdict.ok) {
+    // Temporary production recovery (#177). A configured widget still has to
+    // verify, and both the shared and Better Auth rate limits continue to apply.
+    if (
+      input.action === "auth-magic-link" &&
+      verdict.code === "TURNSTILE_MISCONFIGURED" &&
+      turnstileConfiguration(input.env).state === "misconfigured"
+    ) return null;
+    return turnstileFailureResponse(verdict);
+  }
 
   return null;
 }
