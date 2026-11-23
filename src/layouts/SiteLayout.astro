@@ -163,7 +163,7 @@ const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organ
   // Same-origin hover/focus link prefetching for near-instant page navigation
   const prefetched = new Set<string>();
   const shouldPrefetch = (anchor: HTMLAnchorElement | null): anchor is HTMLAnchorElement => {
-    if (!anchor || !anchor.href) return false;
+    if (!anchor || !anchor.href || anchor.hasAttribute('data-no-prefetch')) return false;
     if (anchor.target && anchor.target !== '_self') return false;
     if (anchor.hasAttribute('download')) return false;
     let url: URL;
@@ -196,21 +196,8 @@ const ogImageAltText = imageAlt || `${siteConfig.siteName} · ${siteConfig.organ
   }, { passive: true });
 </script>
 <script>
-  import { formatLocalDeadline, formatRelativeDeadline } from '../lib/ballot-deadline.ts';
-  function hydrateBallotDeadlines() {
-    const now = new Date();
-    document.querySelectorAll('time[data-ballot-deadline]').forEach((el) => {
-      const iso = el.getAttribute('datetime');
-      if (!iso) return;
-      try {
-        const prefix = el.getAttribute('data-prefix') || 'Voting closes';
-        el.textContent = `${prefix} ${formatRelativeDeadline(iso, now)} · ${formatLocalDeadline(iso)}`;
-      } catch {
-        // Keep server-rendered fallback if invalid date
-      }
-    });
-  }
+  import { hydrateBallotDeadlines } from '../scripts/ballot-deadlines';
   hydrateBallotDeadlines();
-  document.addEventListener('astro:page-load', hydrateBallotDeadlines);
+  document.addEventListener('astro:page-load', () => hydrateBallotDeadlines());
 </script>
 
