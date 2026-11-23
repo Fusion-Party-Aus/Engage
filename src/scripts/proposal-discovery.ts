@@ -7,6 +7,7 @@ const linkSelector = 'a[data-discovery-link]';
 function updateListing(root: HTMLElement, incoming: HTMLElement, search: HTMLInputElement) {
   const active = document.activeElement as HTMLElement | null;
   const activeLink = active?.dataset.discoveryLink;
+  const focusedResults = active?.closest(resultsSelector);
   const scroll = { left: window.scrollX, top: window.scrollY };
 
   // Retain the actual input, selects, stage tabs and live region across updates.
@@ -26,6 +27,7 @@ function updateListing(root: HTMLElement, incoming: HTMLElement, search: HTMLInp
   form.dataset.analyticsResults = incoming.querySelector<HTMLFormElement>('#proposals-filter-form')!.dataset.analyticsResults;
 
   for (const element of root.querySelectorAll<HTMLElement>('[data-discovery-text], [data-discovery-region], a[data-discovery-link]:not([data-discovery-link=""])')) {
+    if (element.closest(resultsSelector)) continue;
     const attribute = Array.from(element.attributes).find(({ name }) =>
       name === 'data-discovery-text' || name === 'data-discovery-region' || name === 'data-discovery-link',
     )!;
@@ -52,10 +54,10 @@ function updateListing(root: HTMLElement, incoming: HTMLElement, search: HTMLInp
   } else if (active && !active.isConnected) {
     const replacement = active.id
       ? document.getElementById(active.id)
-      : activeLink
+      : activeLink && !focusedResults
         ? root.querySelector<HTMLElement>(`[data-discovery-link="${activeLink}"]`)
         : null;
-    (replacement ?? (activeLink === '' ? results : search)).focus({ preventScroll: true });
+    (replacement ?? (focusedResults ? results : search)).focus({ preventScroll: true });
   }
   window.scrollTo({ ...scroll, behavior: 'instant' });
 }
@@ -90,6 +92,7 @@ export function enhanceProposalDiscovery(root: HTMLElement) {
   let activeRequest: AbortController | undefined;
   let failed: Navigation | undefined;
   let editing = false;
+  let renderedFilters = formUrl().searchParams;
 
   function cancelPending() {
     clearTimeout(timer);
@@ -121,6 +124,7 @@ export function enhanceProposalDiscovery(root: HTMLElement) {
 
       const nextUrl = resolvedUrl(new URL(url), incoming);
       updateListing(root, incoming, search);
+      renderedFilters = formUrl().searchParams;
       if (nextUrl.href !== location.href) {
         if (mode === 'restore' || (mode === 'search' && editing)) {
           history.replaceState(history.state, '', nextUrl);
@@ -192,10 +196,23 @@ export function enhanceProposalDiscovery(root: HTMLElement) {
       void navigate({ url: formUrl(), mode: 'filter' });
       return;
     }
-    if (link.dataset.discoveryLink?.match(/^(stage-|sort-|needs-vote$)/) || link.classList.contains('proposal-item__space')) {
-      const query = search.value.trim();
-      if (query) url.searchParams.set('q', query);
-      else url.searchParams.delete('q');
+    const intent = link.dataset.discoveryLink ?? '';
+    const overrides = intent.startsWith('stage-') || intent === 'needs-vote'
+      ? ['stage', 'focus', 'needsVote']
+      : intent.startsWith('sort-') ? ['sort']
+      : intent === 'topic' ? ['space']
+      : intent === 'page' ? [] : null;
+
+    if (overrides) {
+      const pending = formUrl().searchParams;
+      for (const key of new Set([...renderedFilters.keys(), ...pending.keys()])) {
+        const value = pending.get(key);
+        if (overrides.includes(key) || value === renderedFilters.get(key)) continue;
+        if (value === null) url.searchParams.delete(key);
+        else url.searchParams.set(key, value);
+        if (key === 'space') url.searchParams.delete('category');
+        url.searchParams.delete('page');
+      }
     }
     void navigate({ url, mode: 'filter' });
   });

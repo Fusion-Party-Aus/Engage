@@ -124,14 +124,30 @@ async function verifyListing(browser, origin) {
     await waitForResult(page, '', 'Page 1 of');
     assert.equal(await page.locator('#proposal-sort').inputValue(), 'recent');
 
+    // The stage link must carry a new branch selection while its response is pending.
+    const branchSelect = page.locator('#proposal-branch');
+    const branchRequest = page.waitForRequest((request) =>
+      partial(request) && new URL(request.url()).searchParams.get('branch') === branch);
+    let releaseBranch;
+    const heldBranch = new Promise((resolve) => { releaseBranch = resolve; });
+    await page.route((url) => url.searchParams.get('branch') === branch && !url.searchParams.has('stage'), async (route) => {
+      await heldBranch;
+      await route.continue().catch(() => {});
+    }, { times: 1 });
+    await branchSelect.selectOption(branch);
+    await branchRequest;
     await page.getByRole('link', { name: /^Ideas/ }).click();
     await page.waitForFunction(() => new URLSearchParams(location.search).get('stage') === 'propose');
+    releaseBranch();
+    assert.equal(new URL(page.url()).searchParams.get('branch'), branch);
+    assert.equal(await branchSelect.inputValue(), branch);
     assert.equal(await page.getByRole('link', { name: /^Ideas/ }).getAttribute('aria-current'), 'page');
+    await branchSelect.selectOption('all');
+    await page.waitForFunction(() => !new URLSearchParams(location.search).has('branch'));
     const topicSelect = page.locator('#proposal-space');
     const topic = await topicSelect.locator('option').nth(1).getAttribute('value');
     await topicSelect.selectOption(topic);
     await page.waitForFunction((topic) => new URLSearchParams(location.search).get('space') === topic, topic);
-    const branchSelect = page.locator('#proposal-branch');
     await branchSelect.selectOption(branch);
     await page.waitForFunction((branch) => new URLSearchParams(location.search).get('branch') === branch, branch);
     assert.equal(await topicSelect.inputValue(), topic);
@@ -161,10 +177,14 @@ async function verifyListing(browser, origin) {
     assert.equal(sent.length, 1);
     assert.ok((await page.locator(heading).allTextContents()).includes(laterPageTitle));
 
+    await page.getByRole('link', { name: 'Clear search', exact: true }).click();
+    await waitForResult(page, '', 'Page 1 of');
+    assert.equal(await page.getByRole('navigation', { name: 'Proposal pages' }).count(), 1);
     await search.fill('unlikely-proposal-169');
     await waitForResult(page, 'unlikely-proposal-169', 'No proposals match');
     assert.equal(await page.getByRole('heading', { name: 'No matching proposals' }).count(), 1);
     assert.equal(await page.getByRole('navigation', { name: 'Proposal pages' }).count(), 0);
+    await page.getByRole('region', { name: 'Proposal results' }).getByRole('link', { name: 'Clear filters' }).waitFor();
 
     const retryQuery = 'retry-proposal-169';
     await page.route((url) => url.searchParams.get('q') === retryQuery, (route) => route.abort(), { times: 1 });

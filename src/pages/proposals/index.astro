@@ -413,7 +413,7 @@ const hasActiveFilters =
                 <div class="proposal-item__eyebrow">
                   <div class="proposal-item__context">
                     <a
-                      class="proposal-item__space" data-discovery-link data-no-prefetch
+                      class="proposal-item__space" data-discovery-link="topic" data-no-prefetch
                       href={buildFilterUrl({ space: item.space, page: '1' })}
                     >
                       {item.space}
@@ -496,7 +496,7 @@ const hasActiveFilters =
           <nav class="pagination" aria-label="Proposal pages">
             <Button
               href={pageUrl(Math.max(1, currentPage - 1))}
-              data-discovery-link data-no-prefetch
+              data-discovery-link="page" data-no-prefetch
               variant="outline"
               size="sm"
               aria-label="Previous page"
@@ -508,7 +508,7 @@ const hasActiveFilters =
             <span class="tabular" aria-current="page">Page {currentPage} of {pageCount}</span>
             <Button
               href={pageUrl(Math.min(pageCount, currentPage + 1))}
-              data-discovery-link data-no-prefetch
+              data-discovery-link="page" data-no-prefetch
               variant="outline"
               size="sm"
               aria-label="Next page"
