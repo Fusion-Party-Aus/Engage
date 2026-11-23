@@ -351,6 +351,31 @@ describe("abuse protection for authentication requests", () => {
 });
 
 describe("abuse protection guard", () => {
+  it("allows rate-limited magic-link requests alone when widget keys are missing", async () => {
+    const db = await getDatabase(env);
+    const input = {
+      request: new Request("https://engage.test/api/auth/sign-in/magic-link", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "203.0.113.33" },
+      }),
+      env: { ...env, TURNSTILE_SECRET_KEY: "" },
+      db,
+      token: "",
+    };
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      assert.equal(await enforceAbuseProtection({ ...input, action: "auth-magic-link" }), null);
+    }
+    const limited = await enforceAbuseProtection({ ...input, action: "auth-magic-link" });
+    assert.equal(limited?.status, 429);
+
+    for (const action of ["auth-sign-up", "sense-box-submit", "collaboration-submit"] as const) {
+      const refused = await enforceAbuseProtection({ ...input, action });
+      assert.equal(refused?.status, 503);
+      assert.equal((await refused?.json()).code, "TURNSTILE_MISCONFIGURED");
+    }
+  });
+
   it("returns null once a token verifies, and reports the expected action", async () => {
     const db = await getDatabase(env);
     const captured: string[] = [];
