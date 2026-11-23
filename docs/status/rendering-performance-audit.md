@@ -509,3 +509,106 @@ The Mongo suites initialise a fresh database per case through `initializeDatabas
 - Browser verification: `/admin/` server island replaces its fallback and its nested activity timeline hydrates on scroll with no console errors; the proposal ballot hydrates and responds to a click on desktop (member click-to-next-paint proxy 97 ms in the measured run).
 - Raw-control audit on changed files: no new raw `<button>`, `<select>`, `<input>`, `<textarea>`, `<table>` or `<dialog>` elements. The notification list rows use plain anchors for navigation; the summary is a native `<details>/<summary>` disclosure; the retry and view-all controls use the existing `Button` primitive.
 - No new arbitrary palette values or undefined Horizon custom properties were introduced.
+
+## Public navigation follow-up (23 November 2026)
+
+Three requests per route over one reused HTTP/2 connection to production showed
+that most document download time elapsed before the first byte. The measurement
+came from a remote runner and includes its network path to Engage.
+
+| Route | Time to first byte | Complete HTML response | Compressed transfer |
+| --- | --- | --- | --- |
+| `/proposals/` | 326–505 ms | 387–564 ms | 17.3–17.7 kB |
+| `/policies/` | 245–276 ms | 287–318 ms | 15.1–15.7 kB |
+
+The proposal list now renders from one projected proposal read. Branch options,
+configuration and candidate reads can run in parallel. The policy registry
+loads a smaller projection and reads adopted wording when it is needed for
+search. Eligibility and tally evaluation still use current server-side data.
+
+A local comparison used 80 synthetic proposals and a fixed 25 ms delay per
+database read. The median of nine anonymous proposal list data loads fell from
+79 ms to 54 ms, with identical page IDs, summaries and counts. The change
+removed one serial read. This experiment measures data loading with a simulated
+round trip, and production timing still needs a staging comparison.
+
+The response header `Server-Timing: app;dur=…` measures the time from application
+middleware entry to the response becoming available. Compare it with document
+TTFB on the same request to distinguish time spent preparing the application
+response from time spent outside that span, including networking and proxying.
+
+## First-render boundaries by route
+
+A route should send the content people came to read before waiting for data
+used only by an interactive panel. Reserve space for a pending panel and
+keep the surrounding content readable. Separate first paint from panel-ready
+time in the browser benchmark.
+
+| Route | Needed in the first response | Work that can move off the initial render |
+| --- | --- | --- |
+| Proposal detail | Visible proposal, summary, commitments, rationale, immutable wording and published deadline | The page currently reads all vote envelopes, then resolves eligibility, the viewer's vote, outstanding ballots, amendments and discussion context. Quorum now uses its own server island and rechecks visibility and the revision. The next boundary is the ballot and discussion controls. |
+| Home and proposal directory | Public proposal cards, filters and links | The home page waits for highlights and member-specific ballot progress. The directory waits for the viewer's outstanding ballot and vote badges on ordinary browse requests. Personal filters still need authorisation and filtered results. |
+| Policy registry and policy detail | Public policy, adoption record and the requested registry results | Separate session-sensitive navigation from public policy output so the edge can serve that output. Keep unpublished and restricted records behind server checks. |
+| How it works and changelog | Guide or release notes plus normal navigation | The guide now uses stable links and no longer reads the proposal register or the policy collection for incidental counts and copy. Both pages still use the dynamic site layout. |
+| My Engage and member profiles | Identity or profile visibility, navigation and the selected view | My Engage loads the inbox, push subscriptions, passkey count, catch-up and preferences before rendering. Load each panel when its view is selected, with a loading state inside the panel. Profile activity should resolve separately after the profile visibility check. |
+| Sense Box and Collaborate | Published priorities, initiative descriptions and navigation | Submission tools, contribution controls and counts can load separately. Keep review and unpublished content authorisation with its read. |
+| Admin | Access check, navigation and the primary work for the selected screen | The dashboard already defers Recent Member Participation. The responsibility queue and secondary reporting panels are candidates for the same treatment. |
+
+For public proposal caching, publish content under its revision identity and
+refresh or purge the slug response when wording or visibility changes. The
+cached document can carry the canonical closing timestamp and let the browser
+format the countdown. The member ballot response must be private and resolve
+the current session, eligibility and revision. Ballot submissions still
+validate the current revision and deadline on the server.
+
+The proposal quorum island removes its lookup and electorate calculation from
+the HTML request. The participation count it receives is the snapshot already
+computed by the containing request. A built-server smoke check verified the
+proposal heading and skeleton in the HTML, quorum in a separate response, and
+denial when the proposal became private between requests. This slice does not
+yet move the containing page's ballot scan or enable public HTML caching.
+
+### Follow-up query and panel changes
+
+- Proposal detail starts ballot and discussion reads alongside the other detail
+  queries once proposal visibility is established. Open ballots use a fresh
+  projection for the bound revision. Guest renders take that path without
+  reading vote envelopes. Signed-in renders query only that member's vote.
+  Missing or stale projections fall back to the live tally to keep legacy
+  ballots readable.
+- The branch directory uses projected proposal metadata for branch counts.
+  My Engage and the deferred admin participation panel do not request the
+  proposal register's full ballot tallies.
+- My Engage fetches the inbox and push subscriptions only inside the
+  Notifications tab's deferred preferences panel. The panel rechecks the
+  requesting member and sets `private, no-store`.
+
+The full proposal document still depends on the current session and on some
+ballot and discussion reads. A cacheable public document and separately loaded
+voting controls require moving those remaining dependencies out of the shared
+layout and proposal template. Staging first-paint and panel-ready measurements
+remain pending.
+
+### Proposal ballot and discussion split
+
+The proposal document now reads contribution counts without fetching the
+thread. The ballot widget, vote status, next-ballot navigation and quorum load
+together in one private server island. Discussion, feedback evidence and
+contributor profile links load in another. Both check access to the proposal
+on their own requests. The title, wording, reading navigation, history and
+amendments stay in the initial document. Staff stage-change warnings still
+use a ballot count and active amendment voting still checks eligibility.
+
+The deferred panels have local skeletons and links to render the panel directly
+if it cannot load. A browser regression check holds the island requests and
+asserts that the document appears before releasing them.
+
+In a built in-memory preview with a two-second delay injected into vote and
+comment record reads, one warm signed-in document request completed in 123 ms
+and issued neither delayed read. The separate responses loaded those records.
+The same smoke check exercised vote updates, comment submission, direct panel
+links, signed-out vote privacy and visibility changes between requests.
+
+Anonymous unfiltered policy documents allow 30 seconds of browser reuse.
+Signed-in, filtered and missing policy documents use `private, no-store`.
+Shared edge HTML caching and staging browser timings are still pending.

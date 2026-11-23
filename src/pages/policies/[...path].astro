@@ -12,6 +12,7 @@ import {
   findPolicyByBranchPath,
   groupRegistryPolicies,
   policyCanonicalPath,
+  setPolicyPageCache,
 } from '../../lib/policy-registry.ts';
 import { isPolicyRegistryRecordForResolution } from '../../lib/proposal-helpers.ts';
 
@@ -67,6 +68,7 @@ if (detailContext) mode = 'detail';
 else if (segments.length === 1 && branch) mode = 'branch';
 else mode = 'missing';
 if (mode === 'missing') Astro.response.status = 404;
+setPolicyPageCache(Astro.request, Astro.response.headers, mode !== 'missing');
 
 // ---- Branch registry data -------------------------------------------------
 const branchSlug = segments[0] ?? '';

@@ -12,6 +12,7 @@ import {
   policyCanonicalPath,
   policySlugFromTitle,
   policyStatusLabel,
+  setPolicyPageCache,
   uniquePolicySlug,
 } from "./policy-registry.ts";
 
@@ -166,5 +167,27 @@ describe("policy registry grouping", () => {
   it("names publication states in member language", () => {
     assert.equal(policyStatusLabel("published"), "Current policy");
     assert.equal(policyStatusLabel("repealed"), "Repealed");
+  });
+});
+
+describe("policy document caching", () => {
+  it("allows short browser reuse of the anonymous registry and varies on credentials", () => {
+    const headers = new Headers();
+    setPolicyPageCache(new Request("https://engage.example/policies/"), headers);
+    assert.equal(headers.get("Cache-Control"), "private, max-age=30");
+    assert.equal(headers.get("Vary"), "Cookie, Authorization");
+  });
+
+  it("avoids caching signed-in, filtered, and missing pages", () => {
+    for (const [request, available] of [
+      [new Request("https://engage.example/policies/", { headers: { Cookie: "session=member" } }), true],
+      [new Request("https://engage.example/policies/", { headers: { Authorization: "Bearer member" } }), true],
+      [new Request("https://engage.example/policies/?q=transport"), true],
+      [new Request("https://engage.example/policies/missing/"), false],
+    ] as const) {
+      const headers = new Headers();
+      setPolicyPageCache(request, headers, available);
+      assert.equal(headers.get("Cache-Control"), "private, no-store");
+    }
   });
 });

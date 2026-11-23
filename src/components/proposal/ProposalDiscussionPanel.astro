@@ -1,0 +1,219 @@
+---
+import DiscussionThread, { type EvidenceOption } from './DiscussionThread';
+import { Badge } from '../ui/badge';
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { canRespondToContribution, resolveContributionEvidenceMap } from '../../lib/contribution-feedback.ts';
+import { getVisibleProposal, loadProposalComments } from '../../lib/proposals-store.ts';
+import { resolveMemberProfileLinks } from '../../lib/member-profile.ts';
+import { commentUpvotePercent, compareComments, type DiscussionComment } from '../../lib/comment-thread.ts';
+import { hasPermission } from '../../lib/rbac.ts';
+
+interface Props {
+  slug: string;
+  proposalId: string;
+  policyEvidenceIsPublic: boolean;
+  viewerId?: string;
+  evidenceOptions: EvidenceOption[];
+}
+
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
+const proposal = await getVisibleProposal(db, Astro.props.slug, user);
+if (!proposal || proposal.proposalId !== Astro.props.proposalId) return;
+const canRespondToFeedback = canRespondToContribution(user, proposal);
+const evidenceOptions = canRespondToFeedback && user?.memberId === Astro.props.viewerId
+  ? Astro.props.evidenceOptions.filter(({ group }) =>
+      group !== 'Policy registry' || Astro.props.policyEvidenceIsPublic || user?.isStaff || user?.isAdmin)
+  : [];
+const comments = await loadProposalComments(db, proposal.proposalId);
+const [profileLinks, evidenceMap] = await Promise.all([
+  resolveMemberProfileLinks(db, comments.map((comment) => comment.memberId)),
+  resolveContributionEvidenceMap(db, proposal, comments, user),
+]);
+const profileLinkFor = (memberId?: string | null) =>
+  memberId ? profileLinks.get(String(memberId).trim()) ?? null : null;
+
+const canModerateComments = Boolean(
+  user && (user.isStaff || hasPermission(user, 'comments.moderate', proposal?.originatingBranchId)),
+);
+const feedbackEvidence = (evidence?: { kind: string; recordId: string }) => {
+  if (!evidence) return undefined;
+  const resolved = evidenceMap.get(`${evidence.kind}:${evidence.recordId}`);
+  return resolved
+    ? { label: resolved.label, ...(resolved.href ? { href: resolved.href } : {}) }
+    : undefined;
+};
+const discussionComments: DiscussionComment[] = comments.map((comment) => {
+  const evidence = comment.feedback?.evidence;
+  const resolvedEvidence = feedbackEvidence(evidence);
+  const authorLink = profileLinkFor(comment.memberId);
+  const authorName = authorLink?.name || comment.authorName;
+  return {
+    commentId: comment.commentId,
+    parentCommentId: comment.parentCommentId ?? null,
+    authorName,
+    authorProfileHref: authorName ? authorLink?.href ?? null : null,
+    stance: comment.stance,
+    body: comment.body,
+    createdAt: new Date(comment.createdAt).toISOString(),
+    upvoteCount: comment.upvotes.length,
+    downvoteCount: (comment.downvotes ?? []).length,
+    score: comment.upvotes.length - (comment.downvotes ?? []).length,
+    upvotedByMe: Boolean(user && comment.upvotes.includes(user.memberId)),
+    downvotedByMe: Boolean(
+      user && (comment.downvotes ?? []).includes(user.memberId),
+    ),
+    isMine: Boolean(user && comment.memberId === user.memberId),
+    deleted: Boolean(comment.deletedAt),
+    ...(comment.feedback
+      ? {
+          feedback: {
+            status: comment.feedback.status,
+            ...(comment.feedback.note ? { note: comment.feedback.note } : {}),
+            updatedByName: comment.feedback.updatedByName,
+            updatedAt: new Date(comment.feedback.updatedAt).toISOString(),
+            ...(evidence ? { evidenceRef: `${evidence.kind}:${evidence.recordId}` } : {}),
+            ...(resolvedEvidence ? { evidence: resolvedEvidence } : {}),
+          },
+        }
+      : {}),
+    ...(comment.feedbackHistory?.length
+      ? {
+          feedbackHistory: comment.feedbackHistory.map((entry) => {
+            const historyEvidence = feedbackEvidence(entry.evidence);
+            return {
+              action: entry.action,
+              ...(entry.note ? { note: entry.note } : {}),
+              updatedByName: entry.updatedByName,
+              updatedAt: new Date(entry.updatedAt).toISOString(),
+              ...(historyEvidence ? { evidence: historyEvidence } : {}),
+            };
+          }),
+        }
+      : {}),
+  };
+});
+const topSupportComment = [...discussionComments]
+  .filter((c) => !c.deleted && c.stance === 'support')
+  .sort((a, b) => compareComments(a, b, 'best'))[0] ?? null;
+
+const topConcernComment = [...discussionComments]
+  .filter((c) => !c.deleted && c.stance === 'concern')
+  .sort((a, b) => compareComments(a, b, 'best'))[0] ?? null;
+
+---
+{(topSupportComment || topConcernComment) && (
+  <div class="deliberation-takeaways" aria-label="Key deliberation takeaways">
+    {topSupportComment && (
+      <div class="takeaway-box takeaway-box--support">
+        <div class="takeaway-box__head">
+          <Badge variant="success">Leading support</Badge>
+          <span class="takeaway-meta tabular" title={`${commentUpvotePercent(topSupportComment)}% upvoted from ${topSupportComment.upvoteCount + topSupportComment.downvoteCount} votes`}>
+            {topSupportComment.authorProfileHref ? (
+              <a class="takeaway-author" href={topSupportComment.authorProfileHref}>{topSupportComment.authorName}</a>
+            ) : topSupportComment.authorName} · {topSupportComment.score} {topSupportComment.score === 1 || topSupportComment.score === -1 ? 'point' : 'points'}
+          </span>
+        </div>
+        <p class="takeaway-quote">{topSupportComment.body}</p>
+      </div>
+    )}
+    {topConcernComment && (
+      <div class="takeaway-box takeaway-box--concern">
+        <div class="takeaway-box__head">
+          <Badge variant="destructive">Leading concern</Badge>
+          <span class="takeaway-meta tabular" title={`${commentUpvotePercent(topConcernComment)}% upvoted from ${topConcernComment.upvoteCount + topConcernComment.downvoteCount} votes`}>
+            {topConcernComment.authorProfileHref ? (
+              <a class="takeaway-author" href={topConcernComment.authorProfileHref}>{topConcernComment.authorName}</a>
+            ) : topConcernComment.authorName} · {topConcernComment.score} {topConcernComment.score === 1 || topConcernComment.score === -1 ? 'point' : 'points'}
+          </span>
+        </div>
+        <p class="takeaway-quote">{topConcernComment.body}</p>
+      </div>
+    )}
+  </div>
+)}
+
+<DiscussionThread
+  client:idle
+  proposalId={proposal.proposalId}
+  proposalTitle={proposal.title}
+  proposalSlug={proposal.slug}
+  initialComments={discussionComments}
+  isSignedIn={Boolean(user)}
+  canParticipate={Boolean(user?.canParticipate)}
+  canModerate={canModerateComments}
+  canRespondToFeedback={canRespondToFeedback}
+  evidenceOptions={evidenceOptions}
+/>
+
+<style>
+  .takeaway-author:focus-visible {
+    outline: 2px solid var(--horizon-focus);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  .takeaway-author {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .takeaway-author:hover {
+    text-decoration: underline;
+  }
+
+  /* Key deliberation takeaways */
+  .deliberation-takeaways {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .takeaway-box {
+    padding: 0.5rem 0.7rem;
+    border: 0;
+    border-left: 3px solid var(--horizon-line-strong);
+    border-radius: 0 0.45rem 0.45rem 0;
+    background: var(--horizon-lavender-soft);
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .takeaway-box--support {
+    border-left-color: var(--horizon-success-ink);
+  }
+
+  .takeaway-box--concern {
+    border-left-color: var(--horizon-danger-ink);
+  }
+
+  .takeaway-box__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+  }
+
+  .takeaway-meta {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--horizon-muted);
+  }
+
+  .takeaway-quote {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--horizon-purple-deep);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+</style>

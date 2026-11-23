@@ -272,14 +272,15 @@ function combineFilters(
   return clauses.length === 1 ? clauses[0]! : { $and: clauses };
 }
 
-// Display rows exclude the long rationale and rendered detail HTML. The search
-// still matches `details` in the query without returning it.
+// Read the list fields once. Search can match long-form wording without returning it.
 const LIST_CANDIDATE_PROJECTION = {
   _id: 0,
   proposalId: 1,
   policyId: 1,
   slug: 1,
   title: 1,
+  summary: 1,
+  statement: 1,
   space: 1,
   category: 1,
   stage: 1,
@@ -299,8 +300,8 @@ const LIST_CANDIDATE_PROJECTION = {
 
 /**
  * Read the visible matters that can match the list's search. This is the only
- * unfiltered-by-stage proposal read; it carries no rationale, ballot or vote
- * data and is used for counts and ordering before the display page is loaded.
+ * unfiltered-by-stage proposal read. Its projection supports counts, ordering
+ * and rendering without returning rationale or votes.
  */
 export async function listPublicProposalCandidates(
   db: Db,
@@ -625,32 +626,9 @@ export async function buildPublicProposalPage(
   const start = (page - 1) * pageSize;
   const pageItems = ordered.slice(start, start + pageSize);
 
-  const pageIds = pageItems.map((item) => item.proposalId);
-  const displayRows = pageIds.length
-    ? await db
-        .collection<ProposalRecord>("proposals")
-        .find(
-          {
-            $or: [
-              { proposalId: { $in: pageIds } },
-              { policyId: { $in: pageIds } },
-            ],
-          },
-          { projection: { detailHtml: 0, details: 0 } },
-        )
-        .toArray()
-    : [];
-  const displayById = new Map<string, ProposalRecord>();
-  for (const rawRow of displayRows) {
-    const proposal = normalizeProposalDoc(rawRow);
-    displayById.set(proposal.proposalId, proposal);
-  }
-
   const memberVotes = options.memberVotes ?? [];
   const rows: PublicProposalRow[] = [];
   for (const item of pageItems) {
-    const display = displayById.get(item.proposalId);
-    if (!display) continue;
     const hasVoted = memberVotes.some(
       (vote) =>
         String(vote.proposalId) === item.proposalId &&
@@ -659,11 +637,7 @@ export async function buildPublicProposalPage(
         vote.revisionId === item.ballotRevisionId,
     );
     rows.push({
-      ...display,
-      commentCount: item.commentCount,
-      votes: item.votes,
-      tallyState: item.tallyState,
-      ballotOpen: item.ballotOpen,
+      ...item,
       hasVoted,
     });
   }

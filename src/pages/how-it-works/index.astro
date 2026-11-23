@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { listProposals } from '../../lib/proposals-store.ts';
 import { getSiteConfig } from '../../lib/site-config.ts';
 
 export const prerender = false;
@@ -33,18 +32,6 @@ const [db, user] = await Promise.all([
   getSessionUser(Astro.request, env),
 ]);
 const siteConfig = await getSiteConfig(db, env);
-
-const [recentProposals, publishedPolicies] = await Promise.all([
-  listProposals(db, { user }),
-  db
-    .collection('policy_registry')
-    .find({ publicationStatus: 'published' })
-    .sort({ publishedAt: -1, ratifiedAt: -1 })
-    .limit(1)
-    .toArray(),
-]);
-const openVotes = recentProposals.filter((p) => p.stage === 'decide');
-const discussions = recentProposals.filter((p) => p.stage === 'deliberate');
 
 const primaryCtaLabel = siteConfig.primaryCtaLabel || 'Suggest an idea';
 const primaryCtaHref = siteConfig.primaryCtaHref || '/proposals/new/';
@@ -60,13 +47,13 @@ const walkthroughSteps = [
     step: '02', stage: '2. Deliberate', duration: 'Usually 30 days',
     who: 'Members discuss', title: 'Work through the idea together',
     body: 'Ask questions, raise concerns and suggest improvements. For a specific change to the text, submit a formal amendment so members can consider the wording separately.',
-    href: '/proposals/?stage=deliberate', linkLabel: `See ${discussions.length} discussions`,
+    href: '/proposals/?stage=deliberate', linkLabel: 'Browse discussions',
   },
   {
     step: '03', stage: '3. Decide', duration: 'Usually 30 days',
     who: 'Eligible members vote', title: 'Have your say on the wording',
     body: 'Read the ballot text before voting. That wording stays fixed for the ballot, and you can change your vote until it closes. An amendment ballot is separate from the vote on the main proposal.',
-    href: '/proposals/?stage=decide', linkLabel: `See ${openVotes.length} proposals at Decide`,
+    href: '/proposals/?stage=decide', linkLabel: 'Browse proposals at Decide',
   },
   {
     step: '04', stage: '4. Implement', duration: 'After the decision',
@@ -97,7 +84,7 @@ const underDevelopmentItems = [
   { status: 'In use', title: 'Seconding and deadlines', detail: 'Seconding starts the usual 30-day deliberation period, followed by a 30-day ballot. Scheduled transitions still depend on the lifecycle job running. Check each proposal for its actual dates, including any extended first-round timetable.' },
   { status: 'Still being developed', title: 'Handling successful amendments', detail: 'Successful member decisions are intended to take effect without a separate executive approval. Automatic ratification and the rules for resolving competing amendments are not yet complete.' },
   { status: 'Not available yet', title: 'Public pulse poll', detail: 'An informal public poll is planned but is not available yet. It would be separate from the formal member ballot.' },
-  { status: 'Policy record', title: 'What the registry includes', detail: publishedPolicies.length > 0 ? 'The registry contains published policy. Each record explains the basis for its adoption, including authorised branch imports where applicable.' : 'No policy has been published in this registry yet. Proposals are not adopted policy. Existing national policies have not been imported here.' },
+  { status: 'Policy record', title: 'What the registry includes', detail: 'The registry is where Engage publishes adopted policy. Each record explains how it was adopted, including authorised branch imports where applicable.' },
 ];
 
 const sourceMaterialLinks = [
@@ -138,7 +125,7 @@ const governanceRules = [
             {primaryCtaLabel}
           </Button>
           <Button href="/proposals/" variant="outline">
-            Browse {recentProposals.length} proposals
+            Browse proposals
           </Button>
           <Button href="/policies/" variant="ghost">
             Policy registry →

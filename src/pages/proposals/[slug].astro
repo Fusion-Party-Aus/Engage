@@ -1,17 +1,8 @@
 ---
-import { recordLifecycle } from '../../lib/member-lifecycle.ts';
 import { ballotExpired } from '../../lib/ballot-deadline.ts';
 import { proposalBallotResultFilter } from '../../lib/ballots.ts';
-import {
-  buildQuorumPreview,
-  getQuorumElectoratePreview,
-  quorumRuleLabel,
-  quorumVerdictLabel,
-  readBallotQuorumRecord,
-} from '../../lib/quorum.ts';
-import { proposalBallotId } from '../../lib/vote-storage.ts';
+import ProposalVotingPanel from '../../components/proposal/ProposalVotingPanel.astro';
 import SiteLayout from '../../layouts/SiteLayout.astro';
-import ProposalBallot from '../../components/ui/ProposalBallot';
 import SecondProposalButton from '../../components/ui/SecondProposalButton';
 import PortableText from '../../components/PortableText.astro';
 import { FileText } from 'lucide-react';
@@ -21,27 +12,19 @@ import { Badge } from '../../components/ui/badge';
 import { Textarea } from '../../components/ui/textarea';
 import { NativeSelect } from '../../components/ui/native-select';
 import BallotPrivacyNotice from '../../components/legal/BallotPrivacyNotice.astro';
-import DiscussionThread from '../../components/proposal/DiscussionThread';
+import ProposalDiscussionPanel from '../../components/proposal/ProposalDiscussionPanel.astro';
 import AmendmentComposer from '../../components/proposal/AmendmentComposer';
 import AmendmentSuggestions from '../../components/proposal/AmendmentSuggestions.astro';
 import { competingTargets, wordingSnapshot } from '../../lib/amendment-suggestions.ts';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import {
-  canRespondToContribution,
-  resolveContributionEvidenceMap,
-} from '../../lib/contribution-feedback.ts';
-import {
   canViewProposal,
   isGovernanceResolution,
   normalizeProposalDoc,
 } from '../../lib/proposal-helpers.ts';
-import { getProposalDetail } from '../../lib/proposals-store.ts';
-import { listOutstandingDecisions } from '../../lib/voting-store.ts';
+import { countProposalBallotVotes, countProposalComments, getVisibleProposal } from '../../lib/proposals-store.ts';
 import { getProposalEligibility } from '../../lib/branch-participation.ts';
-import { hasPermission } from '../../lib/rbac.ts';
-import { commentUpvotePercent, compareComments } from '../../lib/comment-thread.ts';
-import type { DiscussionComment } from '../../lib/comment-thread.ts';
 import { resolveMemberProfileLinks } from '../../lib/member-profile.ts';
 import { revisionDisplayLabel } from '../../lib/revision-label.ts';
 import { policyCanonicalPath } from '../../lib/policy-registry.ts';
@@ -56,29 +39,34 @@ const [db, user] = await Promise.all([
   getSessionUser(Astro.request, env),
 ]);
 
-const detail = await getProposalDetail(db, Astro.params.slug ?? '', user);
-if (!detail) {
-  Astro.response.status = 404;
-}
-const proposal = detail?.proposal;
+const inlineBallot = Astro.url.searchParams.get('ballot') === 'full';
+const inlineDiscussion = Astro.url.searchParams.get('discussion') === 'full';
+const directPanelHref = (panel: 'ballot' | 'discussion', anchor: string) => {
+  const params = new URLSearchParams(Astro.url.searchParams);
+  params.set(panel, 'full');
+  return `?${params}#${anchor}`;
+};
+const proposal = await getVisibleProposal(db, Astro.params.slug ?? '', user);
+if (!proposal) Astro.response.status = 404;
+
 const [
-  supersededByDetail,
+  commentCount,
+  staffVoteCount,
+  supersededByProposal,
   revisions,
   rawPolicyRecord,
   ballotResult,
   relatedProposals,
   amendmentRows,
-  outstandingDecisions,
-  eligibility,
   relatedBranches,
-  evidenceMap,
   targetPolicyForChange,
-  quorumRecord,
   senseOrigin,
 ] = proposal
   ? await Promise.all([
+      countProposalComments(db, proposal.proposalId),
+      user?.isStaff && proposal.stage === 'decide' ? countProposalBallotVotes(db, proposal.proposalId) : 0,
       proposal.supersededByProposalId
-        ? getProposalDetail(db, proposal.supersededByProposalId, user)
+        ? getVisibleProposal(db, proposal.supersededByProposalId, user)
         : Promise.resolve(null),
       db.collection('proposal_revisions').find({ proposalId: proposal.proposalId }).sort({ createdAt: -1 }).toArray(),
       db.collection('policy_registry').findOne({ proposalId: proposal.proposalId }),
@@ -90,18 +78,12 @@ const [
         .toArray()
         .then((rows) => rows.filter((row: any) => canViewProposal(normalizeProposalDoc(row), user)).slice(0, 4)),
       db.collection('amendments').find({ proposalId: proposal.proposalId, status: { $ne: 'withdrawn' } }).sort({ createdAt: 1 }).toArray(),
-      user?.canParticipate && proposal.stage === 'decide'
-        ? listOutstandingDecisions(db, user.memberId, user)
-        : Promise.resolve([]),
-      getProposalEligibility(db, proposal, user),
       [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)).length
         ? db.collection('branches').find({ branchId: { $in: [...new Set([proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].filter((value): value is string => Boolean(value)))] } }).toArray()
         : Promise.resolve([]),
-      resolveContributionEvidenceMap(db, proposal, detail.comments, user),
       proposal.targetPolicyId
         ? db.collection('policy_registry').findOne({ policyId: proposal.targetPolicyId })
         : Promise.resolve(null),
-      readBallotQuorumRecord(db, proposalBallotId(proposal.proposalId)),
       proposal.sourceSenseSubmissionId
         ? db.collection('sense_submissions').findOne(
             { submissionId: proposal.sourceSenseSubmissionId, visibility: 'published' },
@@ -109,10 +91,8 @@ const [
           )
         : Promise.resolve(null),
     ])
-  : [null, [], null, null, [], [], [], null, [], new Map(), null, null, null];
+  : [0, null, null, [], null, null, [], [], [], null, null];
 
-const supersededByProposal = supersededByDetail?.proposal ?? null;
-const canRespondToFeedback = Boolean(detail?.proposal && canRespondToContribution(user, detail.proposal));
 const isResolution = proposal ? isGovernanceResolution(proposal) : false;
 const policyRecord = !isResolution ? rawPolicyRecord : null;
 
@@ -183,22 +163,23 @@ const evidenceOptions = proposal
   : [];
 const branchNameFor = (branchId?: string) =>
   branchId ? String(relatedBranches.find((branch: any) => branch.branchId === branchId)?.name ?? branchId) : 'Party-wide';
-const canVoteOnProposal = Boolean(proposal && !ballotExpired(proposal) && eligibility?.eligible);
+const canVoteOnAmendments = Boolean(
+  proposal && user?.canParticipate && !ballotExpired(proposal) &&
+  amendmentRows.some((row) => row.status === 'voting') &&
+  (await getProposalEligibility(db, proposal, user)).eligible
+);
 // D3: in Propose, the next required act is a seconder, which opens deliberation.
 const awaitingSeconder = Boolean(proposal && proposal.stage === 'propose' && !proposal.secondedAt);
 const canSecondProposal = Boolean(
   awaitingSeconder && user?.canParticipate && user.memberId !== proposal?.authorId,
 );
-if (user && canVoteOnProposal && proposal?.stage === 'decide' && proposal.ballotRevisionId) await recordLifecycle(db,user.memberId,'first_eligible_ballot_viewed');
 for (const amendment of amendmentRows) {
   const history = allAmendmentRevisions.filter((row: any) => row.amendmentId === amendment.amendmentId);
   amendment.revisionHistory = history;
   const current = history.find((row: any) => row.revisionId === amendment.currentRevisionId);
   if (current) amendment.changes = current.snapshot;
 }
-const comments = detail?.comments ?? [];
 const profileLinks = await resolveMemberProfileLinks(db, [
-  ...comments.map((comment) => comment.memberId),
   ...(proposal?.authorId ? [proposal.authorId] : []),
   ...amendmentRows
     .map((amendment: any) => amendment.authorId)
@@ -218,90 +199,6 @@ for (const amendment of amendmentRows) {
   amendment.authorProfileHref = link?.href ?? null;
   amendment.authorDisplayName = link?.name ?? '';
 }
-const canModerateComments = Boolean(
-  user && (user.isStaff || hasPermission(user, 'comments.moderate', proposal?.originatingBranchId)),
-);
-const feedbackEvidence = (evidence?: { kind: string; recordId: string }) => {
-  if (!evidence) return undefined;
-  const resolved = evidenceMap.get(`${evidence.kind}:${evidence.recordId}`);
-  return resolved
-    ? { label: resolved.label, ...(resolved.href ? { href: resolved.href } : {}) }
-    : undefined;
-};
-const discussionComments: DiscussionComment[] = comments.map((comment) => {
-  const evidence = comment.feedback?.evidence;
-  const resolvedEvidence = feedbackEvidence(evidence);
-  const authorLink = profileLinkFor(comment.memberId);
-  const authorName = authorLink?.name || comment.authorName;
-  return {
-    commentId: comment.commentId,
-    parentCommentId: comment.parentCommentId ?? null,
-    authorName,
-    authorProfileHref: authorName ? authorLink?.href ?? null : null,
-    stance: comment.stance,
-    body: comment.body,
-    createdAt: new Date(comment.createdAt).toISOString(),
-    upvoteCount: comment.upvotes.length,
-    downvoteCount: (comment.downvotes ?? []).length,
-    score: comment.upvotes.length - (comment.downvotes ?? []).length,
-    upvotedByMe: Boolean(user && comment.upvotes.includes(user.memberId)),
-    downvotedByMe: Boolean(
-      user && (comment.downvotes ?? []).includes(user.memberId),
-    ),
-    isMine: Boolean(user && comment.memberId === user.memberId),
-    deleted: Boolean(comment.deletedAt),
-    ...(comment.feedback
-      ? {
-          feedback: {
-            status: comment.feedback.status,
-            ...(comment.feedback.note ? { note: comment.feedback.note } : {}),
-            updatedByName: comment.feedback.updatedByName,
-            updatedAt: new Date(comment.feedback.updatedAt).toISOString(),
-            ...(evidence ? { evidenceRef: `${evidence.kind}:${evidence.recordId}` } : {}),
-            ...(resolvedEvidence ? { evidence: resolvedEvidence } : {}),
-          },
-        }
-      : {}),
-    ...(comment.feedbackHistory?.length
-      ? {
-          feedbackHistory: comment.feedbackHistory.map((entry) => {
-            const historyEvidence = feedbackEvidence(entry.evidence);
-            return {
-              action: entry.action,
-              ...(entry.note ? { note: entry.note } : {}),
-              updatedByName: entry.updatedByName,
-              updatedAt: new Date(entry.updatedAt).toISOString(),
-              ...(historyEvidence ? { evidence: historyEvidence } : {}),
-            };
-          }),
-        }
-      : {}),
-  };
-});
-const myVote = detail?.myVote ?? null;
-const myReason = detail?.myReason ?? '';
-const myPendingVote = detail?.myPendingVote ?? null;
-const myPendingReason = detail?.myPendingReason ?? '';
-
-const remainingBallots = proposal
-  ? outstandingDecisions.filter((item) => item.proposalId !== proposal.proposalId)
-  : [];
-const nextBallotInfo = remainingBallots[0]
-  ? {
-      slug: remainingBallots[0].slug,
-      title: remainingBallots[0].title,
-      remainingCount: remainingBallots.length,
-    }
-  : null;
-
-const topSupportComment = [...discussionComments]
-  .filter((c) => !c.deleted && c.stance === 'support')
-  .sort((a, b) => compareComments(a, b, 'best'))[0] ?? null;
-
-const topConcernComment = [...discussionComments]
-  .filter((c) => !c.deleted && c.stance === 'concern')
-  .sort((a, b) => compareComments(a, b, 'best'))[0] ?? null;
-
 const stagePillLabel = (stage: ProposalStage) => {
   if (stage === 'propose') return 'New idea';
   if (stage === 'deliberate') return 'In discussion';
@@ -349,50 +246,7 @@ const proposalSocialImage = isRasterImageAttachment
 const stages: ProposalStage[] = ['propose', 'deliberate', 'decide', 'implement'];
 const currentStageIndex = proposal ? stages.indexOf(proposal.stage) : -1;
 
-const votes = proposal?.votes ?? { approve: 0, abstain: 0, reject: 0, total: 0 };
-
-const quorumPreview =
-  proposal?.stage === 'decide' && !ballotExpired(proposal) && !quorumRecord
-    ? buildQuorumPreview(await getQuorumElectoratePreview(db), votes.total)
-    : null;
-const quorumView = quorumRecord
-  ? {
-      final: true,
-      label: quorumRuleLabel(quorumRecord),
-      status: quorumRecord.status,
-      verdict: quorumRecord.verdict,
-      verdictLabel: quorumVerdictLabel(quorumRecord.verdict),
-      eligibleRegisteredMembers: quorumRecord.eligibleRegisteredMembers,
-      activeEligibleMembers: quorumRecord.activeEligibleMembers,
-      platformQuorumRequired: quorumRecord.platformQuorumRequired,
-      platformQuorumMet: quorumRecord.platformQuorumMet,
-      ballotQuorumRequired: quorumRecord.ballotQuorumRequired,
-      ballotQuorumMet: quorumRecord.ballotQuorumMet,
-      participatingMembers:
-        quorumRecord.participatingMembers ?? quorumRecord.tally?.total,
-      quorumMet: quorumRecord.quorumMet,
-      activeWindowDays: quorumRecord.activeWindowDays,
-    }
-  : quorumPreview
-    ? {
-        final: false,
-        label: quorumRuleLabel({ ruleVersion: quorumPreview.ruleVersion }),
-        status: 'current',
-        verdict: null,
-        verdictLabel: null,
-        eligibleRegisteredMembers: quorumPreview.eligibleRegisteredMembers,
-        activeEligibleMembers: quorumPreview.activeEligibleMembers,
-        platformQuorumRequired: quorumPreview.platformQuorumRequired,
-        platformQuorumMet: quorumPreview.platformQuorumMet,
-        ballotQuorumRequired: quorumPreview.ballotQuorumRequired,
-        ballotQuorumMet: quorumPreview.ballotQuorumMet,
-        participatingMembers: quorumPreview.participationCount,
-        quorumMet: quorumPreview.quorumMet,
-        activeWindowDays: quorumPreview.activeWindowDays,
-      }
-    : null;
-
-const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : votes.total > 0 ? 'Ballot closed' : 'Not yet open';
+const ballotState = proposal && ballotExpired(proposal) ? 'Voting closed' : proposal?.stage === 'decide' ? 'Ballot open' : (proposal?.ballotRevisionId || ballotResult) ? 'Ballot closed' : 'Not yet open';
 
 const policyStatusLabel = policyRecord
   ? policyRecord.publicationStatus === 'unpublished'
@@ -539,7 +393,7 @@ const initialsFor = (name: string) =>
                 defaultValue={proposal.stage}
                 data-proposal-id={proposal.proposalId}
                 data-current-stage={proposal.stage}
-                data-vote-count={votes.total}
+                data-vote-count={staffVoteCount}
               >
                 <option value="propose" selected={proposal.stage === 'propose'}>Stage 1 · Idea</option>
                 <option value="deliberate" selected={proposal.stage === 'deliberate'}>Stage 2 · Discussion</option>
@@ -571,15 +425,7 @@ const initialsFor = (name: string) =>
             </div>
 
             <div class="proposal-hero__badges">
-              {proposal.stage === 'decide' && myVote && (
-                <span class="personal-vote-chip is-voted">✓ You have voted</span>
-              )}
-              {proposal.stage === 'decide' && !myVote && myPendingVote && (
-                <a href="#proposal-vote" class="personal-vote-chip is-action">Choice saved pending verification →</a>
-              )}
-              {proposal.stage === 'decide' && !myVote && canVoteOnProposal && (
-                <a href="#proposal-vote" class="personal-vote-chip is-action">You haven’t voted yet →</a>
-              )}
+              <span data-ballot-badge-target hidden></span>
               <span class:list={['stage-badge', `stage-badge--${proposal.stage}`]}>
                 {stagePillLabel(proposal.stage)}
               </span>
@@ -627,26 +473,14 @@ const initialsFor = (name: string) =>
           <!-- Immediate Next Action Banner (Zero-Friction Entry Point) -->
           <div class:list={[
             'next-action-bar',
-            proposal.stage === 'decide' && myVote ? 'is-complete' : proposal.stage === 'decide' ? 'is-vote' : 'is-deliberate',
+            proposal.stage === 'decide' ? 'is-vote' : 'is-deliberate',
           ]} role="region" aria-label="Taking part">
             <div class="next-action-bar__copy">
               <span class="next-action-bar__kicker">
                 {proposal.stage === 'decide' && ballotExpired(proposal)
                   ? 'Voting has closed. Review the tally and recorded decision.'
                   : proposal.stage === 'decide'
-                  ? myVote
-                    ? 'Your recorded vote'
-                    : myPendingVote
-                      ? 'Choice saved pending verification'
-                      : canVoteOnProposal
-                        ? 'Read the ballot'
-                        : !user
-                          ? 'Taking part'
-                          : eligibility?.level === 'follower'
-                            ? 'Following this branch'
-                            : eligibility?.level === 'not-connected'
-                              ? 'Branch membership required to vote'
-                              : 'Check your voting eligibility'
+                  ? 'Read the ballot'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
                     ? awaitingSeconder
                       ? 'One more member is needed to open deliberation.'
@@ -657,19 +491,7 @@ const initialsFor = (name: string) =>
                 {proposal.stage === 'decide' && ballotExpired(proposal)
                   ? 'Voting has closed. Review the tally and recorded decision.'
                   : proposal.stage === 'decide'
-                  ? myVote
-                    ? `Your vote: ${myVote[0]!.toUpperCase() + myVote.slice(1)}. You can change it until voting closes.`
-                    : myPendingVote
-                      ? `Your "${myPendingVote[0]!.toUpperCase() + myPendingVote.slice(1)}" choice is saved on ${ballotRevisionLabel}. It can count after verification only if you are eligible, voting is still open and the ballot wording still matches.`
-                      : canVoteOnProposal
-                        ? 'Review the proposal and cast your vote.'
-                        : !user
-                          ? 'Sign in to save your vote.'
-                          : user.status === 'pending'
-                            ? `You can save a choice on ${ballotRevisionLabel} while your membership is checked. It is not a recorded vote yet.`
-                            : eligibility?.level === 'follower' || eligibility?.level === 'not-connected'
-                              ? eligibility.reason
-                              : 'Verify your membership or branch eligibility to vote in this ballot.'
+                  ? 'Review the wording and check your voting status.'
                   : proposal.stage === 'deliberate' || proposal.stage === 'propose'
                     ? awaitingSeconder
                       ? !user
@@ -689,29 +511,7 @@ const initialsFor = (name: string) =>
             </div>
             <div class="next-action-bar__actions">
               {proposal.stage === 'decide' && ballotExpired(proposal) ? <a href="#proposal-vote" class="next-action-btn is-primary">Review ballot &amp; decision →</a> : proposal.stage === 'decide' ? (
-                canVoteOnProposal ? (
-                  <a href="#proposal-vote" class="next-action-btn is-primary">
-                    {myVote ? 'Review or update vote →' : 'Read and vote →'}
-                  </a>
-                ) : !user ? (
-                  <a
-                    href="#proposal-vote"
-                    class="next-action-btn is-primary"
-                  >
-                    Preview &amp; cast ballot →
-                  </a>
-                ) : user.status === 'pending' ? (
-                  <a href="#proposal-vote" class="next-action-btn is-primary">
-                    {myPendingVote ? 'Update queued vote →' : 'Save vote pending verification →'}
-                  </a>
-                ) : (
-                  <a
-                    href={eligibility?.level === 'follower' || eligibility?.level === 'not-connected' ? '/member/?view=branches' : '/member/'}
-                    class="next-action-btn is-secondary"
-                  >
-                    {eligibility?.level === 'follower' || eligibility?.level === 'not-connected' ? 'My branches →' : 'Check verification →'}
-                  </a>
-                )
+                <a href="#proposal-vote" class="next-action-btn is-primary">Open ballot →</a>
               ) : proposal.stage === 'deliberate' || proposal.stage === 'propose' ? (
                 <>
                   {awaitingSeconder ? (
@@ -739,7 +539,7 @@ const initialsFor = (name: string) =>
                       href={user?.canParticipate ? '#comment-form' : '#deliberation'}
                       class="next-action-btn is-primary"
                     >
-                      {user?.canParticipate ? 'Add your stance →' : `Read discussion (${comments.length}) →`}
+                      {user?.canParticipate ? 'Add your stance →' : `Read discussion (${commentCount}) →`}
                     </a>
                   )}
                   {awaitingSeconder && canSecondProposal && (
@@ -827,7 +627,7 @@ const initialsFor = (name: string) =>
               <dd>
                 <strong>{ballotRevisionLabel}</strong>
                 <span class="fact-sub tabular">
-                  {votes.total} {votes.total === 1 ? 'ballot cast' : 'ballots cast'} · {comments.length} {comments.length === 1 ? 'contribution' : 'contributions'}
+                  {commentCount} {commentCount === 1 ? 'contribution' : 'contributions'}
                 </span>
               </dd>
             </div>
@@ -851,14 +651,6 @@ const initialsFor = (name: string) =>
           </dl>
         </header>
 
-        {canVoteOnProposal && proposal.stage === 'decide' && (
-          <nav class="proposal-progression" aria-label="Proposal progression">
-            <span data-outstanding-after-vote={remainingBallots.length}>{remainingBallots.length + (myVote ? 0 : 1)} you haven’t voted on</span>
-            {nextBallotInfo && <a href={`/proposals/${nextBallotInfo.slug}/`}>Skip for now →</a>}
-            <a href="/proposals/?stage=decide&focus=all">All ballots</a>
-          </nav>
-        )}
-
         <!-- Sticky Section Jump Navigation -->
         <nav class="reading-nav" aria-label="Jump to proposal section">
           <div class="reading-nav__links">
@@ -878,7 +670,7 @@ const initialsFor = (name: string) =>
               Amendments <span class="nav-count tabular">{amendmentRows.length}</span>
             </a>
             <a href="#deliberation">
-              Discussion <span class="nav-count tabular">{comments.length}</span>
+              Discussion <span class="nav-count tabular">{commentCount}</span>
             </a>
             <a href="#revision-history-heading">
               History <span class="nav-count tabular">{revisions.length}</span>
@@ -886,9 +678,7 @@ const initialsFor = (name: string) =>
           </div>
           <a href="#proposal-vote" class="reading-nav__cta">
             {proposal.stage === 'decide'
-              ? myVote
-                ? 'Review your vote →'
-                : 'Review & vote →'
+              ? 'Review & vote →'
               : 'Ballot status →'}
           </a>
         </nav>
@@ -1048,150 +838,17 @@ const initialsFor = (name: string) =>
                 {ballotResult && <p>Returning officer result: {ballotResultLabel}</p>}
               </details>
 
-              {quorumView && (
-                <section class="grid gap-3" aria-labelledby="quorum-heading">
-                  <div class="flex flex-wrap items-start justify-between gap-2">
-                    <h3 id="quorum-heading" class="m-0 text-base font-semibold">How many people need to vote?</h3>
-                    <Badge
-                      variant={
-                        quorumView.status === 'unavailable'
-                          ? 'warning'
-                          : quorumView.quorumMet
-                            ? 'success'
-                            : 'muted'
-                      }
-                    >
-                      {quorumView.verdictLabel ?? (quorumView.quorumMet ? 'Quorum met' : 'Not yet met')}
-                    </Badge>
-                  </div>
-                  <p class="m-0 text-sm text-muted-foreground">
-                    Engage needs at least 30 eligible registered members before its ballots can make decisions. Each ballot also needs enough people to take part.
-                  </p>
-                  <dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                    <div>
-                      <dt class="text-muted-foreground">Eligible registered members</dt>
-                      <dd class="m-0 font-medium tabular">
-                        {quorumView.eligibleRegisteredMembers ?? 'Not recorded'}
-                        {quorumView.platformQuorumRequired
-                          ? ` · ${quorumView.platformQuorumMet ? 'platform quorum met' : `needs ${quorumView.platformQuorumRequired}`}`
-                          : ''}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-muted-foreground">Recently active members</dt>
-                      <dd class="m-0 font-medium tabular">
-                        {quorumView.activeEligibleMembers ?? 'Not recorded'}
-                        {quorumView.activeWindowDays ? ` in the last ${quorumView.activeWindowDays} days` : ''}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-muted-foreground">Participants needed</dt>
-                      <dd class="m-0 font-medium tabular">
-                        {quorumView.ballotQuorumRequired
-                          ? quorumView.ballotQuorumRequired
-                          : quorumView.final
-                            ? 'Not recorded'
-                            : 'No active electorate yet'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-muted-foreground">{quorumView.final ? 'Members who took part' : 'Votes recorded so far'}</dt>
-                      <dd class="m-0 font-medium tabular">
-                        {quorumView.participatingMembers ?? 0}
-                        {quorumView.ballotQuorumRequired
-                          ? ` of ${quorumView.ballotQuorumRequired} needed`
-                          : ' recorded'}
-                      </dd>
-                    </div>
-                  </dl>
-                  {!quorumView.final ? (
-                    <p class="m-0 text-sm text-muted-foreground">
-                      You can vote for, vote against or abstain. All three count towards participation. The final calculation happens when voting closes, so the number needed can change as members become active or inactive.
-                    </p>
-                  ) : quorumView.status === 'legacy-not-applied' ? (
-                    <p class="m-0 text-sm text-muted-foreground">
-                      This ballot closed before the current quorum rule took effect. It is recorded under the earlier rule and quorum is not applied retrospectively.
-                    </p>
-                  ) : quorumView.status === 'unavailable' ? (
-                    <p class="m-0 text-sm text-muted-foreground">
-                      Quorum could not be calculated when this ballot closed. The recorded result stays provisional until an officer reviews the closure.
-                    </p>
-                  ) : quorumView.verdict === 'inconclusive' ? (
-                    <p class="m-0 text-sm text-muted-foreground">
-                      Too few people took part for this ballot to decide the question. It is inconclusive, not rejected, and can return for further discussion before a later ballot.
-                    </p>
-                  ) : (
-                    <p class="m-0 text-sm text-muted-foreground">
-                      This result reflects the members who took part, not Fusion’s whole membership.
-                    </p>
-                  )}
-                  {quorumView.final && quorumView.status === 'evaluated' && (
-                    <p class="m-0 text-xs text-muted-foreground">
-                      {quorumView.platformQuorumMet ? 'Platform quorum met' : 'Platform quorum not met'}
-                      {' · '}
-                      {quorumView.ballotQuorumMet ? 'ballot quorum met' : 'ballot quorum not met'}
-                      {' · '}
-                      {quorumView.label}
-                    </p>
-                  )}
-                </section>
-              )}
-
-              {proposal.stage === 'decide' && !canVoteOnProposal && (
-                <div class="rail-notice">
-                  {eligibility?.level === 'follower' || eligibility?.level === 'not-connected' || eligibility?.level === 'branch-unavailable' ? (
-                    <div class="rail-notice__row">
-                      <p>{eligibility.reason}</p>
-                      {eligibility.level !== 'branch-unavailable' && (
-                        <Button href="/member/?view=branches" variant="outline" size="sm">My branches</Button>
-                      )}
-                    </div>
-                  ) : user ? (
-                    <div class="rail-notice__row">
-                      <p>
-                        {myPendingVote
-                          ? 'Your choice is saved pending verification. It can count only if you are eligible before voting closes and the ballot wording still matches.'
-                          : 'This account cannot vote yet. If your membership is pending, you can save a choice below. It will count only after verification, if you are eligible and voting is still open on the same wording.'}
-                      </p>
-                      <Button href="/member/" variant="outline" size="sm">Account</Button>
-                    </div>
-                  ) : (
-                    <div class="rail-notice__row">
-                      <p>
-                        {votes.total > 0
-                          ? `${votes.total} ${votes.total === 1 ? 'vote has' : 'votes have'} been recorded. Sign in to vote if you are eligible.`
-                          : 'Read the wording and choose an option below. Sign in to vote if you are eligible.'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {proposal.stage === 'decide' || votes.total > 0 ? (
-                <div class="rail-ballot__widget">
-                  <ProposalBallot
-                    client:idle
-                    proposalId={proposal.proposalId}
-                    proposalSlug={proposal.slug}
-                    proposalTitle={proposal.title}
-                    initialChoice={myVote}
-                    initialReason={myReason}
-                    initialPendingChoice={myPendingVote}
-                    initialPendingReason={myPendingReason}
-                    initialTally={votes}
-                    open={proposal.stage === 'decide' && !ballotExpired(proposal)}
-                    canVote={canVoteOnProposal}
-                    ineligibleReason={!canVoteOnProposal ? eligibility?.reason : undefined}
-                    isGuest={!user}
-                    isPendingMember={Boolean(user && !user.canParticipate && user.status === 'pending')}
-                    nextBallot={nextBallotInfo}
-                    ballotClosesAt={proposal.ballotClosesAt ? new Date(proposal.ballotClosesAt).toISOString() : null}
-                  />
-                </div>
+              {inlineBallot ? (
+                <ProposalVotingPanel slug={proposal.slug} proposalId={proposal.proposalId} revisionId={proposal.ballotRevisionId} />
               ) : (
-                <p class="rail-muted">
-                  Formal voting has not opened yet. Join the discussion or propose a wording amendment while this proposal is in deliberation.
-                </p>
+                <ProposalVotingPanel server:defer slug={proposal.slug} proposalId={proposal.proposalId} revisionId={proposal.ballotRevisionId}>
+                  <div slot="fallback" class="grid gap-3" data-ballot-fallback>
+                    <p role="status" class="sr-only">Loading ballot…</p>
+                    <div class="h-5 w-48 rounded bg-muted motion-safe:animate-pulse" aria-hidden="true"></div>
+                    <div class="h-24 rounded bg-muted motion-safe:animate-pulse" aria-hidden="true"></div>
+                    <a href={directPanelHref('ballot', 'proposal-vote')}>Open ballot directly</a>
+                  </div>
+                </ProposalVotingPanel>
               )}
 
               <BallotPrivacyNotice />
@@ -1303,7 +960,7 @@ const initialsFor = (name: string) =>
                             </details>
                           )}
 
-                          {amendment.status === 'voting' && canVoteOnProposal && (
+                          {amendment.status === 'voting' && canVoteOnAmendments && (
                             <form class="amendment-vote-form" data-amendment-id={amendment.amendmentId} data-proposal-id={proposal.proposalId}>
                               <div class="amendment-vote-form__info">
                                 <strong>Vote on this amendment</strong>
@@ -1351,7 +1008,7 @@ const initialsFor = (name: string) =>
                 <div>
                   <div class="doc-title-row">
                     <h2 id="deliberate-heading">Discussion</h2>
-                    <span class="doc-count tabular">{comments.length} {comments.length === 1 ? 'contribution' : 'contributions'}</span>
+                    <span class="doc-count tabular">{commentCount} {commentCount === 1 ? 'contribution' : 'contributions'}</span>
                   </div>
                   <p class="doc-section__sub">
                     Share evidence, ask a question or suggest an improvement. Discussion scores do not count as ballot votes.
@@ -1360,49 +1017,31 @@ const initialsFor = (name: string) =>
 
               </div>
 
-              {(topSupportComment || topConcernComment) && (
-                <div class="deliberation-takeaways" aria-label="Key deliberation takeaways">
-                  {topSupportComment && (
-                    <div class="takeaway-box takeaway-box--support">
-                      <div class="takeaway-box__head">
-                        <Badge variant="success">Leading support</Badge>
-                        <span class="takeaway-meta tabular" title={`${commentUpvotePercent(topSupportComment)}% upvoted from ${topSupportComment.upvoteCount + topSupportComment.downvoteCount} votes`}>
-                          {topSupportComment.authorProfileHref ? (
-                            <a class="takeaway-author" href={topSupportComment.authorProfileHref}>{topSupportComment.authorName}</a>
-                          ) : topSupportComment.authorName} · {topSupportComment.score} {topSupportComment.score === 1 || topSupportComment.score === -1 ? 'point' : 'points'}
-                        </span>
-                      </div>
-                      <p class="takeaway-quote">{topSupportComment.body}</p>
-                    </div>
-                  )}
-                  {topConcernComment && (
-                    <div class="takeaway-box takeaway-box--concern">
-                      <div class="takeaway-box__head">
-                        <Badge variant="destructive">Leading concern</Badge>
-                        <span class="takeaway-meta tabular" title={`${commentUpvotePercent(topConcernComment)}% upvoted from ${topConcernComment.upvoteCount + topConcernComment.downvoteCount} votes`}>
-                          {topConcernComment.authorProfileHref ? (
-                            <a class="takeaway-author" href={topConcernComment.authorProfileHref}>{topConcernComment.authorName}</a>
-                          ) : topConcernComment.authorName} · {topConcernComment.score} {topConcernComment.score === 1 || topConcernComment.score === -1 ? 'point' : 'points'}
-                        </span>
-                      </div>
-                      <p class="takeaway-quote">{topConcernComment.body}</p>
-                    </div>
-                  )}
-                </div>
+              {inlineDiscussion ? (
+                <ProposalDiscussionPanel
+                  slug={proposal.slug}
+                  proposalId={proposal.proposalId}
+                  policyEvidenceIsPublic={evidencePolicyPublic}
+                  viewerId={user?.memberId}
+                  evidenceOptions={evidenceOptions}
+                />
+              ) : (
+                <ProposalDiscussionPanel
+                  server:defer
+                  slug={proposal.slug}
+                  proposalId={proposal.proposalId}
+                  policyEvidenceIsPublic={evidencePolicyPublic}
+                  viewerId={user?.memberId}
+                  evidenceOptions={evidenceOptions}
+                >
+                  <div slot="fallback" class="grid gap-3" data-discussion-fallback id={user?.canParticipate ? 'comment-form' : undefined}>
+                    <p role="status" class="sr-only">Loading discussion…</p>
+                    <div class="h-6 w-44 rounded bg-muted motion-safe:animate-pulse" aria-hidden="true"></div>
+                    <div class="h-24 rounded bg-muted motion-safe:animate-pulse" aria-hidden="true"></div>
+                    <a href={directPanelHref('discussion', 'deliberation')}>Open discussion directly</a>
+                  </div>
+                </ProposalDiscussionPanel>
               )}
-
-              <DiscussionThread
-                client:idle
-                proposalId={proposal.proposalId}
-                proposalTitle={proposal.title}
-                proposalSlug={proposal.slug}
-                initialComments={discussionComments}
-                isSignedIn={Boolean(user)}
-                canParticipate={Boolean(user?.canParticipate)}
-                canModerate={canModerateComments}
-                canRespondToFeedback={canRespondToFeedback}
-                evidenceOptions={evidenceOptions}
-              />
 
             </section>
 
@@ -1608,6 +1247,18 @@ const initialsFor = (name: string) =>
 </SiteLayout>
 
 <script>
+  const discussion = document.getElementById('deliberation');
+  if (discussion && discussion.querySelector('[data-discussion-fallback]')) {
+    const observer = new MutationObserver(() => {
+      if (discussion.querySelector('[data-discussion-fallback]')) return;
+      observer.disconnect();
+      const target = document.getElementById(location.hash.slice(1));
+      if (target && discussion.contains(target)) target.scrollIntoView();
+      else if (location.hash === '#comment-form') discussion.scrollIntoView();
+    });
+    observer.observe(discussion, { childList: true, subtree: true });
+  }
+
   document.querySelectorAll<HTMLAnchorElement>('a[href="#details-heading"]').forEach((link) => {
     link.addEventListener('click', () => {
       const rationale = document.querySelector<HTMLDetailsElement>('.decision-rationale details');
@@ -1621,6 +1272,24 @@ const initialsFor = (name: string) =>
       if (context) context.open = true;
     });
   });
+
+  const ballot = document.getElementById('proposal-vote');
+  const badge = document.querySelector<HTMLElement>('[data-ballot-badge-target]');
+  if (ballot && badge) {
+    const syncBadge = () => {
+      const template = ballot.querySelector<HTMLTemplateElement>('template[data-ballot-badge]');
+      if (!template) return false;
+      badge.replaceChildren(template.content.cloneNode(true));
+      badge.hidden = !badge.firstElementChild;
+      return true;
+    };
+    if (!syncBadge() && ballot.querySelector('[data-ballot-fallback]')) {
+      const observer = new MutationObserver(() => {
+        if (syncBadge() || !ballot.querySelector('[data-ballot-fallback]')) observer.disconnect();
+      });
+      observer.observe(ballot, { childList: true, subtree: true });
+    }
+  }
 
   window.addEventListener('engage:vote-saved', (event) => {
     const choice = (event as CustomEvent<{ choice: string }>).detail.choice;
@@ -1780,8 +1449,6 @@ const initialsFor = (name: string) =>
   .ballot-context { margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--horizon-line); font-size: .9rem; }
   .ballot-context summary { cursor: pointer; font-weight: 600; }
   .ballot-context p { line-height: 1.6; }
-  .proposal-progression { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: .85rem 1.25rem; margin: 1rem 0; border-bottom: 1px solid var(--horizon-line); font-size: .9rem; }
-  .proposal-progression a { color: var(--horizon-purple-deep); text-decoration: underline; text-underline-offset: .2em; }
   @media (max-width: 1100px) {
     .proposal-workspace { display: flex !important; flex-direction: column; }
     .proposal-main, .proposal-rail { display: contents !important; }
@@ -1792,6 +1459,31 @@ const initialsFor = (name: string) =>
   }
   .ballot-record { font-size: .875rem; margin-bottom: 1rem; }
   .ballot-record summary { cursor: pointer; }
+
+  [data-ballot-badge-target] :global(.personal-vote-chip) {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.75rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  [data-ballot-badge-target] :global(.personal-vote-chip.is-voted) {
+    background: var(--horizon-success-bg);
+    color: var(--horizon-success-ink);
+  }
+
+  [data-ballot-badge-target] :global(.personal-vote-chip.is-action) {
+    background: #f0f9f7;
+    color: #0e6f64;
+    border: 1px solid rgba(14, 111, 100, 0.25);
+  }
+
+  [data-ballot-badge-target] :global(.personal-vote-chip.is-action:hover) {
+    background: #e1f4f0;
+  }
 
   .proposal-detail-page {
     padding-top: 1.25rem;
@@ -1923,30 +1615,7 @@ const initialsFor = (name: string) =>
     gap: 0.5rem;
   }
 
-  .personal-vote-chip {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    padding: 0.28rem 0.75rem;
-    font-size: 0.82rem;
-    font-weight: 600;
-    text-decoration: none;
-  }
 
-  .personal-vote-chip.is-voted {
-    background: var(--horizon-success-bg);
-    color: var(--horizon-success-ink);
-  }
-
-  .personal-vote-chip.is-action {
-    background: #f0f9f7;
-    color: #0e6f64;
-    border: 1px solid rgba(14, 111, 100, 0.25);
-  }
-
-  .personal-vote-chip.is-action:hover {
-    background: #e1f4f0;
-  }
 
   .stage-badge {
     display: inline-flex;
@@ -2260,21 +1929,10 @@ const initialsFor = (name: string) =>
   }
 
   .fact-author-link:focus-visible,
-  .takeaway-author:focus-visible,
   .amendment-author a:focus-visible {
     outline: 2px solid var(--horizon-focus);
     outline-offset: 2px;
     border-radius: 3px;
-  }
-
-  .takeaway-author {
-    color: inherit;
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .takeaway-author:hover {
-    text-decoration: underline;
   }
 
   /* Sticky Section Jump Navigation */
@@ -2776,57 +2434,6 @@ const initialsFor = (name: string) =>
     color: var(--horizon-muted);
   }
 
-  /* Key deliberation takeaways */
-  .deliberation-takeaways {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-    gap: 0.5rem;
-    margin-bottom: 0.85rem;
-  }
-
-  .takeaway-box {
-    padding: 0.5rem 0.7rem;
-    border: 0;
-    border-left: 3px solid var(--horizon-line-strong);
-    border-radius: 0 0.45rem 0.45rem 0;
-    background: var(--horizon-lavender-soft);
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .takeaway-box--support {
-    border-left-color: var(--horizon-success-ink);
-  }
-
-  .takeaway-box--concern {
-    border-left-color: var(--horizon-danger-ink);
-  }
-
-  .takeaway-box__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.45rem;
-  }
-
-  .takeaway-meta {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: var(--horizon-muted);
-  }
-
-  .takeaway-quote {
-    margin: 0;
-    font-size: 0.82rem;
-    line-height: 1.45;
-    color: var(--horizon-purple-deep);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
   /* Wording Revision Log & Provenance */
   .revision-list {
     margin: 0;
@@ -3036,38 +2643,7 @@ const initialsFor = (name: string) =>
     color: var(--horizon-success-ink);
   }
 
-  .rail-notice {
-    margin-bottom: 0.9rem;
-    padding: 0.75rem 0.85rem;
-    border-radius: 0.7rem;
-    background: #f5f2fc;
-    border: 1px solid var(--horizon-line);
-  }
 
-  .rail-notice p {
-    margin: 0;
-    font-size: 0.84rem;
-    line-height: 1.45;
-    color: var(--horizon-purple-deep);
-  }
-
-  .rail-notice__row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.65rem;
-  }
-
-  .rail-ballot__widget {
-    margin-bottom: 0.75rem;
-  }
-
-  .rail-muted {
-    margin: 0 0 0.75rem;
-    font-size: 0.86rem;
-    line-height: 1.5;
-    color: var(--horizon-muted);
-  }
 
   /* Decision Chain */
   .decision-chain {

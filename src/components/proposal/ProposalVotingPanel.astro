@@ -1,0 +1,162 @@
+---
+import BallotQuorum from './BallotQuorum.astro';
+import ProposalBallot from '../ui/ProposalBallot';
+import { Button } from '../ui/button';
+import { getSessionUser } from '../../lib/auth.ts';
+import { ballotExpired } from '../../lib/ballot-deadline.ts';
+import { getProposalEligibility } from '../../lib/branch-participation.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { recordLifecycle } from '../../lib/member-lifecycle.ts';
+import { loadVisibleProposalDetail, getVisibleProposal } from '../../lib/proposals-store.ts';
+import { listOutstandingDecisions } from '../../lib/voting-store.ts';
+
+interface Props {
+  slug: string;
+  proposalId: string;
+  revisionId?: string;
+}
+
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+const env = runtimeEnv(Astro.locals);
+const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
+const proposal = await getVisibleProposal(db, Astro.props.slug, user);
+if (!proposal || proposal.proposalId !== Astro.props.proposalId) return;
+const revisionMatches = proposal.ballotRevisionId === Astro.props.revisionId;
+
+const [detail, eligibility, outstandingDecisions] = revisionMatches ? await Promise.all([
+  loadVisibleProposalDetail(db, proposal, user, { useDisplayTally: true, deferDiscussion: true }),
+  getProposalEligibility(db, proposal, user),
+  user?.canParticipate && proposal.stage === 'decide' && !ballotExpired(proposal)
+    ? listOutstandingDecisions(db, user.memberId, user)
+    : [],
+]) : [null, null, []];
+const votes = detail?.proposal.votes;
+const { myVote = null, myReason = '', myPendingVote = null, myPendingReason = '' } = detail ?? {};
+const canVoteOnProposal = Boolean(!ballotExpired(proposal) && eligibility?.eligible);
+if (user && canVoteOnProposal && proposal.stage === 'decide' && proposal.ballotRevisionId) {
+  await recordLifecycle(db, user.memberId, 'first_eligible_ballot_viewed');
+}
+const remainingBallots = outstandingDecisions.filter((item) => item.proposalId !== proposal.proposalId);
+const nextBallot = remainingBallots[0];
+const nextBallotInfo = nextBallot
+  ? { slug: nextBallot.slug, title: nextBallot.title, remainingCount: remainingBallots.length }
+  : null;
+---
+{!revisionMatches && (
+  <p role="status">The ballot wording changed. <a href={`/proposals/${encodeURIComponent(proposal.slug)}/#proposal-vote`}>Reload the proposal to review it.</a></p>
+)}
+{votes && (
+<>
+<template data-ballot-badge>
+  {proposal.stage === 'decide' && myVote ? (
+    <span class="personal-vote-chip is-voted">✓ You have voted</span>
+  ) : proposal.stage === 'decide' && myPendingVote ? (
+    <a href="#proposal-vote" class="personal-vote-chip is-action">Choice saved pending verification →</a>
+  ) : proposal.stage === 'decide' && canVoteOnProposal ? (
+    <a href="#proposal-vote" class="personal-vote-chip is-action">You haven’t voted yet →</a>
+  ) : null}
+</template>
+<BallotQuorum db={db} proposal={proposal} participationCount={votes.total} />
+{proposal.stage === 'decide' && !canVoteOnProposal && (
+  <div class="rail-notice">
+    {eligibility?.level === 'follower' || eligibility?.level === 'not-connected' || eligibility?.level === 'branch-unavailable' ? (
+      <div class="rail-notice__row">
+        <p>{eligibility.reason}</p>
+        {eligibility.level !== 'branch-unavailable' && (
+          <Button href="/member/?view=branches" variant="outline" size="sm">My branches</Button>
+        )}
+      </div>
+    ) : user ? (
+      <div class="rail-notice__row">
+        <p>
+          {myPendingVote
+            ? 'Your choice is saved pending verification. It can count only if you are eligible before voting closes and the ballot wording still matches.'
+            : 'This account cannot vote yet. If your membership is pending, you can save a choice below. It will count only after verification, if you are eligible and voting is still open on the same wording.'}
+        </p>
+        <Button href="/member/" variant="outline" size="sm">Account</Button>
+      </div>
+    ) : (
+      <div class="rail-notice__row">
+        <p>
+          {votes.total > 0
+            ? `${votes.total} ${votes.total === 1 ? 'vote has' : 'votes have'} been recorded. Sign in to vote if you are eligible.`
+            : 'Read the wording and choose an option below. Sign in to vote if you are eligible.'}
+        </p>
+      </div>
+    )}
+  </div>
+)}
+
+{proposal.stage === 'decide' || votes.total > 0 ? (
+  <div class="rail-ballot__widget">
+    <ProposalBallot
+      client:idle
+      proposalId={proposal.proposalId}
+      proposalSlug={proposal.slug}
+      proposalTitle={proposal.title}
+      initialChoice={myVote}
+      initialReason={myReason}
+      initialPendingChoice={myPendingVote}
+      initialPendingReason={myPendingReason}
+      initialTally={votes}
+      open={proposal.stage === 'decide' && !ballotExpired(proposal)}
+      canVote={canVoteOnProposal}
+      ineligibleReason={!canVoteOnProposal ? eligibility?.reason : undefined}
+      isGuest={!user}
+      isPendingMember={Boolean(user && !user.canParticipate && user.status === 'pending')}
+      nextBallot={nextBallotInfo}
+      ballotClosesAt={proposal.ballotClosesAt ? new Date(proposal.ballotClosesAt).toISOString() : null}
+    />
+  </div>
+) : (
+  <p class="rail-muted">
+    Formal voting has not opened yet. Join the discussion or propose a wording amendment while this proposal is in deliberation.
+  </p>
+)}
+{canVoteOnProposal && proposal.stage === 'decide' && (
+  <nav class="proposal-progression" aria-label="Proposal progression">
+    <span data-outstanding-after-vote={remainingBallots.length}>{remainingBallots.length + (myVote ? 0 : 1)} you haven’t voted on</span>
+    {nextBallotInfo && <a href={`/proposals/${nextBallotInfo.slug}/`}>Skip for now →</a>}
+    <a href="/proposals/?stage=decide&focus=all">All ballots</a>
+  </nav>
+)}
+
+</>
+)}
+
+<style>
+  .rail-notice {
+    margin-bottom: 0.9rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: 0.7rem;
+    background: #f5f2fc;
+    border: 1px solid var(--horizon-line);
+  }
+
+  .rail-notice p {
+    margin: 0;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: var(--horizon-purple-deep);
+  }
+
+  .rail-notice__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+
+  .rail-ballot__widget {
+    margin-bottom: 0.75rem;
+  }
+
+  .rail-muted {
+    margin: 0 0 0.75rem;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--horizon-muted);
+  }
+  .proposal-progression { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: .85rem 1.25rem; margin: 1rem 0; border-bottom: 1px solid var(--horizon-line); font-size: .9rem; }
+  .proposal-progression a { color: var(--horizon-purple-deep); text-decoration: underline; text-underline-offset: .2em; }
+</style>

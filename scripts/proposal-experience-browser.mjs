@@ -31,7 +31,29 @@ const shot=async name=>{console.log('screenshot',version,device,name);await page
 await go('/proposals/');await shot('all');
 await go('/proposals/?stage=decide'+(version==='before'?'&focus=needs-vote':''));await shot('outstanding');
 const link=await page.locator('.proposal-item h2 a, .proposal-item h3 a').first().getAttribute('href');assert.ok(link);
-await go(link);if(version==='after') {
+if (version === 'after') {
+ let releasePanels;
+ const panelsGate = new Promise(resolve => { releasePanels = resolve; });
+ const deferredPanels = '**/_server-islands/**';
+ await page.route(deferredPanels, async route => {
+  await panelsGate;
+  await route.continue();
+ });
+ try {
+  await page.goto(origin + link, { waitUntil: 'domcontentloaded' });
+  await page.locator('main h1').waitFor();
+  await page.getByRole('status').filter({ hasText: 'Loading ballot' }).waitFor({ state: 'attached' });
+  await page.getByRole('status').filter({ hasText: 'Loading discussion' }).waitFor({ state: 'attached' });
+  assert.equal(await page.getByRole('radio', { name: 'Approve', exact: true }).count(), 0);
+ } finally {
+  releasePanels();
+  await page.unroute(deferredPanels);
+ }
+ await page.locator('astro-island[component-url*="ProposalBallot"]:not([ssr])').waitFor();
+} else {
+ await go(link);
+}
+if(version==='after') {
  await page.evaluate(()=>window.scrollTo(0,0));
  const rect=await page.locator('.decision-content').evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1}});
  const cdp=await context.newCDPSession(page);

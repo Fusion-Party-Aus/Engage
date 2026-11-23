@@ -5,24 +5,25 @@ import { Button } from '../../components/ui/button';
 import { getSessionUser } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
 import { getSiteConfig } from '../../lib/site-config.ts';
-import { listProposals } from '../../lib/proposals-store.ts';
+import { listPublicProposalCandidates } from '../../lib/public-proposals.ts';
 import { branchPublicSlug, policyBranchPath } from '../../lib/policy-registry.ts';
 export const prerender = false;
 const env = runtimeEnv(Astro.locals);
 const [db, user] = await Promise.all([getDatabase(env), getSessionUser(Astro.request, env)]);
-const [branches, proposals, siteConfig] = await Promise.all([
+const [branches, candidates, siteConfig, policyRows] = await Promise.all([
   db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
-  listProposals(db, { includeArchived: false, user }),
+  listPublicProposalCandidates(db, { user }),
   getSiteConfig(db, env),
+  db.collection('policy_registry')
+    .find({ publicationStatus: 'published' }, { projection: { _id: 0, jurisdictionBranchId: 1 } })
+    .toArray(),
 ]);
+const proposals = candidates.filter((proposal) => proposal.stage !== 'archived');
 const kinds = ['national', 'state', 'territory', 'constituent'];
 const grouped = kinds.map((kind) => ({ kind, items: branches.filter((branch: any) => branch.kind === kind) })).filter((group) => group.items.length);
 const relevant = user?.activeBranchIds?.length ? branches.filter((branch: any) => user.activeBranchIds?.includes(branch.branchId)) : [];
 const countFor = (branchId: string) => proposals.filter((proposal) => [proposal.originatingBranchId, proposal.governanceAuthorityBranchId, proposal.jurisdictionBranchId].includes(branchId)).length;
-const policyRows = await db
-  .collection('policy_registry')
-  .find({ publicationStatus: 'published' }, { projection: { policyId: 1, jurisdictionBranchId: 1 } })
-  .toArray();
+
 const policyCountFor = (branchId: string) => policyRows.filter((policy: any) => policy.jurisdictionBranchId === branchId).length;
 const branchLinks = (branch: any) => ({
   ideas: countFor(branch.branchId),

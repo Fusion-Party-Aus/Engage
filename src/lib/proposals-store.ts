@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Collection, Db } from "mongodb";
+import { ballotTallyKey, readBallotTallyProjections } from "./ballot-tallies.ts";
 import { loadBallotCryptoConfigForRead } from "./ballot-crypto.ts";
 import { BALLOTS_COLLECTION, FORMAL_DECISIONS_COLLECTION } from "./ballots.ts";
 import { runInTransaction } from "./db.ts";
@@ -273,21 +274,12 @@ export async function listProposals(
     }));
 }
 
-export async function getProposalDetail(
+/** Load proposal content without reading comments or ballots. */
+export async function getVisibleProposal(
   db: Db,
   idOrSlug: string,
   user: SessionUser | null,
-  options: { tolerateUnreadableVotes?: boolean } = {},
-): Promise<{
-  proposal: ProposalSummaryView;
-  comments: CommentRecord[];
-  votesList: VoteRecord[];
-  unreadableVoteCount: number;
-  myVote: VoteChoice | null;
-  myReason: string;
-  myPendingVote?: VoteChoice | null;
-  myPendingReason?: string;
-} | null> {
+): Promise<ProposalRecord | null> {
   const key = idOrSlug.trim();
   if (!key) return null;
 
@@ -302,43 +294,34 @@ export async function getProposalDetail(
 
   if (!canViewProposal(proposal, user)) return null;
 
-  const canReviewArchived = canReviewArchivedProposal(proposal, user);
-  if (proposal.stage === "archived" && !canReviewArchived) {
+  if (proposal.stage === "archived" && !canReviewArchivedProposal(proposal, user)) {
     return null;
   }
+  return proposal;
+}
 
-  const [rawComments, votes, pendingPref] = await Promise.all([
-    db
-      .collection<CommentRecord>("comments")
-      .find({
-        $or: [
-          { proposalId: proposal.proposalId },
-          { policyId: proposal.proposalId } as any,
-        ],
-      })
-      .sort({ createdAt: 1 })
-      .toArray(),
-    db
-      .collection<VoteRecord>(PROPOSAL_VOTES)
-      .find({
-        $or: [
-          { proposalId: proposal.proposalId },
-          { policyId: proposal.proposalId } as any,
-        ],
-      })
-      .sort({ updatedAt: -1 })
-      .toArray(),
-    user && !user.canParticipate && user.status === "pending"
-      ? db
-          .collection<PendingVotePreferenceRecord>(PENDING_VOTE_PREFERENCES)
-          .findOne({
-            ballotId: proposalBallotId(proposal.proposalId),
-            memberId: user.memberId,
-          })
-      : Promise.resolve(null),
-  ]);
+export function countProposalBallotVotes(db: Db, proposalId: string): Promise<number> {
+  return db.collection(PROPOSAL_VOTES).countDocuments({
+    ballotId: proposalBallotId(proposalId),
+    $or: [{ proposalId }, { policyId: proposalId }],
+  });
+}
 
-  const comments = rawComments.map((c) => ({
+export function countProposalComments(db: Db, proposalId: string): Promise<number> {
+  return db.collection("comments").countDocuments(proposalCommentFilter(proposalId));
+}
+
+function proposalCommentFilter(proposalId: string) {
+  return { $or: [{ proposalId }, { policyId: proposalId }] };
+}
+
+/** Load a discussion after its proposal has been authorised for the viewer. */
+export async function loadProposalComments(db: Db, proposalId: string): Promise<CommentRecord[]> {
+  const rawComments = await db.collection<CommentRecord>("comments")
+    .find(proposalCommentFilter(proposalId))
+    .sort({ createdAt: 1 })
+    .toArray();
+  return rawComments.map((c) => ({
     ...c,
     stance: VALID_STANCES.includes(c.stance) ? c.stance : "comment",
     upvotes: Array.isArray(c.upvotes) ? c.upvotes : [],
@@ -351,21 +334,79 @@ export async function getProposalDetail(
     // Deleted contributions keep their place in the thread, never their text.
     ...(c.deletedAt ? { body: "" } : {}),
   }));
-  // Read-only path: tolerate a broken key ring so the page can render an
-  // operational message instead of failing before it is read.
+}
+
+interface ProposalDetail {
+  proposal: ProposalSummaryView;
+  comments: CommentRecord[];
+  votesList: VoteRecord[];
+  unreadableVoteCount: number;
+  myVote: VoteChoice | null;
+  myReason: string;
+  myPendingVote?: VoteChoice | null;
+  myPendingReason?: string;
+}
+
+export async function getProposalDetail(
+  db: Db,
+  idOrSlug: string,
+  user: SessionUser | null,
+  options: { tolerateUnreadableVotes?: boolean } = {},
+): Promise<ProposalDetail | null> {
+  const proposal = await getVisibleProposal(db, idOrSlug, user);
+  return proposal ? loadVisibleProposalDetail(db, proposal, user, options) : null;
+}
+
+/** Load discussion and ballot data for a proposal already authorised for this viewer. */
+export async function loadVisibleProposalDetail(
+  db: Db,
+  proposal: ProposalRecord,
+  user: SessionUser | null,
+  options: { tolerateUnreadableVotes?: boolean; useDisplayTally?: boolean; deferDiscussion?: boolean } = {},
+): Promise<ProposalDetail> {
   const cryptoConfig = loadBallotCryptoConfigForRead(process.env);
   const currentBallotId = proposalBallotId(proposal.proposalId);
-  const myBlindIndexes =
-    user && cryptoConfig
-      ? new Set(
-          computeAllBlindIndexesForMember(
-            cryptoConfig,
-            currentBallotId,
-            user.memberId,
-          ),
-        )
-      : null;
+  const myBlindIndexes = user && cryptoConfig
+    ? computeAllBlindIndexesForMember(cryptoConfig, currentBallotId, user.memberId)
+    : [];
+  const revisionId = proposal.ballotRevisionId;
+  const tallyPromise = options.useDisplayTally && proposal.stage === "decide" && revisionId
+    ? readBallotTallyProjections(db, [{ ballotId: currentBallotId, revisionId }])
+        .then((rows) => {
+          const row = rows.get(ballotTallyKey(currentBallotId, revisionId));
+          return row?.fresh ? row.tally : null;
+        })
+    : Promise.resolve(null);
+  const voteRead = tallyPromise.then((displayTally) => {
+    if (displayTally && !user) return [];
+    return db.collection<VoteRecord>(PROPOSAL_VOTES)
+      .find({
+        ballotId: currentBallotId,
+        ...(displayTally && user
+          ? { $or: [{ memberId: user.memberId }, { voterBlindIndex: { $in: myBlindIndexes } }] }
+          : { $or: [{ proposalId: proposal.proposalId }, { policyId: proposal.proposalId }] }),
+      })
+      .sort({ updatedAt: -1 })
+      .toArray();
+  });
+  const [discussion, votes, pendingPref, displayTally] = await Promise.all([
+    options.deferDiscussion
+      ? countProposalComments(db, proposal.proposalId)
+      : loadProposalComments(db, proposal.proposalId),
+    voteRead,
+    user && !user.canParticipate && user.status === "pending"
+      ? db
+          .collection<PendingVotePreferenceRecord>(PENDING_VOTE_PREFERENCES)
+          .findOne({
+            ballotId: proposalBallotId(proposal.proposalId),
+            memberId: user.memberId,
+          })
+      : Promise.resolve(null),
+    tallyPromise,
+  ]);
 
+  const comments = Array.isArray(discussion) ? discussion : [];
+  const commentCount = typeof discussion === "number" ? discussion : comments.length;
   const proposalVotes: ReturnType<typeof decodeStoredVote>[] = [];
   let unreadableVoteCount = 0;
   for (const vote of votes) {
@@ -396,7 +437,7 @@ export async function getProposalDetail(
       Boolean(
         myBlindIndexes &&
           v.voterBlindIndex &&
-          myBlindIndexes.has(v.voterBlindIndex),
+          myBlindIndexes.includes(v.voterBlindIndex),
       );
     if (isMine) {
       myVote = v.choice;
@@ -412,8 +453,8 @@ export async function getProposalDetail(
   return {
     proposal: {
       ...proposal,
-      commentCount: comments.length,
-      votes: tally,
+      commentCount,
+      votes: displayTally ?? tally,
       ...(unreadableVoteCount ? { unreadableVoteCount } : {}),
     },
     comments,
@@ -439,24 +480,8 @@ export async function listProposalRevisions(
   proposalId: string;
   revisions: Array<Record<string, unknown>>;
 } | null> {
-  const key = idOrSlug.trim();
-  if (!key) return null;
-
-  const col = db.collection<ProposalRecord>("proposals");
-  const rawProposal =
-    (await col.findOne({ slug: key })) ??
-    (await col.findOne({ proposalId: key })) ??
-    (await col.findOne({ policyId: key } as any));
-  if (!rawProposal) return null;
-
-  const proposal = normalizeProposalDoc(rawProposal);
-  if (!canViewProposal(proposal, user)) return null;
-  if (
-    proposal.stage === "archived" &&
-    !canReviewArchivedProposal(proposal, user)
-  ) {
-    return null;
-  }
+  const proposal = await getVisibleProposal(db, idOrSlug, user);
+  if (!proposal) return null;
 
   const revisions: any[] = await db
     .collection("proposal_revisions")
