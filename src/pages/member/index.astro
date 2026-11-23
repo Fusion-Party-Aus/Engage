@@ -291,9 +291,9 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
 
           {/* Temporary incident notice. Remove after confirming recovery in production (#167). */}
           <Alert variant="warning" role="status">
-            <AlertTitle>Email sign-in links are temporarily unavailable</AlertTitle>
+            <AlertTitle>Email sign-in is being restored</AlertTitle>
             <AlertDescription>
-              Use your saved Engage passkey or continue with Google using the email address on your Fusion membership.
+              Email sign-in links may still fail while we finish restoring the service. If a link doesn’t work, use your saved Engage passkey or continue with Google using the email address on your Fusion membership.
             </AlertDescription>
           </Alert>
 
