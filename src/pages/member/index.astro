@@ -27,8 +27,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { buildActivityTimeline, type ActivityTimelineEvent } from '../../lib/activity-timeline.ts';
-import { listMemberNotifications } from '../../lib/notifications.ts';
-import { getVapidConfig, listMemberPushSubscriptions } from '../../lib/web-push.ts';
 import { buildMemberCatchUp, listMemberActivityStream, loadMemberActivityInputs, type MemberCatchUpGroup } from '../../lib/member-activity.ts';
 import {
   catchUpSinceLabel as buildCatchUpSinceLabel,
@@ -45,7 +43,7 @@ import {
   passkeyLoginConfigured,
 } from '../../lib/auth.ts';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import EmailPreferences from '../../components/member/EmailPreferences.astro';
+import MemberNotificationPreferences from '../../components/member/MemberNotificationPreferences.astro';
 import { Turnstile } from '../../components/ui/turnstile';
 import { turnstileEnforced } from '../../lib/turnstile.ts';
 import { ballotExpired, ballotDeadlineLabel, closesWithinSevenDays } from '../../lib/ballot-deadline.ts';
@@ -82,7 +80,7 @@ const [memberActivityInputs, branchProfile, allVisibleProposals, userPasskeyCoun
   ? await Promise.all([
       loadMemberActivityInputs(db, user.memberId),
       getMemberBranchProfile(db, user.memberId),
-      listProposals(db, { includeArchived: true, user, includeDetails: false }),
+      listProposals(db, { includeArchived: true, user, includeDetails: false, includeVoteTallies: false }),
       db
         .collection('passkey')
         .countDocuments({ userId: user.memberId })
@@ -106,29 +104,11 @@ const branchChoices = branchProfile?.all ?? [];
 const followableBranchCount = branchProfile?.following.length ?? 0;
 const verifiedBranchCount = branchProfile?.verified.length ?? 0;
 
-const [emailPreference, outstandingBallotsForMember, existingDigestMembers, rawInAppNotifications, rawPushSubscriptions] = user ? await Promise.all([
+const [emailPreference, outstandingBallotsForMember, existingDigestMembers] = user ? await Promise.all([
  db.collection('engagement_email_preferences').findOne({memberId:user.memberId}),
  outstandingBallots(db,user,visibleProposals),
  ensureDigestCohort(db),
- listMemberNotifications(db, user.memberId, 25).catch(() => []),
- listMemberPushSubscriptions(db, user.memberId).catch(() => []),
-]) : [null, [], new Set<string>(), [], []];
-const vapidConfig = getVapidConfig(env);
-const serializedNotifications = rawInAppNotifications.map((item) => ({
- notificationId: item.notificationId,
- topic: item.topic,
- title: item.title,
- body: item.body,
- href: item.href,
- readAt: item.readAt ? item.readAt.toISOString() : null,
- createdAt: item.createdAt.toISOString(),
-}));
-const serializedPushSubscriptions = rawPushSubscriptions.map((sub) => ({
- subscriptionId: sub.subscriptionId,
- deviceLabel: sub.deviceLabel,
- createdAt: sub.createdAt.toISOString(),
- lastUsedAt: sub.lastUsedAt ? sub.lastUsedAt.toISOString() : undefined,
-}));
+]) : [null, [], new Set<string>()];
 const outstandingProposalIds=new Set(outstandingBallotsForMember.filter(b=>b.key.startsWith('proposal:')).map(b=>b.proposalId));
 const awaitingDecision=visibleProposals.filter(p=>outstandingProposalIds.has(p.proposalId));
 const closingSoon=outstandingBallotsForMember.filter((b):b is DigestBallot=>Boolean(b.closesAt && closesWithinSevenDays({ballotClosesAt:b.closesAt})));
@@ -698,15 +678,19 @@ const rawTargetTitle = Astro.url.searchParams.get('title')?.trim().slice(0, 140)
             dismissReturnTo="/member/?view=notifications"
           />
 
-          <EmailPreferences
-            existingMember={existingDigestMember}
-            preference={emailPreference}
-            saved={Astro.url.searchParams.get('emailPreferences') === 'saved'}
-            inAppNotifications={serializedNotifications}
-            pushSubscriptions={serializedPushSubscriptions}
-            pushConfigured={Boolean(vapidConfig)}
-            vapidPublicKey={vapidConfig?.publicKey ?? null}
-          />
+          {memberView === 'notifications' && (
+            <MemberNotificationPreferences
+              server:defer
+              expectedMemberId={user.memberId}
+              saved={Astro.url.searchParams.get('emailPreferences') === 'saved'}
+            >
+              <div slot="fallback" class="member-panel grid gap-3" role="status">
+                <span class="sr-only">Loading notification preferences…</span>
+                <div class="h-5 w-48 rounded bg-muted motion-safe:animate-pulse" aria-hidden="true"></div>
+                <div class="h-20 rounded bg-muted motion-safe:animate-pulse" aria-hidden="true"></div>
+              </div>
+            </MemberNotificationPreferences>
+          )}
         </div>
         <!-- VIEW 1: OVERVIEW (Outstanding votes, Participation opportunities, Catch-up, Status changes) -->
         <div class="overview-only member-overview-grid">

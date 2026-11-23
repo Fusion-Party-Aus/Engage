@@ -297,3 +297,13 @@ export async function findBranchBySlug(
     null
   );
 }
+
+/** Cache a public policy page only in the anonymous visitor's browser. */
+export function setPolicyPageCache(request: Request, headers: Headers, available = true): void {
+  const anonymous = available && request.method === "GET"
+    && !request.headers.has("Cookie")
+    && !request.headers.has("Authorization")
+    && !new URL(request.url).search;
+  headers.append("Vary", "Cookie, Authorization");
+  headers.set("Cache-Control", anonymous ? "private, max-age=30" : "private, no-store");
+}

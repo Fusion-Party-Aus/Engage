@@ -39,6 +39,7 @@ function finish(response: Response, secure: boolean): Response {
  * leaves. See `docs/security/perimeter.md`.
  */
 export const onRequest = defineMiddleware(async (context, next) => {
+  const started = performance.now();
   const env = runtimeEnv(context.locals);
   const publicOrigin = resolvePublicOrigin({
     env,
@@ -73,6 +74,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
     );
   }
 
-  const response = await next();
-  return finish(response, secure);
+  const response = finish(await next(), secure);
+  if (context.request.method === "GET" && isDocumentResponse(response.headers.get("content-type"))) {
+    // Time to an application response, excluding the proxy and browser.
+    response.headers.append("Server-Timing", `app;dur=${(performance.now() - started).toFixed(1)}`);
+  }
+  return response;
 });

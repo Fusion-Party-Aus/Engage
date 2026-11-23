@@ -42,7 +42,7 @@ export async function loadPolicyDetail(
   )
     return null;
 
-  const [branch, authority, sourceResult, changeCandidates, previousPolicy] =
+  const [branch, authority, sourceResult, changeCandidates, previousPolicy, successorPolicy, repealProposal] =
     await Promise.all([
       row.jurisdictionBranchId
         ? db
@@ -65,19 +65,17 @@ export async function loadPolicyDetail(
             .collection("policy_registry")
             .findOne({ policyId: String(row.supersedes[0]) })
         : Promise.resolve(null),
+      row.supersededBy
+        ? db
+            .collection("policy_registry")
+            .findOne({ policyId: String(row.supersededBy) })
+        : Promise.resolve(null),
+      row.repealedBy?.proposalId
+        ? db
+            .collection("proposals")
+            .findOne({ proposalId: String(row.repealedBy.proposalId) })
+        : Promise.resolve(null),
     ]);
-  const [successorPolicy, repealProposal] = await Promise.all([
-    row.supersededBy
-      ? db
-          .collection("policy_registry")
-          .findOne({ policyId: String(row.supersededBy) })
-      : Promise.resolve(null),
-    row.repealedBy?.proposalId
-      ? db
-          .collection("proposals")
-          .findOne({ proposalId: String(row.repealedBy.proposalId) })
-      : Promise.resolve(null),
-  ]);
   return {
     policy: row,
     branch,

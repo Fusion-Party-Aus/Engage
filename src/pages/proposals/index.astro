@@ -44,14 +44,12 @@ const [db, user] = await Promise.all([
 const inline = Astro.request.headers.get('X-Engage-Proposal-List') === '1';
 const Layout = inline ? ProposalListFragment : SiteLayout;
 Astro.response.headers.append('Vary', 'X-Engage-Proposal-List');
-const siteConfig = inline ? null : await getSiteConfig(db, env);
 
 const initialQuery = (Astro.url.searchParams.get('q') ?? '').trim();
 const initialSpace = (Astro.url.searchParams.get('space') ?? Astro.url.searchParams.get('category') ?? 'all').trim();
 const initialBranch = (Astro.url.searchParams.get('branch') ?? 'all').trim();
 const initialFocus = discoveryFocus(Astro.url.searchParams, Boolean(user?.canParticipate), Astro.cookies.get('engage_voting_focus')?.value);
 const initialSort = (Astro.url.searchParams.get('sort') ?? 'priority').trim();
-const branches = (await db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray()).map(({ branchId, name }) => ({ branchId, name }));
 const rawStage = (Astro.url.searchParams.get('stage') ?? Astro.url.searchParams.get('status') ?? 'all').trim();
 const initialStage = parsePublicProposalStage(rawStage);
 if (initialStage === 'decide' && (Astro.url.searchParams.has('focus') || Astro.url.searchParams.has('needsVote'))) {
@@ -59,7 +57,17 @@ if (initialStage === 'decide' && (Astro.url.searchParams.has('focus') || Astro.u
 }
 const joinedOnly = Astro.url.searchParams.get('joined') === '1' || initialFocus === 'discussion';
 
-const candidates = await listPublicProposalCandidates(db, { user, search: initialQuery });
+const [candidates, branches, siteConfig, joinedComments] = await Promise.all([
+  listPublicProposalCandidates(db, { user, search: initialQuery }),
+  db.collection<{ branchId: string; name: string }>('branches')
+    .find({ recognised: true }, { projection: { _id: 0, branchId: 1, name: 1 } })
+    .sort({ name: 1 })
+    .toArray(),
+  inline ? null : getSiteConfig(db, env),
+  user && joinedOnly
+    ? db.collection('comments').find({ memberId: user.memberId }, { projection: { _id: 0, proposalId: 1 } }).toArray()
+    : [],
+]);
 const candidateSummaries = candidates.map((proposal) => ({
   ...proposal,
   commentCount: 0,
@@ -77,13 +85,10 @@ const memberVotesPromise = user
     )
   : Promise.resolve([]);
 
-const [myVotesRaw, myOutstandingVotes, joinedComments] = await Promise.all([
+const [myVotesRaw, myOutstandingVotes] = await Promise.all([
   memberVotesPromise,
   user?.canParticipate
     ? listOutstandingDecisions(db, user.memberId, user, candidateSummaries, memberVotesPromise)
-    : Promise.resolve([]),
-  user
-    ? db.collection('comments').find({ memberId: user.memberId }).project({ proposalId: 1 }).toArray()
     : Promise.resolve([]),
 ]);
 

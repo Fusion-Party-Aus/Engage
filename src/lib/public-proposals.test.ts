@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { Db } from "mongodb";
 import { createMemoryDb } from "./db.ts";
+import { getVisibleProposal, loadVisibleProposalDetail } from "./proposals-store.ts";
 import {
   PUBLIC_PROPOSAL_PAGE_SIZE,
   attachPublicTallies,
@@ -380,6 +381,43 @@ describe("proposal list filtering", () => {
   });
 });
 
+describe("proposal detail display reads", () => {
+  it("uses the revision projection and reads only personal votes when it is fresh", async () => {
+    const db = createMemoryDb();
+    const proposalId = "PROP-001";
+    const ballotId = proposalBallotId(proposalId);
+    await seedDecide(db, proposalId);
+    const proposal = await getVisibleProposal(db, proposalId, null);
+    assert.ok(proposal);
+    await db.collection(BALLOT_TALLIES).insertOne({
+      ballotId, revisionId: "rev-1", approve: 1, abstain: 0, reject: 1,
+      total: 2, updatedAt: new Date(),
+    });
+    await db.collection(PROPOSAL_VOTES).insertOne({
+      ballotId, proposalId, revisionId: "rev-1", memberId: "member-1", choice: "approve", reason: "My reason",
+    });
+    await db.collection(PROPOSAL_VOTES).insertOne({
+      ballotId, proposalId, revisionId: "rev-1", memberId: "member-2", choice: "reject",
+    });
+
+    const guestReads = spyDb(db);
+    const guest = await loadVisibleProposalDetail(guestReads.db, proposal, null, { useDisplayTally: true });
+    assert.equal(guest.proposal.votes.total, 2);
+    assert.equal(guestReads.accesses.some(({ name }) => name === PROPOSAL_VOTES), false);
+
+    const member = await loadVisibleProposalDetail(db, proposal, memberUser(), { useDisplayTally: true });
+    assert.deepEqual(member.proposal.votes, guest.proposal.votes);
+    assert.equal(member.myVote, "approve");
+    assert.equal(member.myReason, "My reason");
+    assert.deepEqual(member.votesList.map((vote) => vote.memberId), ["member-1"]);
+
+    await db.collection(BALLOT_TALLIES).updateOne({ ballotId }, { $set: { updatedAt: NOW, total: 999 } });
+    const fallback = await loadVisibleProposalDetail(db, proposal, null, { useDisplayTally: true });
+    assert.equal(fallback.proposal.votes.total, 2);
+    assert.equal(fallback.myVote, null);
+  });
+});
+
 describe("public list tallies", () => {
   it("shows fresh projection counts and a neutral state for stale or missing rows", async () => {
     const db = createMemoryDb();
@@ -522,6 +560,10 @@ describe("public list read cost and privacy", () => {
   it("never reads proposal_votes and excludes the rationale from display rows", async () => {
     const db = createMemoryDb();
     await seedProposals(db, 30);
+    await db.collection("proposals").updateOne(
+      { proposalId: "PROP-029" },
+      { $unset: { summary: "" }, $set: { statement: "Legacy summary" } },
+    );
     const spy = spyDb(db);
     const candidates = await listPublicProposalCandidates(spy.db, {
       user: null,
@@ -534,19 +576,13 @@ describe("public list read cost and privacy", () => {
       false,
       "the public list must not read proposal_votes",
     );
-    assert.equal(
-      spy.accesses.some(
-        (access) =>
-          access.name === "proposals" &&
-          access.projection?.detailHtml === 0 &&
-          access.projection?.details === 0,
-      ),
-      true,
-      "the display page asks MongoDB to exclude rationale fields",
-    );
-    const candidateAccess = spy.accesses.find(
-      (access) => access.name === "proposals",
-    );
+    const proposalReads = spy.accesses.filter((access) => access.name === "proposals");
+    assert.equal(proposalReads.length, 1, "rendering the page must reuse the candidate read");
+    const [candidateAccess] = proposalReads;
+    assert.equal(candidateAccess?.projection?.summary, 1);
+    assert.equal(candidateAccess?.projection?.detailHtml, undefined);
+    assert.equal(page.rows[0]?.summary, "Summary for PROP-030");
+    assert.equal(page.rows[1]?.summary, "Legacy summary");
     assert.equal(candidateAccess?.projection?.details, undefined);
     assert.equal(candidateAccess?.projection?.detailHtml, undefined);
   });

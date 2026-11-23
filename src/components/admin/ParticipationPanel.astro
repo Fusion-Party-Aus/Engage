@@ -37,7 +37,7 @@ if (!user || (!user.isStaff && !user.isBranchAdmin)) {
 }
 
 const authorizedProposals = (
-  await listProposals(db, { includeArchived: true, user, includeDetails: false })
+  await listProposals(db, { includeArchived: true, user, includeDetails: false, includeVoteTallies: false })
 ).filter((proposal) => canIncludeProposalInAdminReport(user, proposal));
 
 const proposalMap = new Map(

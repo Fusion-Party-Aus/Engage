@@ -4,18 +4,30 @@ import { Button } from '../../components/ui/button';
 import PolicyRegistry from '../../components/policy/PolicyRegistry.astro';
 import { Card, CardContent } from '../../components/ui/card';
 import { getDatabase, runtimeEnv } from '../../lib/db.ts';
-import { groupRegistryByBranch, groupRegistryPolicies } from '../../lib/policy-registry.ts';
+import { POLICY_PUBLICATION_STATES, groupRegistryByBranch, groupRegistryPolicies, setPolicyPageCache } from '../../lib/policy-registry.ts';
 import { isPolicyRegistryRecordForResolution } from '../../lib/proposal-helpers.ts';
 export const prerender = false;
+setPolicyPageCache(Astro.request, Astro.response.headers);
 const db = await getDatabase(runtimeEnv(Astro.locals));
 const q = (Astro.url.searchParams.get('q') ?? '').trim();
 const needle = q.toLowerCase();
 const branchFilter = Astro.url.searchParams.get('branch') ?? '';
 const showHistory = Astro.url.searchParams.get('history') === '1';
 const [rawRecords, branches, resolutionProposals] = await Promise.all([
-  db.collection('policy_registry').find({ publicationStatus: { $in: ['published', 'withdrawn', 'superseded', 'repealed'] } }).sort({ title: 1 }).toArray(),
-  db.collection('branches').find({ recognised: true }).sort({ name: 1 }).toArray(),
-  db.collection('proposals').find({}, { projection: { proposalId: 1, kind: 1 } }).toArray(),
+  db.collection('policy_registry').find(
+    { publicationStatus: { $in: POLICY_PUBLICATION_STATES } },
+    { projection: {
+      _id: 0, proposalId: 1, policyId: 1, kind: 1, title: 1, summary: 1,
+      category: 1, pillar: 1, publicationStatus: 1, recordOrigin: 1,
+      jurisdictionBranchId: 1, jurisdiction: 1, branchSlug: 1, policySlug: 1,
+      ...(needle ? { approvedWording: 1 } : {}),
+    } },
+  ).sort({ title: 1 }).toArray(),
+  db.collection('branches').find(
+    { recognised: true },
+    { projection: { _id: 0, branchId: 1, name: 1, kind: 1, slug: 1 } },
+  ).sort({ name: 1 }).toArray(),
+  db.collection('proposals').find({}, { projection: { _id: 0, proposalId: 1, kind: 1 } }).toArray(),
 ]);
 const proposalKindMap = new Map(
   resolutionProposals.map((p: any) => [String(p.proposalId), { proposalId: String(p.proposalId), kind: p.kind ? String(p.kind) : undefined }]),

@@ -1,29 +1,109 @@
 [
   {
-    "hash": "37ed8bb",
+    "hash": "ed266bd",
     "date": "2026-11-23",
     "type": "fix",
     "category": "fix",
-    "scope": "proposals",
-    "summary": "Preserve pending filters and empty-state actions",
-    "details": "Refs #169"
+    "scope": "rendering",
+    "summary": "Reject deferred ballot renders for a changed revision"
   },
   {
-    "hash": "0d81605",
+    "hash": "764f288",
+    "date": "2026-11-23",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "rendering",
+    "summary": "Load proposal ballot and discussion independently (#52)"
+  },
+  {
+    "hash": "70f093b",
     "date": "2026-11-23",
     "type": "chore",
     "category": "ops",
     "scope": "changelog",
-    "summary": "Refresh proposal discovery snapshot (#169)"
+    "summary": "Record scoped rendering reads"
   },
   {
-    "hash": "c0c3650",
+    "hash": "9058af9",
+    "date": "2026-11-23",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "rendering",
+    "summary": "Narrow ballot reads and defer member preferences (#52)"
+  },
+  {
+    "hash": "1734a3c",
+    "date": "2026-11-23",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record localised navigation feedback"
+  },
+  {
+    "hash": "e85c048",
+    "date": "2026-11-23",
+    "type": "fix",
+    "category": "fix",
+    "scope": "navigation",
+    "summary": "Preserve page content while loading (#171, #172)"
+  },
+  {
+    "hash": "fac6b74",
+    "date": "2026-11-23",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record deferred rendering changes"
+  },
+  {
+    "hash": "058aac8",
+    "date": "2026-11-23",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "rendering",
+    "summary": "Defer proposal quorum and remove guide data reads (#52)"
+  },
+  {
+    "hash": "6629406",
+    "date": "2026-11-23",
+    "type": "fix",
+    "category": "fix",
+    "scope": "auth",
+    "summary": "Update email sign-in recovery notice (#167) (#181)"
+  },
+  {
+    "hash": "696608e",
+    "date": "2026-11-23",
+    "type": "fix",
+    "category": "fix",
+    "scope": "auth",
+    "summary": "Restore magic-link requests during Turnstile misconfiguration (#179)",
+    "details": "Refs #177. Remove the temporary fallback in #180."
+  },
+  {
+    "hash": "2c0b8a9",
+    "date": "2026-11-23",
+    "type": "chore",
+    "category": "ops",
+    "scope": "changelog",
+    "summary": "Record public navigation performance"
+  },
+  {
+    "hash": "e148bd9",
+    "date": "2026-11-23",
+    "type": "perf",
+    "category": "improvement",
+    "scope": "navigation",
+    "summary": "Reduce blocking public list reads (#52)"
+  },
+  {
+    "hash": "06f793d",
     "date": "2026-11-23",
     "type": "fix",
     "category": "fix",
     "scope": "proposals",
-    "summary": "Update discovery results without reloading (#169)",
-    "details": "Refs #169"
+    "summary": "Update discovery results without reloading (#170)",
+    "details": "Closes #169."
   },
   {
     "hash": "dfb2ba3",
@@ -607,87 +687,5 @@
     "category": "ops",
     "scope": "changelog",
     "summary": "Include voting status safeguard"
-  },
-  {
-    "hash": "7560540",
-    "date": "2026-11-09",
-    "type": "fix",
-    "category": "fix",
-    "scope": "voting",
-    "summary": "Refresh proposal hero after saving a vote"
-  },
-  {
-    "hash": "a17770f",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record proposal participation redesign"
-  },
-  {
-    "hash": "fc8d130",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Connect policy reading with voting and simplify discovery"
-  },
-  {
-    "hash": "dede16c",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record proposal experience changes"
-  },
-  {
-    "hash": "1c13678",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "proposals",
-    "summary": "Simplify discovery and expose ballot progression"
-  },
-  {
-    "hash": "50a7710",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "agents.md",
-    "summary": "Enhance AGENTS.md with more bounded structure for Coding agents working on the repository"
-  },
-  {
-    "hash": "d619b8f",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record audited platform settings"
-  },
-  {
-    "hash": "5bb7e82",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add audited platform settings and branch hierarchy validation",
-    "details": "Replace the raw JSON platform settings form with a task-based settings workspace. Administrators can manage visibility, public features, social channels and the branch website directory, with server-side URL validation, read-only infrastructure notes and a recorded change history that supports restoring earlier values. Enforce branch parent kinds on the server so states and territories sit under National and local branches sit under a state or territory. Add coverage for the settings API, audit history, restore behaviour and branch hierarchy rules."
-  },
-  {
-    "hash": "b808f0b",
-    "date": "2026-11-09",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Record durable migrations and branch seed"
-  },
-  {
-    "hash": "e2137a5",
-    "date": "2026-11-09",
-    "type": "feat",
-    "category": "feature",
-    "scope": "admin",
-    "summary": "Add durable database migrations and standard branch seed",
-    "details": "Add Admin -> Migrations for national administrators. The page previews each additive migration, shows the last recorded run and any error, and applies Standard branches or Branch participation individually or in order. Every run is recorded in data_migrations with run count, timestamps, actor and result. Standard branches is an idempotent seed for Fusion National, VIC, NSW, QLD, WA, SA, TAS, ACT and NT with National as parent; existing branches are never renamed, re-parented or un-recognised. Branch participation remains blocked until the National branch exists. The command-line seed now uses the same service, and the participation migration remains available for deployment automation."
   }
 ]

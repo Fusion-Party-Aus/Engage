@@ -1,0 +1,50 @@
+---
+import { getSessionUser } from '../../lib/auth.ts';
+import { getDatabase, runtimeEnv } from '../../lib/db.ts';
+import { ensureDigestCohort } from '../../lib/digest-preferences.ts';
+import { listMemberNotifications } from '../../lib/notifications.ts';
+import { getVapidConfig, listMemberPushSubscriptions } from '../../lib/web-push.ts';
+import EmailPreferences from './EmailPreferences.astro';
+
+interface Props {
+  expectedMemberId: string;
+  saved: boolean;
+}
+
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+const env = runtimeEnv(Astro.locals);
+const user = await getSessionUser(Astro.request, env);
+if (!user || user.memberId !== Astro.props.expectedMemberId) return;
+const db = await getDatabase(env);
+const [preference, digestMembers, rawInAppNotifications, rawPushSubscriptions] = await Promise.all([
+  db.collection('engagement_email_preferences').findOne({ memberId: user.memberId }),
+  ensureDigestCohort(db),
+  listMemberNotifications(db, user.memberId, 25).catch(() => []),
+  listMemberPushSubscriptions(db, user.memberId).catch(() => []),
+]);
+const vapidConfig = getVapidConfig(env);
+const serializedNotifications = rawInAppNotifications.map((item) => ({
+ notificationId: item.notificationId,
+ topic: item.topic,
+ title: item.title,
+ body: item.body,
+ href: item.href,
+ readAt: item.readAt ? item.readAt.toISOString() : null,
+ createdAt: item.createdAt.toISOString(),
+}));
+const serializedPushSubscriptions = rawPushSubscriptions.map((sub) => ({
+ subscriptionId: sub.subscriptionId,
+ deviceLabel: sub.deviceLabel,
+ createdAt: sub.createdAt.toISOString(),
+ lastUsedAt: sub.lastUsedAt ? sub.lastUsedAt.toISOString() : undefined,
+}));
+---
+<EmailPreferences
+  existingMember={digestMembers.has(user.memberId)}
+  preference={preference}
+  saved={Astro.props.saved}
+  inAppNotifications={serializedNotifications}
+  pushSubscriptions={serializedPushSubscriptions}
+  pushConfigured={Boolean(vapidConfig)}
+  vapidPublicKey={vapidConfig?.publicKey ?? null}
+/>
