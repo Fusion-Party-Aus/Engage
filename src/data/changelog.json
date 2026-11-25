@@ -1,29 +1,28 @@
 [
   {
-    "hash": "37ed8bb",
+    "hash": "28eb613",
+    "date": "2026-11-23",
+    "type": "fix",
+    "category": "fix",
+    "scope": "deploy",
+    "summary": "Pass Turnstile settings to Coolify (#177)"
+  },
+  {
+    "hash": "53d5882",
+    "date": "2026-11-23",
+    "type": "fix",
+    "category": "fix",
+    "scope": "deploy",
+    "summary": "Pass Turnstile settings to Coolify (#177)"
+  },
+  {
+    "hash": "06f793d",
     "date": "2026-11-23",
     "type": "fix",
     "category": "fix",
     "scope": "proposals",
-    "summary": "Preserve pending filters and empty-state actions",
-    "details": "Refs #169"
-  },
-  {
-    "hash": "0d81605",
-    "date": "2026-11-23",
-    "type": "chore",
-    "category": "ops",
-    "scope": "changelog",
-    "summary": "Refresh proposal discovery snapshot (#169)"
-  },
-  {
-    "hash": "c0c3650",
-    "date": "2026-11-23",
-    "type": "fix",
-    "category": "fix",
-    "scope": "proposals",
-    "summary": "Update discovery results without reloading (#169)",
-    "details": "Refs #169"
+    "summary": "Update discovery results without reloading (#170)",
+    "details": "Closes #169."
   },
   {
     "hash": "dfb2ba3",
